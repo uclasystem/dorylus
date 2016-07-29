@@ -1231,11 +1231,11 @@ void Engine<VertexType, EdgeType>::streamRun4(VertexProgram<VertexType, EdgeType
       if(ts < currentGlobalDeleteCounter) {
         if(smartDeletions) {
           LightEdge<VertexType, EdgeType> dEdge = deleteEdge2(from, to);
-          if(dEdge.to.parent == dEdge.fromId) 
+          //if(dEdge.to.parent == dEdge.fromId) 
             activateEndPoints2(from, to, onDelete, onDeleteSmartHandler, dEdge);
           if(undirected) {
             LightEdge<VertexType, EdgeType> dEdge = deleteEdge2(to, from);
-            if(dEdge.to.parent == dEdge.fromId)
+            //if(dEdge.to.parent == dEdge.fromId)
               activateEndPoints2(to, from, onDelete, onDeleteSmartHandler, dEdge);
           }
         } else {

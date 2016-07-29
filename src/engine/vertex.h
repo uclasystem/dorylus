@@ -21,6 +21,7 @@ class Vertex {
         IdType localIdx;
         IdType globalIdx;
         VertexLocationType vertexLocation;
+        IdType parentIdx;
 
         RWLock lock;
 
@@ -56,6 +57,9 @@ class Vertex {
         VertexType getDestVertexData(unsigned i);
         unsigned getSourceVertexGlobalId(unsigned i);
         unsigned getDestVertexGlobalId(unsigned i);
+
+        IdType parent();
+        void setParent(IdType p); 
 };
 
 #endif /* __VERTEX_H__ */

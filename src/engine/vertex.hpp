@@ -8,7 +8,7 @@
 
 template<typename VertexType, typename EdgeType>
 Vertex<VertexType, EdgeType>::Vertex() :
-    localIdx(0), globalIdx(0), graph(NULL) {
+    localIdx(0), globalIdx(0), parentIdx(MAX_IDTYPE), graph(NULL) {
     lock.init();
 }
 
@@ -140,5 +140,14 @@ void Vertex<VertexType, EdgeType>::unlock() {
     lock.unlock();
 }
 
+template<typename VertexType, typename EdgeType>
+IdType Vertex<VertexType, EdgeType>::parent() {
+    return parentIdx;
+}
+
+template<typename VertexType, typename EdgeType>
+void Vertex<VertexType, EdgeType>::setParent(IdType p) {
+    parentIdx = p;
+}
 
 #endif /* __VERTEX_HPP__ */

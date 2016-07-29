@@ -6,6 +6,7 @@
 #include <cstring>
 #include <string>
 #include <typeinfo>
+#include <climits>
 
 #define INTERFACE "em1" 
 
