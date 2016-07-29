@@ -42,13 +42,13 @@ class InitProgram : public VertexProgram<VertexType, EdgeType> {
     }
 };
 
-/* Approx version with tagging */
+/* Approx version with blind tagging -- we don't look at anything related to algorithm here. This means, just trim the entire subtree */
 template<typename VertexType, typename EdgeType>
 class ABlindTrimProgram : public VertexProgram<VertexType, EdgeType> {
   public:
     bool update(Vertex<VertexType, EdgeType>& vertex, EngineContext& engineContext) {
       if(vertex.globalId() == source) {
-        bool changed = ((vertex.data().value != MAXWIDTH) || (vertex.data().parent != VERY_HIGH) || (vertex.data().level != VERY_HIGH));
+        bool changed = ((vertex.data().value != 0) || (vertex.data().parent != VERY_HIGH) || (vertex.data().level != VERY_HIGH));
         VType v(0, VERY_HIGH, VERY_HIGH);
         vertex.setData(v);
         return changed;
@@ -63,21 +63,18 @@ class ABlindTrimProgram : public VertexProgram<VertexType, EdgeType> {
         return false;
       }
 
-      bool found = false; bool orphan = false;
+      bool orphan = true;
       for(unsigned i=0; i<vertex.numInEdges(); ++i) {
         VertexType sourceVertexData = vertex.getSourceVertexData(i);
         if(vertex.getSourceVertexGlobalId(i) == myParent) {
           if(sourceVertexData.level == VERY_HIGH) {
             assert(sourceVertexData.parent == VERY_HIGH);
-            orphan = true;
-          }
+          } else
+            orphan = false;
 
-          found = true;
           break;
         }
       }
-
-      assert(found);
 
       if(orphan) {
         bool changed = ((vertex.data().value != 0) || (vertex.data().parent != VERY_HIGH) || (vertex.data().level != VERY_HIGH));
@@ -92,14 +89,14 @@ class ABlindTrimProgram : public VertexProgram<VertexType, EdgeType> {
     }
 };
 
-/* Approx version with tagging */
+/* Approx version with tagging -- we look at algorithm to find a better solution (if another path with higher value exists) */
 template<typename VertexType, typename EdgeType>
 class ASmartTrimProgram : public VertexProgram<VertexType, EdgeType> {
   public:
     bool update(Vertex<VertexType, EdgeType>& vertex, EngineContext& engineContext) {
       if(vertex.globalId() == source) {
-        bool changed = ((vertex.data().value != MAXWIDTH) || (vertex.data().parent != VERY_HIGH) || (vertex.data().level != VERY_HIGH));
-        VType v(0, VERY_HIGH, VERY_HIGH);
+        bool changed = ((vertex.data().value != MAXWIDTH) || (vertex.data().parent != VERY_HIGH) || (vertex.data().level != 0));
+        VType v(MAXWIDTH, VERY_HIGH, 0);
         vertex.setData(v);
         return changed;
       }
@@ -113,18 +110,15 @@ class ASmartTrimProgram : public VertexProgram<VertexType, EdgeType> {
         return false;
       }
 
-      bool found = false; bool orphan = false; VType candidate(0, VERY_HIGH, VERY_HIGH);
+      bool orphan = true, reroot = false; VType candidate(0, VERY_HIGH, VERY_HIGH);
       for(unsigned i=0; i<vertex.numInEdges(); ++i) {
         VertexType sourceVertexData = vertex.getSourceVertexData(i);
-        if(vertex.getSourceVertexGlobalId(i) == myParent) {
-          found = true;
-          if(sourceVertexData.level == VERY_HIGH) {
-            assert(sourceVertexData.parent == VERY_HIGH);
-            orphan = true;
-          } else 
-            break;
-
-          continue;
+          if(vertex.getSourceVertexGlobalId(i) == myParent) {
+            if(sourceVertexData.level == VERY_HIGH) {
+              orphan = false; reroot = true;
+              continue;
+            } else 
+              break;
         }
 
         unsigned mW = std::min(sourceVertexData.value, vertex.getInEdgeData(i));
@@ -137,11 +131,8 @@ class ASmartTrimProgram : public VertexProgram<VertexType, EdgeType> {
         }
       }
 
-      assert(found);
-
-      if(orphan) {
-        //bool changed = ((vertex.data().value != candidate.value) || (vertex.data().parent != candidate.parent) || (vertex.data().level != candidate.level));
-        bool changed = (candidate.parent == VERY_HIGH) && (vertex.data().parent != VERY_HIGH);
+      if(orphan || reroot) {
+        bool changed = ((vertex.data().value != candidate.value) || (vertex.data().parent != candidate.parent) || (vertex.data().level != candidate.level));
 
         if(candidate.level == VERY_HIGH)
           Engine<VertexType, EdgeType>::trimmed(vertex.globalId());
@@ -159,7 +150,7 @@ class ASmartTrimProgram : public VertexProgram<VertexType, EdgeType> {
     }
 };
 
-/* Approx version with tagging */
+/* Approx version with tagging -- we look at the algorithm to find any possible viable path */
 template<typename VertexType, typename EdgeType>
 class ASmarterTrimProgram : public VertexProgram<VertexType, EdgeType> {
   public:
@@ -371,7 +362,7 @@ int main(int argc, char* argv[]) {
   Engine<VType, EType>::quickRun(&initProgram, true);
 
   ABlindTrimProgram<VType, EType> abtrimProgram;
-  ASmarterTrimProgram<VType, EType> astrimProgram;
+  ASmartTrimProgram<VType, EType> astrimProgram;
   ASSWPProgram<VType, EType> asswpProgram;
   AWriterProgram<VType, EType> awriterProgram;
 
