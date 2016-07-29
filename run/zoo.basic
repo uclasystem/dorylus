@@ -1,0 +1,5 @@
+tickTime=1000
+dataDir=/home/keval/Desktop/workspace/streaming/aspire/run/tmp/zooDataDir
+clientPort=2180
+initLimit=5
+syncLimit=1
