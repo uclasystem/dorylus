@@ -32,6 +32,11 @@ public:
 		scheduledTasks = false;
 	}
 
+  void reset() {
+    currBitset->clear();
+    nextBitset->clear();
+  }
+
 	virtual ~BitsetScheduler() {
 		delete nextBitset;
 		delete currBitset;
@@ -87,6 +92,11 @@ public:
 	DenseBitset* getCurrentBitset() const {
 		return currBitset;
 	}
+
+  DenseBitset* getNextBitset() const {
+    return nextBitset;
+  }
+
 
 };
 

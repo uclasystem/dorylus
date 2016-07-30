@@ -855,7 +855,7 @@ void Engine<VertexType, EdgeType>::run(VertexProgram<VertexType, EdgeType>* vPro
   dataPool->sync();
 
   fprintf(stderr, "Processing completed on node %u in %u iterations\n", nodeId, iteration);
-  if(NodeManager::amIMaster() && printEM)
+  if(master() && printEM)
     printEngineMetrics();
 }
 
@@ -902,7 +902,7 @@ void Engine<VertexType, EdgeType>::streamRun(VertexProgram<VertexType, EdgeType>
   unsigned batchNo = 0;
   engineContext.setCurrentBatch(batchNo);
   quickRun(vProgram, true);
-  fprintf(stderr, "Base Batch %u completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
+  if(master()) fprintf(stderr, "Base Batch %u completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
   allTimProcess += timProcess;
 
   while(batchNo++ < numBatches) {
@@ -952,29 +952,37 @@ void Engine<VertexType, EdgeType>::streamRun(VertexProgram<VertexType, EdgeType>
       break;
     }
 
-    //if(master()) 
-    fprintf(stderr, "Batch %u constructed using %u insertions and %u deletions\n", batchNo, trueAdditions, trueDeletions);
+    trueAdditions = sillyReduce(trueAdditions, &sumReducer);
+    trueDeletions = sillyReduce(trueDeletions, &sumReducer);
+    if(master()) fprintf(stderr, "Batch %u constructed using %u insertions and %u deletions\n", batchNo, trueAdditions, trueDeletions);
 
+    double onlyBatchTime = 0.0;
+
+    double tmr = 0.0;
     if(reset != NULL) {
-      double tmr = -getTimer();
+      tmr = -getTimer();
       reset();
       tmr += getTimer();
       allTimProcess += tmr;
-      fprintf(stderr, "Batch %u resetting completed on node %u took %.3lf ms\n", batchNo, nodeId, tmr);
+      onlyBatchTime += tmr;
     }
+    if(master()) fprintf(stderr, "Batch %u phase 1 completed on node %u took %.3lf ms\n", batchNo, nodeId, tmr);
 
     //------
 
     engineContext.setCurrentBatch(batchNo);
 
     quickRun(vProgram, true);
-    fprintf(stderr, "Batch %u completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
+    if(master()) fprintf(stderr, "Batch %u phase 2 completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
     allTimProcess += timProcess;
+    onlyBatchTime += timProcess;
+
+    if(master()) fprintf(stderr, "Batch %u fully completed on node %u took %.3lf ms (at %.3lf ms)\n", batchNo, nodeId, onlyBatchTime, allTimProcess);
 
     processAll(wProgram);
   }
 
-  if(NodeManager::amIMaster() && printEM)
+  if(master() && printEM)
     printEngineMetrics();
 }
 
@@ -999,7 +1007,7 @@ void Engine<VertexType, EdgeType>::streamRun2(VertexProgram<VertexType, EdgeType
   unsigned batchNo = 0;
   engineContext.setCurrentBatch(batchNo);
   quickRun(vProgram, true);
-  fprintf(stderr, "Base Batch %u completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
+  if(master()) fprintf(stderr, "Base Batch %u completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
   allTimProcess += timProcess;
 
   while(batchNo++ < numBatches) {
@@ -1008,6 +1016,8 @@ void Engine<VertexType, EdgeType>::streamRun2(VertexProgram<VertexType, EdgeType
 
     unsigned trueAdditions = 0, trueDeletions = 0;
     shadowScheduler->clear();
+
+    scheduler->reset();
 
     // Insertions
     std::set<IdType> inTopics;
@@ -1030,6 +1040,9 @@ void Engine<VertexType, EdgeType>::streamRun2(VertexProgram<VertexType, EdgeType
     }
 
     receiveNewGhostValues(inTopics); 
+
+    shadowScheduler->set(scheduler->getNextBitset());
+    scheduler->reset();
 
     // Deletions
     while(delIter != deleteStream.end()) {
@@ -1059,7 +1072,11 @@ void Engine<VertexType, EdgeType>::streamRun2(VertexProgram<VertexType, EdgeType
       break;
     }
 
+    trueAdditions = sillyReduce(trueAdditions, &sumReducer);
+    trueDeletions = sillyReduce(trueDeletions, &sumReducer);
     if(master()) fprintf(stderr, "Batch %u constructed using %u insertions and %u deletions\n", batchNo, trueAdditions, trueDeletions);
+
+    double onlyBatchTime = 0.0;
 
     //------ Phase 1 process where value and tags flow together
 
@@ -1070,35 +1087,40 @@ void Engine<VertexType, EdgeType>::streamRun2(VertexProgram<VertexType, EdgeType
     trimScheduler->clear();
 
     quickRun(vProgram, true);
-    fprintf(stderr, "Batch %u phase 1 completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
+    if(master()) fprintf(stderr, "Batch %u phase 1 completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
     allTimProcess += timProcess;
+    onlyBatchTime += timProcess;
 
     //------ Phase 2 process where tags are removed and values are appropriately reset
 
-    fprintf(stderr, "Original %u tags now spread to %u vertices; hence, wipping them off\n", iTagged, trimScheduler->countSetBits());
+    iTagged = sillyReduce(iTagged, &sumReducer);
+    IdType trimCount = sillyReduce(trimScheduler->countSetBits(), &sumReducer);
+    if(master()) fprintf(stderr, "Original %u tags now spread to %u vertices; hence, wipping them off\n", iTagged, trimCount);
 
     //signalAll();
     scheduler->schedule(shadowScheduler);
     quickRun(removeApproximations, true);
-    fprintf(stderr, "Batch %u phase 2 completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
+    if(master()) fprintf(stderr, "Batch %u phase 2 completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
     allTimProcess += timProcess;
+    onlyBatchTime += timProcess;
 
     //------ Phase 3 process where exact computations are performed
 
     //signalAll();
     scheduler->schedule(shadowScheduler);
     quickRun(exactProgram, true);
-    fprintf(stderr, "Batch %u phase 3 completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
+    if(master()) fprintf(stderr, "Batch %u phase 3 completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
     allTimProcess += timProcess;
+    onlyBatchTime += timProcess;
 
-    fprintf(stderr, "Batch %u fully completed on node %u at %.3lf ms\n", batchNo, nodeId, allTimProcess);
+    if(master()) fprintf(stderr, "Batch %u fully completed on node %u took %.3lf ms (at %.3lf ms)\n", batchNo, nodeId, onlyBatchTime, allTimProcess);
 
     //------ Writing back
 
     processAll(wProgram);
   }
 
-  if(NodeManager::amIMaster() && printEM)
+  if(master() && printEM)
     printEngineMetrics();
 }
 
@@ -1121,7 +1143,7 @@ void Engine<VertexType, EdgeType>::streamRun3(VertexProgram<VertexType, EdgeType
   unsigned batchNo = 0;
   engineContext.setCurrentBatch(batchNo);
   quickRun(vProgram, true);
-  fprintf(stderr, "Base Batch %u completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
+  if(master()) fprintf(stderr, "Base Batch %u completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
   allTimProcess += timProcess;
 
   while(batchNo++ < numBatches) {
@@ -1130,6 +1152,8 @@ void Engine<VertexType, EdgeType>::streamRun3(VertexProgram<VertexType, EdgeType
 
     unsigned trueAdditions = 0, trueDeletions = 0;
     shadowScheduler->clear();
+
+    scheduler->reset();
 
     // Insertions
     std::set<IdType> inTopics;
@@ -1152,6 +1176,9 @@ void Engine<VertexType, EdgeType>::streamRun3(VertexProgram<VertexType, EdgeType
     }
 
     receiveNewGhostValues(inTopics); 
+
+    shadowScheduler->set(scheduler->getNextBitset());
+    scheduler->reset();
 
     // Deletions
     while(delIter != deleteStream.end()) {
@@ -1181,8 +1208,11 @@ void Engine<VertexType, EdgeType>::streamRun3(VertexProgram<VertexType, EdgeType
       break;
     }
 
-    //if(master()) 
-    fprintf(stderr, "Batch %u constructed using %u insertions and %u deletions\n", batchNo, trueAdditions, trueDeletions);
+    trueAdditions = sillyReduce(trueAdditions, &sumReducer);
+    trueDeletions = sillyReduce(trueDeletions, &sumReducer);
+    if(master()) fprintf(stderr, "Batch %u constructed using %u insertions and %u deletions\n", batchNo, trueAdditions, trueDeletions);
+
+    double onlyBatchTime = 0.0;
 
     //------ Phase 1 process where only tags flow together
 
@@ -1193,35 +1223,40 @@ void Engine<VertexType, EdgeType>::streamRun3(VertexProgram<VertexType, EdgeType
     trimScheduler->clear();
 
     quickRun(tagProgram, true);
-    fprintf(stderr, "Batch %u phase 1 completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
+    if(master()) fprintf(stderr, "Batch %u phase 1 completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
     allTimProcess += timProcess;
+    onlyBatchTime += timProcess;
 
     //------ Phase 2 process where tags are removed and values are appropriately reset
 
-    fprintf(stderr, "Original %u tags now spread to %u vertices; hence, wipping them off\n", iTagged, trimScheduler->countSetBits());
+    iTagged = sillyReduce(iTagged, &sumReducer);
+    IdType trimCount = sillyReduce(trimScheduler->countSetBits(), &sumReducer);
+    if(master()) fprintf(stderr, "Original %u tags now spread to %u vertices; hence, wipping them off\n", iTagged, trimCount);
 
     //signalAll();
     scheduler->schedule(shadowScheduler);
     quickRun(removeApproximations, true);
-    fprintf(stderr, "Batch %u phase 2 completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
+    if(master()) fprintf(stderr, "Batch %u phase 2 completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
     allTimProcess += timProcess;
+    onlyBatchTime += timProcess;
 
     //------ Phase 3 process where exact computations are performed
 
     //signalAll();
     scheduler->schedule(shadowScheduler);
     quickRun(exactProgram, true);
-    fprintf(stderr, "Batch %u phase 3 completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
+    if(master()) fprintf(stderr, "Batch %u phase 3 completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
     allTimProcess += timProcess;
+    onlyBatchTime += timProcess;
 
-    fprintf(stderr, "Batch %u fully completed on node %u at %.3lf ms\n", batchNo, nodeId, allTimProcess);
+    if(master()) fprintf(stderr, "Batch %u fully completed on node %u took %.3lf ms (at %.3lf ms)\n", batchNo, nodeId, onlyBatchTime, allTimProcess);
 
     //------ Writing back
 
     processAll(wProgram);
   }
 
-  if(NodeManager::amIMaster() && printEM)
+  if(master() && printEM)
     printEngineMetrics();
 }
 
@@ -1244,7 +1279,7 @@ void Engine<VertexType, EdgeType>::streamRun4(VertexProgram<VertexType, EdgeType
   unsigned batchNo = 0;
   engineContext.setCurrentBatch(batchNo);
   quickRun(vProgram, true);
-  fprintf(stderr, "Base Batch %u completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
+  if(master()) fprintf(stderr, "Base Batch %u completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
   allTimProcess += timProcess;
 
   while(batchNo++ < numBatches) {
@@ -1252,6 +1287,8 @@ void Engine<VertexType, EdgeType>::streamRun4(VertexProgram<VertexType, EdgeType
     currentGlobalDeleteCounter += numDeletions;
     unsigned trueAdditions = 0, trueDeletions = 0;
     shadowScheduler->clear();
+
+    scheduler->reset();
 
     // Insertions
     std::set<IdType> inTopics;
@@ -1274,6 +1311,9 @@ void Engine<VertexType, EdgeType>::streamRun4(VertexProgram<VertexType, EdgeType
     }
 
     receiveNewGhostValues(inTopics); 
+
+    shadowScheduler->set(scheduler->getNextBitset());
+    scheduler->reset();
 
     // Deletions
     while(delIter != deleteStream.end()) {
@@ -1305,8 +1345,11 @@ void Engine<VertexType, EdgeType>::streamRun4(VertexProgram<VertexType, EdgeType
       break;
     }
 
-    //if(master()) 
-    fprintf(stderr, "Batch %u constructed using %u insertions and %u deletions\n", batchNo, trueAdditions, trueDeletions);
+    trueAdditions = sillyReduce(trueAdditions, &sumReducer);
+    trueDeletions = sillyReduce(trueDeletions, &sumReducer);
+    if(master()) fprintf(stderr, "Batch %u constructed using %u insertions and %u deletions\n", batchNo, trueAdditions, trueDeletions);
+
+    double onlyBatchTime = 0.0;
 
     //------ Phase 1 process where trimming of subtrees takes place
 
@@ -1318,27 +1361,31 @@ void Engine<VertexType, EdgeType>::streamRun4(VertexProgram<VertexType, EdgeType
 
     quickRun(trimProgram, true);
 
-    fprintf(stderr, "Original %u tags were spread to %u vertices; hence, wipped them off\n", iTagged, trimScheduler->countSetBits());
+    iTagged = sillyReduce(iTagged, &sumReducer);
+    IdType trimCount = sillyReduce(trimScheduler->countSetBits(), &sumReducer);
+    if(master()) fprintf(stderr, "Original %u tags were spread to %u vertices; hence, wipped them off\n", iTagged, trimCount);
 
-    fprintf(stderr, "Batch %u phase 1 completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
+    if(master()) fprintf(stderr, "Batch %u phase 1 completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
     allTimProcess += timProcess;
+    onlyBatchTime += timProcess;
 
     //------ Phase 2 process where exact computations are performed
 
     //signalAll();
     scheduler->schedule(shadowScheduler);
     quickRun(vProgram, true);
-    fprintf(stderr, "Batch %u phase 2 completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
+    if(master()) fprintf(stderr, "Batch %u phase 2 completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
     allTimProcess += timProcess;
+    onlyBatchTime += timProcess;
 
-    fprintf(stderr, "Batch %u fully completed on node %u at %.3lf ms\n", batchNo, nodeId, allTimProcess);
+    if(master()) fprintf(stderr, "Batch %u fully completed on node %u took %.3lf ms (at %.3lf ms)\n", batchNo, nodeId, onlyBatchTime, allTimProcess);
 
     //------ Writing back
 
     processAll(wProgram);
   }
 
-  if(NodeManager::amIMaster() && printEM)
+  if(master() && printEM)
     printEngineMetrics();
 }
 
@@ -1361,7 +1408,7 @@ void Engine<VertexType, EdgeType>::streamRun5(VertexProgram<VertexType, EdgeType
   unsigned batchNo = 0;
   engineContext.setCurrentBatch(batchNo);
   quickRun(vProgram, true);
-  fprintf(stderr, "Base Batch %u completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
+  if(master()) fprintf(stderr, "Base Batch %u completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
   allTimProcess += timProcess;
 
   while(batchNo++ < numBatches) {
@@ -1369,6 +1416,8 @@ void Engine<VertexType, EdgeType>::streamRun5(VertexProgram<VertexType, EdgeType
     currentGlobalDeleteCounter += numDeletions;
     unsigned trueAdditions = 0, trueDeletions = 0;
     shadowScheduler->clear();
+
+    scheduler->reset();
 
     // Insertions
     std::set<IdType> inTopics;
@@ -1392,6 +1441,9 @@ void Engine<VertexType, EdgeType>::streamRun5(VertexProgram<VertexType, EdgeType
 
     receiveNewGhostValues(inTopics); 
 
+    shadowScheduler->set(scheduler->getNextBitset());
+    scheduler->reset(); 
+
     // Deletions
     while(delIter != deleteStream.end()) {
       unsigned long long ts;
@@ -1411,8 +1463,11 @@ void Engine<VertexType, EdgeType>::streamRun5(VertexProgram<VertexType, EdgeType
       break;
     }
 
-    //if(master()) 
-    fprintf(stderr, "Batch %u constructed using %u insertions and %u deletions\n", batchNo, trueAdditions, trueDeletions);
+    trueAdditions = sillyReduce(trueAdditions, &sumReducer);
+    trueDeletions = sillyReduce(trueDeletions, &sumReducer);
+    if(master()) fprintf(stderr, "Batch %u constructed using %u insertions and %u deletions\n", batchNo, trueAdditions, trueDeletions);
+
+    double onlyBatchTime = 0.0;
 
     //------ Phase 1 process where trimming of subtrees takes place
 
@@ -1424,27 +1479,31 @@ void Engine<VertexType, EdgeType>::streamRun5(VertexProgram<VertexType, EdgeType
 
     quickRun(trimProgram, true);
 
-    fprintf(stderr, "Original %u tags were spread to %u vertices; hence, wipped them off\n", iTagged, trimScheduler->countSetBits());
+    iTagged = sillyReduce(iTagged, &sumReducer);
+    IdType trimCount = sillyReduce(trimScheduler->countSetBits(), &sumReducer);
+    if(master()) fprintf(stderr, "Original %u tags were spread to %u vertices; hence, wipped them off\n", iTagged, trimCount);
 
-    fprintf(stderr, "Batch %u phase 1 completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
+    if(master()) fprintf(stderr, "Batch %u phase 1 completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
     allTimProcess += timProcess;
+    onlyBatchTime += timProcess;
 
     //------ Phase 2 process where exact computations are performed
 
     //signalAll();
     scheduler->schedule(shadowScheduler);
     quickRun(vProgram, true);
-    fprintf(stderr, "Batch %u phase 2 completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
+    if(master()) fprintf(stderr, "Batch %u phase 2 completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
     allTimProcess += timProcess;
+    onlyBatchTime += timProcess;
 
-    fprintf(stderr, "Batch %u fully completed on node %u at %.3lf ms\n", batchNo, nodeId, allTimProcess);
+    if(master()) fprintf(stderr, "Batch %u fully completed on node %u took %.3lf ms (at %.3lf ms)\n", batchNo, nodeId, onlyBatchTime, allTimProcess);
 
     //------ Writing back
 
     processAll(wProgram);
   }
 
-  if(NodeManager::amIMaster() && printEM)
+  if(master() && printEM)
     printEngineMetrics();
 }
 
@@ -1773,6 +1832,25 @@ template <typename VertexType, typename EdgeType>
 unsigned Engine<VertexType, EdgeType>::getNextAliveNodeId(unsigned nId) {
   unsigned ret = (nId + 1) % numNodes;
   return ret;
+}
+
+template <typename VertexType, typename EdgeType>
+template <typename T>
+T Engine<VertexType, EdgeType>::sillyReduce(T value, T (*reducer)(T, T)) {
+  if(master()) {
+    for(unsigned i=0; i<numNodes; ++i) {
+      if(i == nodeId)
+        continue;
+
+      T v;
+      CommManager::controlSyncPullIn(i, &v, sizeof(T));
+      value = reducer(value, v);
+    }
+  } else {
+    unsigned masterId = NodeManager::masterId();
+    CommManager::controlPushOut(masterId, (void*) &value, sizeof(T));
+  }
+  return value;
 }
 
 #endif //__ENGINE_HPP__

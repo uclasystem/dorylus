@@ -186,38 +186,21 @@ int main(int argc, char* argv[]) {
   assert(parse(&argc, argv, "--bm-tmpdir=", tmpDir));
 
   int t;
-  assert(parse(&argc, argv, "--bm-tagonadd=", &t));
-  bool tagOnAdd = (t == 0) ? false : true;
-
-  assert(parse(&argc, argv, "--bm-tagondelete=", &t));
-  bool tagOnDelete = (t == 0) ? false : true;
-
-  assert(parse(&argc, argv, "--bm-smarttagondelete=", &t));
-  bool smartTagOnDelete = (t == 0) ? false : true;
-  if(smartTagOnDelete)
-    assert(tagOnAdd == false);
-
   assert(parse(&argc, argv, "--bm-smartpropagation=", &t));
   smartPropagation = (t == 0) ? false : true;
 
-  assert(smartPropagation == true);
-
-  if(smartPropagation)
-    assert(smartTagOnDelete == true);
+  //assert(smartPropagation == true);
 
   fprintf(stderr, "source = %u\n", source);
   fprintf(stderr, "tmpDir = %s\n", tmpDir);
-  fprintf(stderr, "tagOnAdd = %s\n", tagOnAdd ? "true" : "false");
-  fprintf(stderr, "tagOnDelete = %s\n", tagOnDelete ? "true" : "false");
-  fprintf(stderr, "smartTagOnDelete = %s\n", smartTagOnDelete ? "true" : "false");
   fprintf(stderr, "smartPropagation = %s\n", smartPropagation ? "true" : "false");
 
   VType defaultVertex = 0;
   EType defaultEdge = 1;
   Engine<VType, EType>::init(argc, argv, defaultVertex, defaultEdge, &edgeWeight);
 
-  Engine<VType, EType>::setOnAddDelete(DST, (tagOnAdd ? &setApprox : &ignoreApprox), DST, (tagOnDelete ? &setApprox : &ignoreApprox));
-  Engine<VType, EType>::setOnDeleteSmartHandler(smartTagOnDelete ? &setSmartApprox : NULL);
+  Engine<VType, EType>::setOnAddDelete(DST, &ignoreApprox, DST, &setApprox);
+  Engine<VType, EType>::setOnDeleteSmartHandler(&setSmartApprox);
 
   Engine<VType, EType>::signalAll();
   InitProgram<VType, EType> initProgram;
@@ -230,10 +213,7 @@ int main(int argc, char* argv[]) {
 
   Engine<VType, EType>::signalVertex(source);
 
-  if(smartPropagation)
-    Engine<VType, EType>::streamRun3(&asswpProgram, &atagProgram, &approxResetProgram, &asswpProgram, &awriterProgram, smartTagOnDelete, true);
-  else
-    Engine<VType, EType>::streamRun2(&asswpProgram, &approxResetProgram, &asswpProgram, &awriterProgram, smartTagOnDelete, true);
+  Engine<VType, EType>::streamRun3(&asswpProgram, &atagProgram, &approxResetProgram, &asswpProgram, &awriterProgram, true, true);
 
   Engine<VType, EType>::destroy();
   return 0;

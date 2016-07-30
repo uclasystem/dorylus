@@ -100,6 +100,11 @@ struct LightEdge {
     bool valid;
 };
 
+template <typename T>
+T sumReducer(T left, T right) {
+  return(left += right);
+}
+
 template <typename VertexType, typename EdgeType>
 class Engine {
 public:
@@ -236,6 +241,9 @@ public:
 
     static IdType numVertices();
     static bool master(); 
+    
+    template<typename T>
+    static T sillyReduce(T value, T (*reducer)(T, T)); 
 };
 
 #endif //__ENGINE_H__

@@ -6,6 +6,7 @@
 #include <cstring>
 
 Node NodeManager::me;
+unsigned NodeManager::masterIdx = 0;
 //bool NodeManager::master;
 std::vector<Node> NodeManager::allNodes;
 unsigned NodeManager::numLiveNodes;
@@ -43,12 +44,14 @@ void NodeManager::parseNodeConfig(const char* hostFile) {
             me.name = name;
             me.master = (role == MASTER_ROLE);
         }
+        masterIdx = (role == MASTER_ROLE) ? allNodes.size() : masterIdx;
         allNodes.push_back(Node(allNodes.size(), &ip, &name, (role == MASTER_ROLE)));
     }
 
     numLiveNodes = allNodes.size();
     for(unsigned i=0; i<allNodes.size(); ++i)
         fprintf(stderr, "%u %s %s\n", allNodes[i].id, allNodes[i].ip.c_str(), allNodes[i].name.c_str());
+    fprintf(stderr, "Node %u is master\n", masterIdx);
 }
 
 void NodeManager::nodeManagerCB(const char* path) {
@@ -453,6 +456,10 @@ Worker:
 
     bool NodeManager::amIMaster() {
         return me.master;
+    }
+
+    unsigned NodeManager::masterId() {
+        return masterIdx; 
     }
 
     unsigned NodeManager::getNodeId(std::string& nodeName) {

@@ -70,9 +70,11 @@ class NodeManager {
     static void barrier(const char* bar);
     static void releaseAll(const char* bar);
     static bool amIMaster();
+    static unsigned masterId();
 
     private:
     static Node me;
+    static unsigned masterIdx;
     //static bool master;
     
     static std::vector<Node> allNodes;
