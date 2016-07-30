@@ -52,7 +52,7 @@ class ApproxResetProgram : public VertexProgram<VertexType, EdgeType> {
     }
 };
 
-/* Approx version with tagging */
+/* Perfect version no tagging */
 template<typename VertexType, typename EdgeType>
 class ASSWPProgram : public VertexProgram<VertexType, EdgeType> {
   public:
@@ -65,24 +65,16 @@ class ASSWPProgram : public VertexProgram<VertexType, EdgeType> {
 
       if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "Processing vertex %u with %u in-edges\n", vertex.globalId(), vertex.numInEdges());
 
-      VType maxWidth = 0; bool approx = (approximator::isApprox(vertex.data())); 
+      VType maxWidth = 0; 
       for(unsigned i=0; i<vertex.numInEdges(); ++i) {
         if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "Vertex %u source %u has min(%u, %u) path and approx = %s\n", vertex.globalId(), vertex.getSourceVertexGlobalId(i), approximator::value(vertex.getSourceVertexData(i)), vertex.getInEdgeData(i), approximator::isApprox(vertex.getSourceVertexData(i)) ? "true" : "false");
 
         maxWidth = std::max(maxWidth, std::min(approximator::value(vertex.getSourceVertexData(i)), vertex.getInEdgeData(i)));
-        approx |= approximator::isApprox(vertex.getSourceVertexData(i));
-      }
-
-      if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "Vertex %u path %u and approx %s\n", vertex.globalId(), maxWidth, approx ? "true" : "false");
-
-      if(approx) {
-        approximator::setApprox(maxWidth);
-        Engine<VertexType, EdgeType>::shadowSignalVertex(vertex.globalId());
       }
 
       bool changed = (vertex.data() != maxWidth);
 
-      //if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "Vertex %u old path =  %u has new path = %u\n", vertex.globalId(), vertex.data(), maxWidth);
+      if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "Vertex %u old path =  %u has new path = %u\n", vertex.globalId(), vertex.data(), maxWidth);
 
       vertex.setData(maxWidth);
       return changed;
@@ -133,7 +125,7 @@ class ATagProgram : public VertexProgram<VertexType, EdgeType> {
 template<typename VertexType, typename EdgeType>
 class AWriterProgram : public VertexProgram<VertexType, EdgeType> {
   std::ofstream outFile;
-  std::ofstream approxFile;
+  //std::ofstream approxFile;
   public:
 
   void beforeIteration(EngineContext& engineContext) {
@@ -141,9 +133,11 @@ class AWriterProgram : public VertexProgram<VertexType, EdgeType> {
     sprintf(filename, "%s/output_%u_%u", tmpDir, engineContext.currentBatch(), NodeManager::getNodeId());
     outFile.open(filename);
 
+    /*
     char afilename[300];
     sprintf(afilename, "%s/approx_%u_%u", tmpDir, engineContext.currentBatch(), NodeManager::getNodeId());
     approxFile.open(afilename);
+    */
   }
 
   void processVertex(Vertex<VertexType, EdgeType>& vertex) {
@@ -151,13 +145,12 @@ class AWriterProgram : public VertexProgram<VertexType, EdgeType> {
       fprintf(stderr, "Writer: Vertex %u path = %u\n", vertex.globalId(), vertex.data());
 
     outFile << vertex.globalId() << " " << approximator::value(vertex.data()) << std::endl;
-    approxFile << vertex.globalId() << " " << (approximator::isApprox(vertex.data()) ? "true" : "false") << std::endl;
-    //if(smartPropagation) vertex.setOldData(approximator::value(vertex.data()));
+    //approxFile << vertex.globalId() << " " << (approximator::isApprox(vertex.data()) ? "true" : "false") << std::endl;
   }
 
   void afterIteration(EngineContext& engineContext) {
     outFile.close();
-    approxFile.close();
+    //approxFile.close();
   }
 };
 
@@ -167,14 +160,14 @@ void setApprox(VType& v) {
 
 void setSmartApprox(VType& v, LightEdge<VType, EType>& e) {
   assert(e.to == v);
-  if(std::min(approximator::value(e.from), e.edge) == v)
+  if(std::min(approximator::value(e.from), e.edge) == approximator::value(v))
     approximator::setApprox(v);
 }
 
 void ignoreApprox(VType& v) { }
 
 EType edgeWeight(IdType from, IdType to) {
-  return EType((from + to + 25) % 50 + 1);
+  return EType((from + to) % 255 + 1);
 }
 
 int main(int argc, char* argv[]) {
