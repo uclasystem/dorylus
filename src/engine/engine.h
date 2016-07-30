@@ -182,6 +182,7 @@ public:
     static void addEdge(IdType from, IdType to, std::set<IdType>* inTopics);
     static void deleteEdge(IdType from, IdType to);
     static LightEdge<VertexType, EdgeType> deleteEdge2(IdType from, IdType to);
+    static bool deleteEdge3(IdType from, IdType to);
 
     static void receiveNewGhostValues(std::set<IdType>& inTopics);
 
@@ -196,6 +197,8 @@ public:
     static void streamRun2(VertexProgram<VertexType, EdgeType>* vProgram, VertexProgram<VertexType, EdgeType>* removeApproximations, VertexProgram<VertexType, EdgeType>* exactProgram, VertexProgram<VertexType, EdgeType>* wProgram, bool smartDeletions, bool printEM);
     static void streamRun3(VertexProgram<VertexType, EdgeType>* vProgram, VertexProgram<VertexType, EdgeType>* tagProgram, VertexProgram<VertexType, EdgeType>* removeApproximations, VertexProgram<VertexType, EdgeType>* exactProgram, VertexProgram<VertexType, EdgeType>* wProgram, bool smartDeletions, bool printEM);
     static void streamRun4(VertexProgram<VertexType, EdgeType>* vProgram, VertexProgram<VertexType, EdgeType>* trimProgram, VertexProgram<VertexType, EdgeType>* wProgram, bool smartDeletions, bool printEM);
+
+    static void streamRun5(VertexProgram<VertexType, EdgeType>* vProgram, VertexProgram<VertexType, EdgeType>* trimProgram, VertexProgram<VertexType, EdgeType>* wProgram, bool printEM);
 
     static void processAll(VertexProgram<VertexType, EdgeType>* vProgram);
     static void quickRun(VertexProgram<VertexType, EdgeType>* vProgram, bool metrics = false);

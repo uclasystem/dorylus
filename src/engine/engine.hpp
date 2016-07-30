@@ -768,6 +768,58 @@ LightEdge<VertexType, EdgeType> Engine<VertexType, EdgeType>::deleteEdge2(IdType
 }
 
 template <typename VertexType, typename EdgeType>
+bool Engine<VertexType, EdgeType>::deleteEdge3(IdType from, IdType to) { // globalIds
+  bool treeEdge = false;
+
+  if(graph.vertexPartitionIds[from] == nodeId) {
+    IdType lFromId = graph.globalToLocalId[from];
+    IdType toId = (graph.vertexPartitionIds[to] == nodeId ? graph.globalToLocalId[to] : to);
+
+    typename std::vector<OutEdge<EdgeType> >::iterator it;
+    for(it = graph.vertices[lFromId].outEdges.begin(); it != graph.vertices[lFromId].outEdges.end(); ++it) {
+      if(it->destId() == toId) {
+        graph.vertices[lFromId].outEdges.erase(it);
+        break;
+      }
+    }
+  }
+
+  if(graph.vertexPartitionIds[to] == nodeId) {
+    IdType lToId = graph.globalToLocalId[to];
+    bool remoteEdge = (graph.vertexPartitionIds[from] != nodeId);
+    IdType fromId = (remoteEdge ? from : graph.globalToLocalId[from]);
+
+    treeEdge = (graph.vertices[lToId].parent() == from);
+
+    typename std::vector<InEdge<EdgeType> >::iterator it;
+    unsigned ct = 0;
+    for(it = graph.vertices[lToId].inEdges.begin(); it != graph.vertices[lToId].inEdges.end(); ++it) {
+      if(it->sourceId() == fromId) {
+        graph.vertices[lToId].inEdges.erase(it);
+        break;
+      }
+      ++ct;
+    }
+
+    if(remoteEdge) {
+      typename std::map<IdType, GhostVertex<VertexType> >::iterator gvit = graph.ghostVertices.find(from);
+      assert(gvit != graph.ghostVertices.end());
+      typename  std::vector<IdType>::iterator it;
+      for(it = gvit->second.outEdges.begin(); it != gvit->second.outEdges.end(); ++it) {
+        if(*it == lToId) {
+          gvit->second.outEdges.erase(it);
+          break; 
+        }
+      }
+    }
+  }
+
+  return treeEdge;
+}
+
+
+
+template <typename VertexType, typename EdgeType>
 void Engine<VertexType, EdgeType>::setOnAddDelete(InOutType oa, void (*oaH) (VertexType& v), InOutType od, void (*odH) (VertexType& v)) {
   onAdd = oa;
   onAddHandler = oaH;
@@ -858,7 +910,7 @@ void Engine<VertexType, EdgeType>::streamRun(VertexProgram<VertexType, EdgeType>
     currentGlobalDeleteCounter += numDeletions;
 
     unsigned trueAdditions = 0, trueDeletions = 0;
-    
+
     // Insertions
     std::set<IdType> inTopics;
     while(insIter != insertStream.end()) {
@@ -1040,7 +1092,7 @@ void Engine<VertexType, EdgeType>::streamRun2(VertexProgram<VertexType, EdgeType
     allTimProcess += timProcess;
 
     fprintf(stderr, "Batch %u fully completed on node %u at %.3lf ms\n", batchNo, nodeId, allTimProcess);
-    
+
     //------ Writing back
 
     processAll(wProgram);
@@ -1163,7 +1215,7 @@ void Engine<VertexType, EdgeType>::streamRun3(VertexProgram<VertexType, EdgeType
     allTimProcess += timProcess;
 
     fprintf(stderr, "Batch %u fully completed on node %u at %.3lf ms\n", batchNo, nodeId, allTimProcess);
-    
+
     //------ Writing back
 
     processAll(wProgram);
@@ -1232,11 +1284,11 @@ void Engine<VertexType, EdgeType>::streamRun4(VertexProgram<VertexType, EdgeType
         if(smartDeletions) {
           LightEdge<VertexType, EdgeType> dEdge = deleteEdge2(from, to);
           //if(dEdge.to.parent == dEdge.fromId) 
-            activateEndPoints2(from, to, onDelete, onDeleteSmartHandler, dEdge);
+          activateEndPoints2(from, to, onDelete, onDeleteSmartHandler, dEdge);
           if(undirected) {
             LightEdge<VertexType, EdgeType> dEdge = deleteEdge2(to, from);
             //if(dEdge.to.parent == dEdge.fromId)
-              activateEndPoints2(to, from, onDelete, onDeleteSmartHandler, dEdge);
+            activateEndPoints2(to, from, onDelete, onDeleteSmartHandler, dEdge);
           }
         } else {
           deleteEdge(from, to);
@@ -1280,7 +1332,7 @@ void Engine<VertexType, EdgeType>::streamRun4(VertexProgram<VertexType, EdgeType
     allTimProcess += timProcess;
 
     fprintf(stderr, "Batch %u fully completed on node %u at %.3lf ms\n", batchNo, nodeId, allTimProcess);
-    
+
     //------ Writing back
 
     processAll(wProgram);
@@ -1290,7 +1342,111 @@ void Engine<VertexType, EdgeType>::streamRun4(VertexProgram<VertexType, EdgeType
     printEngineMetrics();
 }
 
+template <typename VertexType, typename EdgeType>
+void Engine<VertexType, EdgeType>::streamRun5(VertexProgram<VertexType, EdgeType>* vProgram, VertexProgram<VertexType, EdgeType>* trimProgram, VertexProgram<VertexType, EdgeType>* wProgram, bool printEM) {
+  NodeManager::barrier("streamrun5");
+  fprintf(stderr, "Engine::streamRun5 called.\n");
 
+  NodeManager::startProcessing();
+
+  unsigned numDeletions = unsigned(batchSize * (deletePercent / 100.0));
+  unsigned numInsertions = batchSize - numDeletions;
+
+  unsigned long long currentGlobalInsertCounter = 0;
+  unsigned long long currentGlobalDeleteCounter = 0;
+
+  typename std::vector<std::tuple<unsigned long long, IdType, IdType> >::iterator insIter = insertStream.begin();
+  typename std::vector<std::tuple<unsigned long long, IdType, IdType> >::iterator delIter = deleteStream.begin();
+
+  unsigned batchNo = 0;
+  engineContext.setCurrentBatch(batchNo);
+  quickRun(vProgram, true);
+  fprintf(stderr, "Base Batch %u completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
+  allTimProcess += timProcess;
+
+  while(batchNo++ < numBatches) {
+    currentGlobalInsertCounter += numInsertions;
+    currentGlobalDeleteCounter += numDeletions;
+    unsigned trueAdditions = 0, trueDeletions = 0;
+    shadowScheduler->clear();
+
+    // Insertions
+    std::set<IdType> inTopics;
+    while(insIter != insertStream.end()) {
+      unsigned long long ts;
+      IdType from, to; 
+      std::tie(ts, from, to) = *insIter;
+      if(ts < currentGlobalInsertCounter) {
+        addEdge(from, to, &inTopics);
+        activateEndPoints(from, to, onAdd, onAddHandler);
+        if(undirected) {
+          addEdge(to, from, &inTopics);
+          activateEndPoints(to, from, onAdd, onAddHandler);
+        }
+        ++insIter;
+        ++trueAdditions;
+        continue;
+      }
+      break;
+    }
+
+    receiveNewGhostValues(inTopics); 
+
+    // Deletions
+    while(delIter != deleteStream.end()) {
+      unsigned long long ts;
+      IdType from, to; 
+      std::tie(ts, from, to) = *delIter;
+      if(ts < currentGlobalDeleteCounter) {
+        if(deleteEdge3(from, to));
+        activateEndPoints(from, to, onDelete, onDeleteHandler);
+        if(undirected) {
+          if(deleteEdge3(to, from));
+          activateEndPoints(to, from, onDelete, onDeleteHandler);
+        }
+        ++delIter;
+        ++trueDeletions;
+        continue;
+      }
+      break;
+    }
+
+    //if(master()) 
+    fprintf(stderr, "Batch %u constructed using %u insertions and %u deletions\n", batchNo, trueAdditions, trueDeletions);
+
+    //------ Phase 1 process where trimming of subtrees takes place
+
+    IdType iTagged = scheduler->numFutureTasks();
+
+    engineContext.setCurrentBatch(batchNo);
+    //shadowScheduler->clear();
+    trimScheduler->clear();
+
+    quickRun(trimProgram, true);
+
+    fprintf(stderr, "Original %u tags were spread to %u vertices; hence, wipped them off\n", iTagged, trimScheduler->countSetBits());
+
+    fprintf(stderr, "Batch %u phase 1 completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
+    allTimProcess += timProcess;
+
+    //------ Phase 2 process where exact computations are performed
+
+    //signalAll();
+    scheduler->schedule(shadowScheduler);
+    quickRun(vProgram, true);
+    fprintf(stderr, "Batch %u phase 2 completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
+    allTimProcess += timProcess;
+
+    fprintf(stderr, "Batch %u fully completed on node %u at %.3lf ms\n", batchNo, nodeId, allTimProcess);
+
+    //------ Writing back
+
+    processAll(wProgram);
+  }
+
+  if(NodeManager::amIMaster() && printEM)
+    printEngineMetrics();
+}
 
 template <typename VertexType, typename EdgeType>
 void Engine<VertexType, EdgeType>::processAll(VertexProgram<VertexType, EdgeType>* vProgram) {
@@ -1347,7 +1503,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
 
           fprintf(stderr, "Starting iteration %u at %.3lf ms\n", iteration, timProcess + getTimer()); 
           //if(iteration > 1000)
-            //engineContext.setTooLong(true);
+          //engineContext.setTooLong(true);
 
           bool hltBool = ((timProcess + getTimer() > 500) && (scheduler->anyScheduledTasks() == false));  // after 1 sec only!
 
