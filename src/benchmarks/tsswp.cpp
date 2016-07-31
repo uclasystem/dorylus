@@ -12,7 +12,6 @@
 using namespace std;
 
 char tmpDir[256];
-bool smartPropagation = false;
 
 Lock mLock; 
 unsigned maximumLevel = 0;
