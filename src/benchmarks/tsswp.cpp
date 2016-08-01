@@ -13,8 +13,8 @@ using namespace std;
 
 char tmpDir[256];
 
-Lock mLock; 
-unsigned maximumLevel = 0;
+//Lock mLock; 
+//unsigned maximumLevel = 0;
 
 typedef unsigned EType;
 
@@ -257,10 +257,12 @@ class ASmarterTrimProgram : public VertexProgram<VertexType, EdgeType> {
 
       assert((maxLevel == VERY_HIGH) || (maxLevel <= vertex.data().level));
 
+/*
       if((maxLevel < VERY_HIGH) && (maxLevel > 4 * maximumLevel)) {
         fprintf(stderr, "Vertex %u is jumping all over (maximumLevel = %u); hence trimming it off\n", vertex.globalId(), maximumLevel);
         maxWidth = 0; maxParent = VERY_HIGH; maxLevel = VERY_HIGH;
       }
+*/
 
       if((vertex.data().value != maxWidth) || (vertex.data().level != maxLevel)) {
         Engine<VertexType, EdgeType>::shadowSignalVertex(vertex.globalId());
@@ -324,9 +326,11 @@ class ASSWPProgram : public VertexProgram<VertexType, EdgeType> {
         vertex.setData(v);
         vertex.setParent(maxParent);
 
+/*
         mLock.lock();
         maximumLevel = std::max(maxLevel, maximumLevel);
         mLock.unlock();
+*/
         return true;
       }
 
@@ -367,6 +371,21 @@ class AWriterProgram : public VertexProgram<VertexType, EdgeType> {
   }
 };
 
+/* Approx version with tagging */
+template<typename VertexType, typename EdgeType>
+class FakeWriterProgram : public VertexProgram<VertexType, EdgeType> {
+  public:
+
+  void beforeIteration(EngineContext& engineContext) {
+  }
+
+  void processVertex(Vertex<VertexType, EdgeType>& vertex) {
+  }
+
+  void afterIteration(EngineContext& engineContext) {
+  }
+};
+
 void ignoreAddDelete(VType& v) { }
 
 EType edgeWeight(IdType from, IdType to) {
@@ -378,7 +397,7 @@ int main(int argc, char* argv[]) {
   //checkers.insert(0);
   //checkers.insert(93);
 
-  mLock.init();
+  //mLock.init();
 
   assert(parse(&argc, argv, "--bm-source=", &source));
   assert(parse(&argc, argv, "--bm-tmpdir=", tmpDir));
@@ -403,7 +422,8 @@ int main(int argc, char* argv[]) {
   Engine<VType, EType>::quickRun(&initProgram, true);
 
   ASSWPProgram<VType, EType> asswpProgram;
-  AWriterProgram<VType, EType> awriterProgram;
+  //AWriterProgram<VType, EType> awriterProgram;
+  FakeWriterProgram<VType, EType> awriterProgram;
 
   Engine<VType, EType>::signalVertex(source);
 

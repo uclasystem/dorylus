@@ -154,6 +154,21 @@ class AWriterProgram : public VertexProgram<VertexType, EdgeType> {
   }
 };
 
+/* Approx version with tagging */
+template<typename VertexType, typename EdgeType>
+class FakeWriterProgram : public VertexProgram<VertexType, EdgeType> {
+  public:
+
+  void beforeIteration(EngineContext& engineContext) {
+  }
+
+  void processVertex(Vertex<VertexType, EdgeType>& vertex) {
+  }
+
+  void afterIteration(EngineContext& engineContext) {
+  }
+};
+
 void setApprox(VType& v) {
   approximator::setApprox(v);
 }
@@ -202,7 +217,8 @@ int main(int argc, char* argv[]) {
   ATagProgram<VType, EType> atagProgram;
   ASSWPProgram<VType, EType> asswpProgram;
   ApproxResetProgram<VType, EType> approxResetProgram;
-  AWriterProgram<VType, EType> awriterProgram;
+  //AWriterProgram<VType, EType> awriterProgram;
+  FakeWriterProgram<VType, EType> awriterProgram;
 
   Engine<VType, EType>::signalVertex(source);
 
