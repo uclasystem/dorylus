@@ -928,7 +928,9 @@ void Engine<VertexType, EdgeType>::streamRun(VertexProgram<VertexType, EdgeType>
           activateEndPoints(to, from, onAdd, onAddHandler);
         }
         ++insIter;
-        ++trueAdditions;
+
+        if(graph.vertexPartitionIds[to] == nodeId)
+          ++trueAdditions;
         continue;
       }
       break;
@@ -949,7 +951,9 @@ void Engine<VertexType, EdgeType>::streamRun(VertexProgram<VertexType, EdgeType>
           activateEndPoints(to, from, onDelete, onDeleteHandler);
         }
         ++delIter;
-        ++trueDeletions;
+        
+        if(graph.vertexPartitionIds[to] == nodeId)
+          ++trueDeletions;
         continue;
       }
       break;
@@ -1036,7 +1040,9 @@ void Engine<VertexType, EdgeType>::streamRun2(VertexProgram<VertexType, EdgeType
           activateEndPoints(to, from, onAdd, onAddHandler);
         }
         ++insIter;
-        ++trueAdditions;
+        
+        if(graph.vertexPartitionIds[to] == nodeId)
+          ++trueAdditions;
         continue;
       }
       break;
@@ -1069,7 +1075,9 @@ void Engine<VertexType, EdgeType>::streamRun2(VertexProgram<VertexType, EdgeType
           }
         }
         ++delIter;
-        ++trueDeletions;
+        
+        if(graph.vertexPartitionIds[to] == nodeId)
+          ++trueDeletions;
         continue;
       }
       break;
@@ -1172,7 +1180,9 @@ void Engine<VertexType, EdgeType>::streamRun3(VertexProgram<VertexType, EdgeType
           activateEndPoints(to, from, onAdd, onAddHandler);
         }
         ++insIter;
-        ++trueAdditions;
+        
+        if(graph.vertexPartitionIds[to] == nodeId)
+          ++trueAdditions;
         continue;
       }
       break;
@@ -1204,8 +1214,10 @@ void Engine<VertexType, EdgeType>::streamRun3(VertexProgram<VertexType, EdgeType
             activateEndPoints(to, from, onDelete, onDeleteHandler);
           }
         }
-        ++trueDeletions;
         ++delIter;
+
+        if(graph.vertexPartitionIds[to] == nodeId)
+          ++trueDeletions;
         continue;
       }
       break;
@@ -1307,7 +1319,9 @@ void Engine<VertexType, EdgeType>::streamRun4(VertexProgram<VertexType, EdgeType
           activateEndPoints(to, from, onAdd, onAddHandler);
         }
         ++insIter;
-        ++trueAdditions;
+        
+        if(graph.vertexPartitionIds[to] == nodeId)
+          ++trueAdditions;
         continue;
       }
       break;
@@ -1342,7 +1356,9 @@ void Engine<VertexType, EdgeType>::streamRun4(VertexProgram<VertexType, EdgeType
           }
         }
         ++delIter;
-        ++trueDeletions;
+        
+        if(graph.vertexPartitionIds[to] == nodeId)
+          ++trueDeletions;
         continue;
       }
       break;
@@ -1436,7 +1452,9 @@ void Engine<VertexType, EdgeType>::streamRun5(VertexProgram<VertexType, EdgeType
           activateEndPoints(to, from, onAdd, onAddHandler);
         }
         ++insIter;
-        ++trueAdditions;
+        
+        if(graph.vertexPartitionIds[to] == nodeId)
+          ++trueAdditions;
         continue;
       }
       break;
@@ -1460,7 +1478,9 @@ void Engine<VertexType, EdgeType>::streamRun5(VertexProgram<VertexType, EdgeType
           activateEndPoints(to, from, onDelete, onDeleteHandler);
         }
         ++delIter;
-        ++trueDeletions;
+        
+        if(graph.vertexPartitionIds[to] == nodeId)
+          ++trueDeletions;
         continue;
       }
       break;
