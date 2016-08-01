@@ -58,7 +58,7 @@ void selectDeletions(std::string bSName, float probability) {
   unsigned long long edgesSelected = 0;
   Dice dice;
 
-  long long ignoreCount = 10000;
+  long long ignoreCount = 0;
 
   VertexType srcdst[2];
   while(bSStream.read((char*) srcdst, header.sizeOfVertexType * 2)) {
@@ -85,15 +85,17 @@ void selectDeletions(std::string bSName, float probability) {
 }
 
 int main(int argc, char* argv[]) {
-  if(argc < 2) {
-    std::cout << "Dude! Invoke like this: " << argv[0] << " --bsfile=<filename>" << std::endl;
+  if(argc < 3) {
+    std::cout << "Dude! Invoke like this: " << argv[0] << " --bsfile=<filename> --probability=<number>" << std::endl;
     return -1;
   }
 
-  std::string bSFile;
+  std::string bSFile; float probability = 0.1;
   for(int i=0; i<argc; ++i) {
     if(strncmp("--bsfile=", argv[i], 9) == 0)
       bSFile = argv[i] + 9;
+    if(strncmp("--probability=", argv[i], 14) == 0)
+      probability = atof(argv[i] + 14);
   }
 
   if(bSFile.size() == 0) {
@@ -102,8 +104,9 @@ int main(int argc, char* argv[]) {
   }
 
   std::cout << "BinarySnap file: " << bSFile << std::endl;
+  std::cout << "Probability: " << probability << std::endl;
 
-  selectDeletions(bSFile, 0.05);
+  selectDeletions(bSFile, probability);
 
   return 0;
 }

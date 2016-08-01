@@ -34,7 +34,7 @@ class Dice {
   }
 };
 
-void selectDeletions(std::string bSName, std::string degName, float probability) {
+void selectDeletions(std::string bSName, std::string degName, float probability, int theshold) {
   std::ifstream bSStream;
   bSStream.open(bSName, std::ios::binary);
 
@@ -73,14 +73,14 @@ void selectDeletions(std::string bSName, std::string degName, float probability)
   unsigned long long edgesSelected = 0;
   Dice dice;
 
-  long long ignoreCount = 10000;
+  long long ignoreCount = 0;
 
   VertexType srcdst[2];
   while(bSStream.read((char*) srcdst, header.sizeOfVertexType * 2)) {
     if(--ignoreCount > 0)
       continue;
 
-    if(degrees[srcdst[0]] > 10)
+    if(degrees[srcdst[0]] > theshold)
       continue;
 
     if(dice.chance(probability)) {
@@ -103,18 +103,26 @@ void selectDeletions(std::string bSName, std::string degName, float probability)
 }
 
 int main(int argc, char* argv[]) {
-  if(argc < 3) {
-    std::cout << "Dude! Invoke like this: " << argv[0] << " --bsfile=<filename> --degreefile=<degreename>" << std::endl;
+  if(argc < 5) {
+    std::cout << "Dude! Invoke like this: " << argv[0] << " --bsfile=<filename> --degreefile=<degreename> --probability=<number> --threshold=<number>" << std::endl;
     return -1;
   }
 
   std::string bSFile, degFile;
+  float probability = 0.1;
+  int threshold = 100;
   for(int i=0; i<argc; ++i) {
     if(strncmp("--bsfile=", argv[i], 9) == 0)
       bSFile = argv[i] + 9;
 
     if(strncmp("--degreefile=", argv[i], 13) == 0)
       degFile = argv[i] + 13;
+
+    if(strncmp("--probability=", argv[i], 14) == 0)
+      probability = atof(argv[i] + 14);
+
+    if(strncmp("--threshold=", argv[i], 12) == 0)
+      threshold = atoi(argv[i] + 12);
   }
 
   if(bSFile.size() == 0 || degFile.size() == 0) {
@@ -124,8 +132,10 @@ int main(int argc, char* argv[]) {
 
   std::cout << "BinarySnap file: " << bSFile << std::endl;
   std::cout << "Degree file: " << degFile << std::endl;
+  std::cout << "Probability: " << probability << std::endl;
+  std::cout << "Thresold: " << threshold << std::endl;
 
-  selectDeletions(bSFile, degFile, 0.05);
+  selectDeletions(bSFile, degFile, probability, threshold);
 
   return 0;
 }

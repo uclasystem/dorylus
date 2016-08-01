@@ -182,7 +182,7 @@ public:
     static void (*onDeleteSmartHandler) (VertexType& v, LightEdge<VertexType, EdgeType>& e);
 
     static void parseArgs(int argc, char* argv[]);
-    static void readGraphBS(std::string& fileName, unsigned long long baseEdges, std::set<IdType>& inTopics, std::vector<IdType>& outTopics);
+    static void readGraphBS(std::string& fileName, std::set<IdType>& inTopics, std::vector<IdType>& outTopics);
     static void readDeletionStream(std::string& fileName);
     static void addEdge(IdType from, IdType to, std::set<IdType>* inTopics);
     static void deleteEdge(IdType from, IdType to);

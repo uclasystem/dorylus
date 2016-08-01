@@ -173,7 +173,7 @@ void Engine<VertexType, EdgeType>::parseArgs(int argc, char* argv[]) {
     ("dport", boost::program_options::value<unsigned>()->default_value(unsigned(DATA_PORT), DATA_PORT_STR), "Port for data communication")
     ("cport", boost::program_options::value<unsigned>()->default_value(unsigned(CONTROL_PORT_START), CONTROL_PORT_START_STR), "Port start for control communication")
 
-    ("baseedges", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Number of million edges in base graph")
+    ("baseedges", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Percentage of edges in base graph")
     ("numbatches", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Number of mini-batches") 
     ("batchsize", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Size of mini-batches")
     ("deletepercent", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Deletion percent in mini-batches")
@@ -223,6 +223,8 @@ void Engine<VertexType, EdgeType>::parseArgs(int argc, char* argv[]) {
   assert(vm.count("baseedges"));
   baseEdges = vm["baseedges"].as<unsigned>();
 
+  assert(baseEdges <= 100);
+
   assert(vm.count("numbatches"));
   numBatches = vm["numbatches"].as<unsigned>();
 
@@ -239,7 +241,7 @@ void Engine<VertexType, EdgeType>::parseArgs(int argc, char* argv[]) {
   fprintf(stderr, "undirected set to %s\n", undirected ? "true" : "false");
   fprintf(stderr, "pofrequency set to %u\n", poFrequency);
 
-  fprintf(stderr, "baseEdges (millions) set to %u\n", baseEdges);
+  fprintf(stderr, "baseEdges (percent) set to %u\n", baseEdges);
   fprintf(stderr, "numBatches set to %u\n", numBatches);
   fprintf(stderr, "batchSize set to %u\n", batchSize);
   fprintf(stderr, "deletePercent set to %u\n", deletePercent);
@@ -364,7 +366,7 @@ void Engine<VertexType, EdgeType>::receiveNewGhostValues(std::set<IdType>& inTop
 }
 
 template <typename VertexType, typename EdgeType>
-void Engine<VertexType, EdgeType>::readGraphBS(std::string& fileName, unsigned long long baseEdges, std::set<IdType>& inTopics, std::vector<IdType>& outTopics) {
+void Engine<VertexType, EdgeType>::readGraphBS(std::string& fileName, std::set<IdType>& inTopics, std::vector<IdType>& outTopics) {
   // Read the partition file
   std::string partsFileName = fileName + PARTS_EXT;
   readPartsFile(partsFileName, graph);
@@ -386,6 +388,7 @@ void Engine<VertexType, EdgeType>::readGraphBS(std::string& fileName, unsigned l
   infile.read((char*) &bSHeader, sizeof(bSHeader));
 
   assert(bSHeader.sizeOfVertexType == sizeof(IdType));
+  unsigned long long originalEdges = (unsigned long long) ((baseEdges / 100.0) * bSHeader.numEdges);
 
   graph.numGlobalEdges = 0;
   IdType srcdst[2];
@@ -393,7 +396,7 @@ void Engine<VertexType, EdgeType>::readGraphBS(std::string& fileName, unsigned l
     if(srcdst[0] == srcdst[1])
       continue;
 
-    if(graph.numGlobalEdges < baseEdges) {
+    if(graph.numGlobalEdges < originalEdges) {
       processEdge(srcdst[0], srcdst[1], graph, &inTopics, &oTopics, false);
       if(undirected)
         processEdge(srcdst[1], srcdst[0], graph, &inTopics, &oTopics, false);
@@ -482,7 +485,7 @@ void Engine<VertexType, EdgeType>::init(int argc, char* argv[], VertexType dVert
   edgeWeight = eWeight;
 
   //fprintf(stderr, "defaultVertex = %.3lf\n", defaultVertex);
-  readGraphBS(graphFile, baseEdges * MILLION, inTopics, outTopics);
+  readGraphBS(graphFile, inTopics, outTopics);
   graph.printGraphMetrics();
   fprintf(stderr, "Insert Stream size = %zd\n", insertStream.size());
 
