@@ -1,161 +1,229 @@
+/*
+   3. Approx -- Tagging (OR) on Addition and Deletion to target
+   4. Approx -- Tagging (OR) on Deletion to target 
+ */
 #include <iostream>
-#include "../engine/densebitset.hpp"
 #include "../engine/engine.hpp"
+#include "approximator.hpp"
 #include <fstream>
 #include <set>
 
-#define MAX_DIST 255
+#define MAXPATH 255
 
 using namespace std;
 
-typedef unsigned EType;
+char tmpDir[256];
+bool smartPropagation = false;
 
-typedef struct vType {
-  unsigned path;
-  bool approx;
-  vType() { path = MAX_DIST; approx = false; }
-  vType(unsigned p, bool a) { path = p; approx = a; }
-} VType;
+typedef unsigned EType;
+typedef unsigned VType;
 
 IdType source;
 std::set<IdType> checkers;
 
-DenseBitset approx;
-
+/* Basic version with no tagging */
 template<typename VertexType, typename EdgeType>
-class ApproxInit : public VertexProgram<VertexType, EdgeType> {
+class InitProgram : public VertexProgram<VertexType, EdgeType> {
   public:
     bool update(Vertex<VertexType, EdgeType>& vertex, EngineContext& engineContext) {
-      VType v;
-      v.approx = approx.get(vertex.globalId());
-
-      if(vertex.globalId() == source)
-        v.path = 0;
-
-      bool changed = (v.approx != vertex.data().approx) | (v.path != vertex.data().path);
-      if(changed)
-        vertex.setData(v);
+      bool changed = (vertex.data() != MAXPATH);
+      vertex.setData(MAXPATH);
       return changed;
     }
 };
 
+/* Approx version with tagging */
+template<typename VertexType, typename EdgeType>
+class ApproxResetProgram : public VertexProgram<VertexType, EdgeType> {
+  public:
+    bool update(Vertex<VertexType, EdgeType>& vertex, EngineContext& engineContext) {
+      if(vertex.globalId() == source) {
+        //assert(vertex.data() == 0);  // this is always true
+        return false;
+      }
 
+      if(approximator::isApprox(vertex.data())) {
+        if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "Processing vertex %u by resetting to MAXPATH\n", vertex.globalId());
+        vertex.setData(MAXPATH);
+        return true;
+      }
+
+      return false;
+    }
+};
+
+/* Perfect version no tagging */
 template<typename VertexType, typename EdgeType>
 class ASSSPProgram : public VertexProgram<VertexType, EdgeType> {
-    public:
-        bool update(Vertex<VertexType, EdgeType>& vertex, EngineContext& engineContext) {
-            /*
-            if(vertex.globalId() == source) {
-                bool changed = (vertex.data() != 0);
-                vertex.setData(0);
-                return changed;
-            }
-            */
+  public:
+    bool update(Vertex<VertexType, EdgeType>& vertex, EngineContext& engineContext) {
+      if(vertex.globalId() == source) { 
+        bool changed = (vertex.data() != 0);  // this is not via approximator because source is always accurate
+        vertex.setData(0); // this is not via approximator because source is always accurate
+        return changed;
+      }
 
-            if(vertex.globalId() == source)
-              return false;
+      if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "Processing vertex %u with %u in-edges\n", vertex.globalId(), vertex.numInEdges());
 
-            if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "Processing vertex %u with %u in-edges\n", vertex.globalId(), vertex.numInEdges());
+      VType minPath = MAXPATH; 
+      for(unsigned i=0; i<vertex.numInEdges(); ++i) {
+        if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "Vertex %u source %u has %u + %u path and approx = %s\n", vertex.globalId(), vertex.getSourceVertexGlobalId(i), approximator::value(vertex.getSourceVertexData(i)), vertex.getInEdgeData(i), approximator::isApprox(vertex.getSourceVertexData(i)) ? "true" : "false");
 
-            unsigned minPath = MAX_DIST; bool vapprox = vertex.data().approx;
-            for(unsigned i=0; i<vertex.numInEdges(); ++i) {
-                if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "Vertex %u source %u has %u path\n", vertex.globalId(), vertex.getSourceVertexGlobalId(i), vertex.getSourceVertexData(i).path);
+        minPath = std::min(minPath, approximator::value(vertex.getSourceVertexData(i)) + vertex.getInEdgeData(i));
+      }
 
-                assert(vertex.getInEdgeData(i) == 1);
-                minPath = std::min(minPath, vertex.getSourceVertexData(i).path + vertex.getInEdgeData(i));
-                vapprox |= vertex.getSourceVertexData(i).approx;
-            }
+      bool changed = (vertex.data() != minPath);
 
-            bool changed = (vertex.data().path != minPath) | (vertex.data().approx != vapprox);
+      if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "Vertex %u old path =  %u has new path = %u\n", vertex.globalId(), vertex.data(), minPath);
 
-            if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "Vertex %u old path =  %u has new path = %u\n", vertex.globalId(), vertex.data().path, minPath);
-
-            if(changed) {
-              VType v(minPath, vapprox);
-              vertex.setData(v);
-            }
-
-            return changed;
-        }
+      vertex.setData(minPath);
+      return changed;
+    }
 };
 
+/* Approx version with tagging */
 template<typename VertexType, typename EdgeType>
-class WriterProgram : public VertexProgram<VertexType, EdgeType> {
-    std::ofstream outFile;
-    std::ofstream approxOutFile;
+class ATagProgram : public VertexProgram<VertexType, EdgeType> {
+  public:
+    bool update(Vertex<VertexType, EdgeType>& vertex, EngineContext& engineContext) {
+      if(vertex.globalId() == source) { 
+        bool changed = (vertex.data() != 0);  // this is not via approximator because source is always accurate
+        vertex.setData(0); // this is not via approximator because source is always accurate
+        return changed;
+      }
 
-    public:
-    WriterProgram() {
-        char filename[20];
-        sprintf(filename, "output_%u", NodeManager::getNodeId()); 
-        outFile.open(filename);
+      if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "ATag: Processing vertex %u with %u in-edges\n", vertex.globalId(), vertex.numInEdges());
 
-        sprintf(filename, "approx_%u", NodeManager::getNodeId());
-        approxOutFile.open(filename);
-    }
+      bool approx = (approximator::isApprox(vertex.data()));
+      for(unsigned i=0; i<vertex.numInEdges(); ++i) {
+        if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "Vertex %u source %u has %u + %u path and approx = %s\n", vertex.globalId(), vertex.getSourceVertexGlobalId(i), approximator::value(vertex.getSourceVertexData(i)), vertex.getInEdgeData(i), approximator::isApprox(vertex.getSourceVertexData(i)) ? "true" : "false");
 
-    void processVertex(Vertex<VertexType, EdgeType>& vertex) {
-        if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "Vertex %u path = %u\n", vertex.globalId(), vertex.data().path);
+        if(smartPropagation) {
+          if(approximator::value(vertex.getSourceVertexData(i)) + vertex.getInEdgeData(i) == approximator::value(vertex.data()))
+            approx |= approximator::isApprox(vertex.getSourceVertexData(i)); 
+        } else
+          approx |= approximator::isApprox(vertex.getSourceVertexData(i));
+      }
+      
+      VType vData = vertex.data();
+      if(approx) {
+        approximator::setApprox(vData);
+        Engine<VertexType, EdgeType>::shadowSignalVertex(vertex.globalId());
+        Engine<VertexType, EdgeType>::trimmed(vertex.globalId());
+      }
 
-        outFile << vertex.globalId() << " " << vertex.data().path << std::endl; 
-        approxOutFile << vertex.globalId() << " " << (vertex.data().approx ? "true" : "false") << std::endl;
-    }
+      bool changed = (vertex.data() != vData);
 
-    ~WriterProgram() {
-        outFile.close();
-        approxOutFile.close();
+      //if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "Vertex %u old path =  %u has new path = %u\n", vertex.globalId(), vertex.data(), minPath);
+
+      vertex.setData(vData);
+      return changed;
     }
 };
 
-void loadApproxInfo(char* approxFile) {
-  std::ifstream infile(approxFile);
-  if(!infile.good())
-    fprintf(stderr, "Cannot open approx file: %s\n", approxFile);
+/* Approx version with tagging */
+template<typename VertexType, typename EdgeType>
+class AWriterProgram : public VertexProgram<VertexType, EdgeType> {
+  std::ofstream outFile;
+  //std::ofstream approxFile;
+  public:
 
-  assert(infile.good());
-  fprintf(stderr, "Reading approx file: %s\n", approxFile);
+  void beforeIteration(EngineContext& engineContext) {
+    char filename[300];
+    sprintf(filename, "%s/output_%u_%u", tmpDir, engineContext.currentBatch(), NodeManager::getNodeId());
+    outFile.open(filename);
 
-  IdType v; char o;
-
-  while(infile >> v >> o) {
-    if(o == 'A')
-      approx.setBit(v);
+    /*
+    char afilename[300];
+    sprintf(afilename, "%s/approx_%u_%u", tmpDir, engineContext.currentBatch(), NodeManager::getNodeId());
+    approxFile.open(afilename);
+    */
   }
+
+  void processVertex(Vertex<VertexType, EdgeType>& vertex) {
+    if(checkers.find(vertex.globalId()) != checkers.end())
+      fprintf(stderr, "Writer: Vertex %u path = %u\n", vertex.globalId(), vertex.data());
+
+    outFile << vertex.globalId() << " " << approximator::value(vertex.data()) << std::endl;
+    //approxFile << vertex.globalId() << " " << (approximator::isApprox(vertex.data()) ? "true" : "false") << std::endl;
+  }
+
+  void afterIteration(EngineContext& engineContext) {
+    outFile.close();
+    //approxFile.close();
+  }
+};
+
+/* Approx version with tagging */
+template<typename VertexType, typename EdgeType>
+class FakeWriterProgram : public VertexProgram<VertexType, EdgeType> {
+  public:
+
+  void beforeIteration(EngineContext& engineContext) {
+  }
+
+  void processVertex(Vertex<VertexType, EdgeType>& vertex) {
+  }
+
+  void afterIteration(EngineContext& engineContext) {
+  }
+};
+
+void setApprox(VType& v) {
+  approximator::setApprox(v);
+}
+
+void setSmartApprox(VType& v, LightEdge<VType, EType>& e) {
+  assert(e.to == v);
+  if(approximator::value(e.from) + e.edge == approximator::value(v))
+    approximator::setApprox(v);
+}
+
+void ignoreApprox(VType& v) { }
+
+EType edgeWeight(IdType from, IdType to) {
+  return EType((from + to) % 255 + 1);
 }
 
 int main(int argc, char* argv[]) {
-    init();
-    //checkers.insert(917);
+  init();
+  //checkers.insert(750447);
+  //checkers.insert(2591);
 
-    parse(&argc, argv, "--sssp-source=", &source);
-    fprintf(stderr, "Source = %u\n", source);
+  assert(parse(&argc, argv, "--bm-source=", &source));
+  assert(parse(&argc, argv, "--bm-tmpdir=", tmpDir));
 
-    char approxFile[256];
-    parse(&argc, argv, "--sssp-approxfile=", approxFile);
-    fprintf(stderr, "ApproxFile = %s\n", approxFile);
+  int t;
+  assert(parse(&argc, argv, "--bm-smartpropagation=", &t));
+  smartPropagation = (t == 0) ? false : true;
 
-    VType defaultVertex;
-    EType defaultEdge = 1;
-    Engine<VType, EType>::init(argc, argv, defaultVertex, defaultEdge);
+  //assert(smartPropagation == true);
 
-    approx.resize(Engine<VType, EType>::numVertices()); 
-    approx.clear();
+  fprintf(stderr, "source = %u\n", source);
+  fprintf(stderr, "tmpDir = %s\n", tmpDir);
+  fprintf(stderr, "smartPropagation = %s\n", smartPropagation ? "true" : "false");
 
-    loadApproxInfo(approxFile);
+  VType defaultVertex = MAXPATH;
+  EType defaultEdge = 1;
+  Engine<VType, EType>::init(argc, argv, defaultVertex, defaultEdge, &edgeWeight);
 
-    if(Engine<VType, EType>::master()) fprintf(stderr, "Reduction approximates %u vertices (%.2f%)\n", approx.countSetBits(), (100.0 * approx.countSetBits()) / Engine<VType, EType>::numVertices());
+  Engine<VType, EType>::setOnAddDelete(DST, &ignoreApprox, DST, &setApprox);
+  Engine<VType, EType>::setOnDeleteSmartHandler(&setSmartApprox);
 
-    Engine<VType, EType>::signalAll();
-    ApproxInit<VType, EType> approxInit;
-    Engine<VType, EType>::run(&approxInit, false);
+  Engine<VType, EType>::signalAll();
+  InitProgram<VType, EType> initProgram;
+  Engine<VType, EType>::quickRun(&initProgram, true);
 
-    Engine<VType, EType>::signalVertex(source);
-    ASSSPProgram<VType, EType> assspProgram;
-    Engine<VType, EType>::run(&assspProgram, true);
+  ATagProgram<VType, EType> atagProgram;
+  ASSSPProgram<VType, EType> assspProgram;
+  ApproxResetProgram<VType, EType> approxResetProgram;
+  //AWriterProgram<VType, EType> awriterProgram;
+  FakeWriterProgram<VType, EType> awriterProgram;
 
-    WriterProgram<VType, EType> writerProgram;
-    Engine<VType, EType>::processAll(&writerProgram);
+  Engine<VType, EType>::signalVertex(source);
 
-    Engine<VType, EType>::destroy();
-    return 0;
+  Engine<VType, EType>::streamRun3(&assspProgram, &atagProgram, &approxResetProgram, &assspProgram, &awriterProgram, true, true);
+
+  Engine<VType, EType>::destroy();
+  return 0;
 }
