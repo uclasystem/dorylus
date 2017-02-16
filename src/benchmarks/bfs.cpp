@@ -8,13 +8,13 @@
 #include <fstream>
 #include <set>
 
-#define MAXPATH 10000
+#define MAXPATH 500
 
 using namespace std;
 
 char tmpDir[256];
 
-typedef unsigned EType;
+typedef Empty EType;
 typedef unsigned VType;
 
 IdType source;
@@ -31,7 +31,7 @@ class InitProgram : public VertexProgram<VertexType, EdgeType> {
 };
 
 template<typename VertexType, typename EdgeType>
-class SSSPProgram : public VertexProgram<VertexType, EdgeType> {
+class BFSProgram : public VertexProgram<VertexType, EdgeType> {
   public:
     bool update(Vertex<VertexType, EdgeType>& vertex, EngineContext& engineContext) {
       if(vertex.globalId() == source) {
@@ -44,10 +44,10 @@ class SSSPProgram : public VertexProgram<VertexType, EdgeType> {
 
       VType minPath = MAXPATH;
       for(unsigned i=0; i<vertex.numInEdges(); ++i) {
-        if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "Vertex %u source %u has min(%u, %u) path\n", vertex.globalId(), vertex.getSourceVertexGlobalId(i), vertex.getSourceVertexData(i), vertex.getInEdgeData(i));
+        if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "Vertex %u source %u has %u path\n", vertex.globalId(), vertex.getSourceVertexGlobalId(i), vertex.getSourceVertexData(i));
 
-        assert(vertex.getInEdgeData(i) > 0);
-        minPath = std::min(minPath, vertex.getSourceVertexData(i) + vertex.getInEdgeData(i));
+        //assert(vertex.getInEdgeData(i) > 0);
+        minPath = std::min(minPath, vertex.getSourceVertexData(i) + 1);
       }
       bool changed = (vertex.data() != minPath);
 
@@ -70,6 +70,7 @@ class WriterProgram : public VertexProgram<VertexType, EdgeType> {
   }
 
   void processVertex(Vertex<VertexType, EdgeType>& vertex) {
+    return;
     if(checkers.find(vertex.globalId()) != checkers.end())
       fprintf(stderr, "Vertex %u path = %u\n", vertex.globalId(), vertex.data());
 
@@ -82,7 +83,7 @@ class WriterProgram : public VertexProgram<VertexType, EdgeType> {
 };
 
 EType edgeWeight(IdType from, IdType to) {
-  return EType((from + to) % 255 + 1);
+  return EType();
 }
 
 void ignoreApprox(VType& v) { }
@@ -97,7 +98,7 @@ int main(int argc, char* argv[]) {
   parse(&argc, argv, "--bm-reset=", &rs);
   bool reset = (rs == 0) ? false : true;
 
-  assert(reset == false);   // SSSP always produces right results
+  assert(reset == false);   // BFS always produces right results
 
   parse(&argc, argv, "--bm-tmpdir=", tmpDir);
 
@@ -106,7 +107,7 @@ int main(int argc, char* argv[]) {
   fprintf(stderr, "tmpDir = %s\n", tmpDir);
 
   VType defaultVertex = MAXPATH;
-  EType defaultEdge = 1;
+  EType defaultEdge = Empty();
   Engine<VType, EType>::init(argc, argv, defaultVertex, defaultEdge, &edgeWeight);
   Engine<VType, EType>::setOnAddDelete(DST, &ignoreApprox, DST, &ignoreApprox);
 
@@ -116,10 +117,10 @@ int main(int argc, char* argv[]) {
 
   Engine<VType, EType>::signalVertex(source);
 
-  SSSPProgram<VType, EType> ssspProgram;
+  BFSProgram<VType, EType> bfsProgram;
   WriterProgram<VType, EType> writerProgram;
 
-  Engine<VType, EType>::streamRun(&ssspProgram, &writerProgram, NULL, true);
+  Engine<VType, EType>::streamRun(&bfsProgram, &writerProgram, NULL, true);
 
   Engine<VType, EType>::destroy();
   return 0;

@@ -6,6 +6,7 @@
 #include <fstream>
 #include <set>
 
+#define MAXPATH 500
 #define VERY_HIGH (MAX_IDTYPE - 10)
 
 using namespace std;
@@ -21,9 +22,10 @@ struct VType {
   unsigned value;
   IdType level;
 
-  VType(unsigned v = MAX_IDTYPE, IdType l = 0) { value = v; level = l; }
+  VType(unsigned v = MAXPATH, IdType l = VERY_HIGH) { value = v; level = l; }
 };
 
+IdType source;
 std::set<IdType> checkers;
 
 /* Basic version with no tagging */
@@ -31,9 +33,8 @@ template<typename VertexType, typename EdgeType>
 class InitProgram : public VertexProgram<VertexType, EdgeType> {
   public:
     bool update(Vertex<VertexType, EdgeType>& vertex, EngineContext& engineContext) {
-      bool changed = ((vertex.data().value != vertex.globalId()) || (vertex.data().level != 0));
-      if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "InitProgram: Vertex %u has value %u and hence, changed = %s\n", vertex.globalId(), vertex.data().value, changed ? "true" : "false");
-      VType v(vertex.globalId(), 0);
+      bool changed = ((vertex.data().value != MAXPATH) || (vertex.data().level != VERY_HIGH));
+      VType v(MAXPATH, VERY_HIGH);
       vertex.setData(v);
       vertex.setParent(VERY_HIGH);
       return changed;
@@ -58,7 +59,7 @@ class ABlindTrimProgram : public VertexProgram<VertexType, EdgeType> {
       for(unsigned i=0; i<vertex.numInEdges(); ++i) {
         VertexType sourceVertexData = vertex.getSourceVertexData(i);
         if(vertex.getSourceVertexGlobalId(i) == myParent) {
-          if(sourceVertexData.level == 0) {
+          if(sourceVertexData.level == VERY_HIGH) {
             //assert(sourceVertexData.parent == VERY_HIGH);
           } else
             orphan = false;
@@ -68,8 +69,8 @@ class ABlindTrimProgram : public VertexProgram<VertexType, EdgeType> {
       }
 
       if(orphan) {
-        bool changed = ((vertex.data().value != vertex.globalId()) || (vertex.data().level != 0));
-        VType v(vertex.globalId(), 0);
+        bool changed = ((vertex.data().value != MAXPATH) || (vertex.data().level != VERY_HIGH));
+        VType v(MAXPATH, VERY_HIGH);
         Engine<VertexType, EdgeType>::trimmed(vertex.globalId());
         vertex.setData(v);
         vertex.setParent(VERY_HIGH);
@@ -81,23 +82,29 @@ class ABlindTrimProgram : public VertexProgram<VertexType, EdgeType> {
     }
 };
 
-/* Approx version with tagging -- we look at algorithm to find a better solution (if another component with lower value exists) */
+/* Approx version with tagging -- we look at algorithm to find a better solution (if another path with higher value exists) */
 template<typename VertexType, typename EdgeType>
 class ASmartTrimProgram : public VertexProgram<VertexType, EdgeType> {
   public:
     bool update(Vertex<VertexType, EdgeType>& vertex, EngineContext& engineContext) {
-      IdType myParent = vertex.parent(); 
-      if(myParent == VERY_HIGH) {
-        assert(vertex.data().level == 0);
-        assert(vertex.data().value == vertex.globalId());
+      if(vertex.globalId() == source) {
+        assert((vertex.data().value == 0) && (vertex.data().level == 0));
         return false;
       }
 
-      bool orphan = true, reroot = false; VType candidate(vertex.globalId(), 0); IdType cParent = VERY_HIGH;
+      IdType myParent = vertex.parent(); 
+      if(myParent == VERY_HIGH) {
+        assert(vertex.data().level == VERY_HIGH);
+        Engine<VertexType, EdgeType>::trimmed(vertex.globalId());
+        Engine<VertexType, EdgeType>::shadowSignalVertex(vertex.globalId());
+        return false;
+      }
+
+      bool orphan = true, reroot = false; VType candidate(MAXPATH, VERY_HIGH); IdType cParent = VERY_HIGH;
       for(unsigned i=0; i<vertex.numInEdges(); ++i) {
         VertexType sourceVertexData = vertex.getSourceVertexData(i);
         if(vertex.getSourceVertexGlobalId(i) == myParent) {
-          if(sourceVertexData.level == 0) {
+          if(sourceVertexData.level == VERY_HIGH) {
             orphan = false; reroot = true;
             continue;
           } else {
@@ -106,7 +113,7 @@ class ASmartTrimProgram : public VertexProgram<VertexType, EdgeType> {
           }
         }
 
-        unsigned mW = sourceVertexData.value;
+        unsigned mW = sourceVertexData.value + 1;
         if(mW < candidate.value) {
           if((mW < vertex.data().value) || ((mW == vertex.data().value) && (sourceVertexData.level < vertex.data().level))) {
             candidate.value = mW;
@@ -120,7 +127,7 @@ class ASmartTrimProgram : public VertexProgram<VertexType, EdgeType> {
         //bool changed = ((vertex.data().value != candidate.value) || (vertex.data().level != candidate.level));
         bool changed = (cParent == VERY_HIGH); // We don't want to propagate other changes
 
-        if(candidate.level == 0)
+        if(candidate.level == VERY_HIGH)
           Engine<VertexType, EdgeType>::trimmed(vertex.globalId());
         else
           Engine<VertexType, EdgeType>::notTrimmed(vertex.globalId());
@@ -141,16 +148,22 @@ template<typename VertexType, typename EdgeType>
 class ASmartestTrimProgram : public VertexProgram<VertexType, EdgeType> {
   public:
     bool update(Vertex<VertexType, EdgeType>& vertex, EngineContext& engineContext) {
+      if(vertex.globalId() == source) {
+        assert((vertex.data().value == 0) && (vertex.data().level == 0));
+        return false;
+      }
+
       IdType myParent = vertex.parent();
       if(myParent == VERY_HIGH) {
-        assert(vertex.data().level == 0);
-        assert(vertex.data().value == vertex.globalId());
+        assert(vertex.data().level == VERY_HIGH);
+        Engine<VertexType, EdgeType>::trimmed(vertex.globalId());
+        Engine<VertexType, EdgeType>::shadowSignalVertex(vertex.globalId());
         return false;
       }
 
       if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "ASmartestTrimProgram: Processing vertex %u (level %u and parent %u) with %u in-edges\n", vertex.globalId(), vertex.data().level, vertex.parent(), vertex.numInEdges());
 
-      bool orphan = true, reroot = false; VType candidate(vertex.globalId(), 0); IdType cParent = VERY_HIGH;
+      bool orphan = true, reroot = false; VType candidate(MAXPATH, VERY_HIGH); IdType cParent = VERY_HIGH;
       for(unsigned i=0; i<vertex.numInEdges(); ++i) {
         VertexType sourceVertexData = vertex.getSourceVertexData(i);
         if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "ASmartestTrimProgram: Vertex %u (level %u) source %u (level %u) has %u path\n", vertex.globalId(), vertex.data().level, vertex.getSourceVertexGlobalId(i), sourceVertexData.level, sourceVertexData.value);
@@ -159,7 +172,7 @@ class ASmartestTrimProgram : public VertexProgram<VertexType, EdgeType> {
           //if((sourceVertexData.level >= vertex.data().level) && (sourceVertexData.level != VERY_HIGH)) 
             //fprintf(stderr, "SOMETHING IS WRONG: Vertex %u with <path, level> <%u, %u> has source %u with <path, level> <%u, %u>\n", vertex.globalId(), vertex.data().value, vertex.data().level, vertex.getSourceVertexGlobalId(i), sourceVertexData.value, sourceVertexData.level);
           //assert((sourceVertexData.level < vertex.data().level) || (sourceVertexData.level == VERY_HIGH));
-          if((sourceVertexData.value > vertex.data().value) || (sourceVertexData.level >= vertex.data().level)) {
+          if((sourceVertexData.value + 1 > vertex.data().value) || (sourceVertexData.level >= vertex.data().level)) {
             orphan = false; reroot = true;
             //continue;
           } else {
@@ -168,7 +181,7 @@ class ASmartestTrimProgram : public VertexProgram<VertexType, EdgeType> {
           }
         }
 
-        unsigned mW = sourceVertexData.value;
+        unsigned mW = sourceVertexData.value + 1;
         if(mW < candidate.value) {
           if(sourceVertexData.level < vertex.data().level) {
             candidate.value = mW;
@@ -182,7 +195,7 @@ class ASmartestTrimProgram : public VertexProgram<VertexType, EdgeType> {
         //bool changed = ((vertex.data().value != candidate.value) || (vertex.data().level != candidate.level));
         bool changed = ((cParent == VERY_HIGH) || (candidate.value > vertex.data().value)); // We don't want to propagate other changes
 
-        if(candidate.level == 0)
+        if(candidate.level == VERY_HIGH)
           Engine<VertexType, EdgeType>::trimmed(vertex.globalId());
         else
           Engine<VertexType, EdgeType>::notTrimmed(vertex.globalId());
@@ -201,40 +214,127 @@ class ASmartestTrimProgram : public VertexProgram<VertexType, EdgeType> {
     }
 };
 
-/* Approx version with tagging */
+
+/* Approx version with tagging -- we look at the algorithm to find any possible viable path */
 template<typename VertexType, typename EdgeType>
-class AConnectedComponentsProgram : public VertexProgram<VertexType, EdgeType> {
+class ASmarterTrimProgram : public VertexProgram<VertexType, EdgeType> {
   public:
     bool update(Vertex<VertexType, EdgeType>& vertex, EngineContext& engineContext) {
-      if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "Processing vertex %u with %u in-edges\n", vertex.globalId(), vertex.numInEdges());
+      if(vertex.globalId() == source) { 
+        assert((vertex.data().value == 0) && (vertex.data().level == 0));
+        return false;
+      }
 
-      unsigned minComponent = vertex.data().value; IdType maxParent = vertex.parent(); IdType maxLevel = vertex.data().level; 
+      IdType myParent = vertex.parent();
+      if(myParent == VERY_HIGH) {
+        assert(vertex.data().level == VERY_HIGH);
+        Engine<VertexType, EdgeType>::trimmed(vertex.globalId());
+        Engine<VertexType, EdgeType>::shadowSignalVertex(vertex.globalId());
+        return false;
+      }
+
+      if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "ASmarterTrimProgram: Processing vertex %u with %u in-edges\n", vertex.globalId(), vertex.numInEdges());
+
+      unsigned minPath = MAXPATH; IdType maxParent = VERY_HIGH; IdType maxLevel = VERY_HIGH; 
       for(unsigned i=0; i<vertex.numInEdges(); ++i) {
         VertexType sourceVertexData = vertex.getSourceVertexData(i);
-        if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "Vertex %u source %u has %u component\n", vertex.globalId(), vertex.getSourceVertexGlobalId(i), sourceVertexData.value);
+        if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "ASmarterTrimProgram: Vertex %u source %u has %u path\n", vertex.globalId(), vertex.getSourceVertexGlobalId(i), sourceVertexData.value);
 
-        unsigned mW = sourceVertexData.value;
-        if(mW < minComponent) {
-          minComponent = mW;
-          maxParent = vertex.getSourceVertexGlobalId(i);
-          maxLevel = sourceVertexData.level + 1;
+        if(sourceVertexData.level < vertex.data().level) {
+          unsigned mW = sourceVertexData.value + 1;
+          if(mW < minPath) {
+            minPath = mW;
+            maxParent = vertex.getSourceVertexGlobalId(i);
+            maxLevel = sourceVertexData.level + 1;
+          }
         }
       }
 
-      if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "Vertex %u component %u\n", vertex.globalId(), minComponent);
+      if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "ASmarterTrimProgram: Vertex %u path %u maxParent = %u maxLevel = %u\n", vertex.globalId(), minPath, maxParent, maxLevel);
 
-      if(vertex.data().value > minComponent) {
-        VType v(minComponent, maxLevel);
+      //if((maxLevel != VERY_HIGH) && (maxLevel > vertex.data().level + 1))
+      //fprintf(stderr, "DANGER: Vertex %u maxLevel = %u, VERY_HIGH = %u, vertex.data().level + 1 = %u\n", vertex.globalId(), maxLevel, VERY_HIGH, vertex.data().level + 1);
+
+      assert((maxLevel == VERY_HIGH) || (maxLevel <= vertex.data().level));
+
+/*
+      if((maxLevel < VERY_HIGH) && (maxLevel > 4 * maximumLevel)) {
+        fprintf(stderr, "Vertex %u is jumping all over (maximumLevel = %u); hence trimming it off\n", vertex.globalId(), maximumLevel);
+        minPath = 0; maxParent = VERY_HIGH; maxLevel = VERY_HIGH;
+      }
+*/
+
+      if((vertex.data().value != minPath) || (vertex.data().level != maxLevel)) {
+        Engine<VertexType, EdgeType>::shadowSignalVertex(vertex.globalId());
+
+        if(maxLevel == VERY_HIGH)
+          Engine<VertexType, EdgeType>::trimmed(vertex.globalId());
+        else
+          Engine<VertexType, EdgeType>::notTrimmed(vertex.globalId());
+
+        VType v(minPath, maxLevel);
         vertex.setData(v);
         vertex.setParent(maxParent);
-        
-        /*
+        return true;
+      }
+
+      return false;
+    }
+};
+
+
+
+/* Approx version with tagging */
+// This is a monotonic function -- once the parent is attached in the dependence tree, it cannot change for the same value
+template<typename VertexType, typename EdgeType>
+class ABFSProgram : public VertexProgram<VertexType, EdgeType> {
+  public:
+    bool update(Vertex<VertexType, EdgeType>& vertex, EngineContext& engineContext) {
+      if(vertex.globalId() == source) {
+        bool changed = ((vertex.data().value != 0) || (vertex.data().level != 0));
+        VType v(0, 0);
+        vertex.setData(v);
+        vertex.setParent(VERY_HIGH);
+        return changed;
+      }
+
+      if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "Processing vertex %u level %u with %u in-edges\n", vertex.globalId(), vertex.data().level, vertex.numInEdges());
+
+      unsigned minPath = MAXPATH; IdType maxParent = VERY_HIGH; IdType maxLevel = VERY_HIGH; 
+      for(unsigned i=0; i<vertex.numInEdges(); ++i) {
+        VertexType sourceVertexData = vertex.getSourceVertexData(i);
+        if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "Vertex %u level %u source %u level %u has %u path\n", vertex.globalId(), vertex.data().level, vertex.getSourceVertexGlobalId(i), sourceVertexData.level, sourceVertexData.value);
+
+        unsigned mW = sourceVertexData.value + 1;
+        if(mW < minPath) {
+          minPath = mW;
+          maxParent = vertex.getSourceVertexGlobalId(i);
+          maxLevel = sourceVertexData.level + 1;
+        } /*else if((mW == minPath) && (sourceVertexData.level + 1 < maxLevel)) {
+          maxParent = vertex.getSourceVertexGlobalId(i);
+          maxLevel = sourceVertexData.level + 1;
+        }*/
+      }
+
+      //if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "Vertex %u path %u level %u and parent %u\n", vertex.globalId(), minPath, maxLevel, maxParent);
+
+      //if((vertex.data().value < minPath) || ((vertex.data().value == minPath) && (vertex.data().level != maxLevel))) {
+      //if((vertex.data().value < minPath) || ((vertex.data().value == minPath) && (vertex.data().level > maxLevel))) {
+      if(vertex.data().value > minPath) {  // We only need this condition -- effectively, once the parent is attached it cannot be changed
+        if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "Vertex %u path %u level %u and parent %u\n", vertex.globalId(), minPath, maxLevel, maxParent);
+        VType v(minPath, maxLevel);
+        vertex.setData(v);
+        vertex.setParent(maxParent);
+
+/*
         mLock.lock();
         maximumLevel = std::max(maxLevel, maximumLevel);
         mLock.unlock();
-        */
+*/
         return true;
       }
+
+      //vertex.setParent(maxParent);
 
       return false;
     }
@@ -244,7 +344,7 @@ class AConnectedComponentsProgram : public VertexProgram<VertexType, EdgeType> {
 template<typename VertexType, typename EdgeType>
 class AWriterProgram : public VertexProgram<VertexType, EdgeType> {
   std::ofstream outFile;
-  std::ofstream approxFile;
+  //std::ofstream approxFile;
   public:
 
   void beforeIteration(EngineContext& engineContext) {
@@ -259,7 +359,7 @@ class AWriterProgram : public VertexProgram<VertexType, EdgeType> {
 
   void processVertex(Vertex<VertexType, EdgeType>& vertex) {
     if(checkers.find(vertex.globalId()) != checkers.end())
-      fprintf(stderr, "Writer: Vertex %u component = %u parent = %u\n", vertex.globalId(), vertex.data().value, vertex.parent());
+      fprintf(stderr, "Writer: Vertex %u path = %u\n", vertex.globalId(), vertex.data().value);
 
     outFile << vertex.globalId() << " " << vertex.data().value << std::endl;
     //approxFile << vertex.globalId() << " -> " << vertex.data().parent << std::endl;
@@ -286,40 +386,7 @@ class FakeWriterProgram : public VertexProgram<VertexType, EdgeType> {
   }
 };
 
-void setApprox(VType& v) {
-  //approximator::setApprox(v);
-  assert(false);
-}
-
-void setSmartApprox(VType& v, LightEdge<VType, EType>& e) {
-  //assert(e.to == v);
-  //if(std::min(approximator::value(e.from), e.edge) == v)
-  //  approximator::setApprox(v);
-  assert(false);
-}
-
-void ignoreApprox(VType& v) { }
-
-void trimOff(VType& v) {
-  assert(false);
-  //v.value = MAX_IDTYPE;
-  //v.parent = VERY_HIGH;
-  //v.level = VERY_HIGH;
-}
-
-void setSmartTrimOff(VType& v, LightEdge<VType, EType>& e) {
-  assert(false);
-  /*
-  if(v.parent == e.fromId) {
-    fprintf(stderr, "Tree edge (%u -> %u) deleted\n", e.fromId, e.toId);
-    v.value = e.toId;
-    v.parent = VERY_HIGH;
-    v.level = 0;
-  }
-  */
-}
-
-void setSmarterTrimOff(VType& v, LightEdge<VType, EType>& e) { }
+void ignoreAddDelete(VType& v) { }
 
 EType edgeWeight(IdType from, IdType to) {
   return EType();
@@ -327,56 +394,56 @@ EType edgeWeight(IdType from, IdType to) {
 
 int main(int argc, char* argv[]) {
   init();
-  //checkers.insert(43112);
-  //checkers.insert(1965203);
-  //checkers.insert(1965204);
-  //checkers.insert(1965211);
+  //checkers.insert(0);
+  //checkers.insert(93);
 
   //mLock.init();
 
+  assert(parse(&argc, argv, "--bm-source=", &source));
   assert(parse(&argc, argv, "--bm-tmpdir=", tmpDir));
 
-  unsigned smartPropagation = 100; 
+  unsigned smartPropagation = 100;
   assert(parse(&argc, argv, "--bm-smartpropagation=", &smartPropagation));
   assert(smartPropagation < 3);
 
+  fprintf(stderr, "source = %u\n", source);
   fprintf(stderr, "tmpDir = %s\n", tmpDir);
-  fprintf(stderr, "smartPropagation = %d\n", smartPropagation);
+  fprintf(stderr, "smartPropagation = %u\n", smartPropagation);
 
-  VType defaultVertex = VType(MAX_IDTYPE, MAX_IDTYPE);
+  VType defaultVertex = VType(MAXPATH, VERY_HIGH);
   EType defaultEdge = Empty();
   Engine<VType, EType>::init(argc, argv, defaultVertex, defaultEdge, &edgeWeight);
 
-  Engine<VType, EType>::setOnAddDelete(DST, &ignoreApprox, DST, &ignoreApprox);
+  Engine<VType, EType>::setOnAddDelete(DST, &ignoreAddDelete, DST, &ignoreAddDelete);
   Engine<VType, EType>::setOnDeleteSmartHandler(NULL);
 
   Engine<VType, EType>::signalAll();
   InitProgram<VType, EType> initProgram;
   Engine<VType, EType>::quickRun(&initProgram, true);
 
-  AConnectedComponentsProgram<VType, EType> aconnectedcomponentsProgram;
-  AWriterProgram<VType, EType> awriterProgram;
-  //FakeWriterProgram<VType, EType> awriterProgram; 
+  ABFSProgram<VType, EType> abfsProgram;
+  //AWriterProgram<VType, EType> awriterProgram;
+  FakeWriterProgram<VType, EType> awriterProgram;
 
-  Engine<VType, EType>::signalAll();
+  Engine<VType, EType>::signalVertex(source);
 
   switch(smartPropagation) {
     case 0: {
               fprintf(stderr, "Blind Trimming\n");
               ABlindTrimProgram<VType, EType> abtProgram;
-              Engine<VType, EType>::streamRun5(&aconnectedcomponentsProgram, &abtProgram, &awriterProgram, true);
+              Engine<VType, EType>::streamRun5(&abfsProgram, &abtProgram, &awriterProgram, true);
               break;
             }
     case 1: {
               fprintf(stderr, "Smart Trimming\n");
               ASmartTrimProgram<VType, EType> astProgram;
-              Engine<VType, EType>::streamRun5(&aconnectedcomponentsProgram, &astProgram, &awriterProgram, true);
+              Engine<VType, EType>::streamRun5(&abfsProgram, &astProgram, &awriterProgram, true);
               break;
             }
     case 2: {
               fprintf(stderr, "Smarter Trimming\n");
               ASmartestTrimProgram<VType, EType> astProgram;
-              Engine<VType, EType>::streamRun5(&aconnectedcomponentsProgram, &astProgram, &awriterProgram, true);
+              Engine<VType, EType>::streamRun5(&abfsProgram, &astProgram, &awriterProgram, true);
               break;
             }
     default:

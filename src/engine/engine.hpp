@@ -406,6 +406,8 @@ void Engine<VertexType, EdgeType>::readGraphBS(std::string& fileName, std::set<I
         insertStream.push_back(std::make_tuple(globalInsertStreamSize, srcdst[0], srcdst[1]));
       }
       ++globalInsertStreamSize;
+      if(globalInsertStreamSize > numBatches * batchSize)
+        break;
     }
   }
 
@@ -442,6 +444,9 @@ void Engine<VertexType, EdgeType>::readDeletionStream(std::string& fileName) {
       deleteStream.push_back(std::make_tuple(globalDeleteStreamSize, srcdst[0], srcdst[1]));
     }
     ++globalDeleteStreamSize;
+
+    if(globalDeleteStreamSize > numBatches * (batchSize * (deletePercent / 100.0 + 1)))
+      break;
   }
 
   infile.close();
@@ -908,6 +913,8 @@ void Engine<VertexType, EdgeType>::streamRun(VertexProgram<VertexType, EdgeType>
   if(master()) fprintf(stderr, "Base Batch %u completed on node %u in %u iterations took %.3lf ms\n", batchNo, nodeId, iteration, timProcess);
   allTimProcess += timProcess;
 
+  processAll(wProgram);
+
   while(batchNo++ < numBatches) {
     currentGlobalInsertCounter += numInsertions;
     currentGlobalDeleteCounter += numDeletions;
@@ -958,6 +965,8 @@ void Engine<VertexType, EdgeType>::streamRun(VertexProgram<VertexType, EdgeType>
       }
       break;
     }
+
+    graph.compactGraph();
 
     trueAdditions = sillyReduce(trueAdditions, &sumReducer);
     trueDeletions = sillyReduce(trueDeletions, &sumReducer);
@@ -1082,6 +1091,8 @@ void Engine<VertexType, EdgeType>::streamRun2(VertexProgram<VertexType, EdgeType
       }
       break;
     }
+
+    graph.compactGraph();
 
     trueAdditions = sillyReduce(trueAdditions, &sumReducer);
     trueDeletions = sillyReduce(trueDeletions, &sumReducer);
@@ -1222,6 +1233,8 @@ void Engine<VertexType, EdgeType>::streamRun3(VertexProgram<VertexType, EdgeType
       }
       break;
     }
+
+    graph.compactGraph();
 
     trueAdditions = sillyReduce(trueAdditions, &sumReducer);
     trueDeletions = sillyReduce(trueDeletions, &sumReducer);
@@ -1364,6 +1377,8 @@ void Engine<VertexType, EdgeType>::streamRun4(VertexProgram<VertexType, EdgeType
       break;
     }
 
+    graph.compactGraph();
+
     trueAdditions = sillyReduce(trueAdditions, &sumReducer);
     trueDeletions = sillyReduce(trueDeletions, &sumReducer);
     if(master()) fprintf(stderr, "Batch %u constructed using %u insertions and %u deletions\n", batchNo, trueAdditions, trueDeletions);
@@ -1486,6 +1501,8 @@ void Engine<VertexType, EdgeType>::streamRun5(VertexProgram<VertexType, EdgeType
       break;
     }
 
+    graph.compactGraph();
+
     trueAdditions = sillyReduce(trueAdditions, &sumReducer);
     trueDeletions = sillyReduce(trueDeletions, &sumReducer);
     if(master()) fprintf(stderr, "Batch %u constructed using %u insertions and %u deletions\n", batchNo, trueAdditions, trueDeletions);
@@ -1500,6 +1517,8 @@ void Engine<VertexType, EdgeType>::streamRun5(VertexProgram<VertexType, EdgeType
     //shadowScheduler->clear();
     trimScheduler->clear();
 
+    //timProcess = 0.0;
+    //if(false)
     quickRun(trimProgram, true);
 
     iTagged = sillyReduce(iTagged, &sumReducer);

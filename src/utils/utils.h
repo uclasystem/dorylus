@@ -8,7 +8,7 @@
 #include <typeinfo>
 #include <climits>
 
-#define INTERFACE "em1" 
+#define INTERFACE "eth0" 
 
 #ifdef VERBOSE_ERRORS
 #define efprintf(ofile, fmt, ...) fprintf(ofile, "%s:%s():%d || " fmt, __FILE__, __func__, __LINE__, __VA_ARGS__);

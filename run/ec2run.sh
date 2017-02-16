@@ -1,13 +1,13 @@
 #!/bin/bash
 
-WORKDIR="/home/keval/Desktop/workspace";
-RUNDIR="/home/keval/Desktop/workspace/streaming/aspire/run";
-DSHFILE="/home/keval/Desktop/workspace/streaming/aspire/run/dshmachines";
-HOSTFILE="/home/keval/Desktop/workspace/streaming/aspire/run/hostfile";
-TMPDIR="/home/keval/Desktop/workspace/streaming/aspire/run/tmp";
+WORKDIR="/home/ubuntu/Desktop/workspace";
+RUNDIR="/home/ubuntu/Desktop/workspace/aspire-streaming/run";
+DSHFILE="/home/ubuntu/Desktop/workspace/management/dshmachines";
+HOSTFILE="/home/ubuntu/Desktop/workspace/aspire-streaming/run/hostfile";
+TMPDIR="/mnt1/tmp";
 DSH=dsh;
 
-cat ${DSHFILE} | sed 's/keval@//' > ${HOSTFILE};
+cat ${DSHFILE} | sed 's/ubuntu@//' > ${HOSTFILE};
 
 NDS=$(wc -l ${HOSTFILE} | cut -d" " -f1);
 
@@ -18,12 +18,12 @@ done;
 
 echo "Cluster of ${NDS} nodes";
 
-echo "DSH Running: rm -rf ${TMPDIR} && mkdir ${TMPDIR} && chown keval:keval ${TMPDIR}";
-${DSH} -M -f ${DSHFILE} -c "rm -rf ${TMPDIR} && mkdir ${TMPDIR} && chown keval:keval ${TMPDIR}";
+echo "DSH Running: rm -rf ${TMPDIR} && mkdir ${TMPDIR} && chown ubuntu:ubuntu ${TMPDIR}";
+${DSH} -M -f ${DSHFILE} -c "rm -rf ${TMPDIR} && mkdir ${TMPDIR} && chown ubuntu:ubuntu ${TMPDIR}";
 
 ############### INIT ZOOKEEPER ###############
 
-ZOODIR=/home/keval/Desktop/workspace/installs/zookeeper-3.4.8;
+ZOODIR=/home/ubuntu/Desktop/workspace/installs/zookeeper-3.4.6;
 ZOONDS=3;
 
 echo "DSH Running: cd ${ZOODIR} && ./bin/zkServer.sh stop";
@@ -59,19 +59,24 @@ done;
 
 ############### DO WORK ###############
 
-ASPIREDIR=/home/keval/Desktop/workspace/streaming/aspire;
+ASPIREDIR=/home/ubuntu/Desktop/workspace/aspire-streaming;
 
 UD=0;
 
 #BM=pagerank.bin; BK=PR;
 #BM=sssp.bin; BK=SSSP;
+#BM=asssp.bin; BK=ASSSP;
 #BM=tsssp.bin; BK=TSSSP;
-BM=sswp.bin; BK=SSWP;
+#BM=bfs.bin; BK=BFS;
+#BM=abfs.bin; BK=ABFS;
+#BM=tbfs.bin; BK=TBFS;
+#BM=sswp.bin; BK=SSWP;
 #BM=asswp.bin; BK=ASSWP;
 #BM=tsswp.bin; BK=TSSWP;
 #BM=asssp.bin; BK=ASSSP;
 #BM=connectedcomponents.bin; BK=CC; UD=1;
-#BM=tconnectedcomponents.bin; BK=TCC; UD=1;
+#BM=aconnectedcomponents.bin; BK=ACC; UD=1;
+BM=tconnectedcomponents.bin; BK=TCC; UD=1;
 #BM=communitydetection.bin; BK=CD;
 #BM=acommunitydetection.bin; BK=ACD;
 #BM=abcommunitydetection.bin; BK=ABCD;
@@ -81,29 +86,35 @@ BM=sswp.bin; BK=SSWP;
 
 #IP=../inputs/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB;
 #IP=../inputs/parts_${NDS}/facebook_combined.txt_undir.bsnap; IK=FBU;
-#IP=../inputs/parts_${NDS}/twitter_combined.txt.edited; IK=TT;
-IP=../inputs/parts_${NDS}/soc-LiveJournal1.txt.bsnap; AF=NULL; IK=LJ; BE=300; SRC=10000;
-#IP=../inputs/parts_${NDS}/soc-LiveJournal1.txt.bsnap.red.bsnap; AF=../inputs/parts_${NDS}/soc-LiveJournal1.txt.bsnap.red.bsnap.deleteadd; IK=SLJ;
-#IP=../inputs/parts_${NDS}/roadNet-CA.txt.bsnap; AF=NULL; IK=RNCA; BE=30; SRC=0;
+#IP=../inputs/parts_${NDS}/twitter_rv.net_edited.bsnap; IK=TT; SRC=1436;
+#IP=../inputs/parts_${NDS}/soc-LiveJournal1.txt.bsnap; AF=NULL; IK=LJ; SRC=10000;
+#IP=../inputs/parts_${NDS}/roadNet-CA.txt.bsnap; AF=NULL; IK=RNCA; SRC=0;
+#IP=../inputs/parts_${NDS}/uk2005_edited.bsnap; AF=NULL; IK=UK; SRC=26954; 
+#IP=../inputs/parts_${NDS}/twitter_rv.net_edited.bsnap; AF=NULL; IK=TT; SRC=1652;
+#IP=../inputs/parts_${NDS}/out.twitter_mpi.bsnap; AF=NULL; IK=OT; SRC=2256;
+#IP=../inputs/parts_${NDS}/rmat-0.25.txt.bsnap; AK=NULL; IK=RM; SRC=0;
+#IP=../inputs/parts_${NDS}/rmat-251.txt_edited.bsnap; AK=NULL; IK=RM; SRC=92;
+IP=../inputs/parts_${NDS}/out.friendster_edited.bsnap; AK=NULL; IK=FT; SRC=221;
 
-#IP=../inputs/parts_${NDS}/soc-LiveJournal1.txt_undir.bsnap; AF=NULL; IK=LJ; XTRAARGS="--cd-initfile=/home/keval/Desktop/workspace/aspire/inputs/cdp1outfinal";
+#IP=../inputs/parts_${NDS}/soc-LiveJournal1.txt_undir.bsnap; AF=NULL; IK=LJ; XTRAARGS="--cd-initfile=/home/ubuntu/Desktop/workspace/aspire/inputs/cdp1outfinal";
 #IP=../inputs/parts_${NDS}/soc-LiveJournal1.txt_undir.bsnap.red.bsnap; AF=../inputs/parts_${NDS}/soc-LiveJournal1.txt_undir.bsnap.red.bsnap.deleteadd; IK=SLJ;
 
 OPFILE=${WORKDIR}/out.${BK}.${IK}.out;
 
-CT=4;POF=1;
+BE=50;
+CT=7;POF=1;
 #SRC=10000;
 KC=10;
 
-NB=4;BS=100000;DP=10;
-TOA=0;TOD=1;STOD=1;SP=1;
-RS=1;
+NB=11;BS=100000;DP=10;
+TOA=0;TOD=1;STOD=1;SP=0;
+RS=0;
 
 for i in $(seq 1 ${NDS}); do
   ${DSH} -M -m ${dshnodes[$i]} -c "echo ${nodes[$i]} > ${TMPDIR}/myip";
 done;
 
-rm -f ${OPFILE};
+#rm -f ${OPFILE};
 #rm -f ${ASPIREDIR}/build/output_*;
 #rm -f ${ASPIREDIR}/build/outputs/${BK}.${IK}/*;
 #rm -f ${ASPIREDIR}/build/approx_*;
@@ -125,26 +136,41 @@ done;
 
 #-----
 
-GVID=`cat gvid`
-NGVID=$((GVID+1))
-echo ${NGVID} > gvid;
+#BS=0;
+#for bs in {1..10}; do
+#  BS=$((BS + 100000));
 
-echo "GVID = ${GVID}" >> ${OPFILE} 2>&1;
+#SP=1;
+DP=30; SP=1; RS=0;
+for dp in {1..1}; do
+  #DP=$((DP + 10));
 
-echo "DSH Running (from ${ASPIREDIR}/build): ./${BM} --graphfile ${IP} --undirected ${UD} --bm-reset=${RS} --bm-source=${SRC} --bm-tagonadd=${TOA} --bm-tagondelete=${TOD} --bm-smarttagondelete=${STOD} --bm-smartpropagation=${SP} --bm-tmpdir=${TMPDIR} --kcore-maxcore=${KC} --cthreads ${CT} --pofrequency ${POF} --baseedges ${BE} --numbatches ${NB} --batchsize ${BS} --deletepercent ${DP} ${XTRAARGS}";
-${DSH} -M -f ${DSHFILE} -c "cd ${ASPIREDIR}/build && ./${BM} --graphfile ${IP} --undirected ${UD} --bm-reset=${RS} --bm-source=${SRC} --bm-tagonadd=${TOA} --bm-tagondelete=${TOD} --bm-smarttagondelete=${STOD} --bm-smartpropagation=${SP} --bm-tmpdir=${TMPDIR} --kcore-maxcore=${KC} --cthreads ${CT} --pofrequency ${POF} --baseedges ${BE} --numbatches ${NB} --batchsize ${BS} --deletepercent ${DP} ${XTRAARGS}" >> ${OPFILE} 2>&1;
+  cd ${RUNDIR};
 
-DOPDIR=${ASPIREDIR}/build/outputs/${BK}.${IK}/${GVID};
-mkdir -p ${DOPDIR};
-for i in $(seq 1 ${NDS}); do
-  #echo "${dshnodes[$i]}:${ASPIREDIR}/build/output_$i ${ASPIREDIR}/build/output_$i";
-  oid=`expr $i - 1`;
-  scp ${dshnodes[$i]}:${TMPDIR}/output_* ${DOPDIR}/;
-  scp ${dshnodes[$i]}:${TMPDIR}/approx_* ${DOPDIR}/;
-  #scp ${dshnodes[$i]}:${ASPIREDIR}/build/approx_${oid} ${ASPIREDIR}/build/approx_${oid};
-done;
+  GVID=`cat gvid`;
+  NGVID=$((GVID + 1));
+  echo ${NGVID} > gvid;
 
-cd ${ASPIREDIR}/build && ./tester.sh ${DOPDIR}/ ${NB};
+  echo "GVID = ${GVID}" >> ${OPFILE} 2>&1;
+
+  echo "DSH Running (from ${ASPIREDIR}/build): ./${BM} --graphfile ${IP} --undirected ${UD} --bm-reset=${RS} --bm-source=${SRC} --bm-tagonadd=${TOA} --bm-tagondelete=${TOD} --bm-smarttagondelete=${STOD} --bm-smartpropagation=${SP} --bm-tmpdir=${TMPDIR} --kcore-maxcore=${KC} --cthreads ${CT} --pofrequency ${POF} --baseedges ${BE} --numbatches ${NB} --batchsize ${BS} --deletepercent ${DP} ${XTRAARGS}";
+  ${DSH} -M -f ${DSHFILE} -c "cd ${ASPIREDIR}/build && ./${BM} --graphfile ${IP} --undirected ${UD} --bm-reset=${RS} --bm-source=${SRC} --bm-tagonadd=${TOA} --bm-tagondelete=${TOD} --bm-smarttagondelete=${STOD} --bm-smartpropagation=${SP} --bm-tmpdir=${TMPDIR} --kcore-maxcore=${KC} --cthreads ${CT} --pofrequency ${POF} --baseedges ${BE} --numbatches ${NB} --batchsize ${BS} --deletepercent ${DP} ${XTRAARGS}" >> ${OPFILE} 2>&1;
+
+  DOPDIR=${ASPIREDIR}/build/outputs/${BK}.${IK}/${GVID};
+  mkdir -p ${DOPDIR};
+  for i in $(seq 1 ${NDS}); do
+    #echo "${dshnodes[$i]}:${ASPIREDIR}/build/output_$i ${ASPIREDIR}/build/output_$i";
+    oid=`expr $i - 1`;
+    scp ${dshnodes[$i]}:${TMPDIR}/output_* ${DOPDIR}/;
+    #scp ${dshnodes[$i]}:${TMPDIR}/approx_* ${DOPDIR}/;
+    #scp ${dshnodes[$i]}:${ASPIREDIR}/build/approx_${oid} ${ASPIREDIR}/build/approx_${oid};
+  done;
+
+  cd ${ASPIREDIR}/build && ./tester.sh ${DOPDIR}/ ${NB};
+
+done; # dp
+
+#done;
 
 #-----
 
@@ -154,4 +180,8 @@ for i in $(seq 1 $ZOONDS); do
   ${DSH} -M -m ${nodes[$i]} -c "cd ${ZOODIR} && ./bin/zkServer.sh stop";
 done;
 
+#sleep 10;
+#cd /home/ubuntu/Desktop/workspace/aspire-streaming/run;
+#/home/ubuntu/Desktop/workspace/aspire-streaming/run/ec3run.sh;
 
+#/home/ubuntu/Desktop/workspace/management/commander.py stopworkers ;

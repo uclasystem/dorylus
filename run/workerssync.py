@@ -12,10 +12,17 @@ sdirname = sys.argv[1].strip()
 filename = sys.argv[2].strip()
 ddirname = sys.argv[3].strip()
 
+sinputs = sdirname + "/realinputs/";
+dinputs = "/mnt0/inputs";
+
 fh = open(filename)
 for line in fh:
   line.strip()
-  p = Popen(["rsync", "-av", "--exclude", ".git", "--exclude", "build", "--exclude", "innnnnnputs", "--exclude", "run", sdirname, line.strip() + ":" + ddirname])
+
+  p = Popen(["rsync", "-av", "--exclude", ".git", "--exclude", "build", "--exclude", "realinputs", "--exclude", "run", sdirname, line.strip() + ":" + ddirname])
+  p.communicate()
+
+  p = Popen(["rsync", "-av", sinputs, line.strip() + ":" + dinputs])
   p.communicate()
 
 fh.close()

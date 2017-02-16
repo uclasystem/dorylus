@@ -172,7 +172,7 @@ class ASmartestTrimProgram : public VertexProgram<VertexType, EdgeType> {
           //if((sourceVertexData.level >= vertex.data().level) && (sourceVertexData.level != VERY_HIGH)) 
             //fprintf(stderr, "SOMETHING IS WRONG: Vertex %u with <path, level> <%u, %u> has source %u with <path, level> <%u, %u>\n", vertex.globalId(), vertex.data().value, vertex.data().level, vertex.getSourceVertexGlobalId(i), sourceVertexData.value, sourceVertexData.level);
           //assert((sourceVertexData.level < vertex.data().level) || (sourceVertexData.level == VERY_HIGH));
-          if((std::min(sourceVertexData.value, vertex.getInEdgeData(i)) < vertex.data().value) || (sourceVertexData.level >= vertex.data().level)) {
+          if((std::min(sourceVertexData.value, vertex.getInEdgeData(i)) < vertex.data().value) || ((std::min(sourceVertexData.value, vertex.getInEdgeData(i)) == vertex.data().value) && (sourceVertexData.level >= vertex.data().level))) {
             orphan = false; reroot = true;
             //continue;
           } else {
@@ -422,8 +422,8 @@ int main(int argc, char* argv[]) {
   Engine<VType, EType>::quickRun(&initProgram, true);
 
   ASSWPProgram<VType, EType> asswpProgram;
-  //AWriterProgram<VType, EType> awriterProgram;
-  FakeWriterProgram<VType, EType> awriterProgram;
+  AWriterProgram<VType, EType> awriterProgram;
+  //FakeWriterProgram<VType, EType> awriterProgram;
 
   Engine<VType, EType>::signalVertex(source);
 

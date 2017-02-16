@@ -6,7 +6,7 @@
 #include <fstream>
 #include <set>
 
-#define MAXPATH 255
+#define MAXPATH 10000
 #define VERY_HIGH (MAX_IDTYPE - 10)
 
 using namespace std;

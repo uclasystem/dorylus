@@ -8,14 +8,14 @@
 #include <fstream>
 #include <set>
 
-#define MAXPATH 10000
+#define MAXPATH 500
 
 using namespace std;
 
 char tmpDir[256];
 bool smartPropagation = false;
 
-typedef unsigned EType;
+typedef Empty EType;
 typedef unsigned VType;
 
 IdType source;
@@ -54,7 +54,7 @@ class ApproxResetProgram : public VertexProgram<VertexType, EdgeType> {
 
 /* Perfect version no tagging */
 template<typename VertexType, typename EdgeType>
-class ASSSPProgram : public VertexProgram<VertexType, EdgeType> {
+class ABFSProgram : public VertexProgram<VertexType, EdgeType> {
   public:
     bool update(Vertex<VertexType, EdgeType>& vertex, EngineContext& engineContext) {
       if(vertex.globalId() == source) { 
@@ -67,9 +67,9 @@ class ASSSPProgram : public VertexProgram<VertexType, EdgeType> {
 
       VType minPath = MAXPATH; 
       for(unsigned i=0; i<vertex.numInEdges(); ++i) {
-        if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "Vertex %u source %u has %u + %u path and approx = %s\n", vertex.globalId(), vertex.getSourceVertexGlobalId(i), approximator::value(vertex.getSourceVertexData(i)), vertex.getInEdgeData(i), approximator::isApprox(vertex.getSourceVertexData(i)) ? "true" : "false");
+        if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "Vertex %u source %u has %u path and approx = %s\n", vertex.globalId(), vertex.getSourceVertexGlobalId(i), approximator::value(vertex.getSourceVertexData(i)), approximator::isApprox(vertex.getSourceVertexData(i)) ? "true" : "false");
 
-        minPath = std::min(minPath, approximator::value(vertex.getSourceVertexData(i)) + vertex.getInEdgeData(i));
+        minPath = std::min(minPath, approximator::value(vertex.getSourceVertexData(i)) + 1);
       }
 
       bool changed = (vertex.data() != minPath);
@@ -95,15 +95,18 @@ class ATagProgram : public VertexProgram<VertexType, EdgeType> {
       if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "ATag: Processing vertex %u with %u in-edges\n", vertex.globalId(), vertex.numInEdges());
 
       bool approx = (approximator::isApprox(vertex.data()));
+      if(smartPropagation) approx = true;
       for(unsigned i=0; i<vertex.numInEdges(); ++i) {
-        if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "Vertex %u source %u has %u + %u path and approx = %s\n", vertex.globalId(), vertex.getSourceVertexGlobalId(i), approximator::value(vertex.getSourceVertexData(i)), vertex.getInEdgeData(i), approximator::isApprox(vertex.getSourceVertexData(i)) ? "true" : "false");
+        if(checkers.find(vertex.globalId()) != checkers.end()) fprintf(stderr, "Vertex %u source %u has %u path and approx = %s\n", vertex.globalId(), vertex.getSourceVertexGlobalId(i), approximator::value(vertex.getSourceVertexData(i)), approximator::isApprox(vertex.getSourceVertexData(i)) ? "true" : "false");
 
         if(smartPropagation) {
-          if(approximator::value(vertex.getSourceVertexData(i)) + vertex.getInEdgeData(i) == approximator::value(vertex.data()))
-            approx |= approximator::isApprox(vertex.getSourceVertexData(i)); 
+          if(approximator::value(vertex.getSourceVertexData(i)) + 1 == approximator::value(vertex.data()))
+            approx &= approximator::isApprox(vertex.getSourceVertexData(i)); 
         } else
           approx |= approximator::isApprox(vertex.getSourceVertexData(i));
       }
+
+      if(smartPropagation) approx |= (approximator::isApprox(vertex.data()));
       
       VType vData = vertex.data();
       if(approx) {
@@ -175,14 +178,14 @@ void setApprox(VType& v) {
 
 void setSmartApprox(VType& v, LightEdge<VType, EType>& e) {
   assert(e.to == v);
-  if(approximator::value(e.from) + e.edge == approximator::value(v))
+  if(approximator::value(e.from) + 1 == approximator::value(v))
     approximator::setApprox(v);
 }
 
 void ignoreApprox(VType& v) { }
 
 EType edgeWeight(IdType from, IdType to) {
-  return EType((from + to) % 255 + 1);
+  return EType();
 }
 
 int main(int argc, char* argv[]) {
@@ -204,7 +207,7 @@ int main(int argc, char* argv[]) {
   fprintf(stderr, "smartPropagation = %s\n", smartPropagation ? "true" : "false");
 
   VType defaultVertex = MAXPATH;
-  EType defaultEdge = 1;
+  EType defaultEdge = EType();
   Engine<VType, EType>::init(argc, argv, defaultVertex, defaultEdge, &edgeWeight);
 
   Engine<VType, EType>::setOnAddDelete(DST, &ignoreApprox, DST, &setApprox);
@@ -215,14 +218,14 @@ int main(int argc, char* argv[]) {
   Engine<VType, EType>::quickRun(&initProgram, true);
 
   ATagProgram<VType, EType> atagProgram;
-  ASSSPProgram<VType, EType> assspProgram;
+  ABFSProgram<VType, EType> abfsProgram;
   ApproxResetProgram<VType, EType> approxResetProgram;
   //AWriterProgram<VType, EType> awriterProgram;
   FakeWriterProgram<VType, EType> awriterProgram;
 
   Engine<VType, EType>::signalVertex(source);
 
-  Engine<VType, EType>::streamRun3(&assspProgram, &atagProgram, &approxResetProgram, &assspProgram, &awriterProgram, true, true);
+  Engine<VType, EType>::streamRun3(&abfsProgram, &atagProgram, &approxResetProgram, &abfsProgram, &awriterProgram, true, true);
 
   Engine<VType, EType>::destroy();
   return 0;
