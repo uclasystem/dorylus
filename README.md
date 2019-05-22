@@ -7,8 +7,9 @@ run from an ec2 instance (Ubuntu seems to be the easiest)
 First you will need to install the following libraries:
 	sudo apt install dsh libboost-all-dev
 
-##### DEPENDENCIES #####
+## DEPENDENCIES
 ZeroMQ
+
 ZooKeeper
 
 create an installs folder in root aspire directory for library dependencies
@@ -18,7 +19,7 @@ cd installs
 make another directory inside installs called "out". This is where we will install the libraries we need
 
 
-== ZeroMQ Setup ==
+#### ZeroMQ Setup
 Make sure that libtool pkg-config build-essential and autoconf are installed
 get ZeroMQ 4.1.4: https://archive.org/download/zeromq_4.1.4/zeromq-4.1.4.tar.gz
 extract the tarball in the installs directory
@@ -29,8 +30,7 @@ inside the zeromq-4.1.4 directory, run the following commands:
 
 finally, in the installs/out directory include should contain several zmq header files. Move zmq.hpp from the top level aspire directory into the include folder
 
-
-== ZooKeeper Setup ==
+#### ZooKeeper Setup
 Make sure that ant and openjdk-8-jdk are installed
 get Zookeeper 3.4.6: https://github.com/apache/zookeeper/archive/release-3.4.6.tar.gz
 
