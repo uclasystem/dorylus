@@ -30,7 +30,7 @@ inside the zeromq-4.1.4 directory, run the following commands:
 	make install
 	sudo ldconfig
 
-finally, in the installs/out directory include should contain several zmq header files. Move zmq.hpp from the top level aspire directory into the include folder
+finally, in the installs/out directory include should contain several zmq header files. Move zmq.hpp from the aspire-streaming/build directory into the include folder
 
 #### ZooKeeper Setup
 Make sure that ant and openjdk-8-jdk are installed  
