@@ -1,10 +1,10 @@
 #!/bin/bash
 
-WORKDIR="/home/ubuntu/Desktop/workspace";
-RUNDIR="/home/ubuntu/Desktop/workspace/aspire-streaming/run";
-DSHFILE="/home/ubuntu/Desktop/workspace/management/dshmachines";
-HOSTFILE="/home/ubuntu/Desktop/workspace/aspire-streaming/run/hostfile";
-TMPDIR="/mnt1/tmp";
+WORKDIR="/home/ubuntu";
+RUNDIR="/home/ubuntu/aspire-streaming/run";
+DSHFILE="/home/ubuntu/aspire-streaming/run/dshmachines";
+HOSTFILE="/home/ubuntu/aspire-streaming/run/hostfile";
+TMPDIR="/home/ubuntu/tmp"
 DSH=dsh;
 
 cat ${DSHFILE} | sed 's/ubuntu@//' > ${HOSTFILE};
@@ -23,7 +23,7 @@ ${DSH} -M -f ${DSHFILE} -c "rm -rf ${TMPDIR} && mkdir ${TMPDIR} && chown ubuntu:
 
 ############### INIT ZOOKEEPER ###############
 
-ZOODIR=/home/ubuntu/Desktop/workspace/installs/zookeeper-3.4.6;
+ZOODIR=/home/ubuntu/aspire-streaming/installs/zookeeper-release-3.4.6
 ZOONDS=3;
 
 echo "DSH Running: cd ${ZOODIR} && ./bin/zkServer.sh stop";
@@ -59,7 +59,7 @@ done;
 
 ############### DO WORK ###############
 
-ASPIREDIR=/home/ubuntu/Desktop/workspace/aspire-streaming;
+ASPIREDIR=/home/ubuntu/aspire-steaming
 
 UD=0;
 

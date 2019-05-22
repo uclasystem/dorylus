@@ -49,10 +49,11 @@ Once the file is modified, the system is ready to build. In the same directory (
 
 	ACLOCAL="aclocal -I /usr/share/aclocal" autoreconf -if
 		** for this command the directory path following -I should be the location of your "aclocal"
-	./configure --prefix=path/to/out
+	./configure --prefix=path/to/out --without-cppunit
 	make
 	make install
 
+make sure to keep the zookeeper directory even after installation
 
 
 ## BUILDING ASPIRE
