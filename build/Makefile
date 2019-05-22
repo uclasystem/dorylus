@@ -62,15 +62,15 @@ CFLAGS          := -DTHREADED -Wall -MMD -O3 ${EFLAGS}
 #OMP_LIBS       := -fopenmp
 #BOOST_LIBS     := -lboost_system -lboost_filesystem
 ZK_LIBS         := -lzookeeper_mt
-ZK_LIBPATH      := /home/ubuntu/Desktop/workspace/installs/builds/zookeeper-cbinding/lib
+ZK_LIBPATH      := /home/thorpedoes/projects/GCN/aspire-streaming/installs/builds/zk-out/lib
 
 ZMQ_LIBS        := -lzmq
-ZMQ_LIBPATH     := /home/ubuntu/Desktop/workspace/installs/builds/zeromq-4.1.4/lib
+ZMQ_LIBPATH     :=  /home/thorpedoes/projects/GCN/aspire-streaming/installs/builds/zeromq-4.1.4/lib
 
 LIBS            := -L$(ZK_LIBPATH) $(ZK_LIBS) -L$(ZMQ_LIBPATH) $(ZMQ_LIBS) -lpthread -fopenmp -lboost_program_options
 
-ZK_INCPATH      := /home/ubuntu/Desktop/workspace/installs/builds/zookeeper-cbinding/include/zookeeper
-ZMQ_INCPATH     := /home/ubuntu/Desktop/workspace/installs/builds/zeromq-4.1.4/include
+ZK_INCPATH      := /home/thorpedoes/projects/GCN/aspire-streaming/installs/builds/zk-out/include/zookeeper
+ZMQ_INCPATH     := /home/thorpedoes/projects/GCN/aspire-streaming/installs/builds/zeromq-4.1.4/include
 INC             := -I$(ZK_INCPATH) -I$(ZMQ_INCPATH)
 
 LDFLAGS         := -Wl,-rpath=$(ZK_LIBPATH) -Wl,-rpath=$(ZMQ_LIBPATH)
