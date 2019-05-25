@@ -7,9 +7,7 @@ run from an ec2 instance (Ubuntu seems to be the easiest)
 First you will need to install the following libraries:
 
 	sudo apt install dsh libboost-all-dev
-
-## DEPENDENCIES
-ZeroMQ  
+## DEPENDENCIES ZeroMQ  
 ZooKeeper
 
 create an installs folder in root aspire directory for library dependencies:
@@ -42,6 +40,7 @@ First, go into the src/c directory and make the following change to the file "co
 	line 37: delete "AM_PATH_CPPUNIT(1.10.2)"; replace with "PKG_CHECK_MODULES(CPPUNIT, cppunit >= 1.10.2)"
 
 inside the zookeeper-release directory run the following command:
+
 	ant deb
 		** you may have to set JAVA_HOME if it has not been set
 
