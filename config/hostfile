@@ -1,4 +1,3 @@
-169.235.27.151	node1	master
-169.235.27.28	node2	worker
-169.235.27.147	node3	worker
-169.235.27.29	node4	worker
+13.58.234.18	node1	master
+52.14.45.139	node2	worker
+18.188.226.1	node3	worker

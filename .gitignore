@@ -4,3 +4,4 @@ out*
 *.bin
 inputs/*
 installs
+run/hostfile

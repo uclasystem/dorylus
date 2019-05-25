@@ -66,6 +66,7 @@ ZK_LIBPATH      := /home/ubuntu/aspire-streaming/installs/out/lib
 
 ZMQ_LIBS        := -lzmq
 ZMQ_LIBPATH     :=  /home/ubuntu/aspire-streaming/installs/out/lib
+ZMQ_LIBPATH     := /home/ubuntu/aspire-streaming/installs/out/lib
 
 LIBS            := -L$(ZK_LIBPATH) $(ZK_LIBS) -L$(ZMQ_LIBPATH) $(ZMQ_LIBS) -lpthread -fopenmp -lboost_program_options
 
