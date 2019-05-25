@@ -7,9 +7,7 @@ run from an ec2 instance (Ubuntu seems to be the easiest)
 First you will need to install the following libraries:
 
 	sudo apt install dsh libboost-all-dev
-
-## DEPENDENCIES
-ZeroMQ  
+## DEPENDENCIES ZeroMQ  
 ZooKeeper
 
 create an installs folder in root aspire directory for library dependencies:
