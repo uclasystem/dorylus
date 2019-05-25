@@ -4,7 +4,7 @@ WORKDIR="/home/ubuntu";
 RUNDIR="/home/ubuntu/aspire-streaming/run";
 DSHFILE="/home/ubuntu/aspire-streaming/run/dshmachines";
 HOSTFILE="/home/ubuntu/aspire-streaming/run/hostfile";
-TMPDIR="/home/ubuntu/tmp"
+TMPDIR="/home/ubuntu/zktmp"
 DSH=dsh;
 
 cat ${DSHFILE} | sed 's/ubuntu@//' > ${HOSTFILE};
@@ -24,9 +24,9 @@ ${DSH} -M -f ${DSHFILE} -c "rm -rf ${TMPDIR} && mkdir ${TMPDIR} && chown ubuntu:
 ############### INIT ZOOKEEPER ###############
 
 ZOODIR=/home/ubuntu/aspire-streaming/installs/zookeeper-release-3.4.6
-ZOONDS=3;
+ZOONDS=3
 
-echo "DSH Running: cd ${ZOODIR} && ./bin/zkServer.sh stop";
+echo -e "\e[33;1mDSH Running: cd ${ZOODIR} && ./bin/zkServer.sh stop\e[0m";
 ${DSH} -M -f ${DSHFILE} -c "cd ${ZOODIR} && ./bin/zkServer.sh stop";
 
 cat ${RUNDIR}/zoo.basic > ${ZOODIR}/conf/zoo.cfg;
@@ -35,7 +35,8 @@ for i in $(seq 1 ${ZOONDS}); do
   echo "server.${i}=${nodes[$i]}:2080:3080" >> ${ZOODIR}/conf/zoo.cfg;
 done;
 
-echo "DSH Running: cd ${ZOODIR} && ./bin/zkServer.sh start";
+echo -e "\e[33;1mSTARTING ZOOKEEPER\e[0m";
+echo -e "\e[33;1mDSH Running: cd ${ZOODIR} && ./bin/zkServer.sh start\e[0m";
 for i in $(seq 1 ${ZOONDS}); do
   scp ${ZOODIR}/conf/zoo.cfg ${dshnodes[$i]}:${ZOODIR}/conf/zoo.cfg;
   ${DSH} -M -m ${dshnodes[$i]} -c "mkdir -p ${TMPDIR}/zooDataDir";
@@ -43,6 +44,8 @@ for i in $(seq 1 ${ZOONDS}); do
   ${DSH} -M -m ${dshnodes[$i]} -c "cd ${ZOODIR} && ./bin/zkServer.sh start";
 done;
 
+
+echo -e "\e[33;1mCHECKING FOR QUORUM NOW \e[0m"
 # CHECK FOR ZK QUORUM
 for i in $(seq 1 ${ZOONDS}); do
   while true
@@ -59,7 +62,9 @@ done;
 
 ############### DO WORK ###############
 
-ASPIREDIR=/home/ubuntu/aspire-steaming
+
+ASPIREDIR=/home/ubuntu/aspire-streaming
+echo -e "\e[33;1mSTARTING BENCHMARK\e[0m"
 
 UD=0;
 

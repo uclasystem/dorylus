@@ -36,30 +36,22 @@ finally, in the installs/out directory include should contain several zmq header
 Make sure that ant and openjdk-8-jdk are installed  
 get Zookeeper 3.4.6: https://github.com/apache/zookeeper/archive/release-3.4.6.tar.gz  
 extract the tarball in the installs directory  
-inside the zookeeper-release directory run the following command:
 
-	ant compile_jute
-		** you may have to set JAVA_HOME if it has not been set
-
-Next go into the src/c directory and make the following change to the file "configure.ac":
+First, go into the src/c directory and make the following change to the file "configure.ac":
 
 	line 37: delete "AM_PATH_CPPUNIT(1.10.2)"; replace with "PKG_CHECK_MODULES(CPPUNIT, cppunit >= 1.10.2)"
 
-Once the file is modified, the system is ready to build. In the same directory (src/c) run the following commands:
+inside the zookeeper-release directory run the following command:
 
-	ACLOCAL="aclocal -I /usr/share/aclocal" autoreconf -if
-		** for this command the directory path following -I should be the location of your "aclocal"
-	./configure --prefix=path/to/out --without-cppunit
-	make
-	make install
+	ant deb
+		** you may have to set JAVA_HOME if it has not been set
 
 make sure to keep the zookeeper directory even after installation
 
 
 ## BUILDING ASPIRE
-Once both major dependencies have been installed correctly we can go to the aspire-streaming root directory. Move into the "build" folder and open the Makefile. There are four values that need to be updated to reflect the values on your system:
+Once both major dependencies have been installed correctly we can go to the aspire-streaming root directory. Move into the "build" folder and open the Makefile. There are two values that need to be updated to reflect the values on your system:
 
-	ZK_LIBPATH, ZK_INCPATH
 	ZMQ_LIBPATH, ZMQ_INCPATH
 	
 	Make sure that each points to the correct placed (path/to/out/include, path/to/out/lib, etc)
