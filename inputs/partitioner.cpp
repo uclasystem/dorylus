@@ -33,6 +33,8 @@ int main(int argc, char* argv[])
     idx_t nvtxs = atoll(argv[2]);
     idx_t nparts = atoi(argv[3]);
 
+    std::cerr << "nvtxs: " << nvtxs << std::endl;
+
     std::string partsDir = std::string(PARTS_PATH) + argv[3] + "/";
     mkdir(partsDir.c_str(), 0777);
 
@@ -49,6 +51,9 @@ int main(int argc, char* argv[])
     BELHeaderType belHeader;
     infile.read((char*) &belHeader, sizeof(belHeader));
 
+    std::cerr << "SIZE OF VERT TYPE: " << belHeader.sizeOfVertexType << std::endl;
+    std::cerr << "SIZE OF CNT TYPE: " << belHeader.sizeOfCountType << std::endl;
+
     assert(belHeader.sizeOfVertexType == sizeof(unsigned long long));
     assert(belHeader.sizeOfCountType == sizeof(unsigned));
 
@@ -59,7 +64,7 @@ int main(int argc, char* argv[])
 
         for(unsigned i=0; i<count; ++i) {
             infile.read((char*) &to, belHeader.sizeOfVertexType);
-        
+
             edgeLists[from].insert(to);
             edgeLists[to].insert(from);
         }
