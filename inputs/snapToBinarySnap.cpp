@@ -7,12 +7,11 @@
 #include <cstring>
 #include <vector>
 
-typedef unsigned long long VertexType;
+typedef unsigned VertexType;
 typedef unsigned CountType;
 
 struct HeaderType {
 	int sizeOfVertexType;
-	int sizeOfCountType;
 	VertexType numVertices;
 	unsigned long long numEdges;
 };
@@ -62,7 +61,6 @@ void readWriteFile(std::string snapFile, std::string bSFile, bool undirected, bo
 
 	if(withheader) {
 		bSStream.write((char*) &header, sizeof(header));
-		std::cout << "numEdges: " << header.numEdges << std::endl;
 	}
 
 	std::string line;
@@ -79,24 +77,8 @@ void readWriteFile(std::string snapFile, std::string bSFile, bool undirected, bo
 		if(src == dst)
 			continue;
 	
-		if (src == oldId) {
-			dsts.push_back(dst);
-		} else {
-			int32_t count = dsts.size();
-			bSStream.write((char*) &oldId, sizeof(VertexType));
-			bSStream.write((char*) &count, sizeof(CountType));
-		
-			for (auto ll : dsts) {
-				bSStream.write((char*) &ll, sizeof(VertexType));
-			}
-
-			oldId = src;
-			dsts.clear();
-
-			dsts.push_back(dst);
-
-		}
-
+		bSStream.write((char*) &src, header.sizeOfVertexType);
+		bSStream.write((char*) &dst, header.sizeOfVertexType);
 	}
 	
 	snapStream.close();
@@ -141,7 +123,6 @@ int main(int argc, char* argv[]) {
 	std::cout << "If undirected, edge repitions might occur" << std::endl;
 
 	header.sizeOfVertexType = sizeof(VertexType);
-	header.sizeOfCountType = sizeof(CountType);
 	header.numVertices = 0;
 	header.numEdges = 0;
 

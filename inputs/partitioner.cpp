@@ -14,10 +14,12 @@
 #define COMM_EXT ".comm"
 #define PART_EXT ".parts"
 
+typedef unsigned VertexType;
+
 struct BELHeaderType {
     int sizeOfVertexType;
-    int sizeOfCountType;
-    unsigned long long numVertices;
+//    int sizeOfCountType;
+    VertexType numVertices;
     unsigned long long numEdges;
 };
 
@@ -30,16 +32,12 @@ int main(int argc, char* argv[])
     }
 
     std::string graphName = argv[1];
-    idx_t nvtxs = atoll(argv[2]);
     idx_t nparts = atoi(argv[3]);
-
-    std::cerr << "nvtxs: " << nvtxs << std::endl;
 
     std::string partsDir = std::string(PARTS_PATH) + argv[3] + "/";
     mkdir(partsDir.c_str(), 0777);
 
     fprintf(stderr, "Reading input graph ...\n");
-    std::set<idx_t>* edgeLists = new std::set<idx_t>[nvtxs];
     std::string graphPath = BASE_PATH + graphName;
     std::ifstream infile(graphPath.c_str(), std::ios::binary);
 
@@ -48,26 +46,30 @@ int main(int argc, char* argv[])
         abort();
     }
 
+	std::cerr << "READING HEADER" << std::endl;
     BELHeaderType belHeader;
     infile.read((char*) &belHeader, sizeof(belHeader));
 
-    std::cerr << "SIZE OF VERT TYPE: " << belHeader.sizeOfVertexType << std::endl;
-    std::cerr << "SIZE OF CNT TYPE: " << belHeader.sizeOfCountType << std::endl;
+    assert(belHeader.sizeOfVertexType == sizeof(unsigned));
+//    assert(belHeader.sizeOfCountType == sizeof(unsigned));
+	idx_t nvtxs = belHeader.numVertices;
+	std::cout << "NUM VERTS: " << nvtxs << std::endl;
+    std::set<idx_t>* edgeLists = new std::set<idx_t>[nvtxs];
+	std::cout << "NUM EDGES: " << belHeader.numEdges << std::endl;
+	
+    unsigned from, to; unsigned count;
 
-    assert(belHeader.sizeOfVertexType == sizeof(unsigned long long));
-    assert(belHeader.sizeOfCountType == sizeof(unsigned));
-
-    unsigned long long from, to; unsigned count;
-
+	std::cerr << "READING GRAPH FROM FILE" << std::endl;
     while(infile.read((char*) &from, belHeader.sizeOfVertexType)) {
-        infile.read((char*) &count, belHeader.sizeOfCountType);
+		infile.read((char*) &to, belHeader.sizeOfVertexType);
+//        infile.read((char*) &count, belHeader.sizeOfCountType);
 
-        for(unsigned i=0; i<count; ++i) {
-            infile.read((char*) &to, belHeader.sizeOfVertexType);
+//        for(unsigned i=0; i<count; ++i) {
+//            infile.read((char*) &to, belHeader.sizeOfVertexType);
 
-            edgeLists[from].insert(to);
-            edgeLists[to].insert(from);
-        }
+//            edgeLists[from].insert(to);
+//            edgeLists[to].insert(from);
+//        }
     }
 
     infile.close();
