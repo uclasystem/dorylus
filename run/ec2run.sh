@@ -68,7 +68,7 @@ echo -e "\e[33;1mSTARTING BENCHMARK\e[0m"
 
 UD=0;
 
-#BM=pagerank.bin; BK=PR;
+BM=pagerank.bin; BK=PR;
 #BM=sssp.bin; BK=SSSP;
 #BM=asssp.bin; BK=ASSSP;
 #BM=tsssp.bin; BK=TSSSP;
@@ -81,7 +81,7 @@ UD=0;
 #BM=asssp.bin; BK=ASSSP;
 #BM=connectedcomponents.bin; BK=CC; UD=1;
 #BM=aconnectedcomponents.bin; BK=ACC; UD=1;
-BM=tconnectedcomponents.bin; BK=TCC; UD=1;
+#BM=tconnectedcomponents.bin; BK=TCC; UD=1;
 #BM=communitydetection.bin; BK=CD;
 #BM=acommunitydetection.bin; BK=ACD;
 #BM=abcommunitydetection.bin; BK=ABCD;
@@ -92,14 +92,14 @@ BM=tconnectedcomponents.bin; BK=TCC; UD=1;
 #IP=../inputs/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB;
 #IP=../inputs/parts_${NDS}/facebook_combined.txt_undir.bsnap; IK=FBU;
 #IP=../inputs/parts_${NDS}/twitter_rv.net_edited.bsnap; IK=TT; SRC=1436;
-#IP=../inputs/parts_${NDS}/soc-LiveJournal1.txt.bsnap; AF=NULL; IK=LJ; SRC=10000;
+IP=../inputs/parts_${NDS}/soc-LiveJournal1.txt.bsnap; AF=NULL; IK=LJ; SRC=10000;
 #IP=../inputs/parts_${NDS}/roadNet-CA.txt.bsnap; AF=NULL; IK=RNCA; SRC=0;
 #IP=../inputs/parts_${NDS}/uk2005_edited.bsnap; AF=NULL; IK=UK; SRC=26954; 
 #IP=../inputs/parts_${NDS}/twitter_rv.net_edited.bsnap; AF=NULL; IK=TT; SRC=1652;
 #IP=../inputs/parts_${NDS}/out.twitter_mpi.bsnap; AF=NULL; IK=OT; SRC=2256;
 #IP=../inputs/parts_${NDS}/rmat-0.25.txt.bsnap; AK=NULL; IK=RM; SRC=0;
 #IP=../inputs/parts_${NDS}/rmat-251.txt_edited.bsnap; AK=NULL; IK=RM; SRC=92;
-IP=../inputs/parts_${NDS}/out.friendster_edited.bsnap; AK=NULL; IK=FT; SRC=221;
+#IP=../inputs/parts_${NDS}/out.friendster_edited.bsnap; AK=NULL; IK=FT; SRC=221;
 
 #IP=../inputs/parts_${NDS}/soc-LiveJournal1.txt_undir.bsnap; AF=NULL; IK=LJ; XTRAARGS="--cd-initfile=/home/ubuntu/Desktop/workspace/aspire/inputs/cdp1outfinal";
 #IP=../inputs/parts_${NDS}/soc-LiveJournal1.txt_undir.bsnap.red.bsnap; AF=../inputs/parts_${NDS}/soc-LiveJournal1.txt_undir.bsnap.red.bsnap.deleteadd; IK=SLJ;
@@ -149,6 +149,8 @@ done;
 DP=30; SP=1; RS=0;
 for dp in {1..1}; do
   #DP=$((DP + 10));
+
+  NB=0; DP=0; BS=0;
 
   cd ${RUNDIR};
 
