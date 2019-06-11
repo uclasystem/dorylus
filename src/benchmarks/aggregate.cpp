@@ -14,6 +14,7 @@ template<typename VertexType, typename EdgeType>
 class PageRankProgram : public VertexProgram<VertexType, EdgeType> {
 public:
     bool update(Vertex<VertexType, EdgeType>& vertex, EngineContext& engineContext) {
+	std::cout << "Updating Vertex " << vertex.globalIdx << std::endl;
 	vector<int> sum(2, 0);
 	for (unsigned i = 0; i < vertex.numInEdges(); ++i) {
 		sumVectors(sum, vertex.getSourceVertexData(i));
