@@ -494,8 +494,10 @@ void Engine<VertexType, EdgeType>::init(int argc, char* argv[], VertexType dVert
   graph.printGraphMetrics();
   fprintf(stderr, "Insert Stream size = %zd\n", insertStream.size());
 
-  readDeletionStream(graphFile);
-  fprintf(stderr, "Delete Stream size = %zd\n", deleteStream.size());
+  if (numBatches != 0) {
+    readDeletionStream(graphFile);
+    fprintf(stderr, "Delete Stream size = %zd\n", deleteStream.size());
+  }
 
   engineContext.setNumVertices(graph.numGlobalVertices);
 

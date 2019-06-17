@@ -4,6 +4,8 @@
 
 using namespace std;
 
+char tmpDir[256];
+
 #define DAMPING_FACTOR 0.85
 #define TOLERANCE 1.0e-2
 
@@ -51,8 +53,8 @@ class WriterProgram : public VertexProgram<VertexType, EdgeType> {
     std::ofstream outFile;
 public:
     WriterProgram() {
-        char filename[10];
-        sprintf(filename, "output_%u", NodeManager::getNodeId()); 
+        char filename[200];
+        sprintf(filename, "%s/output_%u", tmpDir, NodeManager::getNodeId()); 
         outFile.open(filename);
     }
 
@@ -67,6 +69,9 @@ public:
 
 int main(int argc, char* argv[]) {
     init();
+
+    parse(&argc, argv, "--bm-tmpdir=", tmpDir);
+
     VType defaultVertex = 1.0;
     Engine<VType, EType>::init(argc, argv, defaultVertex);
     Engine<VType, EType>::signalAll();

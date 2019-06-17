@@ -68,6 +68,7 @@ echo -e "\e[33;1mSTARTING BENCHMARK\e[0m"
 
 UD=0;
 
+BM=aggregate.bin; BK=AGG;
 #BM=pagerank.bin; BK=PR;
 #BM=sssp.bin; BK=SSSP;
 #BM=asssp.bin; BK=ASSSP;
@@ -81,7 +82,7 @@ UD=0;
 #BM=asssp.bin; BK=ASSSP;
 #BM=connectedcomponents.bin; BK=CC; UD=1;
 #BM=aconnectedcomponents.bin; BK=ACC; UD=1;
-BM=tconnectedcomponents.bin; BK=TCC; UD=1;
+#BM=tconnectedcomponents.bin; BK=TCC; UD=1;
 #BM=communitydetection.bin; BK=CD;
 #BM=acommunitydetection.bin; BK=ACD;
 #BM=abcommunitydetection.bin; BK=ABCD;
@@ -99,10 +100,11 @@ BM=tconnectedcomponents.bin; BK=TCC; UD=1;
 #IP=../inputs/parts_${NDS}/out.twitter_mpi.bsnap; AF=NULL; IK=OT; SRC=2256;
 #IP=../inputs/parts_${NDS}/rmat-0.25.txt.bsnap; AK=NULL; IK=RM; SRC=0;
 #IP=../inputs/parts_${NDS}/rmat-251.txt_edited.bsnap; AK=NULL; IK=RM; SRC=92;
-IP=../inputs/parts_${NDS}/out.friendster_edited.bsnap; AK=NULL; IK=FT; SRC=221;
+#IP=../inputs/parts_${NDS}/out.friendster_edited.bsnap; AK=NULL; IK=FT; SRC=221;
 
 #IP=../inputs/parts_${NDS}/soc-LiveJournal1.txt_undir.bsnap; AF=NULL; IK=LJ; XTRAARGS="--cd-initfile=/home/ubuntu/Desktop/workspace/aspire/inputs/cdp1outfinal";
 #IP=../inputs/parts_${NDS}/soc-LiveJournal1.txt_undir.bsnap.red.bsnap; AF=../inputs/parts_${NDS}/soc-LiveJournal1.txt_undir.bsnap.red.bsnap.deleteadd; IK=SLJ;
+IP=../inputs/parts_${NDS}/data.bsnap; IK=DT; SRC=0;
 
 OPFILE=${WORKDIR}/out.${BK}.${IK}.out;
 
@@ -150,6 +152,8 @@ DP=30; SP=1; RS=0;
 for dp in {1..1}; do
   #DP=$((DP + 10));
 
+  NB=0; DP=0; BS=0;
+
   cd ${RUNDIR};
 
   GVID=`cat gvid`;
@@ -159,6 +163,7 @@ for dp in {1..1}; do
   echo "GVID = ${GVID}" >> ${OPFILE} 2>&1;
 
   echo "DSH Running (from ${ASPIREDIR}/build): ./${BM} --graphfile ${IP} --undirected ${UD} --bm-reset=${RS} --bm-source=${SRC} --bm-tagonadd=${TOA} --bm-tagondelete=${TOD} --bm-smarttagondelete=${STOD} --bm-smartpropagation=${SP} --bm-tmpdir=${TMPDIR} --kcore-maxcore=${KC} --cthreads ${CT} --pofrequency ${POF} --baseedges ${BE} --numbatches ${NB} --batchsize ${BS} --deletepercent ${DP} ${XTRAARGS}";
+
   ${DSH} -M -f ${DSHFILE} -c "cd ${ASPIREDIR}/build && ./${BM} --graphfile ${IP} --undirected ${UD} --bm-reset=${RS} --bm-source=${SRC} --bm-tagonadd=${TOA} --bm-tagondelete=${TOD} --bm-smarttagondelete=${STOD} --bm-smartpropagation=${SP} --bm-tmpdir=${TMPDIR} --kcore-maxcore=${KC} --cthreads ${CT} --pofrequency ${POF} --baseedges ${BE} --numbatches ${NB} --batchsize ${BS} --deletepercent ${DP} ${XTRAARGS}" >> ${OPFILE} 2>&1;
 
   DOPDIR=${ASPIREDIR}/build/outputs/${BK}.${IK}/${GVID};

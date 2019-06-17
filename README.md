@@ -7,8 +7,9 @@ run from an ec2 instance (Ubuntu seems to be the easiest)
 First you will need to install the following libraries:
 
 	sudo apt install dsh libboost-all-dev
-## DEPENDENCIES ZeroMQ  
-ZooKeeper
+## DEPENDENCIES  
+ZeroMQ  
+ZooKeeper  
 
 create an installs folder in root aspire directory for library dependencies:
 
@@ -54,4 +55,33 @@ Once both major dependencies have been installed correctly we can go to the aspi
 	
 	Make sure that each points to the correct placed (path/to/out/include, path/to/out/lib, etc)
 
-finally run make
+finally run make  
+
+# Preparing Input:
+
+### Converting to Binary
+inside the input directory there will be several source files.  
+First, compile the snapToBinarySnap.cpp and binarySnapReader.cpp files. 
+These will allow you to convert text files into binary to be usable by the system,
+and the snapReader will help verify the correctness of the binary data.  
+  
+### Partitioning the Data
+Once you have the data as a binary edge list, it needs to be partitioned. 
+First we need to set up Metis:  
+Extract the tarball in the installs directory as with ZeroMQ. 
+Once it has been extracted, change metis.h in the include directory to 
+reflect the data size being used. 
+Then run the following commands in the top level metis directory:
+
+	make config prefix=/path/to/out
+	make install
+
+Once metis has been setup, compile the partitioner with the following command:
+
+	gcc -I/path/to/out/include -L/path/to/out/lib partitioner.cpp -o partitioner -lmetis
+
+Now run the paritioner.sh script with the binary graph file, the number 
+of vertices, and the number of machiens which will be in the cluster.  
+
+Make sure the data is on all machines and has been properly setup and it should 
+be runnable.
