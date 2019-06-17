@@ -68,11 +68,17 @@ echo -e "\e[33;1mSTARTING BENCHMARK\e[0m"
 
 UD=0;
 
-BM=aggregate.bin; BK=AGG;
+BM=increment.bin; BK=INC;
 if [ $# -ne 0 ]; then
 	case $1 in 
 		"PR")
 			BM=pagerank.bin; BK=PR;
+			;;
+		"AGG")
+			BM=aggregate.bin; BK=AGG;
+			;;
+		"INC")
+			BM=increment.bin; BK=INC;
 			;;
 		*)
 			echo "Unrecognized benchmark option"
