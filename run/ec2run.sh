@@ -68,16 +68,16 @@ echo -e "\e[33;1mSTARTING BENCHMARK\e[0m"
 
 UD=0;
 
-BM=increment.bin; BK=INC;
+BM=aggregate.bin; BK=AGG;
 if [ $# -ne 0 ]; then
 	case $1 in 
-		"PR")
+		"pr")
 			BM=pagerank.bin; BK=PR;
 			;;
-		"AGG")
+		"agg")
 			BM=aggregate.bin; BK=AGG;
 			;;
-		"INC")
+		"inc")
 			BM=increment.bin; BK=INC;
 			;;
 		*)
