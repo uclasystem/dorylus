@@ -287,6 +287,8 @@ void Engine<VertexType, EdgeType>::readPartsFile(std::string& partsFileName, Gra
 template <typename VertexType, typename EdgeType>
 void Engine<VertexType, EdgeType>::initGraph(Graph<VertexType, EdgeType>& lGraph) {
   lGraph.vertices.resize(lGraph.numLocalVertices);
+
+  std::cout << "SIZE OF DEFAULT VERTEX: " << defaultVertex.size() << std::endl;
   for(IdType i=0; i<lGraph.numLocalVertices; ++i) {
     lGraph.vertices[i].localIdx = i;
     lGraph.vertices[i].globalIdx = lGraph.localToGlobalId[i];
@@ -1609,15 +1611,16 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
           //if(iteration > 1000)
           //engineContext.setTooLong(true);
 
-          bool hltBool = ((timProcess + getTimer() > 500) && (scheduler->anyScheduledTasks() == false));  // after 1 sec only!
+          bool hltBool = ((timProcess + getTimer() > 500) && !(scheduler->anyScheduledTasks()));  // after 1 sec only!
 
-          if(hltBool == false) {
+          if(!hltBool) {
             scheduler->newIteration();
 
             currId = 0;     // This is unprotected by lockCurrId because only master executes this code while workers are on barriers
             lockCurrId.lock();
             barComp.wait();
           } else { // deciding to halt
+            fprintf(stderr, "Deciding to halt in this iteration (%u)\n", iteration);
             NodeManager::barrier(COMM_BARRIER);
             fprintf(stderr, "Deciding to halt in this iteration (%u)\n", iteration);
 

@@ -32,13 +32,11 @@ unsigned CommManager::controlPortStart = CONTROL_PORT_START;
 bool CommManager::init() {
     numNodes = NodeManager::getNumNodes();
     nodeId = NodeManager::getNodeId();
-    //dataContext = new zmq::context_t(1);
 
     Node me = NodeManager::getNode(nodeId);
     dataPublisher = new zmq::socket_t(dataContext, ZMQ_PUB);
     assert(dataPublisher->ksetsockopt(ZMQ_SNDHWM, INF_WM));
     assert(dataPublisher->ksetsockopt(ZMQ_RCVHWM, INF_WM));
-    //dataPublisher->kbind("tcp://" GENERIC_DATA_ADDR);
     char hostPort[50];
     sprintf(hostPort, "tcp://%s:%u", me.ip.c_str(), dataPort);
     assert(dataPublisher->kbind(hostPort));
@@ -431,22 +429,19 @@ void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* o
         *((ControlMessage*) outMsg.data()) = ControlMessage(APPMSG);
         memcpy((void*)(((char*) outMsg.data()) + sizeof(ControlMessage)), value, valSize);
 
-        //pthread_mutex_lock(&mtx_controlContext);
         pthread_mutex_lock(&mtx_controlPublishers[to]);
         assert(controlPublishers[to]->ksend(outMsg, ZMQ_DONTWAIT));
         pthread_mutex_unlock(&mtx_controlPublishers[to]);
-        //pthread_mutex_unlock(&mtx_controlContext);
     }
 
     bool CommManager::controlPullIn(unsigned from, void* value, unsigned valSize) {
         assert(from >= 0 && from < numNodes);
         assert(from != nodeId);
         zmq::message_t inMsg;
-        //pthread_mutex_lock(&mtx_controlContext);
+
         pthread_mutex_lock(&mtx_controlSubscribers[from]);
         bool ret = controlSubscribers[from]->krecv(&inMsg, ZMQ_DONTWAIT);
         pthread_mutex_unlock(&mtx_controlSubscribers[from]);
-        //pthread_mutex_unlock(&mtx_controlContext);
 
         if(ret == false)
             return false;
