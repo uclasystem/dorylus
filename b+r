@@ -1,0 +1,15 @@
+#! /bin/bash
+
+ASP_DIR=/home/ubuntu/aspire-streaming
+
+cd ${ASP_DIR}
+
+function header {
+	echo -e "\e[33;1m######## ${1} ########\e[0m"
+}
+
+header "BUILDING ON ALL"
+./bld $1
+
+header "RUNNING"
+./run/ec2run.sh $1

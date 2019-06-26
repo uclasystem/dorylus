@@ -1,0 +1,37 @@
+#! /bin/bash
+
+ASPIRE_DIR=/home/ubuntu/aspire-streaming
+BUILD_DIR=${ASPIRE_DIR}/build
+
+cd ${BUILD_DIR}
+
+case $1 in
+	"re")
+		make clean; make
+		;;
+	"inc")
+		make clean; make increment
+		
+		if [ $? -eq 0 ]; then 
+			cd ${ASPIRE_DIR}
+			./send_file build/increment.bin
+		fi
+		;;
+	"agg")
+		make clean; make aggregate
+		if [ $? -eq 0 ]; then 
+			cd ${ASPIRE_DIR}
+			./send_file build/aggregate.bin
+		fi
+		;;
+	"pr")
+		make clean; make pagerank
+		if [ $? -eq 0 ]; then 
+			cd ${ASPIRE_DIR}
+			./send_file build/pagerank.bin
+		fi
+		;;
+	*)
+		make $1
+		;;
+esac
