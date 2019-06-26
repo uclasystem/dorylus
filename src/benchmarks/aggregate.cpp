@@ -12,17 +12,36 @@ typedef Empty EType;
 typedef vector<FeatType> VType;
 
 template<typename VertexType, typename EdgeType>
-class PageRankProgram : public VertexProgram<VertexType, EdgeType> {
+class AggregateProgram : public VertexProgram<VertexType, EdgeType> {
 public:
     bool update(Vertex<VertexType, EdgeType>& vertex, EngineContext& engineContext) {
-	bool changed = false;
+	bool changed = true;
+	std::cerr << "Getting Data" << std::endl;
 	VType curr = vertex.data();
 
+	std::cerr << "Summing Vertices" << std::endl;
+	for (unsigned i = 0; i < vertex.numInEdges(); ++i) {
+		vector<FeatType> other = vertex.getSourceVertexData(i);
+		sumVectors(curr, other);
+	}
+
+	std::cerr << "Setting data" << std::endl;
 	vertex.setData(curr);
 
+	if (curr[0] >= 5) changed = false;
+
+	std::cerr << "Finished update" << std::endl;
 	return changed;
     }
+
+private:
+    vector<FeatType> sumVectors(vector<FeatType>& curr, vector<FeatType> other) {
+	for (int i = 0; i < curr.size(); ++i) {
+		curr[i] += other[i];
+	}
+    }
 };
+
 
 template<typename VertexType, typename EdgeType>
 class WriterProgram : public VertexProgram<VertexType, EdgeType> {
@@ -37,6 +56,10 @@ public:
     void processVertex(Vertex<VertexType, EdgeType>& vertex) {
 	VType curr = vertex.data();
 	outFile << vertex.globalId() << ": ";
+	for (int i = 0; i < curr.size(); ++i) {
+		outFile << curr[i] << " ";
+	}
+	outFile << std::endl;
     }
 
     ~WriterProgram() {
@@ -58,8 +81,9 @@ int main(int argc, char* argv[]) {
 
 //    Engine<VType, EType>::signalAll();
     
-    PageRankProgram<VType, EType> pagerankProgram;
-    Engine<VType, EType>::run(&pagerankProgram, true);
+    AggregateProgram<VType, EType> aggregateProgram;
+    Engine<VType, EType>::run(&aggregateProgram, true);
+    std::cerr << "finished Engine::run" << std::endl;
 
     WriterProgram<VType, EType> writerProgram;
     Engine<VType, EType>::processAll(&writerProgram);
