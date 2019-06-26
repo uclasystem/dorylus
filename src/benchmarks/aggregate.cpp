@@ -1,6 +1,7 @@
 #include <iostream>
 #include "../engine/engine.hpp"
 #include <fstream>
+#include <memory>
 #include <vector>
 
 using namespace std;
@@ -8,24 +9,7 @@ using namespace std;
 char tmpDir[256];
 
 typedef Empty EType;
-
-typedef struct vType {
-	std::vector<int> features;
-	int iter;
-
-	vType() { features = std::vector<int>(2, 0); iter = 0; }
-	vType(int n) { features = std::vector<int>(2, n); iter = 0; }
-} VType;
-
-//template<typename VertexType, typename EdgeType>
-//class InitProgram : public VertexProgram<VertexType, EdgeType> {
-//public:
-//	bool update(Vertex<VertexType, EdgeType>& vertex, EngineContext& engineContext) {
-//		vertex.setData( VType(vertex.globalIdx) );
-//
-//		return false;
-//	}
-//};
+typedef vector<FeatType> VType;
 
 template<typename VertexType, typename EdgeType>
 class PageRankProgram : public VertexProgram<VertexType, EdgeType> {
@@ -34,17 +18,7 @@ public:
 	bool changed = false;
 	VType curr = vertex.data();
 
-//	for (int& n : curr.features) {
-//		++n;
-//	}
-	++curr.iter;
-	std::cout << "Current Iter: " << curr.iter << std::endl;
-
 	vertex.setData(curr);
-
-//	if (curr.iter <= 10) {
-//		changed = true;
-//	}
 
 	return changed;
     }
@@ -63,10 +37,6 @@ public:
     void processVertex(Vertex<VertexType, EdgeType>& vertex) {
 	VType curr = vertex.data();
 	outFile << vertex.globalId() << ": ";
-	//for (int n : curr.features) {
-	//	outFile << n << " ";
-	//}
-	//outFile << std::endl;
     }
 
     ~WriterProgram() {
@@ -79,7 +49,7 @@ int main(int argc, char* argv[]) {
 
     parse(&argc, argv, "--bm-tmpdir=", tmpDir);
 
-    VType defaultVertex;
+    VType defaultVertex = vector<int>(2, 1);
     Engine<VType, EType>::init(argc, argv, defaultVertex);
     Engine<VType, EType>::signalAll();
 
