@@ -8,8 +8,12 @@ function header {
 	echo -e "\e[33;1m######## ${1} ########\e[0m"
 }
 
-header "BUILDING ON ALL"
+header "BUILDING $1"
 ./bld $1
+
+if [ $? -ne 0 ]; then
+	exit
+fi
 
 header "RUNNING"
 ./run/ec2run.sh $1
