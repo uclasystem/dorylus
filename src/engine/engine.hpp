@@ -288,7 +288,6 @@ template <typename VertexType, typename EdgeType>
 void Engine<VertexType, EdgeType>::initGraph(Graph<VertexType, EdgeType>& lGraph) {
   lGraph.vertices.resize(lGraph.numLocalVertices);
 
-  std::cout << "SIZE OF DEFAULT VERTEX: " << defaultVertex.size() << std::endl;
   for(IdType i=0; i<lGraph.numLocalVertices; ++i) {
     lGraph.vertices[i].localIdx = i;
     lGraph.vertices[i].globalIdx = lGraph.localToGlobalId[i];

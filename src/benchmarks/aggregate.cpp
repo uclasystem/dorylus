@@ -16,21 +16,17 @@ class AggregateProgram : public VertexProgram<VertexType, EdgeType> {
 public:
     bool update(Vertex<VertexType, EdgeType>& vertex, EngineContext& engineContext) {
 	bool changed = true;
-	std::cerr << "Getting Data" << std::endl;
 	VType curr = vertex.data();
 
-	std::cerr << "Summing Vertices" << std::endl;
 	for (unsigned i = 0; i < vertex.numInEdges(); ++i) {
 		vector<FeatType> other = vertex.getSourceVertexData(i);
 		sumVectors(curr, other);
 	}
 
-	std::cerr << "Setting data" << std::endl;
 	vertex.setData(curr);
 
 	if (curr[0] >= 5) changed = false;
 
-	std::cerr << "Finished update" << std::endl;
 	return changed;
     }
 
