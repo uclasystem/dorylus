@@ -17,18 +17,8 @@ typedef struct vType {
 	vType(int n) { features = std::vector<int>(2, n); iter = 0; }
 } VType;
 
-//template<typename VertexType, typename EdgeType>
-//class InitProgram : public VertexProgram<VertexType, EdgeType> {
-//public:
-//	bool update(Vertex<VertexType, EdgeType>& vertex, EngineContext& engineContext) {
-//		vertex.setData( VType(vertex.globalIdx) );
-//
-//		return false;
-//	}
-//};
-
 template<typename VertexType, typename EdgeType>
-class PageRankProgram : public VertexProgram<VertexType, EdgeType> {
+class AggregateProgram : public VertexProgram<VertexType, EdgeType> {
 public:
     bool update(Vertex<VertexType, EdgeType>& vertex, EngineContext& engineContext) {
 	bool changed = false;
@@ -83,13 +73,8 @@ int main(int argc, char* argv[]) {
     Engine<VType, EType>::init(argc, argv, defaultVertex);
     Engine<VType, EType>::signalAll();
 
-//    InitProgram<VType, EType> initProg;
-//    Engine<VType, EType>::quickRun(&initProg, false);
-
-//    Engine<VType, EType>::signalAll();
-    
-    PageRankProgram<VType, EType> pagerankProgram;
-    Engine<VType, EType>::run(&pagerankProgram, true);
+    AggregateProgram<VType, EType> aggregateProgram;
+    Engine<VType, EType>::run(&aggregateProgram, true);
 
     WriterProgram<VType, EType> writerProgram;
     Engine<VType, EType>::processAll(&writerProgram);
