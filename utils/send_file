@@ -1,0 +1,36 @@
+#! /bin/bash
+
+## SEND FILE ##
+## Sends a file to all machines specified in the dsh file
+## 	--"base" option just sends some commonly updated files
+
+ASP_DIR=/home/ubuntu/aspire-streaming
+
+base_files=(src/engine/engine.h src/engine/engine.hpp src/engine/graph.h src/engine/graph.hpp src/engine/vertex.h src/engine/vertex.hpp)
+
+
+file=
+if [ $# -gt 0 ]; then
+	if [[ $1 != "base" ]]; then
+		file=$( pwd )/$1
+	else
+		file=$1
+	fi
+else
+	echo "No file provided"
+	exit
+fi
+
+
+if [[ $file == "base" ]]; then
+	for item in ${base_files[@]}; do
+		file=${ASP_DIR}/$item
+		for mach in $( cat ~/.dsh/machines.list ); do
+			scp $file $mach:$file
+		done
+	done
+else
+	for mach in $( cat ~/.dsh/machines.list ); do
+		scp $file $mach:$file
+	done
+fi
