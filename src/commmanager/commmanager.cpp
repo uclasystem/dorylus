@@ -1,8 +1,10 @@
-#include "commmanager.h"
-#include "../nodemanager/nodemanager.h"
-#include <zmq.hpp>
 #include <vector>
 #include <unistd.h>
+
+#include <zmq.hpp>
+
+#include "commmanager.h"
+#include "../nodemanager/nodemanager.h"
 
 unsigned CommManager::numNodes = 0;
 unsigned CommManager::nodeId = 0;

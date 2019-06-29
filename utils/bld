@@ -1,0 +1,63 @@
+#! /bin/bash
+
+## BUILD SCRIPT ##
+## Given an option, build the executable and distribute the script across the 
+## cluster
+##	--Most commonly used have abbreviated opts but full make command can 
+##	  be provided
+##	--If adding another option to case, should correspond with option in 
+##	  b+r to build and run benchmark
+##	Note: File could definitely be cleaned up...
+
+ASPIRE_DIR=/home/ubuntu/aspire-streaming
+BUILD_DIR=${ASPIRE_DIR}/build
+UTILS_DIR=${ASPIRE_DIR}/utils
+
+cd ${BUILD_DIR}
+
+case $1 in
+	"re")
+		make clean; make
+		;;
+	"inc")
+		make increment
+		
+		if [ $? -eq 0 ]; then 
+			cd ${ASPIRE_DIR}
+			./utils/send_file build/increment.bin
+		else 
+			return 13
+		fi
+		;;
+	"agg")
+		make aggregate
+		if [ $? -eq 0 ]; then 
+			cd ${ASPIRE_DIR}
+			./utils/send_file build/aggregate.bin
+		else 
+			return 13
+		fi
+		;;
+	"pr")
+		make pagerank
+		if [ $? -eq 0 ]; then 
+			cd ${ASPIRE_DIR}
+			./utils/send_file build/pagerank.bin
+		else 
+			return 13
+		fi
+		;;
+	"clean")
+		make clean
+		;;
+	*)
+		make $1
+		if [ $? -eq 0 ]; then 
+			cd ${UTILS_DIR}
+			./send_file build/increment.bin
+		else 
+			return 13
+		fi
+		;;
+esac
+

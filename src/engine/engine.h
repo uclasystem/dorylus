@@ -139,7 +139,7 @@ public:
 
     static bool undirected;
 
-    static bool firstTeration;
+    static bool firstIteration;
     static unsigned iteration;
 
     static double timProcess;   

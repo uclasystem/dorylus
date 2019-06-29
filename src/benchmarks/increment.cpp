@@ -8,34 +8,28 @@ using namespace std;
 char tmpDir[256];
 
 typedef Empty EType;
-typedef struct vType {
-	std::vector<int> features;
-	int iter;
-
-	vType() { features = std::vector<int>(2, 0); iter = 0; }
-	vType(int n) { features = std::vector<int>(2, n); iter = 0; }
-} VType;
+typedef int VType;
 
 template<typename VertexType, typename EdgeType>
-class AggregateProgram : public VertexProgram<VertexType, EdgeType> {
+class PageRankProgram : public VertexProgram<VertexType, EdgeType> {
 public:
     bool update(Vertex<VertexType, EdgeType>& vertex, EngineContext& engineContext) {
 	bool changed = false;
-	VType curr = vertex.data();
+	int curr = vertex.data();
+	++curr;
 
-//	for (int& n : curr.features) {
-//		++n;
-//	}
-	++curr.iter;
-	std::cout << "Current Iter: " << curr.iter << std::endl;
-
-	vertex.setData(curr);
-
-//	if (curr.iter <= 10) {
-//		changed = true;
-//	}
+	if (curr >= 10) {
+		changed = true;
+	}
 
 	return changed;
+    }
+
+private:
+    void sumVectors(vector<int>& v, const vector<int>& v1) {
+	for (int i = 0; i < v1.size(); ++i) {
+		v[i] += v1[i];
+	}
     }
 };
 
@@ -50,12 +44,7 @@ public:
     }
 
     void processVertex(Vertex<VertexType, EdgeType>& vertex) {
-	VType curr = vertex.data();
-	outFile << vertex.globalId() << ": ";
-	//for (int n : curr.features) {
-	//	outFile << n << " ";
-	//}
-	//outFile << std::endl;
+	outFile << vertex.globalId() << ": " << vertex.data() << std::endl;
     }
 
     ~WriterProgram() {
@@ -68,12 +57,12 @@ int main(int argc, char* argv[]) {
 
     parse(&argc, argv, "--bm-tmpdir=", tmpDir);
 
-    VType defaultVertex;
+    VType defaultVertex = 1.0;
     Engine<VType, EType>::init(argc, argv, defaultVertex);
     Engine<VType, EType>::signalAll();
-
-    AggregateProgram<VType, EType> aggregateProgram;
-    Engine<VType, EType>::run(&aggregateProgram, true);
+    
+    PageRankProgram<VType, EType> pagerankProgram;
+    Engine<VType, EType>::run(&pagerankProgram, true);
 
     WriterProgram<VType, EType> writerProgram;
     Engine<VType, EType>::processAll(&writerProgram);

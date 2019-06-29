@@ -68,8 +68,23 @@ echo -e "\e[33;1mSTARTING BENCHMARK\e[0m"
 
 UD=0;
 
-BM=aggregate.bin; BK=AGG;
-#BM=pagerank.bin; BK=PR;
+BM=increment.bin; BK=AGG;
+if [ $# -ne 0 ]; then
+	case $1 in 
+		"pr")
+			BM=pagerank.bin; BK=PR;
+			;;
+		"agg")
+			BM=aggregate.bin; BK=AGG;
+			;;
+		"inc")
+			BM=increment.bin; BK=INC;
+			;;
+		*)
+			echo "Unrecognized benchmark option"
+	esac
+fi
+
 #BM=sssp.bin; BK=SSSP;
 #BM=asssp.bin; BK=ASSSP;
 #BM=tsssp.bin; BK=TSSSP;
@@ -161,6 +176,7 @@ for dp in {1..1}; do
   echo ${NGVID} > gvid;
 
   echo "GVID = ${GVID}" >> ${OPFILE} 2>&1;
+  echo "GVID = ${GVID}"
 
   echo "DSH Running (from ${ASPIREDIR}/build): ./${BM} --graphfile ${IP} --undirected ${UD} --bm-reset=${RS} --bm-source=${SRC} --bm-tagonadd=${TOA} --bm-tagondelete=${TOD} --bm-smarttagondelete=${STOD} --bm-smartpropagation=${SP} --bm-tmpdir=${TMPDIR} --kcore-maxcore=${KC} --cthreads ${CT} --pofrequency ${POF} --baseedges ${BE} --numbatches ${NB} --batchsize ${BS} --deletepercent ${DP} ${XTRAARGS}";
 

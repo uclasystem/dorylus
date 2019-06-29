@@ -1,0 +1,27 @@
+#! /bin/bash
+
+## BUILD AND RUN ##
+## Calls the build script for a specific benchmark, distributes the 
+## executable to the cluster, then runs it with the specified BM
+## 	--The option provided needs to correspond to options in the
+##	  build and run scripts
+
+ASP_DIR=/home/ubuntu/aspire-streaming
+UTILS_DIR=${ASP_DIR}/utils
+
+cd ${UTILS_DIR}
+
+function header {
+	echo -e "\e[33;1m######## ${1} ########\e[0m"
+}
+
+header "BUILDING $1"
+./bld $1
+
+if [ $? -ne 0 ]; then
+	exit
+fi
+
+header "RUNNING"
+cd ${ASP_DIR}
+./run/ec2run.sh $1

@@ -109,7 +109,7 @@ template <typename VertexType, typename EdgeType>
 bool Engine<VertexType, EdgeType>::undirected = false;
 
 template <typename VertexType, typename EdgeType>
-bool Engine<VertexType, EdgeType>::firstTeration = true;
+bool Engine<VertexType, EdgeType>::firstIteration = true;
 
 template <typename VertexType, typename EdgeType>
 double Engine<VertexType, EdgeType>::timProcess = 0.0;
@@ -852,11 +852,13 @@ void Engine<VertexType, EdgeType>::run(VertexProgram<VertexType, EdgeType>* vPro
   NodeManager::startProcessing();
   vertexProgram = vProgram;
   currId = 0; iteration = 0;
-  firstTeration = true; compDone = false; die = false; 
+  firstIteration = true; compDone = false; die = false; 
   halt = false;
   scheduler->newIteration();
 
+  fprintf(stderr, "Starting data communicator\n");
   dataPool->perform(dataCommunicator);
+  fprintf(stderr, "Starting worker task\n");
   computePool->perform(worker);
   computePool->sync();
 
@@ -878,7 +880,7 @@ void Engine<VertexType, EdgeType>::quickRun(VertexProgram<VertexType, EdgeType>*
   if(metrics) timProcess = -getTimer();
 
   currId = 0; iteration = 0;
-  firstTeration = true; compDone = false; die = false; 
+  firstIteration = true; compDone = false; die = false; 
   halt = false;
   scheduler->newIteration();
 
@@ -1590,7 +1592,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
 
           barComp.wait();                   // This is "A"
 
-          if(firstTeration == false) {
+          if(firstIteration == false) {
             ++iteration;
 
             if(iteration % poFrequency == 0) {
@@ -1602,7 +1604,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
               pushWait = true; 
             }
           }
-          firstTeration = false;
+          firstIteration = false;
 
           fprintf(stderr, "Starting iteration %u at %.3lf ms\n", iteration, timProcess + getTimer()); 
           //if(iteration > 1000)
@@ -1687,7 +1689,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
     Vertex<VertexType, EdgeType>& v = graph.vertices[vid];
 
     assert(scheduler->isScheduled(vid));
-    bool ret = firstTeration | vertexProgram->update(v, engineContext);   // this is a very important change. firstTeration ensures that tags flow out.
+    bool ret = firstIteration | vertexProgram->update(v, engineContext);   // this is a very important change. firstIteration ensures that tags flow out.
     if(ret) {
       bool remoteScat = true;
       for(unsigned i=0; i<v.numOutEdges(); ++i) {
@@ -1747,7 +1749,7 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
       //1. Send out i from your data channel
       //2. The idea is to receive n-1 ack-i, but in between you can receive other machine's j so you simply send ack-j
       unsigned rem = numNodes; //numNodes;
-      bool thinkHalt = (scheduler->anyScheduledTasks() == false); 
+      bool thinkHalt = !(scheduler->anyScheduledTasks());
       halt = true;
       while(rem > 0) {
         IdType mType;

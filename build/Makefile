@@ -1,4 +1,5 @@
 AGG_TARGET	:= aggregate
+INC_TARGET	:= increment
 PR_TARGET       := pagerank
 SSSP_TARGET     := sssp
 ASSSP_TARGET    := asssp
@@ -21,6 +22,7 @@ CDP2_TARGET     := communitydetectionp2
 DEG_TARGET      := degree
 
 AGG_TARGET_BIN    := $(AGG_TARGET).bin
+INC_TARGET_BIN    := $(INC_TARGET).bin
 PR_TARGET_BIN     := $(PR_TARGET).bin
 SSSP_TARGET_BIN   := $(SSSP_TARGET).bin
 ASSSP_TARGET_BIN  := $(ASSSP_TARGET).bin
@@ -72,9 +74,10 @@ ZMQ_LIBPATH     := /home/ubuntu/aspire-streaming/installs/out/lib
 
 LIBS            := -L$(ZK_LIBPATH) $(ZK_LIBS) -L$(ZMQ_LIBPATH) $(ZMQ_LIBS) -lpthread -fopenmp -lboost_program_options
 
+#MSGPACK_C_INC	:= /home/ubuntu/aspire-streaming/installs/msgpack-c/include
 ZK_INCPATH      := /home/ubuntu/aspire-streaming/installs/out/include/zookeeper
 ZMQ_INCPATH     := /home/ubuntu/aspire-streaming/installs/out/include
-INC             := -I$(ZK_INCPATH) -I$(ZMQ_INCPATH)
+INC             := -I$(ZK_INCPATH) -I$(ZMQ_INCPATH) #-I$(MSGPACK_C_INC)
 
 LDFLAGS         := -Wl,-rpath=$(ZK_LIBPATH) -Wl,-rpath=$(ZMQ_LIBPATH)
 
@@ -83,6 +86,7 @@ LDFLAGS         := -Wl,-rpath=$(ZK_LIBPATH) -Wl,-rpath=$(ZMQ_LIBPATH)
 BASE_OBJS       := $(OBJ_PATH)/commmanager.o $(OBJ_PATH)/nodemanager.o $(OBJ_PATH)/zkinterface.o $(OBJ_PATH)/zkhelper.o $(OBJ_PATH)/utils.o $(OBJ_PATH)/threadpool.o
 
 AGG_OBJS	:= $(BASE_OBJS) $(OBJ_PATH)/aggregate.o
+INC_OBJS	:= $(BASE_OBJS) $(OBJ_PATH)/increment.o
 PR_OBJS         := $(BASE_OBJS) $(OBJ_PATH)/pagerank.o
 SSSP_OBJS       := $(BASE_OBJS) $(OBJ_PATH)/sssp.o
 ASSSP_OBJS      := $(BASE_OBJS) $(OBJ_PATH)/asssp.o
@@ -107,9 +111,10 @@ DEG_OBJS        := $(BASE_OBJS) $(OBJ_PATH)/degree.o
 #-include    $(PR_OBJS:%.o=%.d)
 
 #all:        CFLAGS += -O3
-all: directories agg_tgt pr_tgt sssp_tgt asssp_tgt tsssp_tgt bfs_tgt abfs_tgt tbfs_tgt mssp_tgt sswp_tgt asswp_tgt tsswp_tgt kcore_tgt cc_tgt tcc_tgt cd_tgt acd_tgt abcd_tgt cdp2_tgt deg_tgt 
+all: directories agg_tgt inc_tgt pr_tgt sssp_tgt asssp_tgt tsssp_tgt bfs_tgt abfs_tgt tbfs_tgt mssp_tgt sswp_tgt asswp_tgt tsswp_tgt kcore_tgt cc_tgt tcc_tgt cd_tgt acd_tgt abcd_tgt cdp2_tgt deg_tgt 
 
 $(AGG_TARGET): directories agg_tgt
+$(INC_TARGET): directories inc_tgt
 $(PR_TARGET): directories pr_tgt
 $(SSSP_TARGET): directories sssp_tgt
 $(ASSSP_TARGET): directories asssp_tgt
@@ -136,6 +141,9 @@ directories:
 
 agg_tgt: $(AGG_OBJS)
 	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFALGS) $(INC) -o $(AGG_TARGET_BIN)
+
+inc_tgt: $(INC_OBJS)
+	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(INC_TARGET_BIN)
 
 pr_tgt: $(PR_OBJS)
 	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) $(INC) -o $(PR_TARGET_BIN)
@@ -221,5 +229,5 @@ $(OBJ_PATH)/%.o: $(BM_PATH)/%.cpp
 	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
 
 clean:
-	$(RM) $(OBJ_PATH) $(AGG_TARGET_BIN) $(PR_TARGET_BIN) $(SSSP_TARGET_BIN) $(ASSSP_TARGET_BIN) $(TSSSP_TARGET_BIN) $(BFS_TARGET_BIN) $(ABFS_TARGET_BIN) $(TBFS_TARGET_BIN) $(MSSP_TARGET_BIN) $(SSWP_TARGET_BIN) $(ASSWP_TARGET_BIN) $(TSSWP_TARGET_BIN) $(KCORE_TARGET_BIN) $(CC_TARGET_BIN) $(ACC_TARGET_BIN) $(TCC_TARGET_BIN) $(CD_TARGET_BIN) $(ACD_TARGET_BIN) $(ABCD_TARGET_BIN) $(CDP2_TARGET_BIN) $(DEG_TARGET_BIN)
+	$(RM) $(OBJ_PATH) $(AGG_TARGET_BIN) $(INC_TARGET_BIN) $(PR_TARGET_BIN) $(SSSP_TARGET_BIN) $(ASSSP_TARGET_BIN) $(TSSSP_TARGET_BIN) $(BFS_TARGET_BIN) $(ABFS_TARGET_BIN) $(TBFS_TARGET_BIN) $(MSSP_TARGET_BIN) $(SSWP_TARGET_BIN) $(ASSWP_TARGET_BIN) $(TSSWP_TARGET_BIN) $(KCORE_TARGET_BIN) $(CC_TARGET_BIN) $(ACC_TARGET_BIN) $(TCC_TARGET_BIN) $(CD_TARGET_BIN) $(ACD_TARGET_BIN) $(ABCD_TARGET_BIN) $(CDP2_TARGET_BIN) $(DEG_TARGET_BIN)
 
