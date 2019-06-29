@@ -8,18 +8,21 @@
 
 unsigned CommManager::numNodes = 0;
 unsigned CommManager::nodeId = 0;
+
+// data sockets and mutex's
 zmq::context_t CommManager::dataContext;
 zmq::socket_t* CommManager::dataPublisher = NULL;
 zmq::socket_t* CommManager::dataSubscriber = NULL;
-//pthread_mutex_t CommManager::mtx_dataContext;
 pthread_mutex_t CommManager::mtx_dataPublisher;
 pthread_mutex_t CommManager::mtx_dataSubscriber;
-//pthread_mutex_t CommManager::mtx_controlContext;
+
+// control sockets and mutex's
 zmq::socket_t** CommManager::controlPublishers = NULL;
 zmq::socket_t** CommManager::controlSubscribers = NULL;
 zmq::context_t CommManager::controlContext;
 pthread_mutex_t* CommManager::mtx_controlPublishers = NULL;
 pthread_mutex_t* CommManager::mtx_controlSubscribers = NULL;
+
 std::vector<bool> CommManager::nodesAlive;
 unsigned CommManager::numLiveNodes;
 unsigned CommManager::dataPort = DATA_PORT;
@@ -29,13 +32,11 @@ unsigned CommManager::controlPortStart = CONTROL_PORT_START;
 bool CommManager::init() {
     numNodes = NodeManager::getNumNodes();
     nodeId = NodeManager::getNodeId();
-    //dataContext = new zmq::context_t(1);
 
     Node me = NodeManager::getNode(nodeId);
     dataPublisher = new zmq::socket_t(dataContext, ZMQ_PUB);
     assert(dataPublisher->ksetsockopt(ZMQ_SNDHWM, INF_WM));
     assert(dataPublisher->ksetsockopt(ZMQ_RCVHWM, INF_WM));
-    //dataPublisher->kbind("tcp://" GENERIC_DATA_ADDR);
     char hostPort[50];
     sprintf(hostPort, "tcp://%s:%u", me.ip.c_str(), dataPort);
     assert(dataPublisher->kbind(hostPort));
@@ -374,7 +375,6 @@ void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* o
         
         pthread_mutex_unlock(&mtx_dataSubscriber);
         pthread_mutex_unlock(&mtx_dataPublisher);
-        //pthread_mutex_unlock(&mtx_dataContext);
 
         flushData(numLiveNodes);
     }
@@ -384,40 +384,42 @@ void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* o
         *((IdType*) outMsg.data()) = topic;
         memcpy((void*)(((char*) outMsg.data()) + sizeof(IdType)), value, valSize);
 
-        //pthread_mutex_lock(&mtx_dataContext);
         pthread_mutex_lock(&mtx_dataPublisher);
         dataPublisher->ksend(outMsg, ZMQ_DONTWAIT); 
-        //pthread_mutex_unlock(&mtx_dataContext);
         pthread_mutex_unlock(&mtx_dataPublisher);
     }
 
-    bool CommManager::dataPullIn(IdType* topic, void* value, unsigned valSize) {
+    bool CommManager::dataPullIn(IdType &topic, std::vector<int>& value) {
         zmq::message_t inMsg;
 
-        //pthread_mutex_lock(&mtx_dataContext);
         pthread_mutex_lock(&mtx_dataSubscriber);
         bool ret = dataSubscriber->krecv(&inMsg, ZMQ_DONTWAIT);
-        //pthread_mutex_unlock(&mtx_dataContext);
         pthread_mutex_unlock(&mtx_dataSubscriber);
 
-        if(ret == false)
+        if(!ret)
             return false;
 
-        *topic = *((IdType*) inMsg.data());
-        memcpy(value, ((void*)((char*)inMsg.data() + sizeof(IdType))), valSize);
+	int32_t dataSize = inMsg.size() - sizeof(IdType);
+	int32_t numberOfFeatures = dataSize / sizeof(FeatType);
+	value.resize(numberOfFeatures);
+
+	memcpy(&topic, inMsg.data(), sizeof(IdType));
+        memcpy(value.data(), ((char*)inMsg.data() + sizeof(IdType)), dataSize);
         return true;
     }
 
-    void CommManager::dataSyncPullIn(IdType* topic, void* value, unsigned valSize) {
+    void CommManager::dataSyncPullIn(IdType& topic, std::vector<int>& value) {
         zmq::message_t inMsg;
-        //pthread_mutex_lock(&mtx_dataContext);
         pthread_mutex_lock(&mtx_dataSubscriber);
         assert(dataSubscriber->krecv(&inMsg));
-        //pthread_mutex_unlock(&mtx_dataContext);
         pthread_mutex_unlock(&mtx_dataSubscriber);
 
-        *topic = *((IdType*) inMsg.data());
-        memcpy(value, ((void*)((char*)inMsg.data() + sizeof(IdType))), valSize);
+	int32_t dataSize = inMsg.size() - sizeof(IdType);
+	int32_t numberOfFeatures = dataSize / sizeof(FeatType);
+	value.resize(numberOfFeatures);
+
+	memcpy(&topic, inMsg.data(), sizeof(IdType));
+	memcpy(value.data(), ((char*)inMsg.data() + sizeof(IdType)), dataSize);
     }
 
     void CommManager::controlPushOut(unsigned to, void* value, unsigned valSize) {
@@ -427,22 +429,19 @@ void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* o
         *((ControlMessage*) outMsg.data()) = ControlMessage(APPMSG);
         memcpy((void*)(((char*) outMsg.data()) + sizeof(ControlMessage)), value, valSize);
 
-        //pthread_mutex_lock(&mtx_controlContext);
         pthread_mutex_lock(&mtx_controlPublishers[to]);
         assert(controlPublishers[to]->ksend(outMsg, ZMQ_DONTWAIT));
         pthread_mutex_unlock(&mtx_controlPublishers[to]);
-        //pthread_mutex_unlock(&mtx_controlContext);
     }
 
     bool CommManager::controlPullIn(unsigned from, void* value, unsigned valSize) {
         assert(from >= 0 && from < numNodes);
         assert(from != nodeId);
         zmq::message_t inMsg;
-        //pthread_mutex_lock(&mtx_controlContext);
+
         pthread_mutex_lock(&mtx_controlSubscribers[from]);
         bool ret = controlSubscribers[from]->krecv(&inMsg, ZMQ_DONTWAIT);
         pthread_mutex_unlock(&mtx_controlSubscribers[from]);
-        //pthread_mutex_unlock(&mtx_controlContext);
 
         if(ret == false)
             return false;

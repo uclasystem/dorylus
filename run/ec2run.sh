@@ -1,11 +1,16 @@
 #!/bin/bash
 
 WORKDIR="/home/ubuntu";
+OUTFILE_DIR="${WORKDIR}/outfiles"
 RUNDIR="/home/ubuntu/aspire-streaming/run";
 DSHFILE="/home/ubuntu/aspire-streaming/run/dshmachines";
 HOSTFILE="/home/ubuntu/aspire-streaming/run/hostfile";
 TMPDIR="/home/ubuntu/zktmp"
 DSH=dsh;
+
+if [ -d ${OUTFILE_DIR} ]; then
+	mkdir -p ${OUTFILE_DIR}
+fi
 
 cat ${DSHFILE} | sed 's/ubuntu@//' > ${HOSTFILE};
 
@@ -121,7 +126,8 @@ fi
 #IP=../inputs/parts_${NDS}/soc-LiveJournal1.txt_undir.bsnap.red.bsnap; AF=../inputs/parts_${NDS}/soc-LiveJournal1.txt_undir.bsnap.red.bsnap.deleteadd; IK=SLJ;
 IP=../inputs/parts_${NDS}/data.bsnap; IK=DT; SRC=0;
 
-OPFILE=${WORKDIR}/out.${BK}.${IK}.out;
+i=0
+OPFILE=${OUTFILE_DIR}/out.${BK}.${IK}.out
 
 BE=50;
 CT=7;POF=1;
@@ -174,6 +180,7 @@ for dp in {1..1}; do
   GVID=`cat gvid`;
   NGVID=$((GVID + 1));
   echo ${NGVID} > gvid;
+  OPFILE=${OPFILE}.${GVID}
 
   echo "GVID = ${GVID}" >> ${OPFILE} 2>&1;
   echo "GVID = ${GVID}"

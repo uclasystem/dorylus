@@ -287,6 +287,7 @@ void Engine<VertexType, EdgeType>::readPartsFile(std::string& partsFileName, Gra
 template <typename VertexType, typename EdgeType>
 void Engine<VertexType, EdgeType>::initGraph(Graph<VertexType, EdgeType>& lGraph) {
   lGraph.vertices.resize(lGraph.numLocalVertices);
+
   for(IdType i=0; i<lGraph.numLocalVertices; ++i) {
     lGraph.vertices[i].localIdx = i;
     lGraph.vertices[i].globalIdx = lGraph.localToGlobalId[i];
@@ -354,7 +355,7 @@ template <typename VertexType, typename EdgeType>
 void Engine<VertexType, EdgeType>::receiveNewGhostValues(std::set<IdType>& inTopics) {
   while(inTopics.size() > 0) {
     IdType vid; VertexType value;
-    CommManager::dataSyncPullIn(&vid, &value, sizeof(VertexType));
+    CommManager::dataSyncPullIn(vid, value);
     if(inTopics.find(vid) != inTopics.end()) {
       typename std::map<IdType, GhostVertex<VertexType> >::iterator gvit = graph.ghostVertices.find(vid);
       assert(gvit != graph.ghostVertices.end());
@@ -1597,9 +1598,8 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
 
             if(iteration % poFrequency == 0) {
               remPushOut = numNodes;
-              VertexType stub;
-              //fprintf(stderr, "comp pushing out PUSHOUT_REQ_ME with value %u\n", PUSHOUT_REQ_ME);
-              CommManager::dataPushOut(PUSHOUT_REQ_ME, (void*) &stub, sizeof(VertexType));
+              VertexType stub = VertexType(2, 0);
+              CommManager::dataPushOut(PUSHOUT_REQ_ME, (void*) &stub, sizeof(FeatType) * stub.size());
 
               pushWait = true; 
             }
@@ -1610,15 +1610,16 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
           //if(iteration > 1000)
           //engineContext.setTooLong(true);
 
-          bool hltBool = ((timProcess + getTimer() > 500) && (scheduler->anyScheduledTasks() == false));  // after 1 sec only!
+          bool hltBool = ((timProcess + getTimer() > 500) && !(scheduler->anyScheduledTasks()));  // after 1 sec only!
 
-          if(hltBool == false) {
+          if(!hltBool) {
             scheduler->newIteration();
 
             currId = 0;     // This is unprotected by lockCurrId because only master executes this code while workers are on barriers
             lockCurrId.lock();
             barComp.wait();
           } else { // deciding to halt
+            fprintf(stderr, "Deciding to halt in this iteration (%u)\n", iteration);
             NodeManager::barrier(COMM_BARRIER);
             fprintf(stderr, "Deciding to halt in this iteration (%u)\n", iteration);
 
@@ -1697,7 +1698,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
           scheduler->schedule(v.getOutEdge(i).destId());
         else {
           if(remoteScat) {
-            CommManager::dataPushOut(graph.localToGlobalId[vid], (void*) &v.vertexData, sizeof(VertexType));
+            CommManager::dataPushOut(graph.localToGlobalId[vid], (void*)v.vertexData.data(), sizeof(FeatType) * v.vertexData.size());
             remoteScat = false;
           }
         }
@@ -1730,7 +1731,7 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
   VertexType value;
 
   while(1) {
-    if(!CommManager::dataPullIn(&vid, &value, sizeof(VertexType))) {
+    if(!CommManager::dataPullIn(vid, value)) {
       if(compDone == false)
         continue;
 
@@ -1753,7 +1754,7 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
       halt = true;
       while(rem > 0) {
         IdType mType;
-        while(CommManager::dataPullIn(&mType, &value, sizeof(VertexType)) == false) { } // spinwait? omg?
+        while(!CommManager::dataPullIn(mType, value)) { } // spinwait? omg?
 
         if(mType == ITHINKIAMDONE) {
           --rem;
@@ -1789,7 +1790,7 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
 
       IdType mType; unsigned totalRem = numNodes; unsigned finalRem = numNodes;
       while(totalRem > 0) {
-        while(CommManager::dataPullIn(&mType, &value, sizeof(VertexType)) == false) { } // spinlock? omg?
+        while(!CommManager::dataPullIn(mType, value)) { } // spinlock? omg?
 
         if(mType == IAMDONE) {
           --finalRem;
