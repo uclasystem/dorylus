@@ -1,13 +1,20 @@
 #!/bin/bash
 
-WORKDIR="/home/ubuntu";
-RUNDIR="/home/ubuntu/aspire-streaming/run";
-DSHFILE="/home/ubuntu/aspire-streaming/run/dshmachines";
-HOSTFILE="/home/ubuntu/aspire-streaming/run/hostfile";
-TMPDIR="/home/ubuntu/zktmp"
+user=
+
+WORKDIR="/home/${user}";
+OUTFILE_DIR="${WORKDIR}/outfiles"
+RUNDIR="/home/${user}/aspire-streaming/run";
+DSHFILE="/home/${user}/aspire-streaming/run/dshmachines";
+HOSTFILE="/home/${user}/aspire-streaming/run/hostfile";
+TMPDIR="/home/${user}/zktmp"
 DSH=dsh;
 
-cat ${DSHFILE} | sed 's/ubuntu@//' > ${HOSTFILE};
+if [ ! -d ${OUTFILE_DIR} ]; then
+	mkdir -p ${OUTFILE_DIR}
+fi
+
+cat ${DSHFILE} | sed "s/${user}@//" > ${HOSTFILE};
 
 NDS=$(wc -l ${HOSTFILE} | cut -d" " -f1);
 
@@ -18,12 +25,12 @@ done;
 
 echo "Cluster of ${NDS} nodes";
 
-echo "DSH Running: rm -rf ${TMPDIR} && mkdir ${TMPDIR} && chown ubuntu:ubuntu ${TMPDIR}";
-${DSH} -M -f ${DSHFILE} -c "rm -rf ${TMPDIR} && mkdir ${TMPDIR} && chown ubuntu:ubuntu ${TMPDIR}";
+echo "DSH Running: rm -rf ${TMPDIR} && mkdir ${TMPDIR} && chown ${user}:${user} ${TMPDIR}";
+${DSH} -M -f ${DSHFILE} -c "rm -rf ${TMPDIR} && mkdir ${TMPDIR} && chown ${user}:${user} ${TMPDIR}";
 
 ############### INIT ZOOKEEPER ###############
 
-ZOODIR=/home/ubuntu/aspire-streaming/installs/zookeeper-release-3.4.6
+ZOODIR=${WORKDIR}/aspire-streaming/installs/zookeeper-release-3.4.6
 ZOONDS=3
 
 echo -e "\e[33;1mDSH Running: cd ${ZOODIR} && ./bin/zkServer.sh stop\e[0m";
@@ -63,12 +70,12 @@ done;
 ############### DO WORK ###############
 
 
-ASPIREDIR=/home/ubuntu/aspire-streaming
+ASPIREDIR=/home/${user}/aspire-streaming
 echo -e "\e[33;1mSTARTING BENCHMARK\e[0m"
 
 UD=0;
 
-BM=increment.bin; BK=AGG;
+BM=aggregate.bin; BK=AGG;
 if [ $# -ne 0 ]; then
 	case $1 in 
 		"pr")
@@ -117,11 +124,12 @@ fi
 #IP=../inputs/parts_${NDS}/rmat-251.txt_edited.bsnap; AK=NULL; IK=RM; SRC=92;
 #IP=../inputs/parts_${NDS}/out.friendster_edited.bsnap; AK=NULL; IK=FT; SRC=221;
 
-#IP=../inputs/parts_${NDS}/soc-LiveJournal1.txt_undir.bsnap; AF=NULL; IK=LJ; XTRAARGS="--cd-initfile=/home/ubuntu/Desktop/workspace/aspire/inputs/cdp1outfinal";
+#IP=../inputs/parts_${NDS}/soc-LiveJournal1.txt_undir.bsnap; AF=NULL; IK=LJ; XTRAARGS="--cd-initfile=/home/${user}/Desktop/workspace/aspire/inputs/cdp1outfinal";
 #IP=../inputs/parts_${NDS}/soc-LiveJournal1.txt_undir.bsnap.red.bsnap; AF=../inputs/parts_${NDS}/soc-LiveJournal1.txt_undir.bsnap.red.bsnap.deleteadd; IK=SLJ;
 IP=../inputs/parts_${NDS}/data.bsnap; IK=DT; SRC=0;
 
-OPFILE=${WORKDIR}/out.${BK}.${IK}.out;
+i=0
+OPFILE=${OUTFILE_DIR}/out.${BK}.${IK}.out
 
 BE=50;
 CT=7;POF=1;
@@ -174,6 +182,7 @@ for dp in {1..1}; do
   GVID=`cat gvid`;
   NGVID=$((GVID + 1));
   echo ${NGVID} > gvid;
+  OPFILE=${OPFILE}.${GVID}
 
   echo "GVID = ${GVID}" >> ${OPFILE} 2>&1;
   echo "GVID = ${GVID}"
@@ -207,7 +216,7 @@ for i in $(seq 1 $ZOONDS); do
 done;
 
 #sleep 10;
-#cd /home/ubuntu/Desktop/workspace/aspire-streaming/run;
-#/home/ubuntu/Desktop/workspace/aspire-streaming/run/ec3run.sh;
+#cd /home/${user}/Desktop/workspace/aspire-streaming/run;
+#/home/${user}/Desktop/workspace/aspire-streaming/run/ec3run.sh;
 
-#/home/ubuntu/Desktop/workspace/management/commander.py stopworkers ;
+#/home/${user}/Desktop/workspace/management/commander.py stopworkers ;
