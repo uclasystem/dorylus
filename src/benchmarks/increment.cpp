@@ -8,28 +8,21 @@ using namespace std;
 char tmpDir[256];
 
 typedef Empty EType;
-typedef int VType;
+typedef vector<FeatType> VType;
 
 template<typename VertexType, typename EdgeType>
-class PageRankProgram : public VertexProgram<VertexType, EdgeType> {
+class IncrementProgram : public VertexProgram<VertexType, EdgeType> {
 public:
     bool update(Vertex<VertexType, EdgeType>& vertex, EngineContext& engineContext) {
 	bool changed = false;
-	int curr = vertex.data();
-	++curr;
+	VType curr = vertex.data();
+	++curr[0];
 
-	if (curr >= 10) {
+	if (curr[0] >= 10) {
 		changed = true;
 	}
 
 	return changed;
-    }
-
-private:
-    void sumVectors(vector<int>& v, const vector<int>& v1) {
-	for (int i = 0; i < v1.size(); ++i) {
-		v[i] += v1[i];
-	}
     }
 };
 
@@ -44,7 +37,11 @@ public:
     }
 
     void processVertex(Vertex<VertexType, EdgeType>& vertex) {
-	outFile << vertex.globalId() << ": " << vertex.data() << std::endl;
+	outFile << vertex.globalId() << ": ";
+	for (FeatType f : vertex.data()) {
+		outFile << f << " ";
+	}
+	outFile << std::endl;
     }
 
     ~WriterProgram() {
@@ -57,12 +54,12 @@ int main(int argc, char* argv[]) {
 
     parse(&argc, argv, "--bm-tmpdir=", tmpDir);
 
-    VType defaultVertex = 1.0;
+    VType defaultVertex = VType(2, 0);
     Engine<VType, EType>::init(argc, argv, defaultVertex);
     Engine<VType, EType>::signalAll();
     
-    PageRankProgram<VType, EType> pagerankProgram;
-    Engine<VType, EType>::run(&pagerankProgram, true);
+    IncrementProgram<VType, EType> incrementProgram;
+    Engine<VType, EType>::run(&incrementProgram, true);
 
     WriterProgram<VType, EType> writerProgram;
     Engine<VType, EType>::processAll(&writerProgram);
