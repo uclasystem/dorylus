@@ -9,7 +9,7 @@
 ##	  b+r to build and run benchmark
 ##	Note: File could definitely be cleaned up...
 
-ASPIRE_DIR=/home/ubuntu/aspire-streaming
+ASPIRE_DIR=/home/jothor/aspire-streaming
 BUILD_DIR=${ASPIRE_DIR}/build
 UTILS_DIR=${ASPIRE_DIR}/utils
 
@@ -38,26 +38,8 @@ case $1 in
 			return 13
 		fi
 		;;
-	"pr")
-		make pagerank
-		if [ $? -eq 0 ]; then 
-			cd ${ASPIRE_DIR}
-			./utils/send_file build/pagerank.bin
-		else 
-			return 13
-		fi
-		;;
-	"clean")
-		make clean
-		;;
 	*)
 		make $1
-		if [ $? -eq 0 ]; then 
-			cd ${UTILS_DIR}
-			./send_file build/increment.bin
-		else 
-			return 13
-		fi
 		;;
 esac
 
