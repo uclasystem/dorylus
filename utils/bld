@@ -9,21 +9,15 @@
 ##	  b+r to build and run benchmark
 ##	Note: File could definitely be cleaned up...
 
-ASPIRE_DIR=/home/ubuntu/aspire-streaming
-BUILD_DIR=${ASPIRE_DIR}/build
-UTILS_DIR=${ASPIRE_DIR}/utils
 
-cd ${BUILD_DIR}
+cd $( dirname $0 )/../build
 
 case $1 in
-	"re")
-		make clean; make
-		;;
 	"inc")
 		make increment
 		
 		if [ $? -eq 0 ]; then 
-			cd ${ASPIRE_DIR}
+			cd ..
 			./utils/send_file build/increment.bin
 		else 
 			return 13
@@ -32,32 +26,14 @@ case $1 in
 	"agg")
 		make aggregate
 		if [ $? -eq 0 ]; then 
-			cd ${ASPIRE_DIR}
+			cd ..
 			./utils/send_file build/aggregate.bin
 		else 
 			return 13
 		fi
 		;;
-	"pr")
-		make pagerank
-		if [ $? -eq 0 ]; then 
-			cd ${ASPIRE_DIR}
-			./utils/send_file build/pagerank.bin
-		else 
-			return 13
-		fi
-		;;
-	"clean")
-		make clean
-		;;
 	*)
 		make $1
-		if [ $? -eq 0 ]; then 
-			cd ${UTILS_DIR}
-			./send_file build/increment.bin
-		else 
-			return 13
-		fi
 		;;
 esac
 
