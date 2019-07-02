@@ -4,6 +4,7 @@
 ## Sends a file to all machines specified in the dsh file
 ## 	--"base" option just sends some commonly updated files
 
+ASP_DIR=$( dirname $0 )/..
 
 base_files=(src/engine/engine.h src/engine/engine.hpp src/engine/graph.h src/engine/graph.hpp src/engine/vertex.h src/engine/vertex.hpp)
 
@@ -23,7 +24,7 @@ fi
 
 if [[ $file == "base" ]]; then
 	for item in ${base_files[@]}; do
-		file=$( dirname $0 )/../$item
+		file=${ASP_DIR}/$item
 		for mach in $( cat ~/.dsh/machines.list ); do
 			scp $file $mach:$file
 		done
