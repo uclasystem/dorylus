@@ -6,10 +6,7 @@
 ## 	--The option provided needs to correspond to options in the
 ##	  build and run scripts
 
-ASP_DIR=/home/ubuntu/aspire-streaming
-UTILS_DIR=${ASP_DIR}/utils
-
-cd ${UTILS_DIR}
+cd $( dirname $0 )
 
 function header {
 	echo -e "\e[33;1m######## ${1} ########\e[0m"
@@ -23,5 +20,5 @@ if [ $? -ne 0 ]; then
 fi
 
 header "RUNNING"
-cd ${ASP_DIR}
+cd ..
 ./run/ec2run.sh $1
