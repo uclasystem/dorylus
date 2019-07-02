@@ -67,7 +67,7 @@ and the snapReader will help verify the correctness of the binary data.
   
 ### Partitioning the Data
 Once you have the data as a binary edge list, it needs to be partitioned. 
-First we need to set up Metis:  
+First we need to set up Metis: http://glaros.dtc.umn.edu/gkhome/fetch/sw/metis/metis-5.1.0.tar.gz  
 Extract the tarball in the installs directory as with ZeroMQ. 
 Once it has been extracted, change metis.h in the include directory to 
 reflect the data size being used. 
