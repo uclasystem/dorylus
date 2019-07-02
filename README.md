@@ -85,3 +85,7 @@ of vertices, and the number of machiens which will be in the cluster.
 
 Make sure the data is on all machines and has been properly setup and it should 
 be runnable.
+
+# Running ASPIRE
+Aspire can be run by calling the ./run/ec2run.sh script. Before running, make sure all that all config options have been set correctly, such as the config files in the run directory. In addition, make sure that the file zoo.cfg has been set in the zookeeper "conf" directory. Finally, set the variable "user" to your username at the top of ec2run.sh and the program should work.
+
