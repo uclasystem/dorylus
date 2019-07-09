@@ -31,7 +31,7 @@ public:
     }
 
 private:
-    vector<FeatType> sumVectors(vector<FeatType>& curr, vector<FeatType> other) {
+    void sumVectors(vector<FeatType>& curr, vector<FeatType>& other) {
 	for (int i = 0; i < curr.size(); ++i) {
 		curr[i] += other[i];
 	}
