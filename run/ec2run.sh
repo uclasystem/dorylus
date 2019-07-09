@@ -14,7 +14,9 @@ if [ ! -d ${OUTFILE_DIR} ]; then
 	mkdir -p ${OUTFILE_DIR}
 fi
 
-cat ${DSHFILE} | sed "s/${user}@//" > ${HOSTFILE};
+if [ ! -f ${HOSTFILE} ]; then
+	cat ${DSHFILE} | sed "s/${user}@//" > ${HOSTFILE}
+fi
 
 NDS=$(wc -l ${HOSTFILE} | cut -d" " -f1);
 
@@ -23,10 +25,10 @@ for i in $(seq 1 ${NDS}); do
   dshnodes[$i]=$(head -n $i ${DSHFILE} | tail -n 1);
 done;
 
-echo "Cluster of ${NDS} nodes";
+echo "Cluster of ${NDS} nodes"
 
-echo "DSH Running: rm -rf ${TMPDIR} && mkdir ${TMPDIR} && chown ${user}:${user} ${TMPDIR}";
-${DSH} -M -f ${DSHFILE} -c "rm -rf ${TMPDIR} && mkdir ${TMPDIR} && chown ${user}:${user} ${TMPDIR}";
+echo "DSH Running: rm -rf ${TMPDIR} && mkdir ${TMPDIR} && chown ${user}:${user} ${TMPDIR}"
+${DSH} -M -f ${DSHFILE} -c "rm -rf ${TMPDIR} && mkdir ${TMPDIR} && chown ${user}:${user} ${TMPDIR}"
 
 ############### INIT ZOOKEEPER ###############
 
@@ -36,11 +38,13 @@ ZOONDS=3
 echo -e "\e[33;1mDSH Running: cd ${ZOODIR} && ./bin/zkServer.sh stop\e[0m";
 ${DSH} -M -f ${DSHFILE} -c "cd ${ZOODIR} && ./bin/zkServer.sh stop";
 
-cat ${RUNDIR}/zoo.basic > ${ZOODIR}/conf/zoo.cfg;
-echo "" >> ${ZOODIR}/conf/zoo.cfg;
-for i in $(seq 1 ${ZOONDS}); do
-  echo "server.${i}=${nodes[$i]}:2080:3080" >> ${ZOODIR}/conf/zoo.cfg;
-done;
+if [ ! -f ${ZOODIR}/conf/zoo.cfg ]; then
+	cat ${RUNDIR}/zoo.basic > ${ZOODIR}/conf/zoo.cfg;
+	echo "" >> ${ZOODIR}/conf/zoo.cfg;
+	for i in $(seq 1 ${ZOONDS}); do
+	  echo "server.${i}=${nodes[$i]}:2080:3080" >> ${ZOODIR}/conf/zoo.cfg;
+	done;
+fi
 
 echo -e "\e[33;1mSTARTING ZOOKEEPER\e[0m";
 echo -e "\e[33;1mDSH Running: cd ${ZOODIR} && ./bin/zkServer.sh start\e[0m";
@@ -115,7 +119,7 @@ fi
 #IP=../inputs/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB;
 #IP=../inputs/parts_${NDS}/facebook_combined.txt_undir.bsnap; IK=FBU;
 #IP=../inputs/parts_${NDS}/twitter_rv.net_edited.bsnap; IK=TT; SRC=1436;
-#IP=../inputs/parts_${NDS}/soc-LiveJournal1.txt.bsnap; AF=NULL; IK=LJ; SRC=10000;
+IP=../inputs/parts_${NDS}/soc-LiveJournal1.txt.bsnap; AF=NULL; IK=LJ; SRC=10000;
 #IP=../inputs/parts_${NDS}/roadNet-CA.txt.bsnap; AF=NULL; IK=RNCA; SRC=0;
 #IP=../inputs/parts_${NDS}/uk2005_edited.bsnap; AF=NULL; IK=UK; SRC=26954; 
 #IP=../inputs/parts_${NDS}/twitter_rv.net_edited.bsnap; AF=NULL; IK=TT; SRC=1652;
@@ -126,7 +130,7 @@ fi
 
 #IP=../inputs/parts_${NDS}/soc-LiveJournal1.txt_undir.bsnap; AF=NULL; IK=LJ; XTRAARGS="--cd-initfile=/home/${user}/Desktop/workspace/aspire/inputs/cdp1outfinal";
 #IP=../inputs/parts_${NDS}/soc-LiveJournal1.txt_undir.bsnap.red.bsnap; AF=../inputs/parts_${NDS}/soc-LiveJournal1.txt_undir.bsnap.red.bsnap.deleteadd; IK=SLJ;
-IP=../inputs/parts_${NDS}/data.bsnap; IK=DT; SRC=0;
+#IP=../inputs/parts_${NDS}/data.bsnap; IK=DT; SRC=0;
 
 i=0
 OPFILE=${OUTFILE_DIR}/out.${BK}.${IK}.out
