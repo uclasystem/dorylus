@@ -284,25 +284,15 @@ void NodeManager::barrierCB(const char* path) {
 }
 
 void NodeManager::barrier(const char* bar) {
-    fprintf(stderr, "BAR Start\n");
     inBarrier = true;
 
-    fprintf(stderr, "BAR context: %s\n", bar);
-    
-    fprintf(stderr, "BAR bContext\n");
     BarrierContext bContext(bar);
     std::string barName = bContext.path;
     pthread_mutex_lock(&mtx_appBarriers);
-    fprintf(stderr, "BAR barname: %s\n", barName.c_str());
-    fprintf(stderr, "BAR Overwriting barrier\n");
     appBarriers[barName] = bContext;    // Overwrite barrier
-    fprintf(stderr, "BAR unlock appBarriers\n");
     pthread_mutex_unlock(&mtx_appBarriers);
 
-    fprintf(stderr, "BAR Master check\n");
-
     if(me.master) {
-	fprintf(stderr, "BAR Jon\n");
         createNode(barName.c_str(), false, true, &createCB);
         //fprintf(stderr, "Node %s: Created barrier %s\n", me.name.c_str(), barName.c_str());
 
@@ -329,7 +319,6 @@ void NodeManager::barrier(const char* bar) {
          */
         ZKInterface::recursiveDeleteZKNode(barName.c_str());
     } else {
-	fprintf(stderr, "BAR Christian\n");
         fprintf(stderr, "Node %s: Waiting to enter barrier %s\n", me.name.c_str(), barName.c_str());
         pthread_mutex_lock(&mtx_waiter);
         if(ZKInterface::checkZKExists(barName.c_str(), checkBarrierExists) == false)

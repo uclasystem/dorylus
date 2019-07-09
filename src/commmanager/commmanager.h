@@ -67,7 +67,6 @@ private:
 
     static pthread_mutex_t mtx_dataPublisher;
     static pthread_mutex_t mtx_dataSubscriber;
-    //static pthread_mutex_t mtx_dataContext;
 
     static zmq::context_t controlContext;
     static zmq::socket_t** controlPublishers;
@@ -75,7 +74,6 @@ private:
 
     static pthread_mutex_t* mtx_controlPublishers;
     static pthread_mutex_t* mtx_controlSubscribers;
-    //static pthread_mutex_t mtx_controlContext;
 
     static std::vector<bool> nodesAlive;
     static unsigned numLiveNodes;

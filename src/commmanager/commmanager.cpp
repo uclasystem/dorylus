@@ -84,7 +84,6 @@ bool CommManager::init() {
 
         char hostPort[50];
         int prt = controlPortStart + i; 
-        //sprintf(hostPort, "tcp://%s:%d", LOCAL_HOST, prt);
         sprintf(hostPort, "tcp://%s:%d", me.ip.c_str(), prt);
         fprintf(stderr, "Control publisher %u binding to %s\n", i, hostPort);
         assert(controlPublishers[i]->kbind(hostPort));
@@ -134,8 +133,6 @@ bool CommManager::init() {
             i = (i + 1) % numNodes;
             continue;
         }
-
-        //fprintf(stderr, "Trying with %s\n", NodeManager::getNode(i).name.c_str());
 
         if(lastSents[i] + getTimer() > 500) {
             zmq::message_t outMsg(sizeof(ControlMessage));
@@ -405,6 +402,7 @@ void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* o
 
 	memcpy(&topic, inMsg.data(), sizeof(IdType));
         memcpy(value.data(), ((char*)inMsg.data() + sizeof(IdType)), dataSize);
+
         return true;
     }
 
