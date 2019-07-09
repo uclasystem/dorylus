@@ -39,8 +39,8 @@ public:
     static void destroy();
     static void subscribeData(std::set<IdType>* topics, std::vector<IdType>* outTopics);
     static void dataPushOut(IdType topic, void* value, unsigned valSize);
-    static bool dataPullIn(IdType& topic, std::vector<int>& value);
-    static void dataSyncPullIn(IdType& topic, std::vector<int>& value);
+    static bool dataPullIn(IdType& topic, std::vector<FeatType>& value);
+    static void dataSyncPullIn(IdType& topic, std::vector<FeatType>& value);
     static void controlPushOut(unsigned to, void* value, unsigned valSize); 
     static bool controlPullIn(unsigned from, void* value, unsigned valSize);
     static void controlSyncPullIn(unsigned from, void* value, unsigned valSize);

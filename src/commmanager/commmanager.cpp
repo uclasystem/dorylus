@@ -386,7 +386,7 @@ void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* o
         pthread_mutex_unlock(&mtx_dataPublisher);
     }
 
-    bool CommManager::dataPullIn(IdType &topic, std::vector<int>& value) {
+    bool CommManager::dataPullIn(IdType &topic, std::vector<FeatType>& value) {
         zmq::message_t inMsg;
 
         pthread_mutex_lock(&mtx_dataSubscriber);
@@ -406,7 +406,7 @@ void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* o
         return true;
     }
 
-    void CommManager::dataSyncPullIn(IdType& topic, std::vector<int>& value) {
+    void CommManager::dataSyncPullIn(IdType& topic, std::vector<FeatType>& value) {
         zmq::message_t inMsg;
         pthread_mutex_lock(&mtx_dataSubscriber);
         assert(dataSubscriber->krecv(&inMsg));
