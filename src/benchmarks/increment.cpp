@@ -18,7 +18,9 @@ public:
 	VType curr = vertex.data();
 	++curr[0];
 
-	if (curr[0] >= 10) {
+	vertex.setData(curr);
+
+	if (curr[0] <= 100) {
 		changed = true;
 	}
 

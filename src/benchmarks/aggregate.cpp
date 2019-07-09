@@ -25,7 +25,7 @@ public:
 
 	vertex.setData(curr);
 
-	if (curr[0] >= 5) changed = false;
+	if (curr[0] >= 1000) changed = false;
 
 	return changed;
     }
@@ -68,7 +68,7 @@ int main(int argc, char* argv[]) {
 
     parse(&argc, argv, "--bm-tmpdir=", tmpDir);
 
-    VType defaultVertex = vector<int>(2, 1);
+    VType defaultVertex = vector<FeatType>(2, 1);
     Engine<VType, EType>::init(argc, argv, defaultVertex);
     Engine<VType, EType>::signalAll();
 
