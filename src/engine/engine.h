@@ -183,6 +183,7 @@ public:
 
     static void parseArgs(int argc, char* argv[]);
     static void readGraphBS(std::string& fileName, std::set<IdType>& inTopics, std::vector<IdType>& outTopics);
+    static void findEdgeNormalizations(std::string& fileName);
     static void readDeletionStream(std::string& fileName);
     static void addEdge(IdType from, IdType to, std::set<IdType>* inTopics);
     static void deleteEdge(IdType from, IdType to);

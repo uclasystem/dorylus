@@ -335,7 +335,7 @@ void Engine<VertexType, EdgeType>::processEdge(IdType& from, IdType& to, Graph<V
       fromId = from;
       eLocation = REMOTE_EDGE_TYPE;
 
-      typename std::map<IdType, GhostVertex<VertexType> >::iterator gvit = lGraph.ghostVertices.find(from);
+      typename std::map< IdType, GhostVertex<VertexType> >::iterator gvit = lGraph.ghostVertices.find(from);
       if(gvit == lGraph.ghostVertices.end()) {
         lGraph.ghostVertices[from] = GhostVertex<VertexType>(defaultVertex);
         gvit = lGraph.ghostVertices.find(from);
@@ -415,9 +415,37 @@ void Engine<VertexType, EdgeType>::readGraphBS(std::string& fileName, std::set<I
 
   infile.close();
 
+  findEdgeNormalizations(edgeFileName);
+
   typename std::set<IdType>::iterator it;
   for(it = oTopics.begin(); it != oTopics.end(); ++it)
     outTopics.push_back(*it);
+}
+
+template <typename VertexType, typename EdgeType>
+void Engine<VertexType, EdgeType>::findEdgeNormalizations(std::string& fileName) {
+	std::ifstream infile(fileName.c_str(), std::ios::binary);
+	if (!infile.good()) {
+		fprintf(stderr, "Cannot open BinarySnap file: %s\n", fileName.c_str());
+	}
+
+	assert(infile.good());
+	fprintf(stderr, "Calculating the degree of ghost vertices\n");
+
+	BSHeaderType<IdType> bsHeader;
+	infile.read((char*) &bsHeader, sizeof(bsHeader));
+
+	IdType srcdst[2];
+	while (infile.read((char*) srcdst, bsHeader.sizeOfVertexType * 2)) {
+		if (srcdst[0] == srcdst[1]) continue;
+
+		typename std::map< IdType, GhostVertex<VertexType> >::iterator gvit = graph.ghostVertices.find(srcdst[0]);
+		if (gvit != graph.ghostVertices.end()) {
+			(gvit->second).incrementDegree();
+		}	
+	}
+	
+	infile.close();
 }
 
 template <typename VertexType, typename EdgeType>
