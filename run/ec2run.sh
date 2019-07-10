@@ -198,7 +198,7 @@ for dp in {1..1}; do
   for i in $(seq 1 ${NDS}); do
     #echo "${dshnodes[$i]}:${ASPIREDIR}/build/output_$i ${ASPIREDIR}/build/output_$i";
     oid=`expr $i - 1`;
-    scp ${dshnodes[$i]}:${TMPDIR}/output_* ${DOPDIR}/;
+    scp "${dshnodes[$i]}:${TMPDIR}/output_*" ${DOPDIR}/;
     #scp ${dshnodes[$i]}:${TMPDIR}/approx_* ${DOPDIR}/;
     #scp ${dshnodes[$i]}:${ASPIREDIR}/build/approx_${oid} ${ASPIREDIR}/build/approx_${oid};
   done;
