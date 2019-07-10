@@ -1,6 +1,7 @@
 #include <iostream>
 #include "../engine/engine.hpp"
 #include <fstream>
+#include <memory>
 #include <vector>
 
 using namespace std;
@@ -8,7 +9,7 @@ using namespace std;
 char tmpDir[256];
 
 typedef Empty EType;
-typedef unsigned VType;
+typedef vector<FeatType> VType;
 
 template<typename VertexType, typename EdgeType>
 class AggregateProgram : public VertexProgram<VertexType, EdgeType> {
@@ -18,19 +19,25 @@ public:
 	VType curr = vertex.data();
 
 	for (unsigned i = 0; i < vertex.numInEdges(); ++i) {
-		unsigned other = vertex.getSourceVertexData(i);
-		curr += other;
+		vector<FeatType> other = vertex.getSourceVertexData(i);
+		sumVectors(curr, other);
 	}
 
 	vertex.setData(curr);
 
-	if (curr >= 10) {
-		changed = false;
-	}
+	if (curr[0] >= 10) changed = false;
 
 	return changed;
     }
+
+private:
+    void sumVectors(vector<FeatType>& curr, vector<FeatType>& other) {
+	for (int i = 0; i < curr.size(); ++i) {
+		curr[i] += other[i];
+	}
+    }
 };
+
 
 template<typename VertexType, typename EdgeType>
 class WriterProgram : public VertexProgram<VertexType, EdgeType> {
@@ -44,7 +51,11 @@ public:
 
     void processVertex(Vertex<VertexType, EdgeType>& vertex) {
 	VType curr = vertex.data();
-	outFile << vertex.globalId() << ": " << curr << std::endl;
+	outFile << vertex.globalId() << ": ";
+	for (int i = 0; i < curr.size(); ++i) {
+		outFile << curr[i] << " ";
+	}
+	outFile << std::endl;
     }
 
     ~WriterProgram() {
@@ -57,12 +68,13 @@ int main(int argc, char* argv[]) {
 
     parse(&argc, argv, "--bm-tmpdir=", tmpDir);
 
-    VType defaultVertex = 1;
+    VType defaultVertex = vector<FeatType>(2, 1);
     Engine<VType, EType>::init(argc, argv, defaultVertex);
     Engine<VType, EType>::signalAll();
 
     AggregateProgram<VType, EType> aggregateProgram;
     Engine<VType, EType>::run(&aggregateProgram, true);
+    std::cerr << "finished Engine::run" << std::endl;
 
     WriterProgram<VType, EType> writerProgram;
     Engine<VType, EType>::processAll(&writerProgram);

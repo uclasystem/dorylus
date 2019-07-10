@@ -17,6 +17,7 @@
 #endif
 
 typedef unsigned IdType;
+typedef unsigned FeatType;
 #define MAX_IDTYPE UINT_MAX
 
 typedef struct empty { } Empty;

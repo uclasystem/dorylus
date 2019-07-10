@@ -7,7 +7,6 @@
 
 Node NodeManager::me;
 unsigned NodeManager::masterIdx = 0;
-//bool NodeManager::master;
 std::vector<Node> NodeManager::allNodes;
 unsigned NodeManager::numLiveNodes;
 pthread_mutex_t NodeManager::mtx_waiter;
@@ -286,10 +285,10 @@ void NodeManager::barrierCB(const char* path) {
 
 void NodeManager::barrier(const char* bar) {
     inBarrier = true;
+
     BarrierContext bContext(bar);
     std::string barName = bContext.path;
     pthread_mutex_lock(&mtx_appBarriers);
-    //assert(appBarriers.find(barName) == appBarriers.end());
     appBarriers[barName] = bContext;    // Overwrite barrier
     pthread_mutex_unlock(&mtx_appBarriers);
 
