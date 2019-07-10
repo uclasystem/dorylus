@@ -25,7 +25,7 @@ public:
 
 	vertex.setData(curr);
 
-	if (curr[0] >= 1000) changed = false;
+	if (curr[0] >= 10) changed = false;
 
 	return changed;
     }
