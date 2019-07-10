@@ -396,11 +396,11 @@ void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* o
         if(!ret)
             return false;
 
-	int32_t dataSize = inMsg.size() - sizeof(IdType);
-	int32_t numberOfFeatures = dataSize / sizeof(FeatType);
-	value.resize(numberOfFeatures);
+		int32_t dataSize = inMsg.size() - sizeof(IdType);
+		int32_t numberOfFeatures = dataSize / sizeof(FeatType);
+		value.resize(numberOfFeatures);
 
-	memcpy(&topic, inMsg.data(), sizeof(IdType));
+		memcpy(&topic, inMsg.data(), sizeof(IdType));
         memcpy(value.data(), ((char*)inMsg.data() + sizeof(IdType)), dataSize);
 
         return true;
@@ -412,12 +412,12 @@ void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* o
         assert(dataSubscriber->krecv(&inMsg));
         pthread_mutex_unlock(&mtx_dataSubscriber);
 
-	int32_t dataSize = inMsg.size() - sizeof(IdType);
-	int32_t numberOfFeatures = dataSize / sizeof(FeatType);
-	value.resize(numberOfFeatures);
+		int32_t dataSize = inMsg.size() - sizeof(IdType);
+		int32_t numberOfFeatures = dataSize / sizeof(FeatType);
+		value.resize(numberOfFeatures);
 
-	memcpy(&topic, inMsg.data(), sizeof(IdType));
-	memcpy(value.data(), ((char*)inMsg.data() + sizeof(IdType)), dataSize);
+		memcpy(&topic, inMsg.data(), sizeof(IdType));
+		memcpy(value.data(), ((char*)inMsg.data() + sizeof(IdType)), dataSize);
     }
 
     void CommManager::controlPushOut(unsigned to, void* value, unsigned valSize) {
