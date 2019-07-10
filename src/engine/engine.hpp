@@ -1732,7 +1732,7 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
 
   while(1) {
     if(!CommManager::dataPullIn(vid, value)) {
-      if(compDone == false)
+      if(!compDone)
         continue;
 
       double dCommTime = -getTimer();
@@ -1742,7 +1742,7 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
       barCompData.wait();
       pthread_mutex_lock(&mtxDataWaiter);
 
-      assert(compDone == true);
+      assert(compDone);
       //fprintf(stderr, "compDone is true\n");
 
       CommManager::dataPushOut(ITHINKIAMDONE, (void*)value.data(), value.size() * sizeof(FeatType));
@@ -1812,6 +1812,7 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
         } else {
           assert(false);
           vid = mType;
+
           conditionalUpdateGhostVertex(vid, value);
           halt = false;
         }
@@ -1853,7 +1854,7 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
 
     if((vid >= PUSHOUT_REQ_BEGIN) && (vid < PUSHOUT_REQ_END)) {
       IdType response = vid - PUSHOUT_REQ_BEGIN + PUSHOUT_RESP_BEGIN;
-      CommManager::dataPushOut(response, (void*) &value, value.size() * sizeof(FeatType)); 
+      CommManager::dataPushOut(response, value.data(), value.size() * sizeof(FeatType)); 
       continue;
     }
 
