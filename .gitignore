@@ -6,3 +6,4 @@ inputs/*
 installs
 run/hostfile
 run/gvid
+config
