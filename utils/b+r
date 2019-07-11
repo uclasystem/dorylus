@@ -19,6 +19,6 @@ if [ $? -ne 0 ]; then
 	exit
 fi
 
-header "RUNNING"
+header "RUNNING on $2"
 cd ..
-./run/ec2run.sh $1
+./run/ec2run.sh $1 $2
