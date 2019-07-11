@@ -417,6 +417,7 @@ void Engine<VertexType, EdgeType>::readGraphBS(std::string& fileName, std::set<I
   infile.close();
 
   findGhostDegrees(edgeFileName);
+  setEdgeNormalizations();
 
   typename std::set<IdType>::iterator it;
   for(it = oTopics.begin(); it != oTopics.end(); ++it)
@@ -440,7 +441,7 @@ void Engine<VertexType, EdgeType>::findGhostDegrees(std::string& fileName) {
 	while (infile.read((char*) srcdst, bsHeader.sizeOfVertexType * 2)) {
 		if (srcdst[0] == srcdst[1]) continue;
 
-		typename std::map< IdType, GhostVertex<VertexType> >::iterator gvit = graph.ghostVertices.find(srcdst[0]);
+		typename std::map< IdType, GhostVertex<VertexType> >::iterator gvit = graph.ghostVertices.find(srcdst[1]);
 		if (gvit != graph.ghostVertices.end()) {
 			(gvit->second).incrementDegree();
 		}	
@@ -452,6 +453,7 @@ void Engine<VertexType, EdgeType>::findGhostDegrees(std::string& fileName) {
 template<typename VertexType, typename EdgeType>
 void Engine<VertexType, EdgeType>::setEdgeNormalizations() {
 	for (Vertex<VertexType, EdgeType>& vertex: graph.vertices) {
+
 		unsigned dstDeg = vertex.numInEdges() + 1;
 		float dstNorm = std::pow(dstDeg, -.5);
 		for (InEdge<EdgeType>& e: vertex.inEdges) {
@@ -461,7 +463,7 @@ void Engine<VertexType, EdgeType>::setEdgeNormalizations() {
 				float srcNorm = std::pow(srcDeg, -.5);
 				e.setData(srcNorm * dstNorm);
 			} else {
-				unsigned ghostDeg = graph.ghostVertices[vid].degree() + 1;
+				unsigned ghostDeg = graph.ghostVertices[vid].degree + 1;
 				float ghostNorm = std::pow(ghostDeg, -.5);
 				e.setData(ghostNorm * dstNorm);
 			}
