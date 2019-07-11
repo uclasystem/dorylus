@@ -46,7 +46,6 @@ public:
     WriterProgram() {
         char filename[200];
         sprintf(filename, "%s/output_%u", tmpDir, NodeManager::getNodeId()); 
-        printf("out filename: %s\n", filename);
         outFile.open(filename);
     }
 
