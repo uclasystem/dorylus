@@ -33,10 +33,11 @@ ${DSH} -M -f ${DSHFILE} -c "rm -rf ${TMPDIR} && mkdir ${TMPDIR} && chown ${user}
 ############### INIT ZOOKEEPER ###############
 
 ZOODIR=${WORKDIR}/aspire-streaming/installs/zookeeper-release-3.4.6
-ZOONDS=${NDS}
+ZOONDS=3
 
 echo -e "\e[33;1mDSH Running: cd ${ZOODIR} && ./bin/zkServer.sh stop\e[0m";
 ${DSH} -M -f ${DSHFILE} -c "cd ${ZOODIR} && ./bin/zkServer.sh stop";
+
 if [ ! -f ${ZOODIR}/conf/zoo.cfg ]; then
 	cat ${RUNDIR}/zoo.basic > ${ZOODIR}/conf/zoo.cfg;
 	echo "" >> ${ZOODIR}/conf/zoo.cfg;
@@ -105,14 +106,13 @@ case $2 in
 		;;
 	"small")
 		IP=../inputs/parts_${NDS}/small.graph.bsnap; IK=SM; SRC=0;
-                ;;
+    ;;
 	*)
 		IP=/filepool/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB; SRC=0
 		;;
 esac
 
 FF=$3 #features file
-
 
 i=0
 
@@ -181,7 +181,7 @@ for dp in {1..1}; do
   for i in $(seq 1 ${NDS}); do
     #echo "${dshnodes[$i]}:${ASPIREDIR}/build/output_$i ${ASPIREDIR}/build/output_$i";
     oid=`expr $i - 1`;
-    scp "${dshnodes[$i]}:${TMPDIR}/output_*" ${DOPDIR}/;
+    scp ${dshnodes[$i]}:${TMPDIR}/output_* ${DOPDIR}/;
     #scp ${dshnodes[$i]}:${TMPDIR}/approx_* ${DOPDIR}/;
     #scp ${dshnodes[$i]}:${ASPIREDIR}/build/approx_${oid} ${ASPIREDIR}/build/approx_${oid};
   done;
