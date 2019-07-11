@@ -107,9 +107,8 @@ esac
 
 
 i=0
-OPFILE=${OUTFILE_DIR}/out.${BK}.${IK}.out
 
-BE=50;
+BE=100;
 CT=7;POF=1;
 #SRC=10000;
 KC=10;
@@ -160,7 +159,7 @@ for dp in {1..1}; do
   GVID=`cat gvid`;
   NGVID=$((GVID + 1));
   echo ${NGVID} > gvid;
-  OPFILE=${OPFILE}.${GVID}
+  OPFILE=${OUTFILE_DIR}/${GVID}.${BK}.${IK}.out
 
   echo "GVID = ${GVID}" >> ${OPFILE} 2>&1;
   echo "GVID = ${GVID}"
