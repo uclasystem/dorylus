@@ -1,5 +1,5 @@
 tickTime=1000
-dataDir=/home/ubuntu/zktmp/zooDataDir
+dataDir=/home/guanzhou/zktmp/zooDataDir
 clientPort=2180
 initLimit=5
 syncLimit=1

@@ -14,7 +14,9 @@ if [ ! -d ${OUTFILE_DIR} ]; then
 	mkdir -p ${OUTFILE_DIR}
 fi
 
-cat ${DSHFILE} | sed "s/${user}@//" > ${HOSTFILE};
+if [ ! -f ${HOSTFILE} ]; then
+	cat ${DSHFILE} | sed "s/${user}@//" > ${HOSTFILE}
+fi
 
 NDS=$(wc -l ${HOSTFILE} | cut -d" " -f1);
 
@@ -23,24 +25,26 @@ for i in $(seq 1 ${NDS}); do
   dshnodes[$i]=$(head -n $i ${DSHFILE} | tail -n 1);
 done;
 
-echo "Cluster of ${NDS} nodes";
+echo "Cluster of ${NDS} nodes"
 
-echo "DSH Running: rm -rf ${TMPDIR} && mkdir ${TMPDIR} && chown ${user}:${user} ${TMPDIR}";
-${DSH} -M -f ${DSHFILE} -c "rm -rf ${TMPDIR} && mkdir ${TMPDIR} && chown ${user}:${user} ${TMPDIR}";
+echo "DSH Running: rm -rf ${TMPDIR} && mkdir ${TMPDIR} && chown ${user}:${user} ${TMPDIR}"
+${DSH} -M -f ${DSHFILE} -c "rm -rf ${TMPDIR} && mkdir ${TMPDIR} && chown ${user}:${user} ${TMPDIR}"
 
 ############### INIT ZOOKEEPER ###############
 
 ZOODIR=${WORKDIR}/aspire-streaming/installs/zookeeper-release-3.4.6
-ZOONDS=${NDS}
+ZOONDS=3
 
 echo -e "\e[33;1mDSH Running: cd ${ZOODIR} && ./bin/zkServer.sh stop\e[0m";
 ${DSH} -M -f ${DSHFILE} -c "cd ${ZOODIR} && ./bin/zkServer.sh stop";
 
-cat ${RUNDIR}/zoo.basic > ${ZOODIR}/conf/zoo.cfg;
-echo "" >> ${ZOODIR}/conf/zoo.cfg;
-for i in $(seq 1 ${ZOONDS}); do
-  echo "server.${i}=${nodes[$i]}:2080:3080" >> ${ZOODIR}/conf/zoo.cfg;
-done;
+if [ ! -f ${ZOODIR}/conf/zoo.cfg ]; then
+	cat ${RUNDIR}/zoo.basic > ${ZOODIR}/conf/zoo.cfg;
+	echo "" >> ${ZOODIR}/conf/zoo.cfg;
+	for i in $(seq 1 ${ZOONDS}); do
+	  echo "server.${i}=${nodes[$i]}:2080:3080" >> ${ZOODIR}/conf/zoo.cfg;
+	done;
+fi
 
 echo -e "\e[33;1mSTARTING ZOOKEEPER\e[0m";
 echo -e "\e[33;1mDSH Running: cd ${ZOODIR} && ./bin/zkServer.sh start\e[0m";
@@ -76,62 +80,35 @@ echo -e "\e[33;1mSTARTING BENCHMARK\e[0m"
 UD=0;
 
 BM=aggregate.bin; BK=AGG;
-if [ $# -ne 0 ]; then
-	case $1 in 
-		"pr")
-			BM=pagerank.bin; BK=PR;
-			;;
-		"agg")
-			BM=aggregate.bin; BK=AGG;
-			;;
-		"inc")
-			BM=increment.bin; BK=INC;
-			;;
-		*)
-			echo "Unrecognized benchmark option"
-	esac
-fi
+case $1 in 
+	"agg")
+		BM=aggregate.bin; BK=AGG;
+		;;
+	"inc")
+		BM=increment.bin; BK=INC;
+		;;
+	*)
+		BM=aggregate.bin; BK=AGG;
+		;;
+esac
 
-#BM=sssp.bin; BK=SSSP;
-#BM=asssp.bin; BK=ASSSP;
-#BM=tsssp.bin; BK=TSSSP;
-#BM=bfs.bin; BK=BFS;
-#BM=abfs.bin; BK=ABFS;
-#BM=tbfs.bin; BK=TBFS;
-#BM=sswp.bin; BK=SSWP;
-#BM=asswp.bin; BK=ASSWP;
-#BM=tsswp.bin; BK=TSSWP;
-#BM=asssp.bin; BK=ASSSP;
-#BM=connectedcomponents.bin; BK=CC; UD=1;
-#BM=aconnectedcomponents.bin; BK=ACC; UD=1;
-#BM=tconnectedcomponents.bin; BK=TCC; UD=1;
-#BM=communitydetection.bin; BK=CD;
-#BM=acommunitydetection.bin; BK=ACD;
-#BM=abcommunitydetection.bin; BK=ABCD;
-#BM=communitydetectionp2.bin; BK=CDP2;
-#BM=kcore.bin; BK=KC;
-#BM=degree.bin; BK=DG;
+IP=/filepool/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB; SRC=0
+case $2 in
+	"fb")
+		IP=/filepool/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB; SRC=0
+		;;
+	"data")
+		IP=/filepool/parts_${NDS}/data.bsnap; IK=DT; SRC=0;
+		;;
+	*)
+		IP=/filepool/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB; SRC=0
+		;;
+esac
 
-#IP=../inputs/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB;
-#IP=../inputs/parts_${NDS}/facebook_combined.txt_undir.bsnap; IK=FBU;
-#IP=../inputs/parts_${NDS}/twitter_rv.net_edited.bsnap; IK=TT; SRC=1436;
-#IP=../inputs/parts_${NDS}/soc-LiveJournal1.txt.bsnap; AF=NULL; IK=LJ; SRC=10000;
-#IP=../inputs/parts_${NDS}/roadNet-CA.txt.bsnap; AF=NULL; IK=RNCA; SRC=0;
-#IP=../inputs/parts_${NDS}/uk2005_edited.bsnap; AF=NULL; IK=UK; SRC=26954; 
-#IP=../inputs/parts_${NDS}/twitter_rv.net_edited.bsnap; AF=NULL; IK=TT; SRC=1652;
-#IP=../inputs/parts_${NDS}/out.twitter_mpi.bsnap; AF=NULL; IK=OT; SRC=2256;
-#IP=../inputs/parts_${NDS}/rmat-0.25.txt.bsnap; AK=NULL; IK=RM; SRC=0;
-#IP=../inputs/parts_${NDS}/rmat-251.txt_edited.bsnap; AK=NULL; IK=RM; SRC=92;
-#IP=../inputs/parts_${NDS}/out.friendster_edited.bsnap; AK=NULL; IK=FT; SRC=221;
-
-#IP=../inputs/parts_${NDS}/soc-LiveJournal1.txt_undir.bsnap; AF=NULL; IK=LJ; XTRAARGS="--cd-initfile=/home/${user}/Desktop/workspace/aspire/inputs/cdp1outfinal";
-#IP=../inputs/parts_${NDS}/soc-LiveJournal1.txt_undir.bsnap.red.bsnap; AF=../inputs/parts_${NDS}/soc-LiveJournal1.txt_undir.bsnap.red.bsnap.deleteadd; IK=SLJ;
-IP=../inputs/parts_${NDS}/data.bsnap; IK=DT; SRC=0;
 
 i=0
-OPFILE=${OUTFILE_DIR}/out.${BK}.${IK}.out
 
-BE=50;
+BE=100;
 CT=7;POF=1;
 #SRC=10000;
 KC=10;
@@ -182,7 +159,7 @@ for dp in {1..1}; do
   GVID=`cat gvid`;
   NGVID=$((GVID + 1));
   echo ${NGVID} > gvid;
-  OPFILE=${OPFILE}.${GVID}
+  OPFILE=${OUTFILE_DIR}/${GVID}.${BK}.${IK}.out
 
   echo "GVID = ${GVID}" >> ${OPFILE} 2>&1;
   echo "GVID = ${GVID}"
@@ -196,7 +173,7 @@ for dp in {1..1}; do
   for i in $(seq 1 ${NDS}); do
     #echo "${dshnodes[$i]}:${ASPIREDIR}/build/output_$i ${ASPIREDIR}/build/output_$i";
     oid=`expr $i - 1`;
-    scp "${dshnodes[$i]}:${TMPDIR}/output_*" ${DOPDIR}/;
+    scp ${dshnodes[$i]}:${TMPDIR}/output_* ${DOPDIR}/;
     #scp ${dshnodes[$i]}:${TMPDIR}/approx_* ${DOPDIR}/;
     #scp ${dshnodes[$i]}:${ASPIREDIR}/build/approx_${oid} ${ASPIREDIR}/build/approx_${oid};
   done;
