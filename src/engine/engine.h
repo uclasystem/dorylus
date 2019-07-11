@@ -183,8 +183,19 @@ public:
 
     static void parseArgs(int argc, char* argv[]);
     static void readGraphBS(std::string& fileName, std::set<IdType>& inTopics, std::vector<IdType>& outTopics);
+
+    /**
+     * Find the in degree of the ghost vertices
+     *
+     * @param fileName	the filename of the graph edge list
+     */
     static void findGhostDegrees(std::string& fileName);
+
+    /**
+     * Sets the normalization factors on all the edges
+     */
     static void setEdgeNormalizations();
+
     static void readDeletionStream(std::string& fileName);
     static void addEdge(IdType from, IdType to, std::set<IdType>* inTopics);
     static void deleteEdge(IdType from, IdType to);

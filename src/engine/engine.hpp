@@ -424,6 +424,7 @@ void Engine<VertexType, EdgeType>::readGraphBS(std::string& fileName, std::set<I
     outTopics.push_back(*it);
 }
 
+// Finds the in degree of the ghost vertices
 template <typename VertexType, typename EdgeType>
 void Engine<VertexType, EdgeType>::findGhostDegrees(std::string& fileName) {
 	std::ifstream infile(fileName.c_str(), std::ios::binary);
@@ -450,6 +451,7 @@ void Engine<VertexType, EdgeType>::findGhostDegrees(std::string& fileName) {
 	infile.close();
 }
 
+// Sets the normalization factors on all edges
 template<typename VertexType, typename EdgeType>
 void Engine<VertexType, EdgeType>::setEdgeNormalizations() {
 	for (Vertex<VertexType, EdgeType>& vertex: graph.vertices) {
