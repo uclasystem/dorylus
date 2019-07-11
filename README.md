@@ -1,92 +1,143 @@
-Push based ASPIRE implementation. This project is a cleaned up version of gift (forked on July 06, 2016).  
-Implemented streaming-like processing as in Tornado (SIGMOD'16) paper.  
+Push-based ASPIRE implementation. This project is a cleaned up version of gift (forked on July 06, 2016). Implemented streaming-like processing as in Tornado (SIGMOD'16) paper.
 
-# Build Instructions:  
-run from an ec2 instance (Ubuntu seems to be the easiest)
+Build the following dependencies and ASPIRE on **ALL** your AWS-EC2 instances (Ubuntu seems to be the easiest) under the **same** location.
 
-First you will need to install the following libraries:
+## Dependences
 
-	sudo apt install dsh libboost-all-dev
-	
-## DEPENDENCIES  
-ZeroMQ  
-ZooKeeper  
+### Preparations
 
-create an installs folder in root aspire directory for library dependencies:
+Make sure you have installed the following packages by `apt`:
 
-	mkdir installs
-	cd installs
+- `build-essential`
+- `libboost-all-dev`
+- `dsh`
+- `libtool`
+- `pkg-config`
+- `autoconf`
+- `ant`
+- `openjdk-8-jdk`
 
-make another directory inside installs called "out". This is where we will install the libraries we need
+Assume the ASPIRE directory is `~/aspire-streaming/`. Create a folder called `installs` in this directory where we put dependency source codes, and then make a `out` folder under `installs` to serve as ZeroMQ & Metis install location.
 
+Folder tree should look like:
 
-#### ZeroMQ Setup
-Make sure that libtool pkg-config build-essential and autoconf are installed  
-get ZeroMQ 4.1.4: https://archive.org/download/zeromq_4.1.4/zeromq-4.1.4.tar.gz  
-extract the tarball in the installs directory  
-inside the zeromq-4.1.4 directory, run the following commands:
+    /home/<USER>/aspire-streaming/
+        |- installs/
+            |- zeromq-x.x.x/
+            |- ...
+            |- out/
+        |- run/
+            |- ec2.run
+            |- dshmachines
+            |- zoo.basic
+            |- ...
+        |- build/
+            |- Makefile
+            |- zmq.hpp
+            |- ...
+        |- ...
 
-	./configure --prefix=path/to/out --with-libsodium=no
-	make install
-	sudo ldconfig
+> Keep all dependency source directories after installation.
 
-finally, in the installs/out directory include should contain several zmq header files. Move zmq.hpp from the aspire-streaming/build directory into the include folder
+### ZeroMQ
 
-#### ZooKeeper Setup
-Make sure that ant and openjdk-8-jdk are installed  
-get Zookeeper 3.4.6: https://github.com/apache/zookeeper/archive/release-3.4.6.tar.gz  
-extract the tarball in the installs directory  
+Get ZeroMQ 4.1.4 from: [https://archive.org/download/zeromq_4.1.4/zeromq-4.1.4.tar.gz](https://archive.org/download/zeromq_4.1.4/zeromq-4.1.4.tar.gz)
 
-First, go into the src/c directory and make the following change to the file "configure.ac":
+    wget https://archive.org/download/zeromq_4.1.4/zeromq-4.1.4.tar.gz
+    tar xvf zeromq-4.1.4.tar.gz
 
-	line 37: delete "AM_PATH_CPPUNIT(1.10.2)"; replace with "PKG_CHECK_MODULES(CPPUNIT, cppunit >= 1.10.2)"
+Go inside the `zeromq-4.1.4/` directory and compile it from source:
 
-inside the zookeeper-release directory run the following command:
+    ./configure --prefix=/home/<USER>/aspire-streaming/installs/out --with-libsodium=no
+    make install
+    sudo ldconfig
 
-	ant deb
-		** you may have to set JAVA_HOME if it has not been set
+Move `build/zmq.hpp` into `installs/out/include/` to replace it.
 
-make sure to keep the zookeeper directory even after installation
+### ZooKeeper
 
+Get ZooKeeper 3.4.6 from: [https://github.com/apache/zookeeper/archive/release-3.4.6.tar.gz](https://archive.org/download/zeromq_4.1.4/zeromq-4.1.4.tar.gz)
 
-## BUILDING ASPIRE
-Once both major dependencies have been installed correctly we can go to the aspire-streaming root directory. Move into the "build" folder and open the Makefile. There are two values that need to be updated to reflect the values on your system:
+    wget https://github.com/apache/zookeeper/archive/release-3.4.6.tar.gz
+    tar xvf release-3.4.6.tar.gz
 
-	ZMQ_LIBPATH, ZMQ_INCPATH
-	
-	Make sure that each points to the correct placed (path/to/out/include, path/to/out/lib, etc)
+Go inside the `zookeeper-release-3.4.6/src/c/` directory and make the following change to the file `configure.ac`:
 
-finally run make  
+    line 37: delete "AM_PATH_CPPUNIT(1.10.2)"; replace with "PKG_CHECK_MODULES(CPPUNIT, cppunit >= 1.10.2)"
 
-# Preparing Input:
+Under the `zookeeper-release-3.4.6/` directory, run:
+
+    ant deb
+
+### Metis
+
+Get Metis 5.1.0 from: [http://glaros.dtc.umn.edu/gkhome/fetch/sw/metis/metis-5.1.0.tar.gz](https://archive.org/download/zeromq_4.1.4/zeromq-4.1.4.tar.gz)
+
+    wget http://glaros.dtc.umn.edu/gkhome/fetch/sw/metis/metis-5.1.0.tar.gz
+    tar xvf metis-5.1.0.tar.gz
+
+> Change `metis-5.1.0/include/metis.h` to reflect the partition data size being used.
+
+Go inside the `metis-5.1.0/` directory and compile it from source:
+
+    make config prefix=/home/<USER>/aspire-streaming/installs/out
+    make install
+
+## Building ASPIRE
+
+Once all dependencies have been installed correctly, go to the `aspire-streaming/build` directory. Change the following values:
+
+    ZK_LIBPATH, ZMQ_LIBPATH
+    ZK_INCPATH, ZMQ_INCPATH
+
+to `...../installs/out/lib` and `...../installs/out/include` respectively.
+
+Then run:
+
+    make
+
+## Preparing Input Graph
 
 ### Converting to Binary
-inside the input directory there will be several source files.  
-First, compile the snapToBinarySnap.cpp and binarySnapReader.cpp files. 
-These will allow you to convert text files into binary to be usable by the system,
-and the snapReader will help verify the correctness of the binary data.  
+
+Go into the `inputs/` directory.
+
+- Compile `snapToBinarySnap.cpp` & `binarySnapReader.cpp`. These will allow you to convert text files into binary to be usable by the system, and the snapReader will help verify the correctness of the binary data.  
   
 ### Partitioning the Data
-Once you have the data as a binary edge list, it needs to be partitioned. 
-First we need to set up Metis: http://glaros.dtc.umn.edu/gkhome/fetch/sw/metis/metis-5.1.0.tar.gz  
-Extract the tarball in the installs directory as with ZeroMQ. 
-Once it has been extracted, change metis.h in the include directory to 
-reflect the data size being used. 
-Then run the following commands in the top level metis directory:
 
-	make config prefix=/path/to/out
-	make install
+Once Metis has been setup, compile the partitioner with:
 
-Once metis has been setup, compile the partitioner with the following command:
+    g++ -I../installs/out/include -L../installs/out/lib partitioner.cpp -o partitioner -lmetis
 
-	gcc -I/path/to/out/include -L/path/to/out/lib partitioner.cpp -o partitioner -lmetis
+Now run the `paritioner.sh` script with the binary graph file, the number of vertices, and the number of machine nodes.
 
-Now run the paritioner.sh script with the binary graph file, the number 
-of vertices, and the number of machiens which will be in the cluster.  
+Make sure the data is put on all machines and under the **same** location.
 
-Make sure the data is on all machines and has been properly setup and it should 
-be runnable.
+## Running ASPIRE
 
-# Running ASPIRE
-Aspire can be run by calling the ./run/ec2run.sh script. Before running, make sure all that all config options have been set correctly, such as the config files in the run directory. In addition, make sure that the file zoo.cfg has been set in the zookeeper "conf" directory. Finally, set the variable "user" to your username at the top of ec2run.sh and the program should work.
+### SSH Password-less Login
 
+Make sure you have setup password-less `ssh` login among all your EC2 instances.
+
+### Setup Config Files
+
+Under `run/` directory, setup the content of `dshmachines` file. Every line is in the form `username@ip` representing one of your nodes.
+
+Setup the content of `zoo.basic` file for configuring ZooKeeper. Basically you need:
+
+    line 2: set dataDir=/home/<USER>/zktmp/zooDataDir
+
+Open `ec2run.sh` and:
+
+    line 3: set user=<USER>     # Your username
+
+### Running with Your Input
+
+Set variable `IP` around line 129 of `ec2run.sh` to the path of your partitioned input data (Make sure the path is the same for all nodes). Set `IK` and `SRC` accordingly.
+
+Run ASPIRE from the current node's shell:
+
+    ./ec2run.sh
+
+and it will start ZooKeeper at all your nodes and do the work (basiclly by utilizing the `dsh` remote shell command).
