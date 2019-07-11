@@ -3,8 +3,6 @@
 
 #include "../utils/utils.h"
 
-#define LOCAL_EDGE_TYPE 'L'
-#define REMOTE_EDGE_TYPE 'R'
 
 typedef char EdgeLocationType;
 
@@ -16,6 +14,7 @@ class Edge {
         EdgeType data();
         EdgeLocationType getEdgeLocation();
         void setEdgeLocation(EdgeLocationType eLoc);
+	void setData(EdgeType value);
 
     protected:
         IdType otherId;

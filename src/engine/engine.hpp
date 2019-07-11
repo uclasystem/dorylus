@@ -6,6 +6,7 @@
 #include "../nodemanager/nodemanager.h"
 #include "ghostvertex.hpp"
 #include <fstream>
+#include <cmath>
 #include <boost/program_options.hpp>
 #include <boost/program_options/parsers.hpp>
 #include <string>
@@ -415,7 +416,7 @@ void Engine<VertexType, EdgeType>::readGraphBS(std::string& fileName, std::set<I
 
   infile.close();
 
-  findEdgeNormalizations(edgeFileName);
+  findGhostDegrees(edgeFileName);
 
   typename std::set<IdType>::iterator it;
   for(it = oTopics.begin(); it != oTopics.end(); ++it)
@@ -423,7 +424,7 @@ void Engine<VertexType, EdgeType>::readGraphBS(std::string& fileName, std::set<I
 }
 
 template <typename VertexType, typename EdgeType>
-void Engine<VertexType, EdgeType>::findEdgeNormalizations(std::string& fileName) {
+void Engine<VertexType, EdgeType>::findGhostDegrees(std::string& fileName) {
 	std::ifstream infile(fileName.c_str(), std::ios::binary);
 	if (!infile.good()) {
 		fprintf(stderr, "Cannot open BinarySnap file: %s\n", fileName.c_str());
@@ -446,6 +447,26 @@ void Engine<VertexType, EdgeType>::findEdgeNormalizations(std::string& fileName)
 	}
 	
 	infile.close();
+}
+
+template<typename VertexType, typename EdgeType>
+void Engine<VertexType, EdgeType>::setEdgeNormalizations() {
+	for (Vertex<VertexType, EdgeType>& vertex: graph.vertices) {
+		unsigned dstDeg = vertex.numInEdges() + 1;
+		float dstNorm = std::pow(dstDeg, -.5);
+		for (InEdge<EdgeType>& e: vertex.inEdges) {
+			IdType vid = e.sourceId();
+			if (e.getEdgeLocation() == LOCAL_EDGE_TYPE) {
+				unsigned srcDeg = graph.vertices[vid].numInEdges() + 1;
+				float srcNorm = std::pow(srcDeg, -.5);
+				e.setData(srcNorm * dstNorm);
+			} else {
+				unsigned ghostDeg = graph.ghostVertices[vid].degree() + 1;
+				float ghostNorm = std::pow(ghostDeg, -.5);
+				e.setData(ghostNorm * dstNorm);
+			}
+		}
+	}
 }
 
 template <typename VertexType, typename EdgeType>

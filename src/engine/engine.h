@@ -183,7 +183,8 @@ public:
 
     static void parseArgs(int argc, char* argv[]);
     static void readGraphBS(std::string& fileName, std::set<IdType>& inTopics, std::vector<IdType>& outTopics);
-    static void findEdgeNormalizations(std::string& fileName);
+    static void findGhostDegrees(std::string& fileName);
+    static void setEdgeNormalizations();
     static void readDeletionStream(std::string& fileName);
     static void addEdge(IdType from, IdType to, std::set<IdType>* inTopics);
     static void deleteEdge(IdType from, IdType to);
@@ -212,7 +213,6 @@ public:
     static void printEngineMetrics();
 
     static void readPartsFile(std::string& partsFileName, Graph<VertexType, EdgeType>& lGraph);
-    //static void readPartsFile(std::string& partsFileName, Graph<VertexType, EdgeType>* lGraphs);
     static void setRepParts();
 
     static void initGraph(Graph<VertexType, EdgeType>& lGraph);
