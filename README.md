@@ -87,10 +87,10 @@ Go inside the `metis-5.1.0/` directory and compile it from source:
 
 Once all dependencies have been installed correctly, go to the `aspire-streaming/build` directory. Change the following values:
 
-    ZK_LIBPATH, ZMQ_LIBPATH
-    ZK_INCPATH, ZMQ_INCPATH
-
-to `...../installs/out/lib` and `...../installs/out/include` respectively.
+    ZMQ_LIBPATH     := /home/<USER>/aspire-streaming/installs/out/lib
+    ZMQ_INCPATH     := /home/<USER>/aspire-streaming/installs/out/include
+    ZK_LIBPATH      := /usr/local/lib
+    ZK_INCPATH      := /usr/local/include/zookeeper
 
 Then run:
 
