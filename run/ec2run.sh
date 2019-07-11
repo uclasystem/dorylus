@@ -33,7 +33,7 @@ ${DSH} -M -f ${DSHFILE} -c "rm -rf ${TMPDIR} && mkdir ${TMPDIR} && chown ${user}
 ############### INIT ZOOKEEPER ###############
 
 ZOODIR=${WORKDIR}/aspire-streaming/installs/zookeeper-release-3.4.6
-ZOONDS=3
+ZOONDS=${NDS}
 
 echo -e "\e[33;1mDSH Running: cd ${ZOODIR} && ./bin/zkServer.sh stop\e[0m";
 ${DSH} -M -f ${DSHFILE} -c "cd ${ZOODIR} && ./bin/zkServer.sh stop";
@@ -60,8 +60,6 @@ echo -e "\e[33;1mCHECKING FOR QUORUM NOW \e[0m"
 for i in $(seq 1 ${ZOONDS}); do
   while true
   do
-    # Sleep 1s to avoid looping too fast to explode the disk space with grep temp results ;(
-    sleep 1s
     str=$(echo stat | nc ${nodes[$i]} 2180 | grep "Mode");
     IFS=' ' read -ra ARR <<< ${str};
     if [[ ${ARR[1]} == "leader" ]] || [[ ${ARR[1]} == "follower" ]]; then
