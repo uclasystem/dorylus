@@ -9,12 +9,11 @@
 ##	  b+r to build and run benchmark
 ##	Note: File could definitely be cleaned up...
 
-
 cd $( dirname $0 )/../build
 
 case $1 in
 	"inc")
-		make increment
+		make clean; make increment
 		
 		if [ $? -eq 0 ]; then 
 			cd ..
@@ -24,7 +23,8 @@ case $1 in
 		fi
 		;;
 	"agg")
-		make aggregate
+		make clean; make aggregate
+
 		if [ $? -eq 0 ]; then 
 			cd ..
 			./utils/send_file build/aggregate.bin
