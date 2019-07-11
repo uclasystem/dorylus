@@ -1,3 +1,5 @@
+USER	:= $(shell whoami)
+
 AGG_TARGET	:= aggregate
 INC_TARGET	:= increment
 PR_TARGET       := pagerank
@@ -66,16 +68,16 @@ CFLAGS          := -DTHREADED -Wall -MMD -O3 ${EFLAGS}
 #OMP_LIBS       := -fopenmp
 #BOOST_LIBS     := -lboost_system -lboost_filesystem
 ZK_LIBS         := -lzookeeper_mt
-ZK_LIBPATH      := /home/ubuntu/aspire-streaming/installs/out/lib
+ZK_LIBPATH      := /home/$(USER)/aspire-streaming/installs/out/lib
 
 ZMQ_LIBS        := -lzmq
-ZMQ_LIBPATH     := /home/ubuntu/aspire-streaming/installs/out/lib
+ZMQ_LIBPATH     := /home/$(USER)/aspire-streaming/installs/out/lib
 
 LIBS            := -L$(ZK_LIBPATH) $(ZK_LIBS) -L$(ZMQ_LIBPATH) $(ZMQ_LIBS) -lpthread -fopenmp -lboost_program_options
 
-#MSGPACK_C_INC	:= /home/ubuntu/aspire-streaming/installs/msgpack-c/include
-ZK_INCPATH      := /home/ubuntu/aspire-streaming/installs/out/include/zookeeper
-ZMQ_INCPATH     := /home/ubuntu/aspire-streaming/installs/out/include
+#MSGPACK_C_INC	:= /home/$(USER)/aspire-streaming/installs/msgpack-c/include
+ZK_INCPATH      := /usr/local/include/zookeeper
+ZMQ_INCPATH     := /home/$(USER)/aspire-streaming/installs/out/include
 INC             := -I$(ZK_INCPATH) -I$(ZMQ_INCPATH) #-I$(MSGPACK_C_INC)
 
 LDFLAGS         := -Wl,-rpath=$(ZK_LIBPATH) -Wl,-rpath=$(ZMQ_LIBPATH)
