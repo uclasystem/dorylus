@@ -79,8 +79,7 @@ echo -e "\e[33;1mSTARTING BENCHMARK\e[0m"
 
 UD=0;
 
-BM= 
-BK=
+BM=aggregate.bin; BK=AGG;
 case $1 in 
 	"agg")
 		BM=aggregate.bin; BK=AGG;
@@ -93,12 +92,13 @@ case $1 in
 		;;
 esac
 
-IP=
-IK=
-SRC=
+IP=/filepool/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB; SRC=0
 case $2 in
 	"fb")
 		IP=/filepool/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB; SRC=0
+		;;
+	"data")
+		IP=/filepool/parts_${NDS}/data.bsnap; IK=DT; SRC=0;
 		;;
 	*)
 		IP=/filepool/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB; SRC=0
