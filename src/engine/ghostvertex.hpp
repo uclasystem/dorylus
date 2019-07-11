@@ -9,15 +9,18 @@ class GhostVertex {
         VertexType vData;
         //char version;
         RWLock lock;
+	int32_t degree;
 
         std::vector<IdType> outEdges;
 
         GhostVertex() {
           lock.init();
+	  degree = 0;
         }
 
         GhostVertex(const VertexType vDat) : vData(vDat) { //, version(0) {
             lock.init();
+	    degree = 0;
         }
 
         ~GhostVertex() {
@@ -46,6 +49,8 @@ class GhostVertex {
             lock.unlock();
             //return ret;
         }
+
+	void incrementDegree() { ++degree; }
 };
 
 #endif //__GHOST_VERTEX_HPP__

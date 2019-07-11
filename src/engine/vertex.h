@@ -25,8 +25,8 @@ class Vertex {
 
         RWLock lock;
 
-        std::vector<InEdge<EdgeType> > inEdges;
-        std::vector<OutEdge<EdgeType> > outEdges;
+        std::vector< InEdge<EdgeType> > inEdges;
+        std::vector< OutEdge<EdgeType> > outEdges;
 
         VertexType vertexData;
         //VertexType oldVertexData;

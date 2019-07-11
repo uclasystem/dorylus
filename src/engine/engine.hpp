@@ -6,6 +6,7 @@
 #include "../nodemanager/nodemanager.h"
 #include "ghostvertex.hpp"
 #include <fstream>
+#include <cmath>
 #include <boost/program_options.hpp>
 #include <boost/program_options/parsers.hpp>
 #include <string>
@@ -287,6 +288,7 @@ void Engine<VertexType, EdgeType>::readPartsFile(std::string& partsFileName, Gra
 template <typename VertexType, typename EdgeType>
 void Engine<VertexType, EdgeType>::initGraph(Graph<VertexType, EdgeType>& lGraph) {
   lGraph.vertices.resize(lGraph.numLocalVertices);
+
   for(IdType i=0; i<lGraph.numLocalVertices; ++i) {
     lGraph.vertices[i].localIdx = i;
     lGraph.vertices[i].globalIdx = lGraph.localToGlobalId[i];
@@ -311,8 +313,9 @@ void Engine<VertexType, EdgeType>::processEdge(IdType& from, IdType& to, Graph<V
       eLocation = REMOTE_EDGE_TYPE;
       lGraph.vertices[lFromId].vertexLocation = BOUNDARY_VERTEX;
       if(oTopics != NULL) oTopics->insert(from);
-      if(streaming)
-        CommManager::dataPushOut(from, (void*) &lGraph.vertices[lFromId].vertexData, sizeof(VertexType));
+      if(streaming) {
+        CommManager::dataPushOut(from, (void*) lGraph.vertices[lFromId].vertexData.data(), lGraph.vertices[lFromId].vertexData.size() * sizeof(FeatType));
+      }
     }
 
     if(edgeWeight != NULL)
@@ -333,7 +336,7 @@ void Engine<VertexType, EdgeType>::processEdge(IdType& from, IdType& to, Graph<V
       fromId = from;
       eLocation = REMOTE_EDGE_TYPE;
 
-      typename std::map<IdType, GhostVertex<VertexType> >::iterator gvit = lGraph.ghostVertices.find(from);
+      typename std::map< IdType, GhostVertex<VertexType> >::iterator gvit = lGraph.ghostVertices.find(from);
       if(gvit == lGraph.ghostVertices.end()) {
         lGraph.ghostVertices[from] = GhostVertex<VertexType>(defaultVertex);
         gvit = lGraph.ghostVertices.find(from);
@@ -354,7 +357,7 @@ template <typename VertexType, typename EdgeType>
 void Engine<VertexType, EdgeType>::receiveNewGhostValues(std::set<IdType>& inTopics) {
   while(inTopics.size() > 0) {
     IdType vid; VertexType value;
-    CommManager::dataSyncPullIn(&vid, &value, sizeof(VertexType));
+    CommManager::dataSyncPullIn(vid, value);
     if(inTopics.find(vid) != inTopics.end()) {
       typename std::map<IdType, GhostVertex<VertexType> >::iterator gvit = graph.ghostVertices.find(vid);
       assert(gvit != graph.ghostVertices.end());
@@ -413,9 +416,61 @@ void Engine<VertexType, EdgeType>::readGraphBS(std::string& fileName, std::set<I
 
   infile.close();
 
+  findGhostDegrees(edgeFileName);
+  setEdgeNormalizations();
+
   typename std::set<IdType>::iterator it;
   for(it = oTopics.begin(); it != oTopics.end(); ++it)
     outTopics.push_back(*it);
+}
+
+// Finds the in degree of the ghost vertices
+template <typename VertexType, typename EdgeType>
+void Engine<VertexType, EdgeType>::findGhostDegrees(std::string& fileName) {
+	std::ifstream infile(fileName.c_str(), std::ios::binary);
+	if (!infile.good()) {
+		fprintf(stderr, "Cannot open BinarySnap file: %s\n", fileName.c_str());
+	}
+
+	assert(infile.good());
+	fprintf(stderr, "Calculating the degree of ghost vertices\n");
+
+	BSHeaderType<IdType> bsHeader;
+	infile.read((char*) &bsHeader, sizeof(bsHeader));
+
+	IdType srcdst[2];
+	while (infile.read((char*) srcdst, bsHeader.sizeOfVertexType * 2)) {
+		if (srcdst[0] == srcdst[1]) continue;
+
+		typename std::map< IdType, GhostVertex<VertexType> >::iterator gvit = graph.ghostVertices.find(srcdst[1]);
+		if (gvit != graph.ghostVertices.end()) {
+			(gvit->second).incrementDegree();
+		}	
+	}
+	
+	infile.close();
+}
+
+// Sets the normalization factors on all edges
+template<typename VertexType, typename EdgeType>
+void Engine<VertexType, EdgeType>::setEdgeNormalizations() {
+	for (Vertex<VertexType, EdgeType>& vertex: graph.vertices) {
+
+		unsigned dstDeg = vertex.numInEdges() + 1;
+		float dstNorm = std::pow(dstDeg, -.5);
+		for (InEdge<EdgeType>& e: vertex.inEdges) {
+			IdType vid = e.sourceId();
+			if (e.getEdgeLocation() == LOCAL_EDGE_TYPE) {
+				unsigned srcDeg = graph.vertices[vid].numInEdges() + 1;
+				float srcNorm = std::pow(srcDeg, -.5);
+				e.setData(srcNorm * dstNorm);
+			} else {
+				unsigned ghostDeg = graph.ghostVertices[vid].degree + 1;
+				float ghostNorm = std::pow(ghostDeg, -.5);
+				e.setData(ghostNorm * dstNorm);
+			}
+		}
+	}
 }
 
 template <typename VertexType, typename EdgeType>
@@ -456,7 +511,7 @@ template <typename VertexType, typename EdgeType>
 void Engine<VertexType, EdgeType>::init(int argc, char* argv[], VertexType dVertex, EdgeType dEdge, EdgeType (*eWeight) (IdType, IdType)) {
   timInit = -getTimer();
   parseArgs(argc, argv);
-
+  
   NodeManager::init(ZKHOST_FILE, HOST_FILE);
 
   CommManager::init();
@@ -1597,9 +1652,8 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
 
             if(iteration % poFrequency == 0) {
               remPushOut = numNodes;
-              VertexType stub;
-              //fprintf(stderr, "comp pushing out PUSHOUT_REQ_ME with value %u\n", PUSHOUT_REQ_ME);
-              CommManager::dataPushOut(PUSHOUT_REQ_ME, (void*) &stub, sizeof(VertexType));
+              VertexType stub = VertexType(2, 0);
+              CommManager::dataPushOut(PUSHOUT_REQ_ME, stub.data(), sizeof(FeatType) * stub.size());
 
               pushWait = true; 
             }
@@ -1610,17 +1664,17 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
           //if(iteration > 1000)
           //engineContext.setTooLong(true);
 
-          bool hltBool = ((timProcess + getTimer() > 500) && (scheduler->anyScheduledTasks() == false));  // after 1 sec only!
+          bool hltBool = ((timProcess + getTimer() > 500) && !(scheduler->anyScheduledTasks()));  // after 1 sec only!
 
-          if(hltBool == false) {
+          if(!hltBool) {
             scheduler->newIteration();
 
             currId = 0;     // This is unprotected by lockCurrId because only master executes this code while workers are on barriers
             lockCurrId.lock();
             barComp.wait();
           } else { // deciding to halt
-            NodeManager::barrier(COMM_BARRIER);
             fprintf(stderr, "Deciding to halt in this iteration (%u)\n", iteration);
+            NodeManager::barrier(COMM_BARRIER);
 
             double bCompTime = -getTimer();
             pthread_mutex_lock(&mtxDataWaiter);
@@ -1697,7 +1751,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
           scheduler->schedule(v.getOutEdge(i).destId());
         else {
           if(remoteScat) {
-            CommManager::dataPushOut(graph.localToGlobalId[vid], (void*) &v.vertexData, sizeof(VertexType));
+            CommManager::dataPushOut(graph.localToGlobalId[vid], (void*)v.vertexData.data(), sizeof(FeatType) * v.vertexData.size());
             remoteScat = false;
           }
         }
@@ -1730,8 +1784,8 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
   VertexType value;
 
   while(1) {
-    if(!CommManager::dataPullIn(&vid, &value, sizeof(VertexType))) {
-      if(compDone == false)
+    if(!CommManager::dataPullIn(vid, value)) {
+      if(!compDone)
         continue;
 
       double dCommTime = -getTimer();
@@ -1741,19 +1795,19 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
       barCompData.wait();
       pthread_mutex_lock(&mtxDataWaiter);
 
-      assert(compDone == true);
+      assert(compDone);
       //fprintf(stderr, "compDone is true\n");
 
-      CommManager::dataPushOut(ITHINKIAMDONE, (void*) &value, sizeof(VertexType));
+      CommManager::dataPushOut(ITHINKIAMDONE, (void*)value.data(), value.size() * sizeof(FeatType));
 
       //1. Send out i from your data channel
       //2. The idea is to receive n-1 ack-i, but in between you can receive other machine's j so you simply send ack-j
-      unsigned rem = numNodes; //numNodes;
+      unsigned rem = numNodes;
       bool thinkHalt = !(scheduler->anyScheduledTasks());
       halt = true;
       while(rem > 0) {
         IdType mType;
-        while(CommManager::dataPullIn(&mType, &value, sizeof(VertexType)) == false) { } // spinwait? omg?
+        while(!CommManager::dataPullIn(mType, value)) { } // spinwait? omg?
 
         if(mType == ITHINKIAMDONE) {
           --rem;
@@ -1765,7 +1819,7 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
           assert(false);
         } else if((mType >= PUSHOUT_REQ_BEGIN) && (mType < PUSHOUT_REQ_END)) {
           IdType response = mType - PUSHOUT_REQ_BEGIN + PUSHOUT_RESP_BEGIN;
-          CommManager::dataPushOut(response, (void*) &value, sizeof(VertexType));
+          CommManager::dataPushOut(response, (void*)value.data(), value.size() * sizeof(FeatType));
         } else if((mType >= PUSHOUT_RESP_BEGIN) && (mType < PUSHOUT_RESP_END)) {
           if(mType == PUSHOUT_RESP_ME) {
             --remPushOut;
@@ -1780,16 +1834,15 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
       NodeManager::barrier(DATACOMM_BARRIER);     // This is required.
 
       if(thinkHalt) {
-        CommManager::dataPushOut(IAMDONE, (void*) &value, sizeof(VertexType));
-      }
-      else {
-        CommManager::dataPushOut(IAMNOTDONE, (void*) &value, sizeof(VertexType));
+        CommManager::dataPushOut(IAMDONE, (void*)value.data(), value.size() * sizeof(FeatType));
+      } else {
+        CommManager::dataPushOut(IAMNOTDONE, (void*)value.data(), value.size() * sizeof(FeatType));
         halt = false;
       }
 
       IdType mType; unsigned totalRem = numNodes; unsigned finalRem = numNodes;
       while(totalRem > 0) {
-        while(CommManager::dataPullIn(&mType, &value, sizeof(VertexType)) == false) { } // spinlock? omg?
+        while(!CommManager::dataPullIn(mType, value)) { } // spinlock? omg?
 
         if(mType == IAMDONE) {
           --finalRem;
@@ -1804,7 +1857,7 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
         } else if((mType >= PUSHOUT_REQ_BEGIN) && (mType < PUSHOUT_REQ_END)) {
           halt = false;
           IdType response = mType - PUSHOUT_REQ_BEGIN + PUSHOUT_RESP_BEGIN;
-          CommManager::dataPushOut(response, (void*) &value, sizeof(VertexType));
+          CommManager::dataPushOut(response, (void*)value.data(), value.size() * sizeof(FeatType));
         } else if((mType >= PUSHOUT_RESP_BEGIN) && (mType < PUSHOUT_RESP_END)) {
           if(mType == PUSHOUT_RESP_ME) {
             --remPushOut;
@@ -1812,6 +1865,7 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
         } else {
           assert(false);
           vid = mType;
+
           conditionalUpdateGhostVertex(vid, value);
           halt = false;
         }
@@ -1853,7 +1907,7 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
 
     if((vid >= PUSHOUT_REQ_BEGIN) && (vid < PUSHOUT_REQ_END)) {
       IdType response = vid - PUSHOUT_REQ_BEGIN + PUSHOUT_RESP_BEGIN;
-      CommManager::dataPushOut(response, (void*) &value, sizeof(VertexType)); 
+      CommManager::dataPushOut(response, value.data(), value.size() * sizeof(FeatType)); 
       continue;
     }
 

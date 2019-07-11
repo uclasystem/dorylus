@@ -1,43 +1,43 @@
 #include <iostream>
 #include "../engine/engine.hpp"
 #include <fstream>
+#include <memory>
 #include <vector>
 
 using namespace std;
 
 char tmpDir[256];
 
-typedef Empty EType;
-typedef struct vType {
-	std::vector<int> features;
-	int iter;
-
-	vType() { features = std::vector<int>(2, 0); iter = 0; }
-	vType(int n) { features = std::vector<int>(2, n); iter = 0; }
-} VType;
+typedef float EType;
+typedef vector<FeatType> VType;
 
 template<typename VertexType, typename EdgeType>
 class AggregateProgram : public VertexProgram<VertexType, EdgeType> {
 public:
     bool update(Vertex<VertexType, EdgeType>& vertex, EngineContext& engineContext) {
-	bool changed = false;
+	bool changed = true;
 	VType curr = vertex.data();
 
-//	for (int& n : curr.features) {
-//		++n;
-//	}
-	++curr.iter;
-	std::cout << "Current Iter: " << curr.iter << std::endl;
+	for (unsigned i = 0; i < vertex.numInEdges(); ++i) {
+		vector<FeatType> other = vertex.getSourceVertexData(i);
+		sumVectors(curr, other);
+	}
 
 	vertex.setData(curr);
 
-//	if (curr.iter <= 10) {
-//		changed = true;
-//	}
+	if (curr[0] >= 10) changed = false;
 
 	return changed;
     }
+
+private:
+    void sumVectors(vector<FeatType>& curr, vector<FeatType>& other) {
+	for (int i = 0; i < curr.size(); ++i) {
+		curr[i] += other[i];
+	}
+    }
 };
+
 
 template<typename VertexType, typename EdgeType>
 class WriterProgram : public VertexProgram<VertexType, EdgeType> {
@@ -52,10 +52,10 @@ public:
     void processVertex(Vertex<VertexType, EdgeType>& vertex) {
 	VType curr = vertex.data();
 	outFile << vertex.globalId() << ": ";
-	//for (int n : curr.features) {
-	//	outFile << n << " ";
-	//}
-	//outFile << std::endl;
+	for (int i = 0; i < curr.size(); ++i) {
+		outFile << curr[i] << " ";
+	}
+	outFile << std::endl;
     }
 
     ~WriterProgram() {
@@ -68,12 +68,13 @@ int main(int argc, char* argv[]) {
 
     parse(&argc, argv, "--bm-tmpdir=", tmpDir);
 
-    VType defaultVertex;
+    VType defaultVertex = vector<FeatType>(2, 1);
     Engine<VType, EType>::init(argc, argv, defaultVertex);
     Engine<VType, EType>::signalAll();
 
     AggregateProgram<VType, EType> aggregateProgram;
     Engine<VType, EType>::run(&aggregateProgram, true);
+    std::cerr << "finished Engine::run" << std::endl;
 
     WriterProgram<VType, EType> writerProgram;
     Engine<VType, EType>::processAll(&writerProgram);

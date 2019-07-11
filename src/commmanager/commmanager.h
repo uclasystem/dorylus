@@ -39,8 +39,8 @@ public:
     static void destroy();
     static void subscribeData(std::set<IdType>* topics, std::vector<IdType>* outTopics);
     static void dataPushOut(IdType topic, void* value, unsigned valSize);
-    static bool dataPullIn(IdType* topic, void* value, unsigned valSize); 
-    static void dataSyncPullIn(IdType* topic, void* value, unsigned valSize);
+    static bool dataPullIn(IdType& topic, std::vector<FeatType>& value);
+    static void dataSyncPullIn(IdType& topic, std::vector<FeatType>& value);
     static void controlPushOut(unsigned to, void* value, unsigned valSize); 
     static bool controlPullIn(unsigned from, void* value, unsigned valSize);
     static void controlSyncPullIn(unsigned from, void* value, unsigned valSize);
@@ -67,7 +67,6 @@ private:
 
     static pthread_mutex_t mtx_dataPublisher;
     static pthread_mutex_t mtx_dataSubscriber;
-    //static pthread_mutex_t mtx_dataContext;
 
     static zmq::context_t controlContext;
     static zmq::socket_t** controlPublishers;
@@ -75,7 +74,6 @@ private:
 
     static pthread_mutex_t* mtx_controlPublishers;
     static pthread_mutex_t* mtx_controlSubscribers;
-    //static pthread_mutex_t mtx_controlContext;
 
     static std::vector<bool> nodesAlive;
     static unsigned numLiveNodes;
