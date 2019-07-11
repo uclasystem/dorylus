@@ -29,6 +29,11 @@ void Edge<EdgeType>::setEdgeLocation(EdgeLocationType eLoc) {
 }
 
 template<typename EdgeType>
+void Edge<EdgeType>::setData(EdgeType value) {
+	edgeData = value;
+}
+
+template<typename EdgeType>
 InEdge<EdgeType>::InEdge() {
 }
 

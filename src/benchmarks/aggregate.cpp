@@ -8,7 +8,7 @@ using namespace std;
 
 char tmpDir[256];
 
-typedef Empty EType;
+typedef float EType;
 typedef vector<FeatType> VType;
 
 template<typename VertexType, typename EdgeType>

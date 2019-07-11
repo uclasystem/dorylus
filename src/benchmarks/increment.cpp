@@ -7,7 +7,7 @@ using namespace std;
 
 char tmpDir[256];
 
-typedef Empty EType;
+typedef float EType;
 typedef vector<FeatType> VType;
 
 template<typename VertexType, typename EdgeType>
@@ -56,8 +56,9 @@ int main(int argc, char* argv[]) {
 
     parse(&argc, argv, "--bm-tmpdir=", tmpDir);
 
+    EType defaultEdge = 1888;
     VType defaultVertex = VType(2, 0);
-    Engine<VType, EType>::init(argc, argv, defaultVertex);
+    Engine<VType, EType>::init(argc, argv, defaultVertex, defaultEdge);
     Engine<VType, EType>::signalAll();
     
     IncrementProgram<VType, EType> incrementProgram;
