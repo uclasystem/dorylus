@@ -1,6 +1,6 @@
 #!/bin/bash
 
-user=
+user=$( whoami )
 
 WORKDIR="/home/${user}";
 OUTFILE_DIR="${WORKDIR}/outfiles"
