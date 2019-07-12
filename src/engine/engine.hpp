@@ -1752,7 +1752,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
           scheduler->schedule(v.getOutEdge(i).destId());
         else {
           if(remoteScat) {
-            CommManager::dataPushOut(graph.localToGlobalId[vid], (void*)v.data().data(), sizeof(FeatType) * v.vertexData.size());
+            CommManager::dataPushOut(graph.localToGlobalId[vid], (void*)v.data().data(), sizeof(FeatType) * v.data().size());
             remoteScat = false;
           }
         }
