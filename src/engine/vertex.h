@@ -40,7 +40,7 @@ class Vertex {
         IdType localId();
         IdType globalId();
 
-        VertexType data();                      // Get a copy of the current value.
+        VertexType data();                      // Get the current value.
         std::vector<VertexType>& dataAll();     // Get reference to all old values' vector.
         void setData(VertexType value);         // Modify the current value.
         void addData(VertexType value);         // Add a new value of the new iteration.
