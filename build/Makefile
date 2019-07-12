@@ -63,8 +63,8 @@ MK              := mkdir -p
 
 # Flags
 EFLAGS          := -DVERBOSE_ERRORS #-DSTATICIP
-# CFLAGS          := -DTHREADED -Wall -MMD -O3 ${EFLAGS}
-CFLAGS          := -DTHREADED -Wall -MMD -O3 ${EFLAGS} -g -fsanitize=address
+# CFLAGS          := -DTHREADED -Wall -Wno-sign-compare -MMD -O3 ${EFLAGS}
+CFLAGS          := -DTHREADED -Wall -Wno-sign-compare -MMD -O3 ${EFLAGS} -g -fsanitize=address
 
 #OMP_LIBS       := -fopenmp
 #BOOST_LIBS     := -lboost_system -lboost_filesystem

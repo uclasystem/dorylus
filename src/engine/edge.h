@@ -14,7 +14,7 @@ class Edge {
         EdgeType data();
         EdgeLocationType getEdgeLocation();
         void setEdgeLocation(EdgeLocationType eLoc);
-	void setData(EdgeType value);
+        void setData(EdgeType value);
 
     protected:
         IdType otherId;

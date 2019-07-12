@@ -28,7 +28,9 @@ class Vertex {
         std::vector< InEdge<EdgeType> > inEdges;
         std::vector< OutEdge<EdgeType> > outEdges;
 
-        VertexType vertexData;
+        // Use a vector to make data in old iterations persistent.
+        std::vector<VertexType> vertexData;
+
         //VertexType oldVertexData;
 
         Graph<VertexType, EdgeType>* graph;
@@ -37,8 +39,11 @@ class Vertex {
         ~Vertex();
         IdType localId();
         IdType globalId();
-        VertexType data();
-        void setData(VertexType value);
+
+        VertexType data();                      // Get the current value.
+        std::vector<VertexType>& dataAll();     // Get reference to all old values' vector.
+        void setData(VertexType value);         // Modify the current value.
+        void addData(VertexType value);         // Add a new value of the new iteration.
 
         //VertexType oldData();
         //void setOldData(VertexType value);
