@@ -23,7 +23,7 @@ public:
         	sumVectors(curr, other);
         }
 
-        vertex.addData(curr);
+        vertex.setData(curr);
 
         if (curr[0] >= 10) changed = false;
 
