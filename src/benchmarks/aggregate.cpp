@@ -21,7 +21,7 @@ public:
         VType curr = vertex.data();
 
         VType temp;
-        copy(curr.begin(), curr.end(), back_inserter(target));
+        copy(curr.begin(), curr.end(), back_inserter(temp));
 
         for (unsigned i = 0; i < vertex.numInEdges(); ++i) {
         	vector<FeatType> other = vertex.getSourceVertexData(i);
