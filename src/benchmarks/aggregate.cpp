@@ -27,7 +27,7 @@ public:
 
         vertex.addData(target);
 
-        if (curr[0] >= 10) changed = false;
+        if (target[0] >= 10) changed = false;
 
         return changed;
     }
