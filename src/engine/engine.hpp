@@ -315,7 +315,7 @@ void Engine<VertexType, EdgeType>::processEdge(IdType& from, IdType& to, Graph<V
       lGraph.vertices[lFromId].vertexLocation = BOUNDARY_VERTEX;
       if(oTopics != NULL) oTopics->insert(from);
       if(streaming) {
-        CommManager::dataPushOut(from, (void*) lGraph.vertices[lFromId].vertexData.data(), lGraph.vertices[lFromId].vertexData.size() * sizeof(FeatType));
+        CommManager::dataPushOut(from, (void*) lGraph.vertices[lFromId].data().data(), lGraph.vertices[lFromId].data().size() * sizeof(FeatType));
       }
     }
 
@@ -662,25 +662,25 @@ void  Engine<VertexType, EdgeType>::activateEndPoints(IdType from, IdType to, In
       signalVertex(from);
       shadowSignalVertex(from);
       if(graph.vertexPartitionIds[from] == nodeId)
-        oadHandler(graph.vertices[graph.globalToLocalId[from]].vertexData);
+        oadHandler(graph.vertices[graph.globalToLocalId[from]].data());
       break;
 
     case DST:
       signalVertex(to);
       shadowSignalVertex(to);
       if(graph.vertexPartitionIds[to] == nodeId)
-        oadHandler(graph.vertices[graph.globalToLocalId[to]].vertexData);
+        oadHandler(graph.vertices[graph.globalToLocalId[to]].data());
       break;
 
     case BOTH:
       signalVertex(from);
       shadowSignalVertex(from);
       if(graph.vertexPartitionIds[from] == nodeId) 
-        oadHandler(graph.vertices[graph.globalToLocalId[from]].vertexData);
+        oadHandler(graph.vertices[graph.globalToLocalId[from]].data());
       signalVertex(to);
       shadowSignalVertex(to);
       if(graph.vertexPartitionIds[to] == nodeId)
-        oadHandler(graph.vertices[graph.globalToLocalId[to]].vertexData);
+        oadHandler(graph.vertices[graph.globalToLocalId[to]].data());
       break;
 
     case NEITHER:
@@ -701,14 +701,14 @@ void  Engine<VertexType, EdgeType>::activateEndPoints2(IdType from, IdType to, I
       signalVertex(from);
       shadowSignalVertex(from);
       if(graph.vertexPartitionIds[from] == nodeId)
-        oadHandler(graph.vertices[graph.globalToLocalId[from]].vertexData, edge);
+        oadHandler(graph.vertices[graph.globalToLocalId[from]].data(), edge);
       break;
 
     case DST:
       signalVertex(to);
       shadowSignalVertex(to);
       if(graph.vertexPartitionIds[to] == nodeId)
-        oadHandler(graph.vertices[graph.globalToLocalId[to]].vertexData, edge);
+        oadHandler(graph.vertices[graph.globalToLocalId[to]].data(), edge);
       break;
 
     case BOTH:
@@ -716,11 +716,11 @@ void  Engine<VertexType, EdgeType>::activateEndPoints2(IdType from, IdType to, I
       signalVertex(from);
       shadowSignalVertex(from);
       if(graph.vertexPartitionIds[from] == nodeId) 
-        oadHandler(graph.vertices[graph.globalToLocalId[from]].vertexData, edge);
+        oadHandler(graph.vertices[graph.globalToLocalId[from]].data(), edge);
       signalVertex(to);
       shadowSignalVertex(to);
       if(graph.vertexPartitionIds[to] == nodeId)
-        oadHandler(graph.vertices[graph.globalToLocalId[to]].vertexData, edge);
+        oadHandler(graph.vertices[graph.globalToLocalId[to]].data(), edge);
       break;
 
     case NEITHER:
@@ -807,7 +807,7 @@ LightEdge<VertexType, EdgeType> Engine<VertexType, EdgeType>::deleteEdge2(IdType
     unsigned ct = 0;
     for(it = graph.vertices[lToId].inEdges.begin(); it != graph.vertices[lToId].inEdges.end(); ++it) {
       if(it->sourceId() == fromId) {
-        retEdge.to = graph.vertices[lToId].vertexData;
+        retEdge.to = graph.vertices[lToId].data();
         retEdge.from = graph.vertices[lToId].getSourceVertexData(ct);
         retEdge.edge = graph.vertices[lToId].getInEdgeData(ct);
         retEdge.valid = true; 
@@ -1752,7 +1752,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
           scheduler->schedule(v.getOutEdge(i).destId());
         else {
           if(remoteScat) {
-            CommManager::dataPushOut(graph.localToGlobalId[vid], (void*)v.vertexData.data(), sizeof(FeatType) * v.vertexData.size());
+            CommManager::dataPushOut(graph.localToGlobalId[vid], (void*)v.data().data(), sizeof(FeatType) * v.vertexData.size());
             remoteScat = false;
           }
         }
