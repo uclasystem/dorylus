@@ -27,13 +27,20 @@ IdType Vertex<VertexType, EdgeType>::globalId() {
     return globalIdx;
 }
 
-
 template<typename VertexType, typename EdgeType>
 VertexType Vertex<VertexType, EdgeType>::data() {
     lock.readLock();
-    VertexType vData = vertexData;
+    VertexType vData = vertexData.back();
     lock.unlock();
     return vData;
+}
+
+template<typename VertexType, typename EdgeType>
+VertexType Vertex<VertexType, EdgeType>::dataAll() {
+    lock.readLock();
+    std::vector<VertexType>& vDataAll = vertexData;
+    lock.unlock();
+    return vDataAll;
 }
 
 /*
@@ -51,7 +58,14 @@ void Vertex<VertexType, EdgeType>::setOldData(VertexType value) {
 template<typename VertexType, typename EdgeType>
 void Vertex<VertexType, EdgeType>::setData(VertexType value) {
     lock.writeLock();
-    vertexData = value;
+    vertexData.back() = value;
+    lock.unlock();
+}
+
+template<typename VertexType, typename EdgeType>
+void Vertex<VertexType, EdgeType>::addData(VertexType value) {
+    lock.writeLock();
+    vertexData.push_back(value);
     lock.unlock();
 }
 

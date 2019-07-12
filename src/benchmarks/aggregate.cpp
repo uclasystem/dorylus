@@ -15,26 +15,26 @@ template<typename VertexType, typename EdgeType>
 class AggregateProgram : public VertexProgram<VertexType, EdgeType> {
 public:
     bool update(Vertex<VertexType, EdgeType>& vertex, EngineContext& engineContext) {
-	bool changed = true;
-	VType curr = vertex.data();
+        bool changed = true;
+        VType curr = vertex.data();
 
-	for (unsigned i = 0; i < vertex.numInEdges(); ++i) {
-		vector<FeatType> other = vertex.getSourceVertexData(i);
-		sumVectors(curr, other);
-	}
+        for (unsigned i = 0; i < vertex.numInEdges(); ++i) {
+        	vector<FeatType> other = vertex.getSourceVertexData(i);
+        	sumVectors(curr, other);
+        }
 
-	vertex.setData(curr);
+        vertex.addData(curr);
 
-	if (curr[0] >= 10) changed = false;
+        if (curr[0] >= 10) changed = false;
 
-	return changed;
+        return changed;
     }
 
 private:
     void sumVectors(vector<FeatType>& curr, vector<FeatType>& other) {
-	for (int i = 0; i < curr.size(); ++i) {
-		curr[i] += other[i];
-	}
+        for (int i = 0; i < curr.size(); ++i) {
+        	curr[i] += other[i];
+        }
     }
 };
 
@@ -50,12 +50,16 @@ public:
     }
 
     void processVertex(Vertex<VertexType, EdgeType>& vertex) {
-	VType curr = vertex.data();
-	outFile << vertex.globalId() << ": ";
-	for (int i = 0; i < curr.size(); ++i) {
-		outFile << curr[i] << " ";
-	}
-	outFile << std::endl;
+        std::vector<VType>& data_all = vertex.dataAll();
+        outFile << vertex.globalId() << ": ";
+        for (int i = 0; i < data_all.size(); ++i) {
+            VType curr = data_all[i];
+            for (int j = 0; j < curr.size(); ++j) {
+            	outFile << curr[i] << " ";
+            }
+            outFile << "| ";
+        }
+        outFile << std::endl;
     }
 
     ~WriterProgram() {

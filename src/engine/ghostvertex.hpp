@@ -6,48 +6,48 @@
 template <typename VertexType>
 class GhostVertex {
     public:
-        VertexType vData;
+        
+        // Use a vector to make data in old iterations persistent.
+        std::vector<VertexType> vertexData;
+
         //char version;
         RWLock lock;
-	int32_t degree;
+        int32_t degree;
 
         std::vector<IdType> outEdges;
 
         GhostVertex() {
-          lock.init();
-	  degree = 0;
+            lock.init();
+            degree = 0;
         }
 
-        GhostVertex(const VertexType vDat) : vData(vDat) { //, version(0) {
+        GhostVertex(const VertexType vData) : vertexData(vData) {
             lock.init();
-	    degree = 0;
+            degree = 0;
         }
 
         ~GhostVertex() {
             lock.destroy();
         }
 
-        VertexType data() {
-            VertexType ret;
+        VertexType data() {                 // Get the current value.
+            VertexType vData;
             lock.readLock();
-            ret = vData;
+            vData = vertexData.back();
             lock.unlock();
-            return ret;
+            return vData;
         }
 
-        void setData(VertexType* value) { //, char ver) {
-            //bool ret = false;
+        void setData(VertexType* value) {   // Modify the current value.
             lock.writeLock();
-            //assert(version != 255);
-            //if(ver > version) {
-                vData = *value;
-                //version = ver;
-                //ret = true;
-            /*} else {
-                fprintf(stderr, "Dropping value %u because it is older than value %u -- because ver = %u is <= version = %u\n", *value, vData, (unsigned) ver, (unsigned) version);
-            }*/
+            vertexData.back() = *value;
             lock.unlock();
-            //return ret;
+        }
+
+        void addData(VertexType* value) {   // Add a new value of the new iteration.
+            lock.writeLock();
+            vertexData.push_back(*value);
+            lock.unlock();
         }
 
 	void incrementDegree() { ++degree; }
