@@ -30,9 +30,8 @@ class GhostVertex {
         }
 
         VertexType data() {
-            VertexType vData;
             lock.readLock();
-            vData = vertexData.back();
+            VertexType vData = vertexData;
             lock.unlock();
             return vData;
         }
