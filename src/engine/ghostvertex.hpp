@@ -7,7 +7,7 @@ template <typename VertexType>
 class GhostVertex {
     public:
         
-        VertexType vertexData;
+        std::vector<VertexType> vertexData;
 
         //char version;
         RWLock lock;
@@ -20,9 +20,10 @@ class GhostVertex {
             degree = 0;
         }
 
-        GhostVertex(const VertexType vData) : vertexData(vData) {
+        GhostVertex(const VertexType vData) {
             lock.init();
             degree = 0;
+            vertexData.push_back(vData);
         }
 
         ~GhostVertex() {
@@ -30,21 +31,27 @@ class GhostVertex {
         }
 
         VertexType data() {
+            VertexType vData;
             lock.readLock();
-            VertexType vData = vertexData;
+            VertexType vDataRef = vertexData.back();
+            copy(vDataRef.begin(), vDataRef.end(), back_inserter(vData)); 
             lock.unlock();
             return vData;
         }
 
         void setData(VertexType* value) {
             lock.writeLock();
-            vertexData = *value;
+            vertexData.back() = *value;
             lock.unlock();
         }
 
+        void addData(VertexType* value) {
+            lock.writeLock();
+            vertexData.push_back(*value);
+            lock.unlock();
+        }
 
-
-	void incrementDegree() { ++degree; }
+        void incrementDegree() { ++degree; }
 };
 
 #endif //__GHOST_VERTEX_HPP__
