@@ -18,7 +18,7 @@ void Graph<VertexType, EdgeType>::updateGhostVertex(IdType vId, VertexType* valu
         fprintf(stderr, "No ghost vertex with id %u\n", vId);
     }
     assert(it != ghostVertices.end());
-    it->second.setData(value);
+    it->second.addData(value);
 }
 
 template <typename VertexType, typename EdgeType>
