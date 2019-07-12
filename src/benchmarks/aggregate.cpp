@@ -4,6 +4,7 @@
 #include <memory>
 #include <vector>
 #include <cassert>
+#include <iterator>
 
 using namespace std;
 
@@ -19,16 +20,17 @@ public:
         bool changed = true;
         VType curr = vertex.data();
 
+        VType temp;
+        copy(curr.begin(), curr.end(), back_inserter(target));
+
         for (unsigned i = 0; i < vertex.numInEdges(); ++i) {
         	vector<FeatType> other = vertex.getSourceVertexData(i);
-        	sumVectors(curr, other);
+        	sumVectors(temp, other);
         }
 
-        if (curr[0] >= 10) {
-            changed = false;
-            vertex.setData(curr);
-        } else
-            vertex.addData(curr);
+        vertex.addData(temp);
+
+        if (temp[0] >= 10) changed = false;
 
         return changed;
     }
