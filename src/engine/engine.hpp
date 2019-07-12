@@ -424,7 +424,7 @@ void Engine<VertexType, EdgeType>::receiveNewGhostValues(std::set<IdType>& inTop
     if(inTopics.find(vid) != inTopics.end()) {
       typename std::map<IdType, GhostVertex<VertexType> >::iterator gvit = graph.ghostVertices.find(vid);
       assert(gvit != graph.ghostVertices.end());
-      gvit->second.setData(&value); 
+      gvit->second.addData(&value); 
       inTopics.erase(vid);
     }
   }
