@@ -20,7 +20,7 @@ class GhostVertex {
             degree = 0;
         }
 
-        GhostVertex(const VertexType vData) : VertexData(vData) {
+        GhostVertex(const VertexType vData) : vertexData(vData) {
             lock.init();
             degree = 0;
         }
