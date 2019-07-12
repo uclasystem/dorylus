@@ -20,17 +20,17 @@ public:
         bool changed = true;
         VType curr = vertex.data();
 
-        VType temp;
-        copy(curr.begin(), curr.end(), back_inserter(temp));
+        // VType temp;
+        // copy(curr.begin(), curr.end(), back_inserter(temp));
 
         for (unsigned i = 0; i < vertex.numInEdges(); ++i) {
         	vector<FeatType> other = vertex.getSourceVertexData(i);
-        	sumVectors(temp, other);
+        	sumVectors(curr, other);
         }
 
-        vertex.addData(temp);
+        vertex.addData(curr);
 
-        if (temp[0] >= 10) changed = false;
+        if (curr[0] >= 10) changed = false;
 
         return changed;
     }
