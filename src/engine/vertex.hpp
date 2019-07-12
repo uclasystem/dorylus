@@ -36,7 +36,7 @@ VertexType Vertex<VertexType, EdgeType>::data() {
 }
 
 template<typename VertexType, typename EdgeType>
-VertexType Vertex<VertexType, EdgeType>::dataAll() {
+std::vector<VertexType>& Vertex<VertexType, EdgeType>::dataAll() {
     lock.readLock();
     std::vector<VertexType>& vDataAll = vertexData;
     lock.unlock();

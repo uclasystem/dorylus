@@ -293,7 +293,7 @@ void Engine<VertexType, EdgeType>::initGraph(Graph<VertexType, EdgeType>& lGraph
     lGraph.vertices[i].localIdx = i;
     lGraph.vertices[i].globalIdx = lGraph.localToGlobalId[i];
     lGraph.vertices[i].vertexLocation = INTERNAL_VERTEX;
-    lGraph.vertices[i].vertexData = defaultVertex;
+    lGraph.vertices[i].vertexData.push_back(defaultVertex);
     lGraph.vertices[i].graph = &lGraph;
   }
 }
