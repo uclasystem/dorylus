@@ -19,12 +19,13 @@ public:
         bool changed = true;
         VType curr = vertex.data();
 
+        VType target;
         for (unsigned i = 0; i < vertex.numInEdges(); ++i) {
         	vector<FeatType> other = vertex.getSourceVertexData(i);
-        	sumVectors(curr, other);
+        	sumVectors(curr, other, target);
         }
 
-        vertex.addData(curr);
+        vertex.addData(target);
 
         if (curr[0] >= 10) changed = false;
 
@@ -32,10 +33,11 @@ public:
     }
 
 private:
-    void sumVectors(vector<FeatType>& curr, vector<FeatType>& other) {
+    void sumVectors(vector<FeatType>& curr, vector<FeatType>& other,
+                    vector<FeatType>& target) {
         if (curr.size() <= other.size()) {
             for (int i = 0; i < curr.size(); ++i) {
-            	curr[i] += other[i];
+            	target.push_back(curr[i] + other[i]);
             }
         }
     }
