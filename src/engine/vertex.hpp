@@ -30,14 +30,10 @@ IdType Vertex<VertexType, EdgeType>::globalId() {
 
 template<typename VertexType, typename EdgeType>
 VertexType Vertex<VertexType, EdgeType>::data() {
-    // VertexType vData;
-    // lock.readLock();
-    // VertexType vDataRef = vertexData.back();
-    // copy(vDataRef.begin(), vDataRef.end(), back_inserter(vData)); 
-    // lock.unlock();
-    // return vData;
+    VertexType vData;
     lock.readLock();
-    VertexType vData = vertexData.back();
+    VertexType vDataRef = vertexData.back();
+    copy(vDataRef.begin(), vDataRef.end(), back_inserter(vData)); 
     lock.unlock();
     return vData;
 }
