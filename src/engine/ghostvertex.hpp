@@ -7,6 +7,7 @@ template <typename VertexType>
 class GhostVertex {
     public:
         
+        // Use a vector to make data in old iterations persistent.
         std::vector<VertexType> vertexData;
 
         //char version;
@@ -31,7 +32,7 @@ class GhostVertex {
             lock.destroy();
         }
 
-        VertexType data() {
+        VertexType data() {     // Get the current value.
             // VertexType vData;
             // lock.readLock();
             // VertexType vDataRef = vertexData.back();
@@ -44,13 +45,13 @@ class GhostVertex {
             return vData;
         }
 
-        void setData(VertexType* value) {
+        void setData(VertexType* value) {   // Modify the current value.
             lock.writeLock();
             vertexData.back() = *value;
             lock.unlock();
         }
 
-        void addData(VertexType* value) {
+        void addData(VertexType* value) {   // Add a new value of the new iteration.
             lock.writeLock();
             vertexData.push_back(*value);
             lock.unlock();

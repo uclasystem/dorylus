@@ -20,6 +20,7 @@ public:
         bool changed = true;
         VType curr = vertex.data();
 
+        // Copy... seems not needed.
         // VType temp;
         // copy(curr.begin(), curr.end(), back_inserter(temp));
 
