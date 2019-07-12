@@ -32,10 +32,14 @@ class GhostVertex {
         }
 
         VertexType data() {
-            VertexType vData;
+            // VertexType vData;
+            // lock.readLock();
+            // VertexType vDataRef = vertexData.back();
+            // copy(vDataRef.begin(), vDataRef.end(), back_inserter(vData)); 
+            // lock.unlock();
+            // return vData;
             lock.readLock();
-            VertexType vDataRef = vertexData.back();
-            copy(vDataRef.begin(), vDataRef.end(), back_inserter(vData)); 
+            VertexType vData = vertexData.back();
             lock.unlock();
             return vData;
         }
