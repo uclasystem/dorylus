@@ -28,7 +28,7 @@ public:
         	sumVectors(temp, other);
         }
 
-        vertex.setData(temp);
+        vertex.addData(temp);
 
         if (temp[0] >= 10) changed = false;
 
