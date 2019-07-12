@@ -1,0 +1,14 @@
+#! /bin/bash
+
+## CLEAR OUTPUTS SCRIPT ##
+##
+## Clears all log files in `~/outfiles/` dir and all output files in `build/outputs/` dir.
+## Resets `gvid` unser `run/` to 1.
+
+USER=$( whoami )
+ASP_DIR=$( dirname $0 )/..
+
+rm -f /home/${USER}/outfiles/*
+rm -rf ${ASP_DIR}/build/outputs/*
+echo "1" > ${ASP_DIR}/run/gvid
+
