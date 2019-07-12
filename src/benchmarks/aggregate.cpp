@@ -55,7 +55,7 @@ public:
         for (int i = 0; i < data_all.size(); ++i) {
             VType curr = data_all[i];
             for (int j = 0; j < curr.size(); ++j) {
-            	outFile << curr[i] << " ";
+            	outFile << curr[j] << " ";
             }
             outFile << "| ";
         }
