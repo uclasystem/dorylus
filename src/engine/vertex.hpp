@@ -33,6 +33,7 @@ VertexType Vertex<VertexType, EdgeType>::data() {
     VertexType vData;
     lock.readLock();
     VertexType vDataRef = vertexData.back();
+    assert(vDataRef != vertexData.end());
     copy(vDataRef.begin(), vDataRef.end(), back_inserter(vData)); 
     lock.unlock();
     return vData;
