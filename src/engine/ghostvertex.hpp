@@ -23,6 +23,7 @@ class GhostVertex {
         GhostVertex(const VertexType vData) {
             lock.init();
             degree = 0;
+            vertexData.clear();
             vertexData.push_back(vData);
         }
 

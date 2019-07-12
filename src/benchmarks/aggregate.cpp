@@ -33,9 +33,10 @@ public:
 
 private:
     void sumVectors(vector<FeatType>& curr, vector<FeatType>& other) {
-        assert(other.size() >= curr.size());
-        for (int i = 0; i < curr.size(); ++i) {
-        	curr[i] += other[i];
+        if (curr.size() <= other.size()) {
+            for (int i = 0; i < curr.size(); ++i) {
+            	curr[i] += other[i];
+            }
         }
     }
 };
