@@ -24,7 +24,7 @@ class GhostVertex {
         GhostVertex(const VertexType vData) {
             lock.init();
             degree = 0;
-            vertexData.push_back(vData)
+            vertexData.push_back(vData);
         }
 
         ~GhostVertex() {
