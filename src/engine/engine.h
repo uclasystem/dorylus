@@ -63,6 +63,8 @@
 #define DATACOMM_BARRIER "datacomm"
 #define COMM_BARRIER "comm"
 
+
+
 enum InOutType {SRC, DST, BOTH, NEITHER};
 
 template <typename VertexType>
@@ -195,6 +197,11 @@ public:
      * Sets the normalization factors on all the edges
      */
     static void setEdgeNormalizations();
+
+    /*
+        Usage:This function will read feature file and set feature vectors as data of the vertices object
+    */
+    static int readFeaturesFile(const std::string& fileName);
 
     static void readDeletionStream(std::string& fileName);
     static void addEdge(IdType from, IdType to, std::set<IdType>* inTopics);
