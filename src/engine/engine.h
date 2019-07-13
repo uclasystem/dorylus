@@ -199,7 +199,21 @@ public:
     static void setEdgeNormalizations();
 
     /*
-        Usage:This function will read feature file and set feature vectors as data of the vertices object
+        Usage:This function will read feature file and 
+            set data to feature vectors of both local and 
+            ghost vertices.
+        The function is called in engine::init()
+            The fileName is currently hard coded to "../inputs/features.txt"
+        The file being read should have format of(either "," or " " is fine):
+        f00,f01,f02,....,f0n
+        f10,f11,f12,....,f1n
+        ...
+        fm0,fm1,fm2,....,fmn
+        
+
+        It is also worth noting that since ghost vertex doesn't have attribute Id,
+        it would be easier for you to test by setting the first feature 
+        in the feature vector as nodeId.
     */
     static int readFeaturesFile(const std::string& fileName);
 
