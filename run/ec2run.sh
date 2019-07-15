@@ -60,7 +60,7 @@ echo -e "\e[33;1mCHECKING FOR QUORUM NOW \e[0m"
 for i in $(seq 1 ${ZOONDS}); do
   while true
   do
-    str=$(echo stat | nc ${nodes[$i]} 2188 | grep "Mode");
+    str=$(echo stat | nc ${nodes[$i]} 2180 | grep "Mode");
     IFS=' ' read -ra ARR <<< ${str};
     if [[ ${ARR[1]} == "leader" ]] || [[ ${ARR[1]} == "follower" ]]; then
       break;
@@ -87,6 +87,9 @@ case $1 in
 	"inc")
 		BM=increment.bin; BK=INC;
 		;;
+  "load")
+    BM=loadfeatures.bin; BK=LOAD;
+    ;;
 	*)
 		BM=aggregate.bin; BK=AGG;
 		;;
@@ -100,6 +103,9 @@ case $2 in
 	"data")
 		IP=/filepool/parts_${NDS}/data.bsnap; IK=DT; SRC=0;
 		;;
+	"small")
+		IP=../inputs/parts_${NDS}/small.graph.bsnap; IK=SM; SRC=0;
+                ;;
 	*)
 		IP=/filepool/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB; SRC=0
 		;;
@@ -136,7 +142,7 @@ for i in $(seq 2 ${NDS}); do
 done;
 
 for i in $(seq 1 ${ZOONDS}); do
-  echo -e "${nodes[$i]}\t2188" >> ${ASPIREDIR}/config/zkhostfile;
+  echo -e "${nodes[$i]}\t2180" >> ${ASPIREDIR}/config/zkhostfile;
 done;
 
 for i in $(seq 1 ${NDS}); do
@@ -166,9 +172,9 @@ for dp in {1..1}; do
   echo "GVID = ${GVID}" >> ${OPFILE} 2>&1;
   echo "GVID = ${GVID}"
 
-  echo "DSH Running (from ${ASPIREDIR}/build): ./${BM} --graphfile ${IP} --featuresfile ${3} --undirected ${UD} --bm-reset=${RS} --bm-source=${SRC} --bm-tagonadd=${TOA} --bm-tagondelete=${TOD} --bm-smarttagondelete=${STOD} --bm-smartpropagation=${SP} --bm-tmpdir=${TMPDIR} --kcore-maxcore=${KC} --cthreads ${CT} --pofrequency ${POF} --baseedges ${BE} --numbatches ${NB} --batchsize ${BS} --deletepercent ${DP} ${XTRAARGS}";
+  echo "DSH Running (from ${ASPIREDIR}/build): ./${BM} --graphfile ${IP} --featuresfile ${FF} --undirected ${UD} --bm-reset=${RS} --bm-source=${SRC} --bm-tagonadd=${TOA} --bm-tagondelete=${TOD} --bm-smarttagondelete=${STOD} --bm-smartpropagation=${SP} --bm-tmpdir=${TMPDIR} --kcore-maxcore=${KC} --cthreads ${CT} --pofrequency ${POF} --baseedges ${BE} --numbatches ${NB} --batchsize ${BS} --deletepercent ${DP} ${XTRAARGS}";
 
-  ${DSH} -M -f ${DSHFILE} -c "cd ${ASPIREDIR}/build && ./${BM} --graphfile ${IP} --featuresfile ${3} --undirected ${UD} --bm-reset=${RS} --bm-source=${SRC} --bm-tagonadd=${TOA} --bm-tagondelete=${TOD} --bm-smarttagondelete=${STOD} --bm-smartpropagation=${SP} --bm-tmpdir=${TMPDIR} --kcore-maxcore=${KC} --cthreads ${CT} --pofrequency ${POF} --baseedges ${BE} --numbatches ${NB} --batchsize ${BS} --deletepercent ${DP} ${XTRAARGS}" >> ${OPFILE} 2>&1;
+  ${DSH} -M -f ${DSHFILE} -c "cd ${ASPIREDIR}/build && ./${BM} --graphfile ${IP} --featuresfile ${FF} --undirected ${UD} --bm-reset=${RS} --bm-source=${SRC} --bm-tagonadd=${TOA} --bm-tagondelete=${TOD} --bm-smarttagondelete=${STOD} --bm-smartpropagation=${SP} --bm-tmpdir=${TMPDIR} --kcore-maxcore=${KC} --cthreads ${CT} --pofrequency ${POF} --baseedges ${BE} --numbatches ${NB} --batchsize ${BS} --deletepercent ${DP} ${XTRAARGS}" >> ${OPFILE} 2>&1;
 
   DOPDIR=${ASPIREDIR}/build/outputs/${BK}.${IK}/${GVID};
   mkdir -p ${DOPDIR};
