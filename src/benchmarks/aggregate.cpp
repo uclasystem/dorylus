@@ -20,16 +20,12 @@ public:
         bool changed = true;
         VType curr = vertex.data();
 
-        // Copy... seems not needed.
-        // VType temp;
-        // copy(curr.begin(), curr.end(), back_inserter(temp));
-
         for (unsigned i = 0; i < vertex.numInEdges(); ++i) {
-        	vector<FeatType> other = vertex.getSourceVertexData(i);
-        	sumVectors(curr, other);
+            vector<FeatType> other = vertex.getSourceVertexData(i);
+            sumVectors(curr, other);
         }
 
-        vertex.addData(curr);
+        vertex.addData(curr);   // Push to the back instead of modify the value.
 
         if (curr[0] >= 10) changed = false;
 
@@ -38,10 +34,8 @@ public:
 
 private:
     void sumVectors(vector<FeatType>& curr, vector<FeatType>& other) {
-        if (curr.size() <= other.size()) {
-            for (int i = 0; i < curr.size(); ++i) {
-            	curr[i] += other[i];
-            }
+        for (int i = 0; i < curr.size(); ++i) {
+            curr[i] += other[i];
         }
     }
 };
@@ -63,7 +57,7 @@ public:
         for (int i = 0; i < data_all.size(); ++i) {
             VType curr = data_all[i];
             for (int j = 0; j < curr.size(); ++j) {
-            	outFile << curr[j] << " ";
+                outFile << curr[j] << " ";
             }
             outFile << "| ";
         }
