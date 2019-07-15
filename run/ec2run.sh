@@ -37,7 +37,6 @@ ZOONDS=3
 
 echo -e "\e[33;1mDSH Running: cd ${ZOODIR} && ./bin/zkServer.sh stop\e[0m";
 ${DSH} -M -f ${DSHFILE} -c "cd ${ZOODIR} && ./bin/zkServer.sh stop";
-
 if [ ! -f ${ZOODIR}/conf/zoo.cfg ]; then
 	cat ${RUNDIR}/zoo.basic > ${ZOODIR}/conf/zoo.cfg;
 	echo "" >> ${ZOODIR}/conf/zoo.cfg;
@@ -61,7 +60,7 @@ echo -e "\e[33;1mCHECKING FOR QUORUM NOW \e[0m"
 for i in $(seq 1 ${ZOONDS}); do
   while true
   do
-    str=$(echo stat | nc ${nodes[$i]} 2180 | grep "Mode");
+    str=$(echo stat | nc ${nodes[$i]} 2188 | grep "Mode");
     IFS=' ' read -ra ARR <<< ${str};
     if [[ ${ARR[1]} == "leader" ]] || [[ ${ARR[1]} == "follower" ]]; then
       break;
@@ -70,6 +69,7 @@ for i in $(seq 1 ${ZOONDS}); do
   done;
   echo "ZK node at ${nodes[$i]} -- ${str}";
 done;
+
 
 ############### DO WORK ###############
 
@@ -105,6 +105,8 @@ case $2 in
 		;;
 esac
 
+FF=$3 #features file
+
 
 i=0
 
@@ -134,7 +136,7 @@ for i in $(seq 2 ${NDS}); do
 done;
 
 for i in $(seq 1 ${ZOONDS}); do
-  echo -e "${nodes[$i]}\t2180" >> ${ASPIREDIR}/config/zkhostfile;
+  echo -e "${nodes[$i]}\t2188" >> ${ASPIREDIR}/config/zkhostfile;
 done;
 
 for i in $(seq 1 ${NDS}); do
@@ -164,9 +166,9 @@ for dp in {1..1}; do
   echo "GVID = ${GVID}" >> ${OPFILE} 2>&1;
   echo "GVID = ${GVID}"
 
-  echo "DSH Running (from ${ASPIREDIR}/build): ./${BM} --graphfile ${IP} --undirected ${UD} --bm-reset=${RS} --bm-source=${SRC} --bm-tagonadd=${TOA} --bm-tagondelete=${TOD} --bm-smarttagondelete=${STOD} --bm-smartpropagation=${SP} --bm-tmpdir=${TMPDIR} --kcore-maxcore=${KC} --cthreads ${CT} --pofrequency ${POF} --baseedges ${BE} --numbatches ${NB} --batchsize ${BS} --deletepercent ${DP} ${XTRAARGS}";
+  echo "DSH Running (from ${ASPIREDIR}/build): ./${BM} --graphfile ${IP} --featuresfile ${3} --undirected ${UD} --bm-reset=${RS} --bm-source=${SRC} --bm-tagonadd=${TOA} --bm-tagondelete=${TOD} --bm-smarttagondelete=${STOD} --bm-smartpropagation=${SP} --bm-tmpdir=${TMPDIR} --kcore-maxcore=${KC} --cthreads ${CT} --pofrequency ${POF} --baseedges ${BE} --numbatches ${NB} --batchsize ${BS} --deletepercent ${DP} ${XTRAARGS}";
 
-  ${DSH} -M -f ${DSHFILE} -c "cd ${ASPIREDIR}/build && ./${BM} --graphfile ${IP} --undirected ${UD} --bm-reset=${RS} --bm-source=${SRC} --bm-tagonadd=${TOA} --bm-tagondelete=${TOD} --bm-smarttagondelete=${STOD} --bm-smartpropagation=${SP} --bm-tmpdir=${TMPDIR} --kcore-maxcore=${KC} --cthreads ${CT} --pofrequency ${POF} --baseedges ${BE} --numbatches ${NB} --batchsize ${BS} --deletepercent ${DP} ${XTRAARGS}" >> ${OPFILE} 2>&1;
+  ${DSH} -M -f ${DSHFILE} -c "cd ${ASPIREDIR}/build && ./${BM} --graphfile ${IP} --featuresfile ${3} --undirected ${UD} --bm-reset=${RS} --bm-source=${SRC} --bm-tagonadd=${TOA} --bm-tagondelete=${TOD} --bm-smarttagondelete=${STOD} --bm-smartpropagation=${SP} --bm-tmpdir=${TMPDIR} --kcore-maxcore=${KC} --cthreads ${CT} --pofrequency ${POF} --baseedges ${BE} --numbatches ${NB} --batchsize ${BS} --deletepercent ${DP} ${XTRAARGS}" >> ${OPFILE} 2>&1;
 
   DOPDIR=${ASPIREDIR}/build/outputs/${BK}.${IK}/${GVID};
   mkdir -p ${DOPDIR};
