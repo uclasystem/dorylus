@@ -6,11 +6,15 @@
 #include "../nodemanager/nodemanager.h"
 #include "ghostvertex.hpp"
 #include <fstream>
+#include <cmath>
 #include <boost/program_options.hpp>
 #include <boost/program_options/parsers.hpp>
+#include <boost/algorithm/string/classification.hpp> // Include boost::for is_any_of
+#include <boost/algorithm/string/split.hpp>
 #include <string>
 #include <stdlib.h>
 #include <omp.h>
+
 
 template <typename VertexType, typename EdgeType>
 Graph<VertexType, EdgeType> Engine<VertexType, EdgeType>::graph;
@@ -29,6 +33,9 @@ unsigned Engine<VertexType, EdgeType>::cThreads = NUM_COMP_THREADS;
 
 template <typename VertexType, typename EdgeType>
 std::string Engine<VertexType, EdgeType>::graphFile;
+
+template <typename VertexType, typename EdgeType>
+std::string Engine<VertexType, EdgeType>::featuresFile;
 
 template <typename VertexType, typename EdgeType>
 unsigned Engine<VertexType, EdgeType>::poFrequency = PUSHOUT_FREQUENCY;
@@ -166,6 +173,8 @@ void Engine<VertexType, EdgeType>::parseArgs(int argc, char* argv[]) {
     ("help", "Produce help message")
     ("config", boost::program_options::value<std::string>()->default_value(std::string(DEFAULT_CONFIG_FILE), DEFAULT_CONFIG_FILE), "Config file")
     ("graphfile", boost::program_options::value<std::string>(), "Graph file")
+    ("featuresfile", boost::program_options::value<std::string>(), "Features file")
+
     ("undirected", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Graph type")
     ("dthreads", boost::program_options::value<unsigned>()->default_value(unsigned(NUM_DATA_THREADS), NUM_DATA_THREADS_STR), "Number of data threads")
     ("cthreads", boost::program_options::value<unsigned>()->default_value(unsigned(NUM_COMP_THREADS), NUM_COMP_THREADS_STR), "Number of compute threads")
@@ -210,6 +219,9 @@ void Engine<VertexType, EdgeType>::parseArgs(int argc, char* argv[]) {
   assert(vm.count("graphfile"));
   graphFile = vm["graphfile"].as<std::string>();
 
+  assert(vm.count("featuresfile"));
+  featuresFile = vm["featuresfile"].as<std::string>();
+
   assert(vm.count("undirected"));
   unsigned undir = vm["undirected"].as<unsigned>();
   undirected = (undir == 0) ? false : true;
@@ -238,6 +250,7 @@ void Engine<VertexType, EdgeType>::parseArgs(int argc, char* argv[]) {
   fprintf(stderr, "dThreads set to %u\n", dThreads);
   fprintf(stderr, "cThreads set to %u\n", cThreads);
   fprintf(stderr, "graphFile set to %s\n", graphFile.c_str());
+  fprintf(stderr, "featuresFile set to %s\n", featuresFile.c_str());
   fprintf(stderr, "undirected set to %s\n", undirected ? "true" : "false");
   fprintf(stderr, "pofrequency set to %u\n", poFrequency);
 
@@ -245,6 +258,55 @@ void Engine<VertexType, EdgeType>::parseArgs(int argc, char* argv[]) {
   fprintf(stderr, "numBatches set to %u\n", numBatches);
   fprintf(stderr, "batchSize set to %u\n", batchSize);
   fprintf(stderr, "deletePercent set to %u\n", deletePercent);
+}
+
+//shen
+template <typename VertexType, typename EdgeType>
+int Engine<VertexType, EdgeType>::readFeaturesFile(const std::string& fileName) {
+  std::ifstream in;//Open file stream
+  in.open(fileName);
+  if(!in.good()) {
+      std::cout << "Cannot open " << fileName << std::endl;
+      return 1;
+  }
+
+  static const std::size_t LINE_BUFFER_SIZE=8192;
+  char buffer[LINE_BUFFER_SIZE];
+
+  std::vector<VertexType> feature_mat;
+  //process each line
+  while (in.eof()!=true){
+      in.getline(buffer,LINE_BUFFER_SIZE);
+      std::vector<std::string> splited_strings;
+      VertexType feature_vec=VertexType();
+      std::string line(buffer);
+      //split each line into numbers
+      boost::split(splited_strings, line, boost::is_any_of(", "), boost::token_compress_on);
+
+      for (auto it=splited_strings.begin();it!=splited_strings.end();it++) {
+          if(it->data()[0]!=0) //check null char at the end
+              feature_vec.push_back(std::stof(it->data()));
+      }
+      feature_mat.push_back(feature_vec);
+  }
+
+  for(std::size_t i = 0;i<feature_mat.size();++i){
+    //is ghost node
+    auto git=graph.ghostVertices.find(i);
+    if (git != graph.ghostVertices.end()){
+      graph.updateGhostVertex(i,&feature_mat[i]);
+      continue;
+    }
+    //is local node
+    auto lit=graph.globalToLocalId.find(i);
+   if (lit != graph.globalToLocalId.end()){
+      graph.vertices[lit->second].setData(feature_mat[i]);
+      continue;
+    }
+  }
+
+  return 0;
+
 }
 
 template <typename VertexType, typename EdgeType>
@@ -335,9 +397,10 @@ void Engine<VertexType, EdgeType>::processEdge(IdType& from, IdType& to, Graph<V
       fromId = from;
       eLocation = REMOTE_EDGE_TYPE;
 
-      typename std::map<IdType, GhostVertex<VertexType> >::iterator gvit = lGraph.ghostVertices.find(from);
+      typename std::map< IdType, GhostVertex<VertexType> >::iterator gvit = lGraph.ghostVertices.find(from);
       if(gvit == lGraph.ghostVertices.end()) {
         lGraph.ghostVertices[from] = GhostVertex<VertexType>(defaultVertex);
+
         gvit = lGraph.ghostVertices.find(from);
       }
       gvit->second.outEdges.push_back(lToId);
@@ -415,9 +478,60 @@ void Engine<VertexType, EdgeType>::readGraphBS(std::string& fileName, std::set<I
 
   infile.close();
 
+  findGhostDegrees(edgeFileName);
+  setEdgeNormalizations();
+
   typename std::set<IdType>::iterator it;
   for(it = oTopics.begin(); it != oTopics.end(); ++it)
     outTopics.push_back(*it);
+}
+
+// Finds the in degree of the ghost vertices
+template <typename VertexType, typename EdgeType>
+void Engine<VertexType, EdgeType>::findGhostDegrees(std::string& fileName) {
+	std::ifstream infile(fileName.c_str(), std::ios::binary);
+	if (!infile.good()) {
+		fprintf(stderr, "Cannot open BinarySnap file: %s\n", fileName.c_str());
+	}
+
+	assert(infile.good());
+	fprintf(stderr, "Calculating the degree of ghost vertices\n");
+
+	BSHeaderType<IdType> bsHeader;
+	infile.read((char*) &bsHeader, sizeof(bsHeader));
+
+	IdType srcdst[2];
+	while (infile.read((char*) srcdst, bsHeader.sizeOfVertexType * 2)) {
+		if (srcdst[0] == srcdst[1]) continue;
+
+		typename std::map< IdType, GhostVertex<VertexType> >::iterator gvit = graph.ghostVertices.find(srcdst[1]);
+		if (gvit != graph.ghostVertices.end()) {
+			(gvit->second).incrementDegree();
+		}	
+	}
+	
+	infile.close();
+}
+
+// Sets the normalization factors on all edges
+template<typename VertexType, typename EdgeType>
+void Engine<VertexType, EdgeType>::setEdgeNormalizations() {
+	for (Vertex<VertexType, EdgeType>& vertex: graph.vertices) {
+		unsigned dstDeg = vertex.numInEdges() + 1;
+		float dstNorm = std::pow(dstDeg, -.5);
+		for (InEdge<EdgeType>& e: vertex.inEdges) {
+			IdType vid = e.sourceId();
+			if (e.getEdgeLocation() == LOCAL_EDGE_TYPE) {
+				unsigned srcDeg = graph.vertices[vid].numInEdges() + 1;
+				float srcNorm = std::pow(srcDeg, -.5);
+				e.setData(srcNorm * dstNorm);
+			} else {
+				unsigned ghostDeg = graph.ghostVertices[vid].degree + 1;
+				float ghostNorm = std::pow(ghostDeg, -.5);
+				e.setData(ghostNorm * dstNorm);
+			}
+		}
+	}
 }
 
 template <typename VertexType, typename EdgeType>
@@ -495,6 +609,8 @@ void Engine<VertexType, EdgeType>::init(int argc, char* argv[], VertexType dVert
   readGraphBS(graphFile, inTopics, outTopics);
   graph.printGraphMetrics();
   fprintf(stderr, "Insert Stream size = %zd\n", insertStream.size());
+
+  readFeaturesFile(featuresFile); //input filename is hardcoded here
 
   if (numBatches != 0) {
     readDeletionStream(graphFile);
