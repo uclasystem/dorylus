@@ -63,8 +63,6 @@
 #define DATACOMM_BARRIER "datacomm"
 #define COMM_BARRIER "comm"
 
-
-
 enum InOutType {SRC, DST, BOTH, NEITHER};
 
 template <typename VertexType>
@@ -185,38 +183,6 @@ public:
 
     static void parseArgs(int argc, char* argv[]);
     static void readGraphBS(std::string& fileName, std::set<IdType>& inTopics, std::vector<IdType>& outTopics);
-
-    /**
-     * Find the in degree of the ghost vertices
-     *
-     * @param fileName	the filename of the graph edge list
-     */
-    static void findGhostDegrees(std::string& fileName);
-
-    /**
-     * Sets the normalization factors on all the edges
-     */
-    static void setEdgeNormalizations();
-
-    /*
-        Usage:This function will read feature file and 
-            set data to feature vectors of both local and 
-            ghost vertices.
-        The function is called in engine::init()
-            The fileName is currently hard coded to "../inputs/features.txt"
-        The file being read should have format of(either "," or " " is fine):
-        f00,f01,f02,....,f0n
-        f10,f11,f12,....,f1n
-        ...
-        fm0,fm1,fm2,....,fmn
-        
-
-        It is also worth noting that since ghost vertex doesn't have attribute Id,
-        it would be easier for you to test by setting the first feature 
-        in the feature vector as nodeId.
-    */
-    static int readFeaturesFile(const std::string& fileName);
-
     static void readDeletionStream(std::string& fileName);
     static void addEdge(IdType from, IdType to, std::set<IdType>* inTopics);
     static void deleteEdge(IdType from, IdType to);
@@ -245,6 +211,7 @@ public:
     static void printEngineMetrics();
 
     static void readPartsFile(std::string& partsFileName, Graph<VertexType, EdgeType>& lGraph);
+    //static void readPartsFile(std::string& partsFileName, Graph<VertexType, EdgeType>* lGraphs);
     static void setRepParts();
 
     static void initGraph(Graph<VertexType, EdgeType>& lGraph);
