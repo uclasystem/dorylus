@@ -156,11 +156,11 @@ $(DEG_TARGET):      prompt directories deg_tgt
 prompt:
 ifneq ($(mode),release)
 ifneq ($(mode),debug)
-	@echo "Invalid build mode. Please specify either `mode=release` or `mode=debug`." 
+	@echo "Invalid build mode. Please specify either \"mode=release\" or \"mode=debug\"." 
 	@exit 1
 endif
 endif
-	@echo "Building on $(mode) mode....."
+	@echo "Building on \"$(mode)\" mode....."
 
 directories:
 	mkdir -p $(OBJ_PATH) 
