@@ -119,7 +119,7 @@ DEG_OBJS        := $(BASE_OBJS) $(OBJ_PATH)/$(DEG_TARGET).o
 # Compiler & Flags
 CPP     := g++ -std=c++11
 CFLAGS  := -DTHREADED -Wall -Wno-sign-compare -MMD
-ifeq ($(mode), release)
+ifeq ($(mode),release)
 	CFLAGS += -O3
 else
 	CFLAGS += -DVERBOSE_ERRORS -g -fsanitize=address
@@ -154,13 +154,13 @@ $(DEG_TARGET):      prompt directories deg_tgt
 
 # Phony utilities
 prompt:
-	ifneq ($(mode), release)
-		ifneq ($(mode), debug)
-			@echo "Invalid build mode. Please specify either `mode=release` or `mode=debug`." 
-			@exit 1
-		endif
-	endif
-	@echo "Building on "$(mode)" mode....."
+ifneq ($(mode),release)
+ifneq ($(mode),debug)
+	@echo "Invalid build mode. Please specify either `mode=release` or `mode=debug`." 
+	@exit 1
+endif
+endif
+	@echo "Building on $(mode) mode....."
 
 directories:
 	mkdir -p $(OBJ_PATH) 
