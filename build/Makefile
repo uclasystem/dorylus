@@ -71,11 +71,6 @@ ABCD_TARGET_BIN   := $(ABCD_TARGET).bin
 CDP2_TARGET_BIN   := $(CDP2_TARGET).bin
 DEG_TARGET_BIN    := $(DEG_TARGET).bin
 
-# Utilities
-CPP     := g++ -std=c++11
-RM      := rm -rf
-MK      := mkdir -p
-
 # Libraries source
 OMP_LIBS        := -fopenmp
 BOOST_LIBS      := -lboost_system -lboost_filesystem -lboost_program_options
@@ -121,46 +116,56 @@ DEG_OBJS        := $(BASE_OBJS) $(OBJ_PATH)/$(DEG_TARGET).o
 # MAKE targets
 #
 
-# Flags 
+# Compiler & Flags
+CPP     := g++ -std=c++11
 CFLAGS  := -DTHREADED -Wall -Wno-sign-compare -MMD
+ifeq ($(mode), release)
+	CFLAGS += -O3
+else
+	CFLAGS += -DVERBOSE_ERRORS -g -fsanitize=address
+endif
 
-# Overall batch targets
-all: CFLAGS += -O3
-all: directories agg_tgt inc_tgt pr_tgt sssp_tgt asssp_tgt tsssp_tgt bfs_tgt abfs_tgt tbfs_tgt mssp_tgt sswp_tgt asswp_tgt tsswp_tgt kcore_tgt cc_tgt tcc_tgt cd_tgt acd_tgt abcd_tgt cdp2_tgt deg_tgt 
-
-# Switches between release mode & debug mode
-.PHONY: release debug
-release:    CFLAGS += -O3
-debug:      CFLAGS += -DVERBOSE_ERRORS -g -fsanitize=address
+# Overall batch target
+all: prompt directories agg_tgt inc_tgt pr_tgt sssp_tgt asssp_tgt tsssp_tgt bfs_tgt abfs_tgt tbfs_tgt mssp_tgt sswp_tgt asswp_tgt tsswp_tgt kcore_tgt cc_tgt tcc_tgt cd_tgt acd_tgt abcd_tgt cdp2_tgt deg_tgt 
 
 # Benchmark individual targets
-$(AGG_TARGET):      directories agg_tgt
-$(INC_TARGET):      directories inc_tgt
-$(PR_TARGET):       directories pr_tgt
-$(SSSP_TARGET):     directories sssp_tgt
-$(ASSSP_TARGET):    directories asssp_tgt
-$(TSSSP_TARGET):    directories tsssp_tgt
-$(BFS_TARGET):      directories bfs_tgt
-$(ABFS_TARGET):     directories abfs_tgt
-$(TBFS_TARGET):     directories tbfs_tgt
-$(MSSP_TARGET):     directories mssp_tgt
-$(SSWP_TARGET):     directories sswp_tgt
-$(ASSWP_TARGET):    directories asswp_tgt
-$(TSSWP_TARGET):    directories tsswp_tgt
-$(KCORE_TARGET):    directories kcore_tgt
-$(CC_TARGET):       directories cc_tgt
-$(TCC_TARGET):      directories tcc_tgt
-$(ACC_TARGET):      directories acc_tgt
-$(CD_TARGET):       directories cd_tgt
-$(ACD_TARGET):      directories acd_tgt
-$(ABCD_TARGET):     directories abcd_tgt
-$(CDP2_TARGET):     directories cdp2_tgt
-$(DEG_TARGET):      directories deg_tgt
+$(AGG_TARGET):      prompt directories agg_tgt
+$(INC_TARGET):      prompt directories inc_tgt
+$(PR_TARGET):       prompt directories pr_tgt
+$(SSSP_TARGET):     prompt directories sssp_tgt
+$(ASSSP_TARGET):    prompt directories asssp_tgt
+$(TSSSP_TARGET):    prompt directories tsssp_tgt
+$(BFS_TARGET):      prompt directories bfs_tgt
+$(ABFS_TARGET):     prompt directories abfs_tgt
+$(TBFS_TARGET):     prompt directories tbfs_tgt
+$(MSSP_TARGET):     prompt directories mssp_tgt
+$(SSWP_TARGET):     prompt directories sswp_tgt
+$(ASSWP_TARGET):    prompt directories asswp_tgt
+$(TSSWP_TARGET):    prompt directories tsswp_tgt
+$(KCORE_TARGET):    prompt directories kcore_tgt
+$(CC_TARGET):       prompt directories cc_tgt
+$(TCC_TARGET):      prompt directories tcc_tgt
+$(ACC_TARGET):      prompt directories acc_tgt
+$(CD_TARGET):       prompt directories cd_tgt
+$(ACD_TARGET):      prompt directories acd_tgt
+$(ABCD_TARGET):     prompt directories abcd_tgt
+$(CDP2_TARGET):     prompt directories cdp2_tgt
+$(DEG_TARGET):      prompt directories deg_tgt
+
+# Phony utilities
+prompt:
+	ifneq ($(mode), release)
+		ifneq ($(mode), debug)
+			@echo "Invalid build mode. Please specify either `mode=release` or `mode=debug`." 
+			@exit 1
+		endif
+	endif
+	@echo "Building on "$(mode)" mode....."
+
+directories:
+	mkdir -p $(OBJ_PATH) 
 
 # Detailed target rules
-directories:
-	$(MK) $(OBJ_PATH) 
-
 agg_tgt: $(AGG_OBJS)
 	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFALGS) -o $(AGG_TARGET_BIN)
 
@@ -251,5 +256,5 @@ $(OBJ_PATH)/%.o: $(BM_PATH)/%.cpp
 # Clean
 .PHONY: clean
 clean:
-	$(RM) $(OBJ_PATH) $(AGG_TARGET_BIN) $(INC_TARGET_BIN) $(PR_TARGET_BIN) $(SSSP_TARGET_BIN) $(ASSSP_TARGET_BIN) $(TSSSP_TARGET_BIN) $(BFS_TARGET_BIN) $(ABFS_TARGET_BIN) $(TBFS_TARGET_BIN) $(MSSP_TARGET_BIN) $(SSWP_TARGET_BIN) $(ASSWP_TARGET_BIN) $(TSSWP_TARGET_BIN) $(KCORE_TARGET_BIN) $(CC_TARGET_BIN) $(ACC_TARGET_BIN) $(TCC_TARGET_BIN) $(CD_TARGET_BIN) $(ACD_TARGET_BIN) $(ABCD_TARGET_BIN) $(CDP2_TARGET_BIN) $(DEG_TARGET_BIN)
+	rm -rf $(OBJ_PATH) $(AGG_TARGET_BIN) $(INC_TARGET_BIN) $(PR_TARGET_BIN) $(SSSP_TARGET_BIN) $(ASSSP_TARGET_BIN) $(TSSSP_TARGET_BIN) $(BFS_TARGET_BIN) $(ABFS_TARGET_BIN) $(TBFS_TARGET_BIN) $(MSSP_TARGET_BIN) $(SSWP_TARGET_BIN) $(ASSWP_TARGET_BIN) $(TSSWP_TARGET_BIN) $(KCORE_TARGET_BIN) $(CC_TARGET_BIN) $(ACC_TARGET_BIN) $(TCC_TARGET_BIN) $(CD_TARGET_BIN) $(ACD_TARGET_BIN) $(ABCD_TARGET_BIN) $(CDP2_TARGET_BIN) $(DEG_TARGET_BIN)
 
