@@ -52,7 +52,7 @@ Go inside the `zeromq-4.1.4/` directory and compile it from source:
     make install
     sudo ldconfig
 
-Move `build/zmq.hpp` into `installs/out/include/` to replace it.
+**Then** move `build/zmq.hpp` into `installs/out/include/` to replace it.
 
 ### ZooKeeper
 
@@ -61,7 +61,7 @@ Get ZooKeeper 3.4.6 from: [https://github.com/apache/zookeeper/archive/release-3
     wget https://github.com/apache/zookeeper/archive/release-3.4.6.tar.gz
     tar xvf release-3.4.6.tar.gz
 
-Go inside the `zookeeper-release-3.4.6/src/c/` directory and make the following change to the file `configure.ac`:
+Go inside the `zookeeper-release-3.4.6/src/c/` directory and make the following **change** to the file `configure.ac`:
 
     line 37: delete "AM_PATH_CPPUNIT(1.10.2)"; replace with "PKG_CHECK_MODULES(CPPUNIT, cppunit >= 1.10.2)"
 
@@ -85,14 +85,13 @@ Go inside the `metis-5.1.0/` directory and compile it from source:
 
 ## Building ASPIRE
 
-Once all dependencies have been installed correctly, go to the `aspire-streaming/build` directory. Change the following values:
+**Ensure all dependencies have been installed correctly** before building ASPIRE.
 
-    ZMQ_LIBPATH     := /home/<USER>/aspire-streaming/installs/out/lib
-    ZMQ_INCPATH     := /home/<USER>/aspire-streaming/installs/out/include
-    ZK_LIBPATH      := /usr/local/lib
-    ZK_INCPATH      := /usr/local/include/zookeeper
+Go to the `aspire-streaming/build` directory, then run the following for a release build:
 
-Then run:
+    make
+
+Or the following for a debug build (enabling `-g` and Address Sanitizer):
 
     make
 
