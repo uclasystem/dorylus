@@ -159,97 +159,97 @@ $(DEG_TARGET):      directories deg_tgt
 
 # Detailed target rules
 directories:
-    $(MK) $(OBJ_PATH) 
+	$(MK) $(OBJ_PATH) 
 
 agg_tgt: $(AGG_OBJS)
-    $(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFALGS) -o $(AGG_TARGET_BIN)
+	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFALGS) -o $(AGG_TARGET_BIN)
 
 inc_tgt: $(INC_OBJS)
-    $(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(INC_TARGET_BIN)
+	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(INC_TARGET_BIN)
 
 pr_tgt: $(PR_OBJS)
-    $(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(PR_TARGET_BIN)
+	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(PR_TARGET_BIN)
 
 sssp_tgt: $(SSSP_OBJS)
-    $(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(SSSP_TARGET_BIN)
+	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(SSSP_TARGET_BIN)
 
 asssp_tgt: $(ASSSP_OBJS)
-    $(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(ASSSP_TARGET_BIN)
+	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(ASSSP_TARGET_BIN)
 
 tsssp_tgt: $(TSSSP_OBJS)
-    $(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(TSSSP_TARGET_BIN)
+	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(TSSSP_TARGET_BIN)
 
 bfs_tgt: $(BFS_OBJS)
-    $(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(BFS_TARGET_BIN)
+	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(BFS_TARGET_BIN)
 
 abfs_tgt: $(ABFS_OBJS)
-    $(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(ABFS_TARGET_BIN)
+	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(ABFS_TARGET_BIN)
 
 tbfs_tgt: $(TBFS_OBJS)
-    $(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(TBFS_TARGET_BIN)
+	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(TBFS_TARGET_BIN)
 
 mssp_tgt: $(MSSP_OBJS)
-    $(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(MSSP_TARGET_BIN)
+	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(MSSP_TARGET_BIN)
 
 sswp_tgt: $(SSWP_OBJS)
-    $(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(SSWP_TARGET_BIN)
+	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(SSWP_TARGET_BIN)
 
 asswp_tgt: $(ASSWP_OBJS)
-    $(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(ASSWP_TARGET_BIN)
+	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(ASSWP_TARGET_BIN)
 
 tsswp_tgt: $(TSSWP_OBJS)
-    $(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(TSSWP_TARGET_BIN)
+	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(TSSWP_TARGET_BIN)
 
 kcore_tgt: $(KCORE_OBJS)
-    $(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(KCORE_TARGET_BIN)
+	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(KCORE_TARGET_BIN)
 
 cc_tgt: $(CC_OBJS)
-    $(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(CC_TARGET_BIN)
+	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(CC_TARGET_BIN)
 
 acc_tgt: $(ACC_OBJS)
-    $(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(ACC_TARGET_BIN)
+	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(ACC_TARGET_BIN)
 
 tcc_tgt: $(TCC_OBJS)
-    $(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(TCC_TARGET_BIN)
+	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(TCC_TARGET_BIN)
 
 cd_tgt: $(CD_OBJS)
-    $(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(CD_TARGET_BIN)
+	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(CD_TARGET_BIN)
 
 acd_tgt: $(ACD_OBJS)
-    $(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(ACD_TARGET_BIN)
+	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(ACD_TARGET_BIN)
 
 abcd_tgt: $(ABCD_OBJS)
-    $(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(ABCD_TARGET_BIN)
+	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(ABCD_TARGET_BIN)
 
 cdp2_tgt: $(CDP2_OBJS)
-    $(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(CDP2_TARGET_BIN)
+	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(CDP2_TARGET_BIN)
 
 deg_tgt: $(DEG_OBJS)
-    $(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(DEG_TARGET_BIN)
+	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFLAGS) -o $(DEG_TARGET_BIN)
 
 $(OBJ_PATH)/%.o: $(NODE_PATH)/%.cpp $(NODE_PATH)/%.h
-    $(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
+	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
 
 $(OBJ_PATH)/%.o: $(COMM_PATH)/%.cpp $(COMM_PATH)/%.h
-    $(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
+	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
 
 $(OBJ_PATH)/%.o: $(ENGINE_PATH)/%.cpp $(ENGINE_PATH)/%.h
-    $(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
+	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
 
 $(OBJ_PATH)/%.o: $(PARALLEL_PATH)/%.cpp $(PARALLEL_PATH)/%.h
-    $(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
+	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
 
 $(OBJ_PATH)/%.o: $(UTILS_PATH)/%.cpp $(UTILS_PATH)/%.h
-    $(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
+	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
 
 $(OBJ_PATH)/%.o: $(BM_PATH)/%.cpp $(BM_PATH)/%.h
-    $(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
+	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
 
 $(OBJ_PATH)/%.o: $(BM_PATH)/%.cpp
-    $(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
+	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
 
 # Clean
 .PHONY: clean
 clean:
-    $(RM) $(OBJ_PATH) $(AGG_TARGET_BIN) $(INC_TARGET_BIN) $(PR_TARGET_BIN) $(SSSP_TARGET_BIN) $(ASSSP_TARGET_BIN) $(TSSSP_TARGET_BIN) $(BFS_TARGET_BIN) $(ABFS_TARGET_BIN) $(TBFS_TARGET_BIN) $(MSSP_TARGET_BIN) $(SSWP_TARGET_BIN) $(ASSWP_TARGET_BIN) $(TSSWP_TARGET_BIN) $(KCORE_TARGET_BIN) $(CC_TARGET_BIN) $(ACC_TARGET_BIN) $(TCC_TARGET_BIN) $(CD_TARGET_BIN) $(ACD_TARGET_BIN) $(ABCD_TARGET_BIN) $(CDP2_TARGET_BIN) $(DEG_TARGET_BIN)
+	$(RM) $(OBJ_PATH) $(AGG_TARGET_BIN) $(INC_TARGET_BIN) $(PR_TARGET_BIN) $(SSSP_TARGET_BIN) $(ASSSP_TARGET_BIN) $(TSSSP_TARGET_BIN) $(BFS_TARGET_BIN) $(ABFS_TARGET_BIN) $(TBFS_TARGET_BIN) $(MSSP_TARGET_BIN) $(SSWP_TARGET_BIN) $(ASSWP_TARGET_BIN) $(TSSWP_TARGET_BIN) $(KCORE_TARGET_BIN) $(CC_TARGET_BIN) $(ACC_TARGET_BIN) $(TCC_TARGET_BIN) $(CD_TARGET_BIN) $(ACD_TARGET_BIN) $(ABCD_TARGET_BIN) $(CDP2_TARGET_BIN) $(DEG_TARGET_BIN)
 
