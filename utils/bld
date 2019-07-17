@@ -12,16 +12,6 @@
 cd $( dirname $0 )/../build
 
 case $1 in
-	"inc")
-		make clean; make mode=debug increment
-		
-		if [ $? -eq 0 ]; then 
-			cd ..
-			./utils/send_file build/increment.bin
-		else 
-			return 13
-		fi
-		;;
 	"agg")
 		make clean; make mode=debug aggregate
 
@@ -32,8 +22,35 @@ case $1 in
 			return 13
 		fi
 		;;
+	"inc")
+		make clean; make mode=debug increment
+
+		if [ $? -eq 0 ]; then 
+			cd ..
+			./utils/send_file build/increment.bin
+		else 
+			return 13
+		fi
+		;;
+	"load")
+		make clean; make mode=debug loadfeatures
+
+		if [ $? -eq 0 ]; then 
+			cd ..
+			./utils/send_file build/loadfeatures.bin
+		else 
+			return 13
+		fi
+		;;
 	*)
-		make clean; make mode=debug $1
+		make clean; make mode=debug aggregate
+
+		if [ $? -eq 0 ]; then 
+			cd ..
+			./utils/send_file build/aggregate.bin
+		else 
+			return 13
+		fi
 		;;
 esac
 

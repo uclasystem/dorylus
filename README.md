@@ -87,13 +87,29 @@ Go inside the `metis-5.1.0/` directory and compile it from source:
 
 **Ensure all dependencies have been installed correctly** before building ASPIRE.
 
-Go to the `aspire-streaming/build` directory, then run the following for a release build:
+### About Makefile
 
-    make
+Go to the `aspire-streaming/build` directory, then run the following for a release build (`-O3`):
+
+    make mode=release [Benchmark-Name]  # Specify benchmark name for individual build, OR omit it to build all benchs
 
 Or the following for a debug build (enabling `-g` and Address Sanitizer):
 
-    make
+    make mode=debug [Benchmark-Name]    # Specify benchmark name for individual build, OR omit it to build all benchs
+
+Clean the build by:
+
+    make clean
+
+### Building & Running utilities
+
+Use `utils/b+r` script for easy build and run across machines:
+
+    ./utils/b+r agg     # Build, send, and run `aggregate` bench
+
+Use `clear_out` script to clean all log files and output files, and reset GVID to 1:
+
+    ./utils/clear_out
 
 ## Preparing Input Graph
 
@@ -121,15 +137,11 @@ Make sure you have setup password-less `ssh` login among all your EC2 instances.
 
 ### Setup Config Files
 
-Under `run/` directory, setup the content of `dshmachines` file. Every line is in the form `username@ip` representing one of your nodes.
+Under `run/` directory, **setup the content of `dshmachines` file**. Every line is in the form `username@ip` representing one of your nodes.
 
 Setup the content of `zoo.basic` file for configuring ZooKeeper. Basically you need:
 
     line 2: set dataDir=/home/<USER>/zktmp/zooDataDir
-
-Open `ec2run.sh` and:
-
-    line 3: set user=<USER>     # Your username
 
 ### Running with Your Input
 

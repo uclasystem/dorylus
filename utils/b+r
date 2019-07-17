@@ -6,19 +6,29 @@
 ## 	--The option provided needs to correspond to options in the
 ##	  build and run scripts
 
+#
+# Usage: ./b+r [Bench] [Dataset] [Feature-File]
+#
+#   Bench:          agg(*), inc, load
+#   Dataset:        fb(*), data, small
+#   Feature-File:   (*), path_to_file 
+#
+# "(*)" means default.
+#
+
 cd $( dirname $0 )
 
 function header {
-	echo -e "\e[33;1m######## ${1} ########\e[0m"
+	echo -e "\e[32;1m######## ${1} ########\e[0m"
 }
 
-header "BUILDING $1"
+header "BUILDING benchmark $1"
 ./bld $1
 
 if [ $? -ne 0 ]; then
 	exit
 fi
 
-header "RUNNING on $2"
+header "RUNNING the benchmark"
 cd ..
-./run/ec2run.sh $1 $2
+./run/ec2run.sh $1 $2 $3
