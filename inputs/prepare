@@ -28,9 +28,9 @@ BSNAP=${GRAPH}.bsnap
 mv ${BSNAP} .
 BSNAP=$( basename ${BSNAP} )
 
-# header "Conduct partitioning..."
+header "Conduct partitioning..."
 
-# ./partitioner ${BSNAP} ${VERTICES} ${PARTS}
+./partitioner ${BSNAP} ${VERTICES} ${PARTS}
 
-# mv parts_${PARTS} data/
-# mv ${BSNAP} data/
+mv parts_${PARTS} data/
+mv ${BSNAP} data/
