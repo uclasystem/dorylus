@@ -115,7 +115,7 @@ case $1 in
     BM=loadfeatures.bin; BK=LOAD;
     ;;
 	*)
-		BM=aggregate.bin; BK=AGG;   # Hmmm...
+		BM=aggregate.bin; BK=AGG;
 		;;
 esac
 
@@ -138,7 +138,6 @@ esac
 # Feature file
 FF=$3
 
-### What the hell are these parameters ???
 UD=0;
 BE=100;
 CT=7;
