@@ -111,7 +111,7 @@ Go into the `inputs/` directory.
 
 Once Metis has been setup, compile the partitioner with:
 
-    $ g++ -I../installs/out/include -L../installs/out/lib partitioner.cpp -o partitioner -lmetis
+    $ 
 
 Now run the `paritioner.sh` script with the binary graph file, the number of vertices, and the number of machine nodes.
 
