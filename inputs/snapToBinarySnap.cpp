@@ -88,7 +88,7 @@ void readWriteFile(std::string snapFile, std::string bSFile, bool undirected, bo
 int main(int argc, char* argv[]) {
 
 	if(argc < 4) {
-		std::cout << "Dude! Invoke like this: " << argv[0] << " --snapfile=<snapfile> --undirected=<0|1> --header=<0|1>" << std::endl;
+		std::cout << "Usage: " << argv[0] << " --snapfile=<snapfile> --undirected=<0|1> --header=<0|1>" << std::endl;
 		return -1;
 	}
 

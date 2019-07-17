@@ -2,7 +2,7 @@
 *.d
 out*
 *.bin
-inputs/*
+inputs/data
 installs
 run/hostfile
 run/gvid

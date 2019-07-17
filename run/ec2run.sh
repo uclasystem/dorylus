@@ -1,14 +1,41 @@
 #!/bin/bash
 
+#
+# Run script. Make sure to set `dshmachines` and `zoo.basic` file in advance before
+# running this script.
+#
+# Usage: ./ec2run.sh [Bench] [Dataset] [Feature-File]
+#
+#   Bench:          agg(*), inc, load
+#   Dataset:        fb(*), data, small
+#   Feature-File:   (*), path_to_file 
+#
+# "(*)" means default.
+#
+
+
+# Helper function for header displaying
+function header {
+  echo -e "\e[33;1m|---- ${1} ----> \e[0m"
+}
+
+
+#
+# Preparations
+#
+
 user=$( whoami )
 
-WORKDIR="/home/${user}";
+WORKDIR="/home/${user}"
 OUTFILE_DIR="${WORKDIR}/outfiles"
-RUNDIR="/home/${user}/aspire-streaming/run";
-DSHFILE="/home/${user}/aspire-streaming/run/dshmachines";
-HOSTFILE="/home/${user}/aspire-streaming/run/hostfile";
+ASPIREDIR="/home/${user}/aspire-streaming"
+RUNDIR="/home/${user}/aspire-streaming/run"
+DSHFILE="/home/${user}/aspire-streaming/run/dshmachines"
+HOSTFILE="/home/${user}/aspire-streaming/run/hostfile"
 TMPDIR="/home/${user}/zktmp"
-DSH=dsh;
+ZOODIR=${WORKDIR}/aspire-streaming/installs/zookeeper-release-3.4.6
+
+DSH=dsh
 
 if [ ! -d ${OUTFILE_DIR} ]; then
 	mkdir -p ${OUTFILE_DIR}
@@ -18,24 +45,24 @@ if [ ! -f ${HOSTFILE} ]; then
 	cat ${DSHFILE} | sed "s/${user}@//" > ${HOSTFILE}
 fi
 
-NDS=$(wc -l ${HOSTFILE} | cut -d" " -f1);
+NDS=$(wc -l ${HOSTFILE} | cut -d" " -f1);   # NDS is number of distributed shells
+ZOONDS=${NDS}
 
 for i in $(seq 1 ${NDS}); do
   nodes[$i]=$(head -n $i ${HOSTFILE} | tail -n 1);
   dshnodes[$i]=$(head -n $i ${DSHFILE} | tail -n 1);
 done;
 
-echo "Cluster of ${NDS} nodes"
+header "Detected a cluster of ${NDS} nodes"
 
-echo "DSH Running: rm -rf ${TMPDIR} && mkdir ${TMPDIR} && chown ${user}:${user} ${TMPDIR}"
+
+#
+# Launch Zookeeper
+#
+
+header "Setting up tmp dir & Stopping running ZooKeeper..."
+
 ${DSH} -M -f ${DSHFILE} -c "rm -rf ${TMPDIR} && mkdir ${TMPDIR} && chown ${user}:${user} ${TMPDIR}"
-
-############### INIT ZOOKEEPER ###############
-
-ZOODIR=${WORKDIR}/aspire-streaming/installs/zookeeper-release-3.4.6
-ZOONDS=3
-
-echo -e "\e[33;1mDSH Running: cd ${ZOODIR} && ./bin/zkServer.sh stop\e[0m";
 ${DSH} -M -f ${DSHFILE} -c "cd ${ZOODIR} && ./bin/zkServer.sh stop";
 
 if [ ! -f ${ZOODIR}/conf/zoo.cfg ]; then
@@ -46,8 +73,8 @@ if [ ! -f ${ZOODIR}/conf/zoo.cfg ]; then
 	done;
 fi
 
-echo -e "\e[33;1mSTARTING ZOOKEEPER\e[0m";
-echo -e "\e[33;1mDSH Running: cd ${ZOODIR} && ./bin/zkServer.sh start\e[0m";
+header "Starting ZooKeeper..."
+
 for i in $(seq 1 ${ZOONDS}); do
   scp ${ZOODIR}/conf/zoo.cfg ${dshnodes[$i]}:${ZOODIR}/conf/zoo.cfg;
   ${DSH} -M -m ${dshnodes[$i]} -c "mkdir -p ${TMPDIR}/zooDataDir";
@@ -55,9 +82,8 @@ for i in $(seq 1 ${ZOONDS}); do
   ${DSH} -M -m ${dshnodes[$i]} -c "cd ${ZOODIR} && ./bin/zkServer.sh start";
 done;
 
+header "Checking for Quorum..."
 
-echo -e "\e[33;1mCHECKING FOR QUORUM NOW \e[0m"
-# CHECK FOR ZK QUORUM
 for i in $(seq 1 ${ZOONDS}); do
   while true
   do
@@ -65,22 +91,19 @@ for i in $(seq 1 ${ZOONDS}); do
     IFS=' ' read -ra ARR <<< ${str};
     if [[ ${ARR[1]} == "leader" ]] || [[ ${ARR[1]} == "follower" ]]; then
       break;
-      echo "ZK node at ${nodes[$i]} -- ${str}";
     fi
   done;
-  echo "ZK node at ${nodes[$i]} -- ${str}";
+  echo "Found ZooKeeper node at ${nodes[$i]} -- ${str}";
 done;
 
 
-############### DO WORK ###############
+# 
+# Do the work
+#
 
+header "Starting the benchmark..."
 
-ASPIREDIR=/home/${user}/aspire-streaming
-echo -e "\e[33;1mSTARTING BENCHMARK\e[0m"
-
-UD=0;
-
-BM=aggregate.bin; BK=AGG;
+# Benchmark program
 case $1 in 
 	"agg")
 		BM=aggregate.bin; BK=AGG;
@@ -96,7 +119,7 @@ case $1 in
 		;;
 esac
 
-IP=/filepool/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB; SRC=0
+# Dataset
 case $2 in
 	"fb")
 		IP=/filepool/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB; SRC=0
@@ -112,30 +135,30 @@ case $2 in
 		;;
 esac
 
-FF=$3 #features file
+# Feature file
+FF=$3
 
-i=0
-
+UD=0;
 BE=100;
-CT=7;POF=1;
-#SRC=10000;
+CT=7;
+POF=1;
 KC=10;
-
-NB=11;BS=100000;DP=10;
-TOA=0;TOD=1;STOD=1;SP=0;
+NB=11;
+BS=100000;
+DP=30;
+TOA=0;
+TOD=1;
+STOD=1;
+SP=1;
 RS=0;
 
+i=0
 for i in $(seq 1 ${NDS}); do
   ${DSH} -M -m ${dshnodes[$i]} -c "echo ${nodes[$i]} > ${TMPDIR}/myip";
 done;
 
-#rm -f ${OPFILE};
-#rm -f ${ASPIREDIR}/build/output_*;
-#rm -f ${ASPIREDIR}/build/outputs/${BK}.${IK}/*;
-#rm -f ${ASPIREDIR}/build/approx_*;
 rm ${ASPIREDIR}/config/hostfile;
 rm ${ASPIREDIR}/config/zkhostfile;
-
 echo -e "${nodes[1]}\tnode1\tmaster" > ${ASPIREDIR}/config/hostfile;
 for i in $(seq 2 ${NDS}); do
   echo -e "${nodes[$i]}\tnode$i\tworker" >> ${ASPIREDIR}/config/hostfile;
@@ -149,59 +172,45 @@ for i in $(seq 1 ${NDS}); do
   scp ${ASPIREDIR}/config/hostfile ${ASPIREDIR}/config/zkhostfile ${dshnodes[$i]}:${ASPIREDIR}/config/;
 done;
 
-#-----
-
-#BS=0;
-#for bs in {1..10}; do
-#  BS=$((BS + 100000));
-
-#SP=1;
-DP=30; SP=1; RS=0;
+# Loop over desired number of runs
 for dp in {1..1}; do
-  #DP=$((DP + 10));
 
-  NB=0; DP=0; BS=0;
+  NB=0;
+  DP=0;
+  BS=0;
 
   cd ${RUNDIR};
 
   GVID=`cat gvid`;
   NGVID=$((GVID + 1));
   echo ${NGVID} > gvid;
+  echo "GVID = ${GVID}" >> ${OPFILE} 2>&1;
+
+  header "Running GVID #: ${GVID}"
+
   OPFILE=${OUTFILE_DIR}/${GVID}.${BK}.${IK}.out
 
-  echo "GVID = ${GVID}" >> ${OPFILE} 2>&1;
-  echo "GVID = ${GVID}"
-
-  echo "DSH Running (from ${ASPIREDIR}/build): ./${BM} --graphfile ${IP} --featuresfile ${FF} --undirected ${UD} --bm-reset=${RS} --bm-source=${SRC} --bm-tagonadd=${TOA} --bm-tagondelete=${TOD} --bm-smarttagondelete=${STOD} --bm-smartpropagation=${SP} --bm-tmpdir=${TMPDIR} --kcore-maxcore=${KC} --cthreads ${CT} --pofrequency ${POF} --baseedges ${BE} --numbatches ${NB} --batchsize ${BS} --deletepercent ${DP} ${XTRAARGS}";
-
+  echo "DSH command (from ${ASPIREDIR}/build): ./${BM} --graphfile ${IP} --featuresfile ${FF} --undirected ${UD} --bm-reset=${RS} --bm-source=${SRC} --bm-tagonadd=${TOA} --bm-tagondelete=${TOD} --bm-smarttagondelete=${STOD} --bm-smartpropagation=${SP} --bm-tmpdir=${TMPDIR} --kcore-maxcore=${KC} --cthreads ${CT} --pofrequency ${POF} --baseedges ${BE} --numbatches ${NB} --batchsize ${BS} --deletepercent ${DP} ${XTRAARGS}";
   ${DSH} -M -f ${DSHFILE} -c "cd ${ASPIREDIR}/build && ./${BM} --graphfile ${IP} --featuresfile ${FF} --undirected ${UD} --bm-reset=${RS} --bm-source=${SRC} --bm-tagonadd=${TOA} --bm-tagondelete=${TOD} --bm-smarttagondelete=${STOD} --bm-smartpropagation=${SP} --bm-tmpdir=${TMPDIR} --kcore-maxcore=${KC} --cthreads ${CT} --pofrequency ${POF} --baseedges ${BE} --numbatches ${NB} --batchsize ${BS} --deletepercent ${DP} ${XTRAARGS}" >> ${OPFILE} 2>&1;
 
   DOPDIR=${ASPIREDIR}/build/outputs/${BK}.${IK}/${GVID};
   mkdir -p ${DOPDIR};
   for i in $(seq 1 ${NDS}); do
-    #echo "${dshnodes[$i]}:${ASPIREDIR}/build/output_$i ${ASPIREDIR}/build/output_$i";
     oid=`expr $i - 1`;
-    scp "${dshnodes[$i]}:${TMPDIR}/output_*" ${DOPDIR}/;
-    #scp "${dshnodes[$i]}:${TMPDIR}/approx_*" ${DOPDIR}/;
-    #scp ${dshnodes[$i]}:${ASPIREDIR}/build/approx_${oid} ${ASPIREDIR}/build/approx_${oid};
+    scp ${dshnodes[$i]}:${TMPDIR}/output_* ${DOPDIR}/;
   done;
 
   cd ${ASPIREDIR}/build && ./tester.sh ${DOPDIR}/ ${NB};
 
-done; # dp
+done;
 
-#done;
 
-#-----
+#
+# Destroy ZooKeeper
+#
 
-############### DESTROY ZOOKEEPER ###############
+header "Finished. Destroying ZooKeeper..."
 
 for i in $(seq 1 $ZOONDS); do
   ${DSH} -M -m ${nodes[$i]} -c "cd ${ZOODIR} && ./bin/zkServer.sh stop";
 done;
-
-#sleep 10;
-#cd /home/${user}/Desktop/workspace/aspire-streaming/run;
-#/home/${user}/Desktop/workspace/aspire-streaming/run/ec3run.sh;
-
-#/home/${user}/Desktop/workspace/management/commander.py stopworkers ;

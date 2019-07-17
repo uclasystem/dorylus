@@ -7,7 +7,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#include "/vagrant/install/metis-5.1.0/include/metis.h"
+#include "metis.h"
 
 #define BASE_PATH "./"
 #define PARTS_PATH BASE_PATH "parts_"
@@ -19,7 +19,7 @@ int main(int argc, char* argv[])
 {
     if(argc < 6) {
         fprintf(stderr, "NEVER INVOKE ME DIRECTLY! USE partitioner.sh SCRIPT WHICH WILL INTERNALLY INVOKE ME!\n");
-        fprintf(stderr, "Dude! Invoke like this: <graph-file> <parts-file> <num-vertices> <original-partitions> <num-partitions>\n");
+        fprintf(stderr, "Usage: <graph-file> <parts-file> <num-vertices> <original-partitions> <num-partitions>\n");
         exit(-1);
     }
 

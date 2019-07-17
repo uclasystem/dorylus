@@ -43,76 +43,84 @@ Folder tree should look like:
 
 Get ZeroMQ 4.1.4 from: [https://archive.org/download/zeromq_4.1.4/zeromq-4.1.4.tar.gz](https://archive.org/download/zeromq_4.1.4/zeromq-4.1.4.tar.gz)
 
-    wget https://archive.org/download/zeromq_4.1.4/zeromq-4.1.4.tar.gz
-    tar xvf zeromq-4.1.4.tar.gz
+    $ wget https://archive.org/download/zeromq_4.1.4/zeromq-4.1.4.tar.gz
+    $ tar xvf zeromq-4.1.4.tar.gz
 
 Go inside the `zeromq-4.1.4/` directory and compile it from source:
 
-    ./configure --prefix=/home/<USER>/aspire-streaming/installs/out --with-libsodium=no
-    make install
-    sudo ldconfig
+    $ ./configure --prefix=/home/<USER>/aspire-streaming/installs/out --with-libsodium=no
+    $ make install
+    $ sudo ldconfig
 
-Move `build/zmq.hpp` into `installs/out/include/` to replace it.
+**Then** move `build/zmq.hpp` into `installs/out/include/` to replace it.
 
 ### ZooKeeper
 
 Get ZooKeeper 3.4.6 from: [https://github.com/apache/zookeeper/archive/release-3.4.6.tar.gz](https://archive.org/download/zeromq_4.1.4/zeromq-4.1.4.tar.gz)
 
-    wget https://github.com/apache/zookeeper/archive/release-3.4.6.tar.gz
-    tar xvf release-3.4.6.tar.gz
+    $ wget https://github.com/apache/zookeeper/archive/release-3.4.6.tar.gz
+    $ tar xvf release-3.4.6.tar.gz
 
-Go inside the `zookeeper-release-3.4.6/src/c/` directory and make the following change to the file `configure.ac`:
+Go inside the `zookeeper-release-3.4.6/src/c/` directory and make the following **change** to the file `configure.ac`:
 
     line 37: delete "AM_PATH_CPPUNIT(1.10.2)"; replace with "PKG_CHECK_MODULES(CPPUNIT, cppunit >= 1.10.2)"
 
 Under the `zookeeper-release-3.4.6/` directory, run:
 
-    ant deb
+    $ ant deb
 
 ### Metis
 
 Get Metis 5.1.0 from: [http://glaros.dtc.umn.edu/gkhome/fetch/sw/metis/metis-5.1.0.tar.gz](https://archive.org/download/zeromq_4.1.4/zeromq-4.1.4.tar.gz)
 
-    wget http://glaros.dtc.umn.edu/gkhome/fetch/sw/metis/metis-5.1.0.tar.gz
-    tar xvf metis-5.1.0.tar.gz
+    $ wget http://glaros.dtc.umn.edu/gkhome/fetch/sw/metis/metis-5.1.0.tar.gz
+    $ tar xvf metis-5.1.0.tar.gz
 
 > Change `metis-5.1.0/include/metis.h` to reflect the partition data size being used.
 
 Go inside the `metis-5.1.0/` directory and compile it from source:
 
-    make config prefix=/home/<USER>/aspire-streaming/installs/out
-    make install
+    $ make config prefix=/home/<USER>/aspire-streaming/installs/out
+    $ make install
 
 ## Building ASPIRE
 
-Once all dependencies have been installed correctly, go to the `aspire-streaming/build` directory. Change the following values:
+**Ensure all dependencies have been installed correctly** before building ASPIRE.
 
-    ZMQ_LIBPATH     := /home/<USER>/aspire-streaming/installs/out/lib
-    ZMQ_INCPATH     := /home/<USER>/aspire-streaming/installs/out/include
-    ZK_LIBPATH      := /usr/local/lib
-    ZK_INCPATH      := /usr/local/include/zookeeper
+Go to the `aspire-streaming/build` directory, then run the following for a release build (`-O3`):
 
-Then run:
+    $ make mode=release [Benchmark-Name]  # Specify benchmark name for individual build, OR omit it to build all benchs
 
-    make
+Or the following for a debug build (enabling `-g` and Address Sanitizer):
+
+    $ make mode=debug [Benchmark-Name]    # Specify benchmark name for individual build, OR omit it to build all benchs
+
+Clean the build by:
+
+    $ make clean
 
 ## Preparing Input Graph
 
-### Converting to Binary
+First we should have a text graph file with vertices numbered from 0 and each line representing an edge. Example content of a text graph file `test_graph.txt`:
 
-Go into the `inputs/` directory.
+    # Example with 6 vertices and 5 edges
+    0 1
+    0 2
+    1 3
+    2 4
+    3 5
 
-- Compile `snapToBinarySnap.cpp` & `binarySnapReader.cpp`. These will allow you to convert text files into binary to be usable by the system, and the snapReader will help verify the correctness of the binary data.  
-  
-### Partitioning the Data
+Go into the `inputs/` directory. Compile the utilities by:
 
-Once Metis has been setup, compile the partitioner with:
+    $ make
 
-    g++ -I../installs/out/include -L../installs/out/lib partitioner.cpp -o partitioner -lmetis
+Then convert the graph to partitioned binary by:
 
-Now run the `paritioner.sh` script with the binary graph file, the number of vertices, and the number of machine nodes.
+    $ ./prepare <Path-to-Text-File> <Undirected? (0/1)> <Num-Vertices> <Num-Partitions>
 
-Make sure the data is put on all machines and under the **same** location.
+This will create a `data/` folder under `input/`, where there is the binary graph file `*.bsnap` and a folder `parts_<Num-Partitions>/` containing partitioning infos inside.
+
+Make sure you put the things in `data/` folder on all machines and under the **same** location, and the `ec2run.sh` script points to it correctly.
 
 ## Running ASPIRE
 
@@ -122,22 +130,19 @@ Make sure you have setup password-less `ssh` login among all your EC2 instances.
 
 ### Setup Config Files
 
-Under `run/` directory, setup the content of `dshmachines` file. Every line is in the form `username@ip` representing one of your nodes.
+Under `run/` directory, **setup the content of `dshmachines` file**. Every line is in the form `username@ip` representing one of your nodes.
 
 Setup the content of `zoo.basic` file for configuring ZooKeeper. Basically you need:
 
     line 2: set dataDir=/home/<USER>/zktmp/zooDataDir
 
-Open `ec2run.sh` and:
-
-    line 3: set user=<USER>     # Your username
-
 ### Running with Your Input
 
-Set variable `IP` around line 129 of `ec2run.sh` to the path of your partitioned input data (Make sure the path is the same for all nodes). Set `IK` and `SRC` accordingly.
+Use `utils/b+r` script for easy build and run across machines:
 
-Run ASPIRE from the current node's shell:
+    $ ./b+r [Bench] [Dataset] [Feature-File]    # Build, send, and run
+    $ ./b+r     # Default config is: "b+r agg fb"
 
-    ./ec2run.sh
+Use `clear_out` script to clean all log files and output files, and reset GVID to 1:
 
-and it will start ZooKeeper at all your nodes and do the work (basiclly by utilizing the `dsh` remote shell command).
+    ./clear_out
