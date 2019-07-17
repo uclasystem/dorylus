@@ -101,21 +101,26 @@ Clean the build by:
 
 ## Preparing Input Graph
 
-### Converting to Binary
+First we should have a text graph file with vertices numbered from 0 and each line representing an edge. Example content of a text graph file `test_graph.txt`:
 
-Go into the `inputs/` directory.
+    # Example with 6 vertices and 5 edges
+    0 1
+    0 2
+    1 3
+    2 4
+    3 5
 
-- Compile `snapToBinarySnap.cpp` & `binarySnapReader.cpp`. These will allow you to convert text files into binary to be usable by the system, and the snapReader will help verify the correctness of the binary data.  
-  
-### Partitioning the Data
+Go into the `inputs/` directory. Compile the utilities by:
 
-Once Metis has been setup, compile the partitioner with:
+    $ make
 
-    $ 
+Then convert the graph to partitioned binary by:
 
-Now run the `paritioner.sh` script with the binary graph file, the number of vertices, and the number of machine nodes.
+    $ ./prepare <Path-to-Text-File> <Undirected? (0/1)> <Num-Vertices> <Num-Partitions>
 
-Make sure the data is put on all machines and under the **same** location.
+This will create a `data/` folder under `input/`, where there is the binary graph file `*.bsnap` and a folder `parts_<Num-Partitions>/` containing partitioning infos inside.
+
+Make sure you put the things in `data/` folder on all machines and under the **same** location, and the `ec2run.sh` script points to it correctly.
 
 ## Running ASPIRE
 
