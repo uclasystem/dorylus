@@ -7,7 +7,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#include "/vagrant/install/metis-5.1.0/include/metis.h"
+#include "metis.h"
 
 #define BASE_PATH "./"
 #define PARTS_PATH BASE_PATH "parts_"
