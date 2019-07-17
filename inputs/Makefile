@@ -16,4 +16,4 @@ tobinary: snapToBinarySnap.cpp
 
 .PHONY: clean
 clean:
-	rm -f partitioner snapToBinarySnap
+	rm -f partitioner tobinary
