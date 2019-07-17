@@ -17,7 +17,6 @@ template<typename VertexType, typename EdgeType>
 class AggregateProgram : public VertexProgram<VertexType, EdgeType> {
 public:
     bool update(Vertex<VertexType, EdgeType>& vertex, EngineContext& engineContext) {
-        bool changed = true;
         VType curr = vertex.data();
 
         for (unsigned i = 0; i < vertex.numInEdges(); ++i) {
@@ -27,12 +26,12 @@ public:
 
         vertex.addData(curr);   // Push to the back instead of modify the value.
 
-        if (curr[0] >= 10) changed = false;
-
-        return changed;
+        return iter_count++ < 5 ? true : false;
     }
 
 private:
+    int iter_count = 0;
+
     void sumVectors(vector<FeatType>& curr, vector<FeatType>& other) {
         for (int i = 0; i < curr.size(); ++i) {
             curr[i] += other[i];

@@ -981,6 +981,8 @@ void Engine<VertexType, EdgeType>::run(VertexProgram<VertexType, EdgeType>* vPro
   computePool->perform(worker);
   computePool->sync();
 
+  
+
   timProcess += getTimer();
 
   dataPool->sync();
@@ -1682,6 +1684,13 @@ void Engine<VertexType, EdgeType>::processAll(VertexProgram<VertexType, EdgeType
   vProgram->afterIteration(engineContext);
 }
 
+
+/**
+ *
+ * Major part of the engine logic is done by workers. When the engine runs it wakes threads up from the thread pool
+ * and assign a worker function for each.
+ * 
+ */
 template <typename VertexType, typename EdgeType>
 void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
   static bool compHalt = false;
@@ -1689,27 +1698,39 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
   compHalt = false;
   pushWait = false;
   //engineContext.setTooLong(false);
-  while(1) {      // Outer while loop
-    IdType vid; bool found = false;
+
+  // Outer while loop. Looping infinitely, looking for a new task to handle.
+  while(1) {
+    IdType vid;
+    bool found = false;
+
     lockCurrId.lock();
-    while(1) {      // Inner while loop
+
+    // Inner while loop. Looping until got a current vertex id to handle.
+    while(1) {
       found = false;
+
+      // All local vertices have been processed. Hit the barrier and wait for next iteration / decide to halt.
       if(currId >= graph.numLocalVertices) {
+
+        // Non-master threads.
         if(tid != 0) {
           lockCurrId.unlock();
 
-          barComp.wait();                   // This is "A". Let everyone reach to this point, then only master will work
-          barComp.wait();                   // Master has finished its work
+          barComp.wait();                   // Barrier 1. Let everyone reach to this point, then only master will work.
+          barComp.wait();                   // Barrier 2. Master has finished its work.
 
           if(compHalt)
             break;
 
           lockCurrId.lock();
           continue;
-        } else {    // tid == 0
+
+        // Master thread (tid == 0).
+        } else {
           lockCurrId.unlock();
 
-          barComp.wait();                   // This is "A"
+          barComp.wait();                   // Barrier 1.
 
           if(firstIteration == false) {
             ++iteration;
@@ -1724,19 +1745,22 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
           }
           firstIteration = false;
 
+          // See if there are any further scheduled iterations.
           fprintf(stderr, "Starting iteration %u at %.3lf ms\n", iteration, timProcess + getTimer()); 
           //if(iteration > 1000)
           //engineContext.setTooLong(true);
+          bool hltBool = ((timProcess + getTimer() > 500) && !(scheduler->anyScheduledTasks()));  // After 1 sec only!
 
-          bool hltBool = ((timProcess + getTimer() > 500) && !(scheduler->anyScheduledTasks()));  // after 1 sec only!
-
+          // Yes please start a new iteration.
           if(!hltBool) {
             scheduler->newIteration();
 
-            currId = 0;     // This is unprotected by lockCurrId because only master executes this code while workers are on barriers
+            currId = 0;       // This is unprotected by lockCurrId because only master executes.
             lockCurrId.lock();
-            barComp.wait();
-          } else { // deciding to halt
+            barComp.wait();   // Barrier 2.
+
+          // No more, so halt.
+          } else {
             fprintf(stderr, "Deciding to halt in this iteration (%u)\n", iteration);
             NodeManager::barrier(COMM_BARRIER);
 
@@ -1746,10 +1770,10 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
             pthread_mutex_unlock(&mtxDataWaiter);
 
             fprintf(stderr, "1. Comp waiting on barCompData\n");
-            barCompData.wait();                   // Wake data up
+            barCompData.wait();                   // Wake data up.
 
             fprintf(stderr, "2. Comp waiting on barCompData after %.3lf ms barCompData time\n", bCompTime + getTimer());
-            barCompData.wait();                   // Wait for data's decision
+            barCompData.wait();                   // Wait for data's decision.
 
             pthread_mutex_lock(&mtxDataWaiter);
             compDone = false;
@@ -1757,10 +1781,10 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
             die = halt;
             pthread_mutex_unlock(&mtxDataWaiter);
             fprintf(stderr, "3. Comp waiting on barCompData after %.3lf ms barCompData time\n", bCompTime + getTimer());
-            barCompData.wait();                   // Wake data up
+            barCompData.wait();                   // Wake data up.
 
             fprintf(stderr, "4. Comp waiting on barCompData after %.3lf ms barCompData time\n", bCompTime + getTimer());
-            barCompData.wait();                   // Allow only data to proceed further before this barrier so that it can aquire the lock
+            barCompData.wait();                   // Allow only data to proceed further before this barrier so that it can aquire the lock.
 
             fprintf(stderr, "barCompData time = %.3lf ms\n", bCompTime + getTimer());
 
@@ -1771,18 +1795,19 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
 
             if(scheduler->anyScheduledTasks()) {     // TODO: does this assert hold true?
               scheduler->newIteration();
-              currId = 0; // This is unprotected by lockCurrId because only master executes this code while workers are on barriers
+              currId = 0;   // This is unprotected by lockCurrId because only master executes.
             }
 
             lockCurrId.lock();
-            barComp.wait();
+            barComp.wait();   // Barrier 2.
             continue;
 
           } // end of else: deciding to halt
         } // end of else: tid == 0
       } // end of if: currId >= graph.numLocalVertices
 
-      if(pushWait) {  // Note tid is always 0 here because it is the one who will have lockCurrId held when pushWait = true
+      // Do work on the current processing local vertex id.
+      if(pushWait) {  // Note tid is always 0 here because it is the one who will have lockCurrId held when pushWait = true.
         assert(tid == 0);
         while(remPushOut > 0) { }; // spinwait? omg?
         assert(remPushOut == 0);
@@ -1796,18 +1821,20 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
         break;
       }
       ++currId;
-    }   // Inner while loop
+    } // end of inner while loop
+
     lockCurrId.unlock();
 
+    // Out of inner while loop but no vertex to handle is given.
     if(!found) {
       fprintf(stderr, "Nothing to work on. Leaving.\n");
       break;
     }
 
+    // I got a current vertex id in `vid` to handle now. Doing the task.
     Vertex<VertexType, EdgeType>& v = graph.vertices[vid];
-
     assert(scheduler->isScheduled(vid));
-    bool ret = firstIteration | vertexProgram->update(v, engineContext);   // this is a very important change. firstIteration ensures that tags flow out.
+    bool ret = firstIteration | vertexProgram->update(v, engineContext);   // Important: firstIteration ensures that tags flow out.
     if(ret) {
       bool remoteScat = true;
       for(unsigned i=0; i<v.numOutEdges(); ++i) {
@@ -1821,7 +1848,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
         }
       }
     }
-  } // Outer while loop
+  } // end of outer while loop
 }
 
 template <typename VertexType, typename EdgeType>
