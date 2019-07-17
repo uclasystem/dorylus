@@ -101,7 +101,7 @@ done;
 # Do the work
 #
 
-header "Starting the benchmark"
+header "Starting the benchmark..."
 
 # Benchmark program
 case $1 in 
