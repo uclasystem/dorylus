@@ -43,14 +43,14 @@ Folder tree should look like:
 
 Get ZeroMQ 4.1.4 from: [https://archive.org/download/zeromq_4.1.4/zeromq-4.1.4.tar.gz](https://archive.org/download/zeromq_4.1.4/zeromq-4.1.4.tar.gz)
 
-    wget https://archive.org/download/zeromq_4.1.4/zeromq-4.1.4.tar.gz
-    tar xvf zeromq-4.1.4.tar.gz
+    $ wget https://archive.org/download/zeromq_4.1.4/zeromq-4.1.4.tar.gz
+    $ tar xvf zeromq-4.1.4.tar.gz
 
 Go inside the `zeromq-4.1.4/` directory and compile it from source:
 
-    ./configure --prefix=/home/<USER>/aspire-streaming/installs/out --with-libsodium=no
-    make install
-    sudo ldconfig
+    $ ./configure --prefix=/home/<USER>/aspire-streaming/installs/out --with-libsodium=no
+    $ make install
+    $ sudo ldconfig
 
 **Then** move `build/zmq.hpp` into `installs/out/include/` to replace it.
 
@@ -58,8 +58,8 @@ Go inside the `zeromq-4.1.4/` directory and compile it from source:
 
 Get ZooKeeper 3.4.6 from: [https://github.com/apache/zookeeper/archive/release-3.4.6.tar.gz](https://archive.org/download/zeromq_4.1.4/zeromq-4.1.4.tar.gz)
 
-    wget https://github.com/apache/zookeeper/archive/release-3.4.6.tar.gz
-    tar xvf release-3.4.6.tar.gz
+    $ wget https://github.com/apache/zookeeper/archive/release-3.4.6.tar.gz
+    $ tar xvf release-3.4.6.tar.gz
 
 Go inside the `zookeeper-release-3.4.6/src/c/` directory and make the following **change** to the file `configure.ac`:
 
@@ -67,49 +67,37 @@ Go inside the `zookeeper-release-3.4.6/src/c/` directory and make the following 
 
 Under the `zookeeper-release-3.4.6/` directory, run:
 
-    ant deb
+    $ ant deb
 
 ### Metis
 
 Get Metis 5.1.0 from: [http://glaros.dtc.umn.edu/gkhome/fetch/sw/metis/metis-5.1.0.tar.gz](https://archive.org/download/zeromq_4.1.4/zeromq-4.1.4.tar.gz)
 
-    wget http://glaros.dtc.umn.edu/gkhome/fetch/sw/metis/metis-5.1.0.tar.gz
-    tar xvf metis-5.1.0.tar.gz
+    $ wget http://glaros.dtc.umn.edu/gkhome/fetch/sw/metis/metis-5.1.0.tar.gz
+    $ tar xvf metis-5.1.0.tar.gz
 
 > Change `metis-5.1.0/include/metis.h` to reflect the partition data size being used.
 
 Go inside the `metis-5.1.0/` directory and compile it from source:
 
-    make config prefix=/home/<USER>/aspire-streaming/installs/out
-    make install
+    $ make config prefix=/home/<USER>/aspire-streaming/installs/out
+    $ make install
 
 ## Building ASPIRE
 
 **Ensure all dependencies have been installed correctly** before building ASPIRE.
 
-### About Makefile
-
 Go to the `aspire-streaming/build` directory, then run the following for a release build (`-O3`):
 
-    make mode=release [Benchmark-Name]  # Specify benchmark name for individual build, OR omit it to build all benchs
+    $ make mode=release [Benchmark-Name]  # Specify benchmark name for individual build, OR omit it to build all benchs
 
 Or the following for a debug build (enabling `-g` and Address Sanitizer):
 
-    make mode=debug [Benchmark-Name]    # Specify benchmark name for individual build, OR omit it to build all benchs
+    $ make mode=debug [Benchmark-Name]    # Specify benchmark name for individual build, OR omit it to build all benchs
 
 Clean the build by:
 
-    make clean
-
-### Building & Running utilities
-
-Use `utils/b+r` script for easy build and run across machines:
-
-    ./utils/b+r agg     # Build, send, and run `aggregate` bench
-
-Use `clear_out` script to clean all log files and output files, and reset GVID to 1:
-
-    ./utils/clear_out
+    $ make clean
 
 ## Preparing Input Graph
 
@@ -123,7 +111,7 @@ Go into the `inputs/` directory.
 
 Once Metis has been setup, compile the partitioner with:
 
-    g++ -I../installs/out/include -L../installs/out/lib partitioner.cpp -o partitioner -lmetis
+    $ g++ -I../installs/out/include -L../installs/out/lib partitioner.cpp -o partitioner -lmetis
 
 Now run the `paritioner.sh` script with the binary graph file, the number of vertices, and the number of machine nodes.
 
@@ -145,10 +133,11 @@ Setup the content of `zoo.basic` file for configuring ZooKeeper. Basically you n
 
 ### Running with Your Input
 
-Set variable `IP` around line 129 of `ec2run.sh` to the path of your partitioned input data (Make sure the path is the same for all nodes). Set `IK` and `SRC` accordingly.
+Use `utils/b+r` script for easy build and run across machines:
 
-Run ASPIRE from the current node's shell:
+    $ ./b+r [Bench] [Dataset] [Feature-File]    # Build, send, and run
+    $ ./b+r     # Default config is: "b+r agg fb"
 
-    ./ec2run.sh
+Use `clear_out` script to clean all log files and output files, and reset GVID to 1:
 
-and it will start ZooKeeper at all your nodes and do the work (basiclly by utilizing the `dsh` remote shell command).
+    ./clear_out
