@@ -6,10 +6,10 @@ CFLAGS=-O3
 all: partitioner repartitioner tobinary
 
 partitioner: partitioner.cpp
-    ${CPP} -I${INCPATH} -L${LIBPATH} $< -o $@ -lmetis ${CFLAGS}
+	${CPP} -I${INCPATH} -L${LIBPATH} $< -o $@ -lmetis ${CFLAGS}
 
 repartitioner: repartitioner.cpp
-    ${CPP} -I${INCPATH} -L${LIBPATH} $< -o $@ -lmetis ${CFLAGS}
+	${CPP} -I${INCPATH} -L${LIBPATH} $< -o $@ -lmetis ${CFLAGS}
 
 tobinary: snapToBinarySnap.cpp
-    ${CPP} $< -o $@ ${CFLAGS}
+	${CPP} $< -o $@ ${CFLAGS}
