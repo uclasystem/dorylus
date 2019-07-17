@@ -1,0 +1,32 @@
+#!/bin/bash
+
+#
+# Convert a text graph into binary, and partite it into partitions.
+#
+
+if [ ! $# == 3 ]; then
+    echo "Usage: $0 <graph-file> <undirected? (0/1)> <num-vertices> <num-partitions>";
+    exit;
+fi
+
+rm -rf data && mkdir data
+
+function header {
+    echo -e "\e[32;1m######## ${1} ########\e[0m"
+}
+
+GRAPH=$1;
+UNDIRECTED=$2;
+VERTICES=$3;
+PARTS=$4;
+
+header "Converting to binary..."
+./tobinary ${GRAPH} --snapfile=${GRAPH} --undirected=${UNDIRECTED} --header=1
+
+BSNAP=${GRAPH}.bsnap
+
+header "Initial partition 0..."
+./partitioner ${BSNAP} ${VERTICES} ${PARTS}
+mv parts_${PARTS} data/0/
+
+
