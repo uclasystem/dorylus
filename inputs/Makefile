@@ -12,4 +12,8 @@ partitioner: partitioner.cpp
 # 	${CPP} -I${INCPATH} -L${LIBPATH} $< -o $@ -lmetis ${CFLAGS}
 
 tobinary: snapToBinarySnap.cpp
-	${CPP} $< -o $@ ${CFLAGS}
+	${CPP} $< -o snapToBinarySnap ${CFLAGS}
+
+.PHONY: clean
+clean:
+	rm -f partitioner snapToBinarySnap
