@@ -10,7 +10,11 @@ VERTICES=$2;
 PARTS=$3;
 
 echo "Partitioning ...";
+if [ ! -d data ]; then
+    mkdir data
+fi
 ./partitioner ${GRAPH} ${VERTICES} ${PARTS};
+mv parts_${PARTS} data/
 
 # echo "Soft linking ...";
 # EFILE=parts_${PARTS}/${GRAPH}.edges;
