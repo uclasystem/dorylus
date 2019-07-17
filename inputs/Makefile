@@ -12,7 +12,7 @@ partitioner: partitioner.cpp
 # 	${CPP} -I${INCPATH} -L${LIBPATH} $< -o $@ -lmetis ${CFLAGS}
 
 tobinary: snapToBinarySnap.cpp
-	${CPP} $< -o snapToBinarySnap ${CFLAGS}
+	${CPP} $< -o $@ ${CFLAGS}
 
 .PHONY: clean
 clean:
