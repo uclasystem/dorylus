@@ -21,11 +21,16 @@ VERTICES=$3;
 PARTS=$4;
 
 header "Converting to binary..."
+
 ./tobinary ${GRAPH} --snapfile=${GRAPH} --undirected=${UNDIRECTED} --header=1
 
 BSNAP=${GRAPH}.bsnap
+mv ${BSNAP} .
+BSNAP=$( basename ${BSNAP} )
 
-header "Conduct partitioning..."
-./partitioner ${BSNAP} ${VERTICES} ${PARTS}
-mv parts_${PARTS} data/
-mv ${BSNAP} data/
+# header "Conduct partitioning..."
+
+# ./partitioner ${BSNAP} ${VERTICES} ${PARTS}
+
+# mv parts_${PARTS} data/
+# mv ${BSNAP} data/
