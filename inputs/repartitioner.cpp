@@ -19,7 +19,7 @@ int main(int argc, char* argv[])
 {
     if(argc < 6) {
         fprintf(stderr, "NEVER INVOKE ME DIRECTLY! USE partitioner.sh SCRIPT WHICH WILL INTERNALLY INVOKE ME!\n");
-        fprintf(stderr, "Dude! Invoke like this: <graph-file> <parts-file> <num-vertices> <original-partitions> <num-partitions>\n");
+        fprintf(stderr, "Usage: <graph-file> <parts-file> <num-vertices> <original-partitions> <num-partitions>\n");
         exit(-1);
     }
 
