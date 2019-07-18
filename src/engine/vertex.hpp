@@ -71,14 +71,6 @@ void Vertex<VertexType, EdgeType>::addData(VertexType value) {
 }
 
 template<typename VertexType, typename EdgeType>
-bool Vertex<VertexType, EdgeType>::nextLayer() {
-    lock.writeLock();
-    bool to_continue = curr_layer++ < 5;
-    lock.unlock();
-    return to_continue;
-}
-
-template<typename VertexType, typename EdgeType>
 unsigned Vertex<VertexType, EdgeType>::numInEdges() {
     return inEdges.size();
 }

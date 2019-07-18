@@ -130,9 +130,6 @@ public:
     static IdType currId;
     static Lock lockCurrId;
 
-    // Record current layer.
-    static int curr_layer;
-
     static std::string graphFile;
     static std::string featuresFile;
     
@@ -146,7 +143,7 @@ public:
     static bool undirected;
 
     static bool firstIteration;
-    static unsigned iteration;
+    static unsigned iteration;  // Represents current layer index.
 
     static double timProcess;   
     static double allTimProcess;
@@ -256,8 +253,8 @@ public:
  
     static void worker(unsigned tid, void* args);
 
-    static bool checkLayer();
-    static void nextLayer();
+    static bool reachOutputLayer();
+    static void gotoNextLayer();
 
     static void dataCommunicator(unsigned tid, void* args);
     static void replicationReceiver(unsigned tid, void* args);

@@ -31,9 +31,6 @@ class Vertex {
         // Use a vector to make data in old iterations persistent.
         std::vector<VertexType> vertexData;
 
-        // Use an iteration counter per vertex to track its iteration status.
-        int curr_layer = 0;
-
         //VertexType oldVertexData;
 
         Graph<VertexType, EdgeType>* graph;
@@ -47,8 +44,6 @@ class Vertex {
         std::vector<VertexType>& dataAll();     // Get reference to all old values' vector.
         void setData(VertexType value);         // Modify the current value.
         void addData(VertexType value);         // Add a new value of the new iteration.
-
-        bool nextLayer();    // Increment the layer counter. Returns whether threshold met (not met -> to continue).
 
         //VertexType oldData();
         //void setOldData(VertexType value);
