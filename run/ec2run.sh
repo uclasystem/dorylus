@@ -136,7 +136,11 @@ case $2 in
 esac
 
 # Feature file
-FF=$3
+if [ -z $3 ]; then
+  FF=/filepool/features;
+else
+  FF=$3;
+fi
 
 UD=0;
 BE=100;
