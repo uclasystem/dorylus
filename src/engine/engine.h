@@ -256,7 +256,8 @@ public:
  
     static void worker(unsigned tid, void* args);
 
-    static bool nextLayer();
+    static bool checkLayer();
+    static void nextLayer();
 
     static void dataCommunicator(unsigned tid, void* args);
     static void replicationReceiver(unsigned tid, void* args);

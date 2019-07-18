@@ -1799,6 +1799,8 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
               currId = 0;   // This is unprotected by lockCurrId because only master executes.
             }
 
+            nextLayer();
+
             lockCurrId.lock();
 
             //////
@@ -1844,7 +1846,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
     if (!firstIteration)
       vertexProgram->update(v, engineContext);
     
-    if(firstIteration | nextLayer()) {
+    if(firstIteration | checkLayer()) {
       bool remoteScat = true;
       for(unsigned i=0; i<v.numOutEdges(); ++i) {
         if(v.getOutEdge(i).getEdgeLocation() == LOCAL_EDGE_TYPE)
@@ -1861,9 +1863,15 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
 }
 
 template <typename VertexType, typename EdgeType>
-bool Engine<VertexType, EdgeType>::nextLayer() {
+bool Engine<VertexType, EdgeType>::checkLayer() {
+  // Do not need mutex lock here, since will only be read but not written.
+  return curr_layer < 5;  // 5 here is just a meaningless example.
+}
+
+template <typename VertexType, typename EdgeType>
+void Engine<VertexType, EdgeType>::nextLayer() {
   // Do not need mutex lock here, since will only be called by master at iteration finish up.
-  return curr_layer++ < 5;  // 5 here is just a meaningless example.
+  curr_layer++;
 }
 
 template <typename VertexType, typename EdgeType>
