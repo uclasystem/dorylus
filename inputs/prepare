@@ -35,4 +35,4 @@ header "Conduct partitioning..."
 mv parts_${PARTS} data/
 mv ${BSNAP} data/
 
-ln -s data/${BSNAP} data/parts_${PARTS}/${BSNAP}.edges
+ln -s ../${BSNAP} data/parts_${PARTS}/${BSNAP}.edges
