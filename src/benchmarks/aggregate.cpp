@@ -26,12 +26,10 @@ public:
 
         vertex.addData(curr);   // Push to the back instead of modify the value.
 
-        return iter_count++ < 5 ? true : false;
+        return vertex.nextIter();
     }
 
 private:
-    int iter_count = 0;
-
     void sumVectors(vector<FeatType>& curr, vector<FeatType>& other) {
         for (int i = 0; i < curr.size(); ++i) {
             curr[i] += other[i];

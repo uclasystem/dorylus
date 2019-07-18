@@ -981,8 +981,6 @@ void Engine<VertexType, EdgeType>::run(VertexProgram<VertexType, EdgeType>* vPro
   computePool->perform(worker);
   computePool->sync();
 
-  
-
   timProcess += getTimer();
 
   dataPool->sync();
@@ -1799,6 +1797,11 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
             }
 
             lockCurrId.lock();
+
+            //////
+            // Send to lambda here ???
+            //////
+
             barComp.wait();   // Barrier 2.
             continue;
 
