@@ -143,7 +143,9 @@ public:
     static bool undirected;
 
     static bool firstIteration;
-    static unsigned iteration;  // Represents current layer index.
+    static unsigned iteration;
+
+    static unsigned curr_layer;
 
     static double timProcess;   
     static double allTimProcess;

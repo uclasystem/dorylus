@@ -113,6 +113,9 @@ template <typename VertexType, typename EdgeType>
 unsigned Engine<VertexType, EdgeType>::iteration = 0;
 
 template <typename VertexType, typename EdgeType>
+unsigned Engine<VertexType, EdgeType>::curr_layer = 1;
+
+template <typename VertexType, typename EdgeType>
 bool Engine<VertexType, EdgeType>::undirected = false;
 
 template <typename VertexType, typename EdgeType>
@@ -290,8 +293,6 @@ int Engine<VertexType, EdgeType>::readFeaturesFile(const std::string& fileName) 
       feature_mat.push_back(feature_vec);
   }
 
-  fprintf(stderr, "!!!!!!!! Size of feature mat: %d\n", feature_mat.size());
-
   for(std::size_t i = 0;i<feature_mat.size();++i){
     //is ghost node
     auto git=graph.ghostVertices.find(i);
@@ -303,10 +304,6 @@ int Engine<VertexType, EdgeType>::readFeaturesFile(const std::string& fileName) 
     auto lit=graph.globalToLocalId.find(i);
     if (lit != graph.globalToLocalId.end()){
       graph.vertices[lit->second].setData(feature_mat[i]);
-      fprintf(stderr, "!!!!!!!! Set node %d to", i);
-      for (int j = 0; j < feature_mat[i].size(); ++j)
-        fprintf(stderr, " %f", feature_mat[i][j]);
-      fprintf(stderr, "\n");
       continue;
     }
   }
@@ -1737,6 +1734,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
           barComp.wait();                   // Barrier 1.
 
           if(!firstIteration) {
+            ++iteration;
             gotoNextLayer();
 
             if(iteration % poFrequency == 0) {
@@ -1866,13 +1864,13 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
 template <typename VertexType, typename EdgeType>
 bool Engine<VertexType, EdgeType>::reachOutputLayer() {
   // Do not need mutex lock here, since will only be read but not written.
-  return iteration >= 5;  // 5 here is just a meaningless example.
+  return curr_layer >= 5;  // 5 here is just a meaningless example.
 }
 
 template <typename VertexType, typename EdgeType>
 void Engine<VertexType, EdgeType>::gotoNextLayer() {
   // Do not need mutex lock here, since will only be called by master at iteration finish up.
-  ++iteration;
+  ++curr_layer;
 }
 
 template <typename VertexType, typename EdgeType>
