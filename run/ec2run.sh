@@ -128,7 +128,7 @@ case $2 in
 		IP=/filepool/parts_${NDS}/data.bsnap; IK=DT; SRC=0;
 		;;
 	"small")
-		IP=../inputs/parts_${NDS}/small.graph.bsnap; IK=SM; SRC=0;
+		IP=../inputs/data/parts_${NDS}/small.graph.bsnap; IK=SM; SRC=0;
     ;;
 	*)
 		IP=/filepool/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB; SRC=0
