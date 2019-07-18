@@ -1823,7 +1823,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
 
       if(scheduler->isScheduled(currId)) {
         vid = currId;
-        fprintf(stderr, "!!!!!!!! Processing node #: %d\n", graph.localToGlobalId(vid));
+        fprintf(stderr, "!!!!!!!! Processing node #: %d\n", graph.localToGlobalId[vid]);
         found = true;
         ++currId;
         break;
