@@ -26,7 +26,7 @@ public:
 
         vertex.addData(curr);   // Push to the back instead of modify the value.
 
-        return vertex.nextIter();
+        return vertex.nextLayer();
     }
 
 private:
