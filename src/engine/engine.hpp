@@ -62,7 +62,7 @@ template <typename VertexType, typename EdgeType>
 Lock Engine<VertexType, EdgeType>::lockCurrId;
 
 template <typename VertexType, typename EdgeType>
-Lock Engine<VertexType, EdgeType>::curr_layer = 1;
+int Engine<VertexType, EdgeType>::curr_layer = 1;
 
 template <typename VertexType, typename EdgeType>
 unsigned Engine<VertexType, EdgeType>::nodeId;
