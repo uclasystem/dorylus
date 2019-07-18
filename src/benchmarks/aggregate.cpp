@@ -50,7 +50,7 @@ public:
 
     void processVertex(Vertex<VertexType, EdgeType>& vertex) {
         std::vector<VType>& data_all = vertex.dataAll();
-        outFile << vertex.globalId() << " (" << vertex.curr_layer << "): ";
+        outFile << vertex.globalId() << ": ";
         for (int i = 0; i < data_all.size(); ++i) {
             VType curr = data_all[i];
             for (int j = 0; j < curr.size(); ++j) {
