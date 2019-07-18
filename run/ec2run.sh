@@ -137,7 +137,7 @@ esac
 
 # Feature file
 if [ -z $3 ]; then
-  FF=/filepool/features;
+  FF=$( dirname ${IP} )/../features;
 else
   FF=$3;
 fi
