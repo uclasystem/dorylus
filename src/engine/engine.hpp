@@ -290,6 +290,8 @@ int Engine<VertexType, EdgeType>::readFeaturesFile(const std::string& fileName) 
       feature_mat.push_back(feature_vec);
   }
 
+  std::cout << "!!!!!!!! Size of feature mat: " << feature_mat.size() << std::endl;
+
   for(std::size_t i = 0;i<feature_mat.size();++i){
     //is ghost node
     auto git=graph.ghostVertices.find(i);
@@ -299,8 +301,9 @@ int Engine<VertexType, EdgeType>::readFeaturesFile(const std::string& fileName) 
     }
     //is local node
     auto lit=graph.globalToLocalId.find(i);
-   if (lit != graph.globalToLocalId.end()){
+    if (lit != graph.globalToLocalId.end()){
       graph.vertices[lit->second].setData(feature_mat[i]);
+      std::cout << "!!!!!!!! Set node " << i << " to " << feature_mat[i] << std::endl;
       continue;
     }
   }
