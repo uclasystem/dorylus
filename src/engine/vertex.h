@@ -32,7 +32,7 @@ class Vertex {
         std::vector<VertexType> vertexData;
 
         // Use an iteration counter per vertex to track its iteration status.
-        int iter_count = 0;
+        int curr_layer = 0;
 
         //VertexType oldVertexData;
 
@@ -48,7 +48,7 @@ class Vertex {
         void setData(VertexType value);         // Modify the current value.
         void addData(VertexType value);         // Add a new value of the new iteration.
 
-        bool nextIter();    // Increment the iteration counter. Returns whether threshold met (to finish / not).
+        bool nextLayer();    // Increment the layer counter. Returns whether threshold met (not met -> to continue).
 
         //VertexType oldData();
         //void setOldData(VertexType value);
