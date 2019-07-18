@@ -1730,7 +1730,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
 
           barComp.wait();                   // Barrier 1.
 
-          if(firstIteration == false) {
+          if(!firstIteration) {
             ++iteration;
 
             if(iteration % poFrequency == 0) {
@@ -1740,8 +1740,8 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
 
               pushWait = true; 
             }
-          }
-          firstIteration = false;
+          } else
+            firstIteration = false;
 
           // See if there are any further scheduled iterations.
           fprintf(stderr, "Starting iteration %u at %.3lf ms\n", iteration, timProcess + getTimer()); 
@@ -1837,8 +1837,11 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
     // I got a current vertex id in `vid` to handle now. Doing the task.
     Vertex<VertexType, EdgeType>& v = graph.vertices[vid];
     assert(scheduler->isScheduled(vid));
-    bool ret = firstIteration | vertexProgram->update(v, engineContext);   // Important: firstIteration ensures that tags flow out.
-    if(ret) {
+
+    if (!firstIteration)
+      vertexProgram->update(v, engineContext);
+    
+    if(firstIteration | nextLayer()) {
       bool remoteScat = true;
       for(unsigned i=0; i<v.numOutEdges(); ++i) {
         if(v.getOutEdge(i).getEdgeLocation() == LOCAL_EDGE_TYPE)
@@ -1852,6 +1855,12 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
       }
     }
   } // end of outer while loop
+}
+
+template <typename VertexType, typename EdgeType>
+bool Engine<VertexType, EdgeType>::nextLayer() {
+  // Do not need mutex lock here, since will only be called by master at iteration finish up.
+  return curr_layer++ < 5;  // 5 here is just a meaningless example.
 }
 
 template <typename VertexType, typename EdgeType>

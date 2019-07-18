@@ -130,6 +130,9 @@ public:
     static IdType currId;
     static Lock lockCurrId;
 
+    // Record current layer.
+    static int curr_layer = 1;
+
     static std::string graphFile;
     static std::string featuresFile;
     
