@@ -62,6 +62,9 @@ template <typename VertexType, typename EdgeType>
 Lock Engine<VertexType, EdgeType>::lockCurrId;
 
 template <typename VertexType, typename EdgeType>
+Lock Engine<VertexType, EdgeType>::curr_layer = 1;
+
+template <typename VertexType, typename EdgeType>
 unsigned Engine<VertexType, EdgeType>::nodeId;
 
 template <typename VertexType, typename EdgeType>
@@ -974,8 +977,6 @@ void Engine<VertexType, EdgeType>::run(VertexProgram<VertexType, EdgeType>* vPro
   firstIteration = true; compDone = false; die = false; 
   halt = false;
   scheduler->newIteration();
-
-  curr_layer = 1;
 
   fprintf(stderr, "Starting data communicator\n");
   dataPool->perform(dataCommunicator);
