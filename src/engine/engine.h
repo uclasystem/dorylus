@@ -145,7 +145,7 @@ public:
     static bool firstIteration;
     static unsigned iteration;
 
-    static unsigned curr_layer;
+    static unsigned curr_layer;     // Current layer, may have duplicate functionality with `iteration`.
 
     static double timProcess;   
     static double allTimProcess;

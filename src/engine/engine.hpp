@@ -1761,7 +1761,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
             lockCurrId.lock();
             barComp.wait();   // Barrier 2.
 
-          // No more, so halt.
+          // No more, so deciding to halt.
           } else {
             fprintf(stderr, "Deciding to halt in this iteration (%u)\n", iteration);
             NodeManager::barrier(COMM_BARRIER);
@@ -1823,6 +1823,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
 
       if(scheduler->isScheduled(currId)) {
         vid = currId;
+        fprintf(stderr, "!!!!!!!! Processing node #: %d\n", vid);
         found = true;
         ++currId;
         break;
@@ -1850,11 +1851,9 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
       for(unsigned i=0; i<v.numOutEdges(); ++i) {
         if(v.getOutEdge(i).getEdgeLocation() == LOCAL_EDGE_TYPE)
           scheduler->schedule(v.getOutEdge(i).destId());
-        else {
-          if(remoteScat) {
-            CommManager::dataPushOut(graph.localToGlobalId[vid], (void*)v.data().data(), sizeof(FeatType) * v.data().size());
-            remoteScat = false;
-          }
+        else if(remoteScat) {
+          CommManager::dataPushOut(graph.localToGlobalId[vid], (void*)v.data().data(), sizeof(FeatType) * v.data().size());
+          remoteScat = false;
         }
       }
     }
@@ -1920,15 +1919,14 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
       halt = true;
       while(rem > 0) {
         IdType mType;
-        while(!CommManager::dataPullIn(mType, value)) { } // spinwait? omg?
+        while(!CommManager::dataPullIn(mType, value)) { }
 
         if(mType == ITHINKIAMDONE) {
           --rem;
         } else if(mType == IAMNOTDONE) {
           assert(false);
           thinkHalt = false;
-        } 
-        else if(mType == IAMDONE) {
+        } else if(mType == IAMDONE) {
           assert(false);
         } else if((mType >= PUSHOUT_REQ_BEGIN) && (mType < PUSHOUT_REQ_END)) {
           IdType response = mType - PUSHOUT_REQ_BEGIN + PUSHOUT_RESP_BEGIN;
@@ -1955,7 +1953,7 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
 
       IdType mType; unsigned totalRem = numNodes; unsigned finalRem = numNodes;
       while(totalRem > 0) {
-        while(!CommManager::dataPullIn(mType, value)) { } // spinlock? omg?
+        while(!CommManager::dataPullIn(mType, value)) { }
 
         if(mType == IAMDONE) {
           --finalRem;
@@ -1977,10 +1975,6 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
           }
         } else {
           assert(false);
-          vid = mType;
-
-          conditionalUpdateGhostVertex(vid, value);
-          halt = false;
         }
       }
 
