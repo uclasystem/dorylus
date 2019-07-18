@@ -38,4 +38,3 @@ mv ${BSNAP} data/
 ln -s ../${BSNAP} data/parts_${PARTS}/${BSNAP}.edges
 
 chmod -R a+w data/parts_3
-chmod a+w data/features
