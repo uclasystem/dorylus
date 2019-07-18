@@ -266,7 +266,7 @@ int Engine<VertexType, EdgeType>::readFeaturesFile(const std::string& fileName) 
   std::ifstream in;//Open file stream
   in.open(fileName);
   if(!in.good()) {
-      std::cout << "Cannot open " << fileName << std::endl;
+      fprintf(stderr, "Cannot open feature file: %s\n", fileName.c_str());
       return 1;
   }
 
@@ -290,7 +290,7 @@ int Engine<VertexType, EdgeType>::readFeaturesFile(const std::string& fileName) 
       feature_mat.push_back(feature_vec);
   }
 
-  std::cout << "!!!!!!!! Size of feature mat: " << feature_mat.size() << std::endl;
+  fprintf(stderr, "!!!!!!!! Size of feature mat: %d\n", feature_mat.size());
 
   for(std::size_t i = 0;i<feature_mat.size();++i){
     //is ghost node
@@ -303,10 +303,10 @@ int Engine<VertexType, EdgeType>::readFeaturesFile(const std::string& fileName) 
     auto lit=graph.globalToLocalId.find(i);
     if (lit != graph.globalToLocalId.end()){
       graph.vertices[lit->second].setData(feature_mat[i]);
-      std::cout << "!!!!!!!! Set node " << i << " to";
+      fprintf(stderr, "!!!!!!!! Set node %d to", i);
       for (int j = 0; j < feature_mat[i].size(); ++j)
-        std::cout << " " << feature_mat[i][j];
-      std::cout << std::endl;
+        fprintf(stderr, " %f", feature_mat[i][j]);
+      fprintf(stderr, "\n");
       continue;
     }
   }
