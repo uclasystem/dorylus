@@ -32,7 +32,7 @@ header "Conduct partitioning..."
 
 ./partitioner ${BSNAP} ${VERTICES} ${PARTS}
 
-ln -s ${BSNAP} parts_${PARTS}/${BSNAP}.edges
-
 mv parts_${PARTS} data/
 mv ${BSNAP} data/
+
+ln -s data/${BSNAP} data/parts_${PARTS}/${BSNAP}.edges
