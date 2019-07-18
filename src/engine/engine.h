@@ -131,7 +131,7 @@ public:
     static Lock lockCurrId;
 
     // Record current layer.
-    static int curr_layer = 1;
+    static int curr_layer;
 
     static std::string graphFile;
     static std::string featuresFile;
@@ -255,6 +255,9 @@ public:
     static void processEdge(IdType& from, IdType& to, Graph<VertexType, EdgeType>& lGraph, std::set<IdType>* inTopics, std::set<IdType>* oTopics, bool streaming = false); 
  
     static void worker(unsigned tid, void* args);
+
+    static bool nextLayer();
+
     static void dataCommunicator(unsigned tid, void* args);
     static void replicationReceiver(unsigned tid, void* args);
 

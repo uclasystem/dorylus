@@ -630,6 +630,8 @@ void Engine<VertexType, EdgeType>::init(int argc, char* argv[], VertexType dVert
 
   lockCurrId.init();
 
+  curr_layer = 1;
+
   pthread_mutex_init(&mtxCompWaiter, NULL);
   pthread_cond_init(&condCompWaiter, NULL);
 
