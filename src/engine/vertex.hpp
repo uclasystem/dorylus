@@ -71,7 +71,7 @@ void Vertex<VertexType, EdgeType>::addData(VertexType value) {
 }
 
 template<typename VertexType, typename EdgeType>
-bool Vertex<VertexType, EdgeType>::nextIter() {
+bool Vertex<VertexType, EdgeType>::nextLayer() {
     lock.writeLock();
     bool to_continue = curr_layer++ < 5;
     lock.unlock();
