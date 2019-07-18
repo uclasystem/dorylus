@@ -303,7 +303,10 @@ int Engine<VertexType, EdgeType>::readFeaturesFile(const std::string& fileName) 
     auto lit=graph.globalToLocalId.find(i);
     if (lit != graph.globalToLocalId.end()){
       graph.vertices[lit->second].setData(feature_mat[i]);
-      std::cout << "!!!!!!!! Set node " << i << " to " << feature_mat[i] << std::endl;
+      std::cout << "!!!!!!!! Set node " << i << " to";
+      for (int j = 0; j < feature_mat[i].size(); ++j)
+        std::cout << " " << feature_mat[i][j];
+      std::cout << std::endl;
       continue;
     }
   }
