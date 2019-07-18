@@ -188,11 +188,11 @@ for dp in {1..1}; do
   GVID=`cat gvid`;
   NGVID=$((GVID + 1));
   echo ${NGVID} > gvid;
-  echo "GVID = ${GVID}" >> ${OPFILE} 2>&1;
 
   header "Running GVID #: ${GVID}"
 
   OPFILE=${OUTFILE_DIR}/${GVID}.${BK}.${IK}.out
+  echo "GVID = ${GVID}" >> ${OPFILE} 2>&1;
 
   echo "DSH command (from ${ASPIREDIR}/build): ./${BM} --graphfile ${IP} --featuresfile ${FF} --undirected ${UD} --bm-reset=${RS} --bm-source=${SRC} --bm-tagonadd=${TOA} --bm-tagondelete=${TOD} --bm-smarttagondelete=${STOD} --bm-smartpropagation=${SP} --bm-tmpdir=${TMPDIR} --kcore-maxcore=${KC} --cthreads ${CT} --pofrequency ${POF} --baseedges ${BE} --numbatches ${NB} --batchsize ${BS} --deletepercent ${DP} ${XTRAARGS}";
   ${DSH} -M -f ${DSHFILE} -c "cd ${ASPIREDIR}/build && ./${BM} --graphfile ${IP} --featuresfile ${FF} --undirected ${UD} --bm-reset=${RS} --bm-source=${SRC} --bm-tagonadd=${TOA} --bm-tagondelete=${TOD} --bm-smarttagondelete=${STOD} --bm-smartpropagation=${SP} --bm-tmpdir=${TMPDIR} --kcore-maxcore=${KC} --cthreads ${CT} --pofrequency ${POF} --baseedges ${BE} --numbatches ${NB} --batchsize ${BS} --deletepercent ${DP} ${XTRAARGS}" >> ${OPFILE} 2>&1;
