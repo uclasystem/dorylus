@@ -95,6 +95,9 @@ template <typename VertexType, typename EdgeType>
 pthread_cond_t Engine<VertexType, EdgeType>::cond_recvWaiters_empty;
 
 template <typename VertexType, typename EdgeType>
+std::map<IdType, unsigned> Engine<VertexType, EdgeType>::recvWaiters;
+
+template <typename VertexType, typename EdgeType>
 Barrier Engine<VertexType, EdgeType>::barComp;
 
 template <typename VertexType, typename EdgeType>
