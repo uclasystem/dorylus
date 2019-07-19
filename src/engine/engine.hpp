@@ -1250,7 +1250,7 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
         VertexType recv_stub = VertexType(2, -1);
         CommManager::dataPushOut(global_vid, (void *) recv_stub.data(), sizeof(FeatType) * recv_stub.size());
 
-      } else if (graph.globalToLocalId.find(mType) != graph.globalToLocalId.end()) {
+      } else if (value[0] == -1 && graph.globalToLocalId.find(mType) != graph.globalToLocalId.end()) {
         IdType global_vid = mType;
 
         pthread_mutex_lock(&lock_recvWaiters);
