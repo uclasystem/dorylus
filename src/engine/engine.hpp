@@ -1760,7 +1760,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
             lockCurrId.lock();
 
             //## Worker barrier 2: Starting a new iteration. ##//
-            fprintf(stderr, "Starting a new iteration %u at %.3lf ms...\n", tid, iteration, timProcess + getTimer());
+            fprintf(stderr, "Starting a new iteration %u at %.3lf ms...\n", iteration, timProcess + getTimer());
             barCompData.wait();
 
           // No more, so deciding to halt. But still needs the communicator to check if there will be further scheduling invoked by ghost
@@ -1771,7 +1771,6 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
             fprintf(stderr, "Deciding to halt at iteration %u...\n", iteration);
             NodeManager::barrier(COMM_BARRIER);
 
-            double bCompTime = -getTimer();
             pthread_mutex_lock(&mtxDataWaiter);
             compDone = true;    // Set this to true, so the communicator will start the finish-up checking procedure.
             pthread_mutex_unlock(&mtxDataWaiter);
@@ -1798,7 +1797,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
             if (compHalt) {
 
               //## Worker barrier 2: Communicator also decides to halt. So going to die. ##//
-              fprintf(stderr, "Communicator confirms the halt at iteration %u.\n", tid, iteration);
+              fprintf(stderr, "Communicator confirms the halt at iteration %u.\n", iteration);
               barCompData.wait();
 
               break;
@@ -1819,7 +1818,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
               //////
 
               //## Worker barrier 2: Communicator decides we cannot halt now. Continue working. ##//
-              fprintf(stderr, "Communicator denies the halt at iteration %u.\n", tid, iteration);
+              fprintf(stderr, "Communicator denies the halt at iteration %u.\n", iteration);
               barCompData.wait();
 
               continue;
@@ -1931,7 +1930,6 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
         continue;
 
       // No message now and computation workers decided to halt. Going into the finish-up checking procedure.
-      double dCommTime = -getTimer();
 
       //## Global Datacomm barrier 1: Wait for every node to enter the finish-up procedure. ##//
       NodeManager::barrier(DATACOMM_BARRIER);
