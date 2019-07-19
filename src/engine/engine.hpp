@@ -1718,10 +1718,10 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
           lockCurrId.unlock();
 
           //## Worker barrier 1: Everyone reach to this point, then only master will work. ##//
-          barCompData.wait();
+          barComp.wait();
 
           //## Worker barrier 2: Master has finished its checking work. ##//
-          barCompData.wait();
+          barComp.wait();
 
           // Master thread decides to halt, and the communicator confirms it. So going to die.
           if (compHalt)
@@ -1736,7 +1736,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
           lockCurrId.unlock();
 
           //## Worker barrier 1: Everyone reach to this point, then only master will work. ##//
-          barCompData.wait();
+          barComp.wait();
 
           if (!firstIteration) {
             ++iteration;
@@ -1761,7 +1761,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
 
             //## Worker barrier 2: Starting a new iteration. ##//
             fprintf(stderr, "Starting a new iteration %u at %.3lf ms...\n", iteration, timProcess + getTimer());
-            barCompData.wait();
+            barComp.wait();
 
           // No more, so deciding to halt. But still needs the communicator to check if there will be further scheduling invoked by ghost
           // vertices. If so we are stilling going to the next iteration.
@@ -1775,7 +1775,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
             compDone = true;    // Set this to true, so the communicator will start the finish-up checking procedure.
             pthread_mutex_unlock(&mtxDataWaiter);
 
-            //## Worker-Comm barrier 1: Wait for dataCommunicator to enter the finish-up checking procedure. ##//
+            //## Worker-Comm barrier 1: Wake up dataCommunicator to enter the finish-up checking procedure. ##//
             barCompData.wait();
 
             //## Worker-Comm barrier 2: Wait for dataCommunicator's decision on truely halt / not. ##//
@@ -1798,7 +1798,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
 
               //## Worker barrier 2: Communicator also decides to halt. So going to die. ##//
               fprintf(stderr, "Communicator confirms the halt at iteration %u.\n", iteration);
-              barCompData.wait();
+              barComp.wait();
 
               break;
 
@@ -1819,7 +1819,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
 
               //## Worker barrier 2: Communicator decides we cannot halt now. Continue working. ##//
               fprintf(stderr, "Communicator denies the halt at iteration %u.\n", iteration);
-              barCompData.wait();
+              barComp.wait();
 
               continue;
             }
