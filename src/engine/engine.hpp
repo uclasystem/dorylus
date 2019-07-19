@@ -1172,7 +1172,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
           IdType global_vid = graph.localToGlobalId[local_vid];
 
           pthread_mutex_lock(&lock_recvWaiters);
-          recvWaiters[global_vid] = v.numOutEdgesRemote();
+          recvWaiters[global_vid] = numNodes;
           pthread_mutex_unlock(&lock_recvWaiters);
 
           CommManager::dataPushOut(global_vid, (void *) v.data().data(), sizeof(FeatType) * v.data().size());
@@ -1243,14 +1243,14 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
       if (mType == IAMDONE || mType == IAMNOTDONE || mType == ITHINKIAMDONE) {   // Impossible.
         assert(false);
 
-      } else if (value.size() != 1 && graph.ghostVertices.find(mType) != graph.ghostVertices.end()) {
+      } else if (value.size() != 1) {
         IdType global_vid = mType;
         conditionalUpdateGhostVertex(global_vid, value);
 
         VertexType recv_stub = VertexType(1, 0);
         CommManager::dataPushOut(global_vid, (void *) recv_stub.data(), sizeof(FeatType) * recv_stub.size());
 
-      } else if (value.size() == 1 && graph.globalToLocalId.find(mType) != graph.globalToLocalId.end()) {
+      } else if (graph.globalToLocalId.find(mType) != graph.globalToLocalId.end()) {
         IdType global_vid = mType;
 
         pthread_mutex_lock(&lock_recvWaiters);
