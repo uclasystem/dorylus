@@ -1243,7 +1243,7 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
       if (mType == IAMDONE || mType == IAMNOTDONE || mType == ITHINKIAMDONE) {   // Impossible.
         assert(false);
 
-      } else if (graph.ghostVertices.find(mType) != graph.ghostVertices.end()) {
+      } else if (value.size() != 1 && graph.ghostVertices.find(mType) != graph.ghostVertices.end()) {
         IdType global_vid = mType;
         conditionalUpdateGhostVertex(global_vid, value);
 
