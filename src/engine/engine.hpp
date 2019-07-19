@@ -1025,8 +1025,6 @@ void Engine<VertexType, EdgeType>::quickRun(VertexProgram<VertexType, EdgeType>*
 template <typename VertexType, typename EdgeType>
 void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
   static bool compHalt = false;
-  compHalt = false;
-  pushWait = false;
 
   // Outer while loop. Looping infinitely, looking for a new task to handle.
   while (1) {
