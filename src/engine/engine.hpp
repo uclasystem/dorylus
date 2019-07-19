@@ -1244,7 +1244,7 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
         IdType global_vid = mType;
         conditionalUpdateGhostVertex(global_vid, value);
 
-        VertexType recv_stub = std::vector(2, -1);
+        VertexType recv_stub = VertexType(2, -1);
         CommManager::dataPushOut(global_vid, (void *) recv_stub.data(), sizeof(FeatType) * recv_stub.size());
 
       } else if (graph.globalToLocalId.find(mType) != graph.globalToLocalId.end()) {

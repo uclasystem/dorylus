@@ -84,7 +84,7 @@ template<typename VertexType, typename EdgeType>
 unsigned Vertex<VertexType, EdgeType>::numOutEdgesRemote() {
     unsigned count = 0;
     for (OutEdge<EdgeType>& e : outEdges) {
-        if (e.EdgeType == REMOTE_EDGE_TYPE)
+        if (e.getEdgeLocation() == REMOTE_EDGE_TYPE)
             ++count;
     }
     return count;
