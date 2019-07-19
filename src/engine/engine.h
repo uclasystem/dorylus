@@ -39,10 +39,12 @@
 #define EDGES_EXT ".edges"
 #define DELS_EXT ".dels"
 
-// Following are for data channel
+// For halting decisions.
 #define IAMDONE (MAX_IDTYPE - 2)
 #define IAMNOTDONE (MAX_IDTYPE - 3)
 #define ITHINKIAMDONE (MAX_IDTYPE - 4)
+
+// For push out requests and responds. Seems useless!
 #define PUSHOUT_REQ_END (MAX_IDTYPE - 6)
 #define PUSHOUT_REQ_BEGIN (PUSHOUT_REQ_END - numNodes)
 #define PUSHOUT_REQ_ME (PUSHOUT_REQ_BEGIN + nodeId)

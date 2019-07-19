@@ -572,6 +572,12 @@ void Engine<VertexType, EdgeType>::readDeletionStream(std::string& fileName) {
   infile.close();
 }
 
+
+/**
+ *
+ * Initialize the engine.
+ * 
+ */
 template <typename VertexType, typename EdgeType>
 void Engine<VertexType, EdgeType>::init(int argc, char* argv[], VertexType dVertex, EdgeType dEdge, EdgeType (*eWeight) (IdType, IdType)) {
   timInit = -getTimer();
@@ -1742,11 +1748,10 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
             ++iteration;
             gotoNextLayer();
 
-            if (iteration % poFrequency == 0) {
+            if (iteration % poFrequency == 0) {   // If push out frequency met, send push out requests to all machines.
               remPushOut = numNodes;
               VertexType stub = VertexType(2, 0);
               CommManager::dataPushOut(PUSHOUT_REQ_ME, stub.data(), sizeof(FeatType) * stub.size());
-
               pushWait = true; 
             }
           } else
@@ -1827,9 +1832,10 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
         } // end of else: tid == 0
       } // end of if: currId >= graph.numLocalVertices
 
-      if (pushWait) {   // Note tid is always 0 here because master is the one who will have lockCurrId held when pushWait = true.
+      // Push out frequency met and push out requests sent. Wait for the communicator to get all responds.
+      if (pushWait) {
         assert(tid == 0);
-        while (remPushOut > 0) { };
+        while (remPushOut > 0) { };   // Spin lock ??????
         assert(remPushOut == 0);
         pushWait = false;
       }
@@ -1948,17 +1954,17 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
       while (rem > 0) {
         IdType mType;
 
-        while(!CommManager::dataPullIn(mType, value)) { }   // Receive the next message.
+        while (!CommManager::dataPullIn(mType, value)) { }   // Receive the next message.
 
-        if(mType == ITHINKIAMDONE) {  // One also thinks he is done, just like me. Good.
+        if (mType == ITHINKIAMDONE) {  // One also thinks he is done, just like me. Good.
           --rem;
-        } else if(mType == IAMNOTDONE || mType == IAMDONE) {    // Impossible.
+        } else if (mType == IAMNOTDONE || mType == IAMDONE) {    // Impossible.
           assert(false);
-        } else if((mType >= PUSHOUT_REQ_BEGIN) && (mType < PUSHOUT_REQ_END)) {
+        } else if ((mType >= PUSHOUT_REQ_BEGIN) && (mType < PUSHOUT_REQ_END)) {     // A push out request.
           IdType response = mType - PUSHOUT_REQ_BEGIN + PUSHOUT_RESP_BEGIN;
           CommManager::dataPushOut(response, (void*)value.data(), value.size() * sizeof(FeatType));
-        } else if((mType >= PUSHOUT_RESP_BEGIN) && (mType < PUSHOUT_RESP_END)) {
-          if(mType == PUSHOUT_RESP_ME) {
+        } else if ((mType >= PUSHOUT_RESP_BEGIN) && (mType < PUSHOUT_RESP_END)) {   // A push out respond.
+          if (mType == PUSHOUT_RESP_ME) {
             --remPushOut;
           }
         } else {  // There is a vertex id message on the way so someone will update its ghost vertices and schedule its neighbors.
@@ -1994,12 +2000,12 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
         } else if (mType == IAMNOTDONE) {  // One cannot finish.
           halt = false;
           --totalRem;
-        } else if ((mType >= PUSHOUT_REQ_BEGIN) && (mType < PUSHOUT_REQ_END)) {
+        } else if ((mType >= PUSHOUT_REQ_BEGIN) && (mType < PUSHOUT_REQ_END)) {     // A push out request.
           halt = false;
           IdType response = mType - PUSHOUT_REQ_BEGIN + PUSHOUT_RESP_BEGIN;
           CommManager::dataPushOut(response, (void*)value.data(), value.size() * sizeof(FeatType));
-        } else if ((mType >= PUSHOUT_RESP_BEGIN) && (mType < PUSHOUT_RESP_END)) {
-          if(mType == PUSHOUT_RESP_ME) {
+        } else if ((mType >= PUSHOUT_RESP_BEGIN) && (mType < PUSHOUT_RESP_END)) {   // A push out respond.
+          if (mType == PUSHOUT_RESP_ME) {
             --remPushOut;
           }
         } else {  // Impossible.
