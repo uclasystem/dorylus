@@ -1365,23 +1365,4 @@ unsigned Engine<VertexType, EdgeType>::getNextAliveNodeId(unsigned nId) {
   return ret;
 }
 
-template <typename VertexType, typename EdgeType>
-template <typename T>
-T Engine<VertexType, EdgeType>::sillyReduce(T value, T (*reducer)(T, T)) {
-  if(master()) {
-    for(unsigned i=0; i<numNodes; ++i) {
-      if(i == nodeId)
-        continue;
-
-      T v;
-      CommManager::controlSyncPullIn(i, &v, sizeof(T));
-      value = reducer(value, v);
-    }
-  } else {
-    unsigned masterId = NodeManager::masterId();
-    CommManager::controlPushOut(masterId, (void*) &value, sizeof(T));
-  }
-  return value;
-}
-
 #endif //__ENGINE_HPP__
