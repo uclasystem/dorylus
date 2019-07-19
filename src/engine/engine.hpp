@@ -1016,6 +1016,17 @@ void Engine<VertexType, EdgeType>::quickRun(VertexProgram<VertexType, EdgeType>*
 }
 
 
+template <typename VertexType, typename EdgeType>
+void Engine<VertexType, EdgeType>::processAll(VertexProgram<VertexType, EdgeType>* vProgram) {
+  vProgram->beforeIteration(engineContext);
+
+  for(IdType i=0; i<graph.numLocalVertices; ++i)
+    vProgram->processVertex(graph.vertices[i]);
+
+  vProgram->afterIteration(engineContext);
+}
+
+
 /**
  *
  * Major part of the engine's computation logic is done by workers. When the engine runs it wakes threads up from the thread pool
@@ -1025,8 +1036,6 @@ void Engine<VertexType, EdgeType>::quickRun(VertexProgram<VertexType, EdgeType>*
 template <typename VertexType, typename EdgeType>
 void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
   static bool compHalt = false;
-  compHalt = false;
-  pushWait = false;
 
   // Outer while loop. Looping infinitely, looking for a new task to handle.
   while (1) {
