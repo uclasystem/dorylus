@@ -9,7 +9,7 @@
 #include <cmath>
 #include <boost/program_options.hpp>
 #include <boost/program_options/parsers.hpp>
-#include <boost/algorithm/string/classification.hpp> // Include boost::for is_any_of
+#include <boost/algorithm/string/classification.hpp> // Include boost::for is_any_of.
 #include <boost/algorithm/string/split.hpp>
 #include <string>
 #include <stdlib.h>
