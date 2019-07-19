@@ -50,6 +50,8 @@ class Vertex {
 
         unsigned numInEdges();
         unsigned numOutEdges();
+        unsigned numOutEdgesRemote();
+
         InEdge<EdgeType>& getInEdge(unsigned i);
         OutEdge<EdgeType>& getOutEdge(unsigned i);
         void readLock();

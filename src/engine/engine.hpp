@@ -89,6 +89,12 @@ template <typename VertexType, typename EdgeType>
 pthread_cond_t Engine<VertexType, EdgeType>::condDataWaiter;
 
 template <typename VertexType, typename EdgeType>
+pthread_mutex_t Engine<VertexType, EdgeType>::lock_recvWaiters;
+
+template <typename VertexType, typename EdgeType>
+pthread_cond_t Engine<VertexType, EdgeType>::cond_recvWaiters_empty;
+
+template <typename VertexType, typename EdgeType>
 Barrier Engine<VertexType, EdgeType>::barComp;
 
 template <typename VertexType, typename EdgeType>
@@ -639,6 +645,9 @@ void Engine<VertexType, EdgeType>::init(int argc, char* argv[], VertexType dVert
   pthread_mutex_init(&mtxDataWaiter, NULL);
   pthread_cond_init(&condDataWaiter, NULL);
 
+  pthread_mutex_init(&lock_recvWaiters, NULL);
+  pthread_cond_init(&cond_recvWaiters_empty, NULL);
+
   barComp.init(cThreads);
   barCompData.init(2);                            // master cthread and datacommunicator
 
@@ -1039,7 +1048,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
 
   // Outer while loop. Looping infinitely, looking for a new task to handle.
   while (1) {
-    IdType vid;
+    IdType local_vid;
     bool found = false;
 
     lockCurrId.lock();
@@ -1082,9 +1091,16 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
           } else
             firstIteration = false;
 
+          // Wait for all remote schedulings sent by me to finish.
+          pthread_mutex_lock(&lock_recvWaiters);
+          if (!recvWaiters.empty())
+            pthread_cond_wait(&cond_recvWaiters_empty, &lock_recvWaiters);
+          pthread_mutex_unlock(&lock_recvWaiters);
+
+          NodeManager::barrier(COMM_BARRIER);
+
           // Yes there are further scheduled vertices. Please start a new iteration.
-          bool hltBool = ((timProcess + getTimer() > 500) && !(scheduler->anyScheduledTasks()));  // After 1 sec only!
-          if (!hltBool) {
+          if (scheduler->anyScheduledTasks()) {
             scheduler->newIteration();
             currId = 0;       // This is unprotected by lockCurrId because only master executes.
             lockCurrId.lock();
@@ -1097,69 +1113,27 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
           // vertices. If so we are stilling going to the next iteration.
           } else {
 
-            //## Global Comm barrier 1: Wait for every node's communicator to enter the decision making procedure. ##//
             fprintf(stderr, "Deciding to halt at iteration %u...\n", iteration);
-            NodeManager::barrier(COMM_BARRIER);
 
             pthread_mutex_lock(&mtxDataWaiter);
             compDone = true;    // Set this to true, so the communicator will start the finish-up checking procedure.
             pthread_mutex_unlock(&mtxDataWaiter);
 
-            //## Worker-Comm barrier 1: Wake up dataCommunicator to enter the finish-up checking procedure. ##//
-            barCompData.wait();
+            compHalt = true;
+            die = true;
 
-            //## Worker-Comm barrier 2: Wait for dataCommunicator's decision on truely halt / not. ##//
-            barCompData.wait();
+            //## Worker barrier 2: Communicator also decides to halt. So going to die. ##//
+            fprintf(stderr, "Communicator confirms the halt at iteration %u.\n", iteration);
+            barComp.wait();
 
-            pthread_mutex_lock(&mtxDataWaiter);
-            compDone = false;
-            compHalt = halt;
-            die = halt;
-            pthread_mutex_unlock(&mtxDataWaiter);
-
-            //## Worker-Comm barrier 3: Worker has set compDone = false. ##//
-            barCompData.wait();
-
-            //## Worker-Comm barrier 4: Wait for communicator to ensure compDone == false. ##//
-            barCompData.wait();
-
-            // Really going to halt.
-            if (compHalt) {
-
-              //## Worker barrier 2: Communicator also decides to halt. So going to die. ##//
-              fprintf(stderr, "Communicator confirms the halt at iteration %u.\n", iteration);
-              barComp.wait();
-
-              break;
-
-            // Communicator denies the halt. Continue working.
-            } else {
-
-              if (scheduler->anyScheduledTasks()) {  // Not always true. Communicator may decide to continue because of another machine is not done. In this situation,
-                                                     // I will not enter a new iteration, but rather hit the COMM_BARRIER again and wait for other machines to decide to halt again.
-                scheduler->newIteration();
-                currId = 0;   // This is unprotected by lockCurrId because only master executes.
-              }
-
-              lockCurrId.lock();
-
-              //////
-              // Send to lambda here ???
-              //////
-
-              //## Worker barrier 2: Communicator decides we cannot halt now. Continue working. ##//
-              fprintf(stderr, "Communicator denies the halt at iteration %u.\n", iteration);
-              barComp.wait();
-
-              continue;
-            }
+            break;
           } // end of else: deciding to halt
         } // end of else: tid == 0
       } // end of if: currId >= graph.numLocalVertices
 
       // Do work on the current processing local vertex id.
       if (scheduler->isScheduled(currId)) {
-        vid = currId;
+        local_vid = currId;
         found = true;
         ++currId;
         break;
@@ -1176,15 +1150,14 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
     }
 
     // I got a current vertex id in `vid` to handle now. Doing the task.
-    Vertex<VertexType, EdgeType>& v = graph.vertices[vid];
-    assert(scheduler->isScheduled(vid));
+    Vertex<VertexType, EdgeType>& v = graph.vertices[local_vid];
+    assert(scheduler->isScheduled(local_vid));
 
     if (!firstIteration)
       vertexProgram->update(v, engineContext);
     
     if (firstIteration | !reachOutputLayer()) {
       bool remoteScat = true;
-
       for (unsigned i = 0; i < v.numOutEdges(); ++i) {
 
         // A local edge. Schedule that neighbor immediately.
@@ -1193,7 +1166,13 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
 
         // A remote edge. Send my vid to other machines, for them to update their ghost vertex's value and schedule its neighbors.
         else if (remoteScat) {
-          CommManager::dataPushOut(graph.localToGlobalId[vid], (void*)v.data().data(), sizeof(FeatType) * v.data().size());
+          IdType global_vid = graph.localToGlobalId[local_vid];
+
+          pthread_mutex_lock(&lock_recvWaiters);
+          recvWaiters[global_vid] = v.numOutEdgesRemote();
+          pthread_mutex_unlock(&lock_recvWaiters);
+
+          CommManager::dataPushOut(global_vid, (void *) v.data().data(), sizeof(FeatType) * v.data().size());
           remoteScat = false;   // Such send should only happen once, no matter how many remote edges this vertex has.
         }
       }
@@ -1239,115 +1218,47 @@ void Engine<VertexType, EdgeType>::conditionalUpdateGhostVertex(IdType vid, Vert
  */
 template <typename VertexType, typename EdgeType>
 void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
-  IdType vid;
+  IdType mType;
   VertexType value;
 
   // While loop, looping infinitely to get the next message.
   while(1) {
 
-    // Pull in the next message, but receives nothing.
-    if (!CommManager::dataPullIn(vid, value)) {
+    // No message in queue.
+    if (!CommManager::dataPullIn(mType, value)) {
 
-      // No message now but computation workers haven't decided to halt yet, so trying to get the next message.
-      if (!compDone)
-        continue;
-
-      // No message now and computation workers decided to halt. Going into the finish-up checking procedure.
-
-      //## Global Datacomm barrier 1: Wait for every node to enter the finish-up procedure. ##//
-      NodeManager::barrier(DATACOMM_BARRIER);
-
-      //## Worker-Comm barrier 1: Going into the finish-up checking procedure. ##//
-      barCompData.wait();
-
-      pthread_mutex_lock(&mtxDataWaiter);
-      assert(compDone);
-      CommManager::dataPushOut(ITHINKIAMDONE, (void*)value.data(), value.size() * sizeof(FeatType));
-
-      // Loop until receiving all nodes' respond on whether I should really halt / not.
-      unsigned rem = numNodes;
-      bool thinkHalt = !(scheduler->anyScheduledTasks());
-      halt = true;
-      while (rem > 0) {
-        IdType mType;
-
-        while (!CommManager::dataPullIn(mType, value)) { }   // Receive the next message.
-
-        if (mType == ITHINKIAMDONE) {  // One also thinks he is done, just like me. Good.
-          --rem;
-        } else if (mType == IAMNOTDONE || mType == IAMDONE) {    // Impossible.
-          assert(false);
-        } else {  // There is a vertex id message on the way so someone will update its ghost vertices and schedule its neighbors.
-                  // So not going to halt.
-          vid = mType;
-          conditionalUpdateGhostVertex(vid, value);
-          thinkHalt = false;
-        }
-      }
-
-      //## Global Datacomm barrier 2: Wait for all nodes to be ready for making the decision. ##//
-      NodeManager::barrier(DATACOMM_BARRIER);
-
-      // Make and push the decision of whether I am done / not.
-      if (thinkHalt) {
-        CommManager::dataPushOut(IAMDONE, (void*)value.data(), value.size() * sizeof(FeatType));
-      } else {
-        CommManager::dataPushOut(IAMNOTDONE, (void*)value.data(), value.size() * sizeof(FeatType));
-        halt = false;
-      }
-
-      // Loop until receiving all nodes' decision on whether it is done / not.
-      IdType mType;
-      unsigned totalRem = numNodes;
-      unsigned finalRem = numNodes;
-      while (totalRem > 0) {
-
-        while (!CommManager::dataPullIn(mType, value)) { }   // Receive the next message.
-
-        if (mType == IAMDONE) {  // One truely decides to finish.
-          --finalRem;
-          --totalRem;
-        } else if (mType == IAMNOTDONE) {  // One cannot finish, so not halting.
-          halt = false;
-          --totalRem;
-        } else {  // Impossible.
-          assert(false);
-        }
-      }
-
-      //## Global Datacomm barrier 3: Required because one of the machines can go so far ahead that we may start receiving data from their worker threads. ##//
-      NodeManager::barrier(DATACOMM_BARRIER);
-
-      if (finalRem != 0)
-        assert(halt == false); 
-      pthread_mutex_unlock(&mtxDataWaiter);
-
-      //## Worker-Comm barrier 2: The dataCommunicator made its decision on truely halt / not. ##//
-      barCompData.wait();
-
-      //## Worker-Comm barrier 3: Wait for worker to set compDone = false. ##//
-      barCompData.wait();
-
-      pthread_mutex_lock(&mtxDataWaiter);
-      assert(compDone == false);
-      pthread_mutex_unlock(&mtxDataWaiter);
-
-      //## Worker-Comm barrier 4: Communicator ensures that compDone == false. ##//
-      barCompData.wait();
-
-      // Communicator confirms the halt, so going to die.
-      if (halt) {
+      // Computation workers decided to halt. Going into the finish-up checking procedure.
+      if (compDone) {
+        halt = true;
         fprintf(stderr, ">- Communicator %u confirms the halt, hence leaving...\n", tid);
         break;
       }
 
-    // Pull in the next message, and recieves something. Process this message.
+    // Pull in the next message, and process this message.
     } else {
 
-      if (vid == IAMDONE || vid == IAMNOTDONE || vid == ITHINKIAMDONE) {   // Impossible.
+      if (mType == IAMDONE || mType == IAMNOTDONE || mType == ITHINKIAMDONE) {   // Impossible.
         assert(false);
-      } else {  // Receives a vid. Update the corresponding ghost vertex (if it is one of my ghost vertices), and schedule its neighbors.
-        conditionalUpdateGhostVertex(vid, value);
+
+      } else if (graph.ghostVertices.find(mType) != graph.ghostVertices.end()) {
+        IdType global_vid = mType;
+        conditionalUpdateGhostVertex(global_vid, value);
+
+        VertexType recv_stub = std::vector(2, -1);
+        CommManager::dataPushOut(global_vid, (void *) recv_stub.data(), sizeof(FeatType) * recv_stub.size());
+
+      } else if (graph.globalToLocalId.find(mType) != graph.globalToLocalId.end()) {
+        IdType global_vid = mType;
+
+        pthread_mutex_lock(&lock_recvWaiters);
+        assert(recvWaiters.find(global_vid) != recvWaiters.end());
+        --recvWaiters[global_vid];
+        if (recvWaiters[global_vid] == 0) {
+          recvWaiters.erase(global_vid);
+          if (recvWaiters.empty())
+            pthread_cond_signal(&cond_recvWaiters_empty);
+        }
+        pthread_mutex_unlock(&lock_recvWaiters);
       }
     }
   }
@@ -1363,25 +1274,6 @@ template <typename VertexType, typename EdgeType>
 unsigned Engine<VertexType, EdgeType>::getNextAliveNodeId(unsigned nId) {
   unsigned ret = (nId + 1) % numNodes;
   return ret;
-}
-
-template <typename VertexType, typename EdgeType>
-template <typename T>
-T Engine<VertexType, EdgeType>::sillyReduce(T value, T (*reducer)(T, T)) {
-  if(master()) {
-    for(unsigned i=0; i<numNodes; ++i) {
-      if(i == nodeId)
-        continue;
-
-      T v;
-      CommManager::controlSyncPullIn(i, &v, sizeof(T));
-      value = reducer(value, v);
-    }
-  } else {
-    unsigned masterId = NodeManager::masterId();
-    CommManager::controlPushOut(masterId, (void*) &value, sizeof(T));
-  }
-  return value;
 }
 
 #endif //__ENGINE_HPP__
