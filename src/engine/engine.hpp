@@ -1718,14 +1718,10 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
           lockCurrId.unlock();
 
           //## Worker barrier 1: Everyone reach to this point, then only master will work. ##//
-          fprintf(stderr, "[Workers Barrier 1]: Worker %u Waiting...\n", tid);
           barCompData.wait();
-          fprintf(stderr, "[Workers Barrier 1]: Worker %u Passed!\n", tid);
 
           //## Worker barrier 2: Master has finished its checking work. ##//
-          fprintf(stderr, "[Workers Barrier 2]: Worker %u Waiting...\n", tid);
           barCompData.wait();
-          fprintf(stderr, "[Workers Barrier 2]: Worker %u Passed!\n", tid);
 
           // Master thread decides to halt, and the communicator confirms it. So going to die.
           if (compHalt)
@@ -1740,9 +1736,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
           lockCurrId.unlock();
 
           //## Worker barrier 1: Everyone reach to this point, then only master will work. ##//
-          fprintf(stderr, "[Workers Barrier 1]: Worker %u Waiting...\n", tid);
           barCompData.wait();
-          fprintf(stderr, "[Workers Barrier 1]: Worker %u Passed!\n", tid);
 
           if (!firstIteration) {
             ++iteration;
@@ -1766,18 +1760,16 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
             lockCurrId.lock();
 
             //## Worker barrier 2: Starting a new iteration. ##//
-            fprintf(stderr, "[Workers Barrier 2]: Worker %u Waiting... Starting a new iteration %u at %.3lf ms...\n", tid, iteration, timProcess + getTimer());
+            fprintf(stderr, "Starting a new iteration %u at %.3lf ms...\n", tid, iteration, timProcess + getTimer());
             barCompData.wait();
-            fprintf(stderr, "[Workers Barrier 2]: Worker %u Passed!\n", tid);
 
           // No more, so deciding to halt. But still needs the communicator to check if there will be further scheduling invoked by ghost
           // vertices. If so we are stilling going to the next iteration.
           } else {
 
             //## Global Comm barrier 1: Wait for every node's communicator to enter the decision making procedure. ##//
-            fprintf(stderr, "[Global COMM_BARRIER]: Waiting... Deciding to halt at iteration %u...\n", iteration);
+            fprintf(stderr, "Deciding to halt at iteration %u...\n", iteration);
             NodeManager::barrier(COMM_BARRIER);
-            fprintf(stderr, "[Global COMM_BARRIER]: Passed!\n");
 
             double bCompTime = -getTimer();
             pthread_mutex_lock(&mtxDataWaiter);
@@ -1785,14 +1777,10 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
             pthread_mutex_unlock(&mtxDataWaiter);
 
             //## Worker-Comm barrier 1: Wait for dataCommunicator to enter the finish-up checking procedure. ##//
-            fprintf(stderr, "[Worker-Comm Barrier 1]: Worker %u Waiting...\n", tid);
             barCompData.wait();
-            fprintf(stderr, "[Worker-Comm Barrier 1]: Worker %u Passed!\n", tid);
 
             //## Worker-Comm barrier 2: Wait for dataCommunicator's decision on truely halt / not. ##//
-            fprintf(stderr, "[Worker-Comm Barrier 2]: Worker %u Waiting...\n", tid);
             barCompData.wait();
-            fprintf(stderr, "[Worker-Comm Barrier 2]: Worker %u Passed!\n", tid);
 
             pthread_mutex_lock(&mtxDataWaiter);
             compDone = false;
@@ -1801,22 +1789,17 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
             pthread_mutex_unlock(&mtxDataWaiter);
 
             //## Worker-Comm barrier 3: Worker has set compDone = false. ##//
-            fprintf(stderr, "[Worker-Comm Barrier 3]: Worker %u Waiting...\n", tid);
             barCompData.wait();
-            fprintf(stderr, "[Worker-Comm Barrier 3]: Worker %u Passed!\n", tid);
 
             //## Worker-Comm barrier 4: Wait for communicator to ensure compDone == false. ##//
-            fprintf(stderr, "[Worker-Comm Barrier 4]: Worker %u Waiting...\n", tid);
             barCompData.wait();
-            fprintf(stderr, "[Worker-Comm Barrier 4]: Worker %u Passed! barCompData time = %.3lf ms.\n", tid, bCompTime + getTimer());
 
             // Really going to halt.
             if (compHalt) {
 
               //## Worker barrier 2: Communicator also decides to halt. So going to die. ##//
-              fprintf(stderr, "[Workers Barrier 2]: Worker %u Waiting... Communicator confirms the halt at iteration %u.\n", tid, iteration);
+              fprintf(stderr, "Communicator confirms the halt at iteration %u.\n", tid, iteration);
               barCompData.wait();
-              fprintf(stderr, "[Workers Barrier 2]: Worker %u Passed!\n", tid);
 
               break;
 
@@ -1836,9 +1819,8 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
               //////
 
               //## Worker barrier 2: Communicator decides we cannot halt now. Continue working. ##//
-              fprintf(stderr, "[Workers Barrier 2]: Worker %u Waiting... Communicator denies the halt at iteration %u.\n", tid, iteration);
+              fprintf(stderr, "Communicator denies the halt at iteration %u.\n", tid, iteration);
               barCompData.wait();
-              fprintf(stderr, "[Workers Barrier 2]: Worker %u Passed!\n", tid);
 
               continue;
             }
@@ -1952,14 +1934,10 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
       double dCommTime = -getTimer();
 
       //## Global Datacomm barrier 1: Wait for every node to enter the finish-up procedure. ##//
-      fprintf(stderr, "[Global DATACOMM_BARRIER 1]: Waiting...\n");
       NodeManager::barrier(DATACOMM_BARRIER);
-      fprintf(stderr, "[Global DATACOMM_BARRIER 1]: Passed!\n");
 
       //## Worker-Comm barrier 1: Going into the finish-up checking procedure. ##//
-      fprintf(stderr, "[Worker-Comm Barrier 1]: Comm %u Waiting...\n", tid);
       barCompData.wait();
-      fprintf(stderr, "[Worker-Comm Barrier 1]: Comm %u Passed!\n", tid);
 
       pthread_mutex_lock(&mtxDataWaiter);
       assert(compDone);
@@ -1994,9 +1972,7 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
       }
 
       //## Global Datacomm barrier 2: Wait for all nodes to be ready for making the decision. ##//
-      fprintf(stderr, "[Global DATACOMM_BARRIER 2]: Waiting...\n");
       NodeManager::barrier(DATACOMM_BARRIER);
-      fprintf(stderr, "[Global DATACOMM_BARRIER 2]: Passed!\n");
 
       // Make and push the decision of whether I am done / not.
       if (thinkHalt) {
@@ -2034,32 +2010,24 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
       }
 
       //## Global Datacomm barrier 3: Required because one of the machines can go so far ahead that we may start receiving data from their worker threads. ##//
-      fprintf(stderr, "[Global DATACOMM_BARRIER 3]: Waiting...\n");
       NodeManager::barrier(DATACOMM_BARRIER);
-      fprintf(stderr, "[Global DATACOMM_BARRIER 3]: Passed!\n");
 
       if (finalRem != 0)
         assert(halt == false); 
       pthread_mutex_unlock(&mtxDataWaiter);
 
       //## Worker-Comm barrier 2: The dataCommunicator made its decision on truely halt / not. ##//
-      fprintf(stderr, "[Worker-Comm Barrier 2]: Comm %u Waiting...\n", tid);
       barCompData.wait();
-      fprintf(stderr, "[Worker-Comm Barrier 2]: Comm %u Passed!\n", tid);
 
       //## Worker-Comm barrier 3: Wait for worker to set compDone = false. ##//
-      fprintf(stderr, "[Worker-Comm Barrier 3]: Comm %u Waiting...\n", tid);
       barCompData.wait();
-      fprintf(stderr, "[Worker-Comm Barrier 3]: Comm %u Passed!\n", tid);
 
       pthread_mutex_lock(&mtxDataWaiter);
       assert(compDone == false);
       pthread_mutex_unlock(&mtxDataWaiter);
 
       //## Worker-Comm barrier 4: Communicator ensures that compDone == false. ##//
-      fprintf(stderr, "[Worker-Comm Barrier 4]: Comm %u Waiting...\n", tid);
       barCompData.wait();
-      fprintf(stderr, "[Worker-Comm Barrier 4]: Comm %u Passed!\n", tid);
 
       // Communicator confirms the halt, so going to die.
       if (halt) {
