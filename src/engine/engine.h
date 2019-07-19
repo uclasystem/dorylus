@@ -164,6 +164,9 @@ public:
     static pthread_mutex_t mtxDataWaiter;
     static pthread_cond_t condDataWaiter;
 
+    static pthread_mutex_t lock_recvWaiters;
+    static pthread_cond_t cond_recvWaiters_empty;
+
     static pthread_barrier_t barDebug;
 
     static Barrier barComp;

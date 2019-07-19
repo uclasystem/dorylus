@@ -81,6 +81,16 @@ unsigned Vertex<VertexType, EdgeType>::numOutEdges() {
 }
 
 template<typename VertexType, typename EdgeType>
+unsigned Vertex<VertexType, EdgeType>::numOutEdgesRemote() {
+    unsigned count = 0;
+    for (OutEdge<EdgeType>& e : outEdges) {
+        if (e.EdgeType == REMOTE_EDGE_TYPE)
+            ++count;
+    }
+    return count;
+}
+
+template<typename VertexType, typename EdgeType>
 InEdge<EdgeType>& Vertex<VertexType, EdgeType>::getInEdge(unsigned i) {
     return inEdges[i];
 }
