@@ -16,6 +16,9 @@
 #include <omp.h>
 
 
+#define NUM_LAYERS 5
+
+
 template <typename VertexType, typename EdgeType>
 Graph<VertexType, EdgeType> Engine<VertexType, EdgeType>::graph;
 
@@ -1041,7 +1044,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
         NodeManager::barrier(COMM_BARRIER);
 
         // Yes there are further scheduled vertices. Please start a new iteration.
-        if (iteration < 4) {
+        if (iteration + 1 < NUM_LAYERS) {
           fprintf(stderr, "Starting a new iteration %u at %.3lf ms...\n", iteration, timProcess + getTimer());
 
           // Step forward to a new iteration. 
