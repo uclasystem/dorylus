@@ -68,9 +68,6 @@ template <typename VertexType, typename EdgeType>
 unsigned Engine<VertexType, EdgeType>::numNodes;
 
 template <typename VertexType, typename EdgeType>
-bool Engine<VertexType, EdgeType>::die = false;
-
-template <typename VertexType, typename EdgeType>
 bool Engine<VertexType, EdgeType>::compDone = false;
 
 template <typename VertexType, typename EdgeType>
@@ -1050,94 +1047,83 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
 
   // Outer while loop. Looping infinitely, looking for a new task to handle.
   while (1) {
-    IdType local_vid;
 
+    // Get current vertex that need to be handled.
     lockCurrId.lock();
+    IdType local_vid = currId++;
+    lockCurrId.unlock();
 
-    // Inner while loop. Looping until got a current vertex id to handle.
-    while (1) {
+    // All local vertices have been processed. Hit the barrier and wait for next iteration / decide to halt.
+    if (currId >= graph.numLocalVertices) {
 
-      // All local vertices have been processed. Hit the barrier and wait for next iteration / decide to halt.
-      if (currId >= graph.numLocalVertices) {
+      // Non-master threads.
+      if (tid != 0) {
 
-        // Non-master threads.
-        if (tid != 0) {
-          lockCurrId.unlock();
+        //## Worker barrier 1: Everyone reach to this point, then only master will work. ##//
+        barComp.wait();
 
-          //## Worker barrier 1: Everyone reach to this point, then only master will work. ##//
-          barComp.wait();
+        //## Worker barrier 2: Master has finished its checking work. ##//
+        barComp.wait();
 
-          //## Worker barrier 2: Master has finished its checking work. ##//
-          barComp.wait();
-
-          // Master thread decides to halt, and the communicator confirms it. So going to die.
-          if (compHalt)
-            return;
-
-          // New iteration starts.
-          lockCurrId.lock();
+        // If master says halt then go to death; else continue for the new iteration.
+        if (compHalt)
+          return;
+        else
           continue;
 
-        // Master thread (tid == 0).
-        } else {
-          lockCurrId.unlock();
+      // Master thread (tid == 0).
+      } else {
 
-          //## Worker barrier 1: Everyone reach to this point, then only master will work. ##//
-          barComp.wait();
+        //## Worker barrier 1: Everyone reach to this point, then only master will work. ##//
+        barComp.wait();
 
+        // Wait for all remote schedulings sent by me to be handled.
+        pthread_mutex_lock(&lock_recvWaiters);
+        if (!recvWaiters.empty())
+          pthread_cond_wait(&cond_recvWaiters_empty, &lock_recvWaiters);
+        pthread_mutex_unlock(&lock_recvWaiters);
+
+        //## Global Iteration barrier. ##//
+        NodeManager::barrier(COMM_BARRIER);
+
+        // Yes there are further scheduled vertices. Please start a new iteration.
+        if (iteration < 5) {
+          fprintf(stderr, "!! Starting a new iteration %u at %.3lf ms...\n", iteration, timProcess + getTimer());
+
+          // Go out of firstIteration if current is; else step forward to a new iteration. 
           if (!firstIteration) {
             ++iteration;
             engineContext.setIteration(iteration);
           } else
             firstIteration = false;
 
-          // Wait for all remote schedulings sent by me to finish.
-          pthread_mutex_lock(&lock_recvWaiters);
-          if (!recvWaiters.empty())
-            pthread_cond_wait(&cond_recvWaiters_empty, &lock_recvWaiters);
-          pthread_mutex_unlock(&lock_recvWaiters);
+          // Reset current id.
+          currId = 0;       // This is unprotected by lockCurrId because only master executes.
 
-          NodeManager::barrier(COMM_BARRIER);
+          //## Worker barrier 2: Starting a new iteration. ##//
+          barComp.wait();
 
-          // Yes there are further scheduled vertices. Please start a new iteration.
-          if (iteration < 5) {
-            scheduler->newIteration();
-            currId = 0;       // This is unprotected by lockCurrId because only master executes.
-            lockCurrId.lock();
+        // No more, so deciding to halt. But still needs the communicator to check if there will be further scheduling invoked by ghost
+        // vertices. If so we are stilling going to the next iteration.
+        } else {
+          fprintf(stderr, "!! Deciding to halt at iteration %u...\n", iteration);
 
-            //## Worker barrier 2: Starting a new iteration. ##//
-            fprintf(stderr, "Starting a new iteration %u at %.3lf ms...\n", iteration, timProcess + getTimer());
-            barComp.wait();
+          pthread_mutex_lock(&mtxDataWaiter);
+          compDone = true;    // Set this to true, so the communicator will start the finish-up checking procedure.
+          pthread_mutex_unlock(&mtxDataWaiter);
 
-          // No more, so deciding to halt. But still needs the communicator to check if there will be further scheduling invoked by ghost
-          // vertices. If so we are stilling going to the next iteration.
-          } else {
-            fprintf(stderr, "Deciding to halt at iteration %u...\n", iteration);
+          compHalt = true;
 
-            pthread_mutex_lock(&mtxDataWaiter);
-            compDone = true;    // Set this to true, so the communicator will start the finish-up checking procedure.
-            pthread_mutex_unlock(&mtxDataWaiter);
+          //## Worker barrier 2: Going to die. ##//
+          barComp.wait();
 
-            compHalt = true;
-            die = true;
-
-            //## Worker barrier 2: Communicator also decides to halt. So going to die. ##//
-            barComp.wait();
-
-            return;
-          }
+          return;
         }
       }
-
-      // Get current vertex that need to be handled.
-      local_vid = currId++;
     }
-
-    lockCurrId.unlock();
 
     // Doing the task.
     Vertex<VertexType, EdgeType>& v = graph.vertices[local_vid];
-    fprintf(stderr, "[[[]]] Processing vid %u | fi = %u\n", local_vid, firstIteration);
     if (!firstIteration)
       vertexProgram->update(v, engineContext);
 
@@ -1146,6 +1132,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
       if (v.getOutEdge(i).getEdgeLocation() == REMOTE_EDGE_TYPE) {
         IdType global_vid = graph.localToGlobalId[local_vid];
 
+        // Record that this vid gets broadcast in this iteration. Should wait for its corresponding respond.
         pthread_mutex_lock(&lock_recvWaiters);
         recvWaiters[global_vid] = numNodes;
         pthread_mutex_unlock(&lock_recvWaiters);
@@ -1192,29 +1179,26 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
     // No message in queue.
     if (!CommManager::dataPullIn(mType, value)) {
 
-      // Computation workers decided to halt. Going into the finish-up checking procedure.
-      if (compDone) {
-        halt = true;
-        fprintf(stderr, ">- Communicator %u confirms the halt, hence leaving...\n", tid);
-        break;
-      }
+      // Computation workers done their work, so communicator goes to death as well.
+      if (compDone)
+        return;
 
     // Pull in the next message, and process this message.
     } else {
+      IdType global_vid = mType;
 
-      if (mType == IAMDONE || mType == IAMNOTDONE || mType == ITHINKIAMDONE) {   // Impossible.
-        assert(false);
-
-      } else if (value.size() != 1) {
-        IdType global_vid = mType;
+      // A normal ghost value broadcast.
+      if (value.size() != 1) {
         conditionalUpdateGhostVertex(global_vid, value);
 
+        // TODO: Using 1-D vec to indicate a respond here. Needs change.
         VertexType recv_stub = VertexType(1, 0);
         CommManager::dataPushOut(global_vid, (void *) recv_stub.data(), sizeof(FeatType) * recv_stub.size());
 
+      // A respond to a broadcast, and the topic vertex is in my local vertices. I should update the
+      // corresponding recvWaiter's value. If waiters become empty, send a signal in case the workers are
+      // waiting on it to be empty at the iteration barrier.
       } else if (graph.globalToLocalId.find(mType) != graph.globalToLocalId.end()) {
-        IdType global_vid = mType;
-
         pthread_mutex_lock(&lock_recvWaiters);
         assert(recvWaiters.find(global_vid) != recvWaiters.end());
         --recvWaiters[global_vid];
