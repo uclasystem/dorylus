@@ -1092,6 +1092,8 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
           //## Worker barrier 2: Starting a new iteration. ##//
           barComp.wait();
 
+          continue;
+
         // No more, so deciding to halt. But still needs the communicator to check if there will be further scheduling invoked by ghost
         // vertices. If so we are stilling going to the next iteration.
         } else {
