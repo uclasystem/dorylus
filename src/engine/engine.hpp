@@ -1051,13 +1051,11 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
   // Outer while loop. Looping infinitely, looking for a new task to handle.
   while (1) {
     IdType local_vid;
-    bool found = false;
 
     lockCurrId.lock();
 
     // Inner while loop. Looping until got a current vertex id to handle.
     while (1) {
-      found = false;
 
       // All local vertices have been processed. Hit the barrier and wait for next iteration / decide to halt.
       if (currId >= graph.numLocalVertices) {
@@ -1074,7 +1072,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
 
           // Master thread decides to halt, and the communicator confirms it. So going to die.
           if (compHalt)
-            break;
+            return;
 
           // New iteration starts.
           lockCurrId.lock();
@@ -1102,7 +1100,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
           NodeManager::barrier(COMM_BARRIER);
 
           // Yes there are further scheduled vertices. Please start a new iteration.
-          if (scheduler->anyScheduledTasks()) {
+          if (iteration < 5) {
             scheduler->newIteration();
             currId = 0;       // This is unprotected by lockCurrId because only master executes.
             lockCurrId.lock();
@@ -1129,58 +1127,32 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
             barComp.wait();
 
             break;
-          } // end of else: deciding to halt
-        } // end of else: tid == 0
-      } // end of if: currId >= graph.numLocalVertices
+          }
+        }
+      }
 
-      // Do work on the current processing local vertex id.
-      if (scheduler->isScheduled(currId)) {
-        local_vid = currId;
-        found = true;
-        ++currId;
-        break;
-      } else
-        ++currId;
-    } // end of inner while loop
+      // Get current vertex that need to be handled.
+      local_vid = currId++;
+    }
 
     lockCurrId.unlock();
 
-    // Out of inner while loop but no vertex to handle is given.
-    if (!found) {
-      fprintf(stderr, ">- Worker %u has nothing to work on, hence leaving....\n", tid);
-      break;
-    }
-
-    // I got a current vertex id in `vid` to handle now. Doing the task.
+    // Doing the task.
     Vertex<VertexType, EdgeType>& v = graph.vertices[local_vid];
-    assert(scheduler->isScheduled(local_vid));
-
     if (!firstIteration)
       vertexProgram->update(v, engineContext);
-    
-    if (iteration <= 5) {
 
-      // TODO: change self link logic!
-      scheduler->schedule(local_vid);   // Self-link, schedule the vertex itself.
+    // If there are any remote edges, should send this vid to others for their ghost's update.
+    for (unsigned i = 0; i < v.numOutEdges(); ++i) {
+      if (v.getOutEdge(i).getEdgeLocation() == REMOTE_EDGE_TYPE) {
+        IdType global_vid = graph.localToGlobalId[local_vid];
 
-      bool remoteScat = true;
-      for (unsigned i = 0; i < v.numOutEdges(); ++i) {
+        pthread_mutex_lock(&lock_recvWaiters);
+        recvWaiters[global_vid] = numNodes;
+        pthread_mutex_unlock(&lock_recvWaiters);
 
-        // A local edge. Schedule that neighbor immediately.
-        if (v.getOutEdge(i).getEdgeLocation() == LOCAL_EDGE_TYPE)
-          scheduler->schedule(v.getOutEdge(i).destId());
-
-        // A remote edge. Send my vid to other machines, for them to update their ghost vertex's value and schedule its neighbors.
-        else if (remoteScat) {
-          IdType global_vid = graph.localToGlobalId[local_vid];
-
-          pthread_mutex_lock(&lock_recvWaiters);
-          recvWaiters[global_vid] = numNodes;
-          pthread_mutex_unlock(&lock_recvWaiters);
-
-          CommManager::dataPushOut(global_vid, (void *) v.data().data(), sizeof(FeatType) * v.data().size());
-          remoteScat = false;   // Such send should only happen once, no matter how many remote edges this vertex has.
-        }
+        CommManager::dataPushOut(global_vid, (void *) v.data().data(), sizeof(FeatType) * v.data().size());
+        break;
       }
     }
   } // end of outer while loop
