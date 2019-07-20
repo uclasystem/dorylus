@@ -299,11 +299,11 @@ int Engine<VertexType, EdgeType>::readFeaturesFile(const std::string& fileName) 
       feature_mat.push_back(feature_vec);
   }
 
-  for(std::size_t i = 0;i<feature_mat.size();++i){
+  for(std::size_t i = 0; i < feature_mat.size(); ++i){
     //is ghost node
-    auto git=graph.ghostVertices.find(i);
+    auto git = graph.ghostVertices.find(i);
     if (git != graph.ghostVertices.end()){
-      graph.updateGhostVertex(i,&feature_mat[i]);
+      graph.ghostVertices[git->second].setData(feature_mat[i]);
       continue;
     }
     //is local node
