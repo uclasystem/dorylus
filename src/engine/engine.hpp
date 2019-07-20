@@ -1124,7 +1124,9 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
 
     // If there are any remote edges, should send this vid to others for their ghost's update.
     for (unsigned i = 0; i < v.numOutEdges(); ++i) {
-      if (v.getOutEdge(i).getEdgeLocation() != LOCAL_EDGE_TYPE) {
+      fprintf(stderr, "<<<>>> Scanning vertex %u...\n", graph.localToGlobalId[local_vid]);
+      if (v.getOutEdge(i).getEdgeLocation() == REMOTE_EDGE_TYPE) {
+        fprintf(stderr, "<<<>>> Get edge %u towards %u\n", graph.localToGlobalId[local_vid], v.getOutEdge(i).destId());
         IdType global_vid = graph.localToGlobalId[local_vid];
 
         // Record that this vid gets broadcast in this iteration. Should wait for its corresponding respond.
