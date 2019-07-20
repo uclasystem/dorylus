@@ -628,7 +628,7 @@ void Engine<VertexType, EdgeType>::init(int argc, char* argv[], VertexType dVert
   shadowScheduler = new DenseBitset(graph.numLocalVertices);
   trimScheduler = new DenseBitset(graph.numLocalVertices);
 
-  engineContext.setIteration(0);
+  engineContext.setIteration(iteration);
 
   lockCurrId.init();
 
@@ -1046,7 +1046,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
     lockCurrId.unlock();
 
     // All local vertices have been processed. Hit the barrier and wait for next iteration / decide to halt.
-    if (currId >= graph.numLocalVertices) {
+    if (local_vid >= graph.numLocalVertices) {
 
       // Non-master threads.
       if (tid != 0) {
