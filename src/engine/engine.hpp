@@ -1139,24 +1139,6 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
   } // end of outer while loop
 }
 
-template <typename VertexType, typename EdgeType>
-void Engine<VertexType, EdgeType>::updateGhostVertex(IdType vid, VertexType& value) {
-  graph.updateGhostVertex(vid, &value);
-  std::vector<IdType>* outEdges = &(graph.ghostVertices[vid].outEdges);
-  for(unsigned i=0; i<outEdges->size(); ++i)
-    scheduler->schedule(outEdges->at(i));
-}
-
-template <typename VertexType, typename EdgeType>
-void Engine<VertexType, EdgeType>::conditionalUpdateGhostVertex(IdType vid, VertexType& value) {
-  if(graph.ghostVertices.find(vid) != graph.ghostVertices.end()) {
-    graph.updateGhostVertex(vid, &value);
-    std::vector<IdType>* outEdges = &(graph.ghostVertices[vid].outEdges);
-    for(unsigned i=0; i<outEdges->size(); ++i)
-      scheduler->schedule(outEdges->at(i));
-  }
-}
-
 
 /**
  *
@@ -1184,7 +1166,10 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
 
       // A normal ghost value broadcast.
       if (value.size() != 1) {
-        conditionalUpdateGhostVertex(global_vid, value);
+
+        // Update the ghost vertex if it is one of mine.
+        if (graph.ghostVertices.find(global_vid) != graph.ghostVertices.end())
+          graph.updateGhostVertex(global_vid, &value);
 
         // TODO: Using 1-D vec to indicate a respond here. Needs change.
         VertexType recv_stub = VertexType(1, 0);
@@ -1208,16 +1193,5 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
   }
 }
 
-template <typename VertexType, typename EdgeType>
-unsigned Engine<VertexType, EdgeType>::getPreviousAliveNodeId(unsigned nId) {
-  unsigned ret = (nId == 0) ? numNodes - 1 : nId - 1;
-  return ret;   
-}
-
-template <typename VertexType, typename EdgeType>
-unsigned Engine<VertexType, EdgeType>::getNextAliveNodeId(unsigned nId) {
-  unsigned ret = (nId + 1) % numNodes;
-  return ret;
-}
 
 #endif //__ENGINE_HPP__
