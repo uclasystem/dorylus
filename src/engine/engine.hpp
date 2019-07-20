@@ -1112,7 +1112,6 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
           // No more, so deciding to halt. But still needs the communicator to check if there will be further scheduling invoked by ghost
           // vertices. If so we are stilling going to the next iteration.
           } else {
-
             fprintf(stderr, "Deciding to halt at iteration %u...\n", iteration);
 
             pthread_mutex_lock(&mtxDataWaiter);
@@ -1123,10 +1122,9 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
             die = true;
 
             //## Worker barrier 2: Communicator also decides to halt. So going to die. ##//
-            fprintf(stderr, "Communicator confirms the halt at iteration %u.\n", iteration);
             barComp.wait();
 
-            break;
+            return;
           }
         }
       }
