@@ -28,6 +28,7 @@ public:
         }
 
         vertex.addData(curr);   // Push to the back instead of modify the value.
+        fprintf(stderr, "[[[]]] Vertex %u After: -> %u\n", vertex.globalId(), vertex.data()[1]);
 
         return false;
     }

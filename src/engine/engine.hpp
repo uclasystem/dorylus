@@ -1136,7 +1136,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
         break;
       }
     }
-  } // end of outer while loop
+  }
 }
 
 
