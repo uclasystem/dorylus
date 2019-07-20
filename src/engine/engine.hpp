@@ -303,7 +303,7 @@ int Engine<VertexType, EdgeType>::readFeaturesFile(const std::string& fileName) 
     //is ghost node
     auto git = graph.ghostVertices.find(i);
     if (git != graph.ghostVertices.end()){
-      graph.ghostVertices[git].setData(feature_mat[i]);
+      graph.ghostVertices[i].setData(feature_mat[i]);
       continue;
     }
     //is local node
