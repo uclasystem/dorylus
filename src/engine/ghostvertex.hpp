@@ -39,6 +39,14 @@ class GhostVertex {
             return vData;
         }
 
+        VertexType dataAt(unsigned layer) {     // Get value at specified layer.
+            lock.readLock();
+            assert(layer < vertexData.size());
+            VertexType vData = vertexData[layer];
+            lock.unlock();
+            return vData;
+        }
+
         void setData(VertexType* value) {   // Modify the current value.
             lock.writeLock();
             vertexData.back() = *value;

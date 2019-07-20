@@ -122,9 +122,6 @@ template <typename VertexType, typename EdgeType>
 unsigned Engine<VertexType, EdgeType>::iteration = 0;
 
 template <typename VertexType, typename EdgeType>
-unsigned Engine<VertexType, EdgeType>::curr_layer = 1;
-
-template <typename VertexType, typename EdgeType>
 bool Engine<VertexType, EdgeType>::undirected = false;
 
 template <typename VertexType, typename EdgeType>
