@@ -24,7 +24,7 @@ public:
         for (unsigned i = 0; i < vertex.numInEdges(); ++i) {
             vector<FeatType> other = vertex.getSourceVertexDataAt(i, layer);
             sumVectors(curr, other);
-            fprintf(stderr, "[[[]]] Vertex %u is adding \n", );
+            fprintf(stderr, "[[[]]] Vertex %u is adding on layer %u\n", vertex.localId(), layer);
         }
 
         vertex.addData(curr);   // Push to the back instead of modify the value.
