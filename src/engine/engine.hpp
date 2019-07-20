@@ -1049,7 +1049,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
     lockCurrId.unlock();
 
     // All local vertices have been processed. Hit the barrier and wait for next iteration / decide to halt.
-    if (local_vid >= graph.numLocalVertices) {
+    if (currId >= graph.numLocalVertices) {
 
       // Non-master threads.
       if (tid != 0) {
