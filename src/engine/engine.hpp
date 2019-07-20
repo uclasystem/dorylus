@@ -119,9 +119,6 @@ template <typename VertexType, typename EdgeType>
 bool Engine<VertexType, EdgeType>::undirected = false;
 
 template <typename VertexType, typename EdgeType>
-bool Engine<VertexType, EdgeType>::firstIteration = true;
-
-template <typename VertexType, typename EdgeType>
 double Engine<VertexType, EdgeType>::timProcess = 0.0;
 
 template <typename VertexType, typename EdgeType>
@@ -977,7 +974,7 @@ void Engine<VertexType, EdgeType>::run(VertexProgram<VertexType, EdgeType>* vPro
   NodeManager::startProcessing();
   vertexProgram = vProgram;
   currId = 0; iteration = 0;
-  firstIteration = true; compDone = false;
+  compDone = false;
   scheduler->newIteration();
 
   fprintf(stderr, "Starting data communicator\n");
@@ -1004,7 +1001,7 @@ void Engine<VertexType, EdgeType>::quickRun(VertexProgram<VertexType, EdgeType>*
   if(metrics) timProcess = -getTimer();
 
   currId = 0; iteration = 0;
-  firstIteration = true; compDone = false;
+  compDone = false;
   scheduler->newIteration();
 
   dataPool->perform(dataCommunicator);
@@ -1085,12 +1082,9 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
         if (iteration < 5) {
           fprintf(stderr, "!! Starting a new iteration %u at %.3lf ms...\n", iteration, timProcess + getTimer());
 
-          // Go out of firstIteration if current is; else step forward to a new iteration. 
-          if (!firstIteration) {
-            ++iteration;
-            engineContext.setIteration(iteration);
-          } else
-            firstIteration = false;
+          // Step forward to a new iteration. 
+          ++iteration;
+          engineContext.setIteration(iteration);
 
           // Reset current id.
           currId = 0;       // This is unprotected by lockCurrId because only master executes.
@@ -1119,8 +1113,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
 
     // Doing the task.
     Vertex<VertexType, EdgeType>& v = graph.vertices[local_vid];
-    if (!firstIteration)
-      vertexProgram->update(v, engineContext);
+    vertexProgram->update(v, engineContext);
 
     // If there are any remote edges, should send this vid to others for their ghost's update.
     for (unsigned i = 0; i < v.numOutEdges(); ++i) {
