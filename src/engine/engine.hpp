@@ -1170,8 +1170,10 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
       if (value.size() != 1) {
 
         // Update the ghost vertex if it is one of mine.
-        if (graph.ghostVertices.find(global_vid) != graph.ghostVertices.end())
+        if (graph.ghostVertices.find(global_vid) != graph.ghostVertices.end()) {
+          fprintf(stderr, ";;;;;; Updating ghost %u\n", global_vid);
           graph.updateGhostVertex(global_vid, &value);
+        }
 
         // TODO: Using 1-D vec to indicate a respond here. Needs change.
         VertexType recv_stub = VertexType(1, 0);
@@ -1190,6 +1192,7 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
             pthread_cond_signal(&cond_recvWaiters_empty);
         }
         pthread_mutex_unlock(&lock_recvWaiters);
+        fprintf(stderr, ";;;;;; Processed recv_stub of %u\n", global_vid);
       }
     }
   }
