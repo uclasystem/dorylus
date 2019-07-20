@@ -977,29 +977,6 @@ void Engine<VertexType, EdgeType>::run(VertexProgram<VertexType, EdgeType>* vPro
     printEngineMetrics();
 }
 
-template <typename VertexType, typename EdgeType>
-void Engine<VertexType, EdgeType>::quickRun(VertexProgram<VertexType, EdgeType>* vProgram, bool metrics) {
-  NodeManager::barrier("quickrun");
-  fprintf(stderr, "Engine::quickRun called.\n");
-  vertexProgram = vProgram;
-
-  if(metrics) timProcess = -getTimer();
-
-  currId = 0; iteration = 0;
-  compDone = false;
-  scheduler->newIteration();
-
-  dataPool->perform(dataCommunicator);
-  computePool->perform(worker);
-  computePool->sync();
-
-  if(metrics) timProcess += getTimer();
-
-  dataPool->sync();
-
-  //fprintf(stderr, "quickRun completed on node %u in %u iterations took %.3lf ms\n", nodeId, iteration, timProcess);
-}
-
 
 template <typename VertexType, typename EdgeType>
 void Engine<VertexType, EdgeType>::processAll(VertexProgram<VertexType, EdgeType>* vProgram) {
