@@ -71,9 +71,6 @@ template <typename VertexType, typename EdgeType>
 bool Engine<VertexType, EdgeType>::compDone = false;
 
 template <typename VertexType, typename EdgeType>
-bool Engine<VertexType, EdgeType>::halt = false;
-
-template <typename VertexType, typename EdgeType>
 pthread_mutex_t Engine<VertexType, EdgeType>::mtxCompWaiter;
 
 template <typename VertexType, typename EdgeType>
@@ -980,8 +977,7 @@ void Engine<VertexType, EdgeType>::run(VertexProgram<VertexType, EdgeType>* vPro
   NodeManager::startProcessing();
   vertexProgram = vProgram;
   currId = 0; iteration = 0;
-  firstIteration = true; compDone = false; die = false; 
-  halt = false;
+  firstIteration = true; compDone = false;
   scheduler->newIteration();
 
   fprintf(stderr, "Starting data communicator\n");
@@ -1008,8 +1004,7 @@ void Engine<VertexType, EdgeType>::quickRun(VertexProgram<VertexType, EdgeType>*
   if(metrics) timProcess = -getTimer();
 
   currId = 0; iteration = 0;
-  firstIteration = true; compDone = false; die = false; 
-  halt = false;
+  firstIteration = true; compDone = false;
   scheduler->newIteration();
 
   dataPool->perform(dataCommunicator);
