@@ -20,10 +20,9 @@ public:
         VType curr = vertex.data();
 
         unsigned layer = engineContext.getIteration();
-        assert(layer > 0);
 
         for (unsigned i = 0; i < vertex.numInEdges(); ++i) {
-            vector<FeatType> other = vertex.getSourceVertexDataAt(i, layer - 1);
+            vector<FeatType> other = vertex.getSourceVertexDataAt(i, layer);
             sumVectors(curr, other);
         }
 

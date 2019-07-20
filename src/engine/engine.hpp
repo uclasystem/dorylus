@@ -1158,7 +1158,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
     if (!firstIteration)
       vertexProgram->update(v, engineContext);
     
-    if (firstIteration || iteration <= 5) {
+    if (iteration <= 5) {
 
       // TODO: change self link logic!
       scheduler->schedule(local_vid);   // Self-link, schedule the vertex itself.
