@@ -417,21 +417,6 @@ void Engine<VertexType, EdgeType>::processEdge(IdType& from, IdType& to, Graph<V
 }
 
 template <typename VertexType, typename EdgeType>
-void Engine<VertexType, EdgeType>::receiveNewGhostValues(std::set<IdType>& inTopics) {
-  while(inTopics.size() > 0) {
-    IdType vid; VertexType value;
-    CommManager::dataSyncPullIn(vid, value);
-    if(inTopics.find(vid) != inTopics.end()) {
-      typename std::map<IdType, GhostVertex<VertexType> >::iterator gvit = graph.ghostVertices.find(vid);
-      assert(gvit != graph.ghostVertices.end());
-      gvit->second.addData(&value); 
-      inTopics.erase(vid);
-    }
-  }
-  CommManager::flushDataControl();
-}
-
-template <typename VertexType, typename EdgeType>
 void Engine<VertexType, EdgeType>::readGraphBS(std::string& fileName, std::set<IdType>& inTopics, std::vector<IdType>& outTopics) {
   // Read the partition file
   std::string partsFileName = fileName + PARTS_EXT;
@@ -1079,8 +1064,8 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
         NodeManager::barrier(COMM_BARRIER);
 
         // Yes there are further scheduled vertices. Please start a new iteration.
-        if (iteration < 5) {
-          fprintf(stderr, "!! Starting a new iteration %u at %.3lf ms...\n", iteration, timProcess + getTimer());
+        if (iteration < 4) {
+          fprintf(stderr, "Starting a new iteration %u at %.3lf ms...\n", iteration, timProcess + getTimer());
 
           // Step forward to a new iteration. 
           ++iteration;
@@ -1097,7 +1082,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
         // No more, so deciding to halt. But still needs the communicator to check if there will be further scheduling invoked by ghost
         // vertices. If so we are stilling going to the next iteration.
         } else {
-          fprintf(stderr, "!! Deciding to halt at iteration %u...\n", iteration);
+          fprintf(stderr, "Deciding to halt at iteration %u...\n", iteration);
 
           pthread_mutex_lock(&mtxDataWaiter);
           compDone = true;    // Set this to true, so the communicator will start the finish-up checking procedure.
@@ -1119,9 +1104,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
 
     // If there are any remote edges, should send this vid to others for their ghost's update.
     for (unsigned i = 0; i < v.numOutEdges(); ++i) {
-      fprintf(stderr, "<<<>>> Scanning vertex %u...\n", graph.localToGlobalId[local_vid]);
       if (v.getOutEdge(i).getEdgeLocation() == REMOTE_EDGE_TYPE) {
-        fprintf(stderr, "<<<>>> Get edge %u towards %u\n", graph.localToGlobalId[local_vid], v.getOutEdge(i).destId());
         IdType global_vid = graph.localToGlobalId[local_vid];
 
         // Record that this vid gets broadcast in this iteration. Should wait for its corresponding respond.
@@ -1165,10 +1148,8 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
       if (value.size() != 1) {
 
         // Update the ghost vertex if it is one of mine.
-        if (graph.ghostVertices.find(global_vid) != graph.ghostVertices.end()) {
-          fprintf(stderr, ";;;;;; Updating ghost %u\n", global_vid);
+        if (graph.ghostVertices.find(global_vid) != graph.ghostVertices.end())
           graph.updateGhostVertex(global_vid, &value);
-        }
 
         // TODO: Using 1-D vec to indicate a respond here. Needs change.
         VertexType recv_stub = VertexType(1, 0);
@@ -1187,7 +1168,6 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
             pthread_cond_signal(&cond_recvWaiters_empty);
         }
         pthread_mutex_unlock(&lock_recvWaiters);
-        fprintf(stderr, ";;;;;; Processed recv_stub of %u\n", global_vid);
       }
     }
   }
