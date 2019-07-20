@@ -1160,6 +1160,10 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
       vertexProgram->update(v, engineContext);
     
     if (firstIteration | !reachOutputLayer()) {
+
+      // TODO: change self link logic!
+      scheduler->schedule(local_vid);   // Self-link, schedule the vertex itself.
+
       bool remoteScat = true;
       for (unsigned i = 0; i < v.numOutEdges(); ++i) {
 
