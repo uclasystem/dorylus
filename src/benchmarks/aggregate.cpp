@@ -19,8 +19,11 @@ public:
     bool update(Vertex<VertexType, EdgeType>& vertex, EngineContext& engineContext) {
         VType curr = vertex.data();
 
+        unsigned layer = engineContext.getIteration();
+        assert(layer > 0);
+
         for (unsigned i = 0; i < vertex.numInEdges(); ++i) {
-            vector<FeatType> other = vertex.getSourceVertexData(i);
+            vector<FeatType> other = vertex.getSourceVertexDataAt(i, layer - 1);
             sumVectors(curr, other);
         }
 

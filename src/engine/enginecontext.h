@@ -38,11 +38,20 @@ public:
       return tLong;
     }
 
+    void setIteration(unsigned iter) {
+      iteration = iter;
+    }
+
+    unsigned getIteration() {
+      return iteration;
+    }
+
 private:
     BitsetScheduler* scheduler;
     IdType nVertices;
     unsigned cBatch;
     bool tLong;
+    unsigned iteration;
 };
 
 #endif //__ENGINE_CONTEXT_H__

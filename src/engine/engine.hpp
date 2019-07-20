@@ -640,6 +640,8 @@ void Engine<VertexType, EdgeType>::init(int argc, char* argv[], VertexType dVert
   shadowScheduler = new DenseBitset(graph.numLocalVertices);
   trimScheduler = new DenseBitset(graph.numLocalVertices);
 
+  engineContext.setIteration(0);
+
   lockCurrId.init();
 
   pthread_mutex_init(&mtxCompWaiter, NULL);
@@ -1090,7 +1092,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
 
           if (!firstIteration) {
             ++iteration;
-            gotoNextLayer();
+            engineContext.setIteration(iteration);
           } else
             firstIteration = false;
 
@@ -1159,7 +1161,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
     if (!firstIteration)
       vertexProgram->update(v, engineContext);
     
-    if (firstIteration | !reachOutputLayer()) {
+    if (firstIteration || iteration <= 5) {
 
       // TODO: change self link logic!
       scheduler->schedule(local_vid);   // Self-link, schedule the vertex itself.
@@ -1185,18 +1187,6 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
       }
     }
   } // end of outer while loop
-}
-
-template <typename VertexType, typename EdgeType>
-bool Engine<VertexType, EdgeType>::reachOutputLayer() {
-  // Do not need mutex lock here, since will only be read but not written.
-  return curr_layer >= 5;  // 5 here is just a meaningless example.
-}
-
-template <typename VertexType, typename EdgeType>
-void Engine<VertexType, EdgeType>::gotoNextLayer() {
-  // Do not need mutex lock here, since will only be called by master at iteration finish up.
-  ++curr_layer;
 }
 
 template <typename VertexType, typename EdgeType>

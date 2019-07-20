@@ -41,6 +41,7 @@ class Vertex {
         IdType globalId();
 
         VertexType data();                      // Get the current value.
+        VertexType dataAt(unsigned layer);      // Get value at specific layer.
         std::vector<VertexType>& dataAll();     // Get reference to all old values' vector.
         void setData(VertexType value);         // Modify the current value.
         void addData(VertexType value);         // Add a new value of the new iteration.
@@ -50,7 +51,6 @@ class Vertex {
 
         unsigned numInEdges();
         unsigned numOutEdges();
-        unsigned numOutEdgesRemote();
 
         InEdge<EdgeType>& getInEdge(unsigned i);
         OutEdge<EdgeType>& getOutEdge(unsigned i);
@@ -61,6 +61,7 @@ class Vertex {
         EdgeType getInEdgeData(unsigned i);
         EdgeType getOutEdgeData(unsigned i);
         VertexType getSourceVertexData(unsigned i);
+        VertexType getSourceVertexDataAt(unsigned i, unsigned layer);
         VertexType getDestVertexData(unsigned i);
         unsigned getSourceVertexGlobalId(unsigned i);
         unsigned getDestVertexGlobalId(unsigned i);

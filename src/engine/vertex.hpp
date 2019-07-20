@@ -37,24 +37,21 @@ VertexType Vertex<VertexType, EdgeType>::data() {
 }
 
 template<typename VertexType, typename EdgeType>
+VertexType Vertex<VertexType, EdgeType>::dataAt(unsigned layer) {
+    lock.readLock();
+    assert(layer < vertexData.size());
+    VertexType vData = vertexData[layer];
+    lock.unlock();
+    return vData;
+}
+
+template<typename VertexType, typename EdgeType>
 std::vector<VertexType>& Vertex<VertexType, EdgeType>::dataAll() {
     lock.readLock();
     std::vector<VertexType>& vDataAll = vertexData;
     lock.unlock();
     return vDataAll;
 }
-
-/*
-template<typename VertexType, typename EdgeType>
-VertexType Vertex<VertexType, EdgeType>::oldData() {
-  return oldVertexData;
-}
-
-template<typename VertexType, typename EdgeType>
-void Vertex<VertexType, EdgeType>::setOldData(VertexType value) {
-  oldVertexData = value;
-}
-*/
 
 template<typename VertexType, typename EdgeType>
 void Vertex<VertexType, EdgeType>::setData(VertexType value) {
@@ -78,16 +75,6 @@ unsigned Vertex<VertexType, EdgeType>::numInEdges() {
 template<typename VertexType, typename EdgeType>
 unsigned Vertex<VertexType, EdgeType>::numOutEdges() {
     return outEdges.size();
-}
-
-template<typename VertexType, typename EdgeType>
-unsigned Vertex<VertexType, EdgeType>::numOutEdgesRemote() {
-    unsigned count = 0;
-    for (OutEdge<EdgeType>& e : outEdges) {
-        if (e.getEdgeLocation() == REMOTE_EDGE_TYPE)
-            ++count;
-    }
-    return count;
 }
 
 template<typename VertexType, typename EdgeType>
@@ -119,6 +106,16 @@ VertexType Vertex<VertexType, EdgeType>::getSourceVertexData(unsigned i) {
         return graph->vertices[inEdges[i].sourceId()].data();
     } else {
         return graph->ghostVertices[inEdges[i].sourceId()].data();
+    }
+}
+
+template<typename VertexType, typename EdgeType>
+VertexType Vertex<VertexType, EdgeType>::getSourceVertexDataAt(unsigned i, unsigned layer) {
+    assert(i < inEdges.size()); 
+    if(inEdges[i].getEdgeLocation() == LOCAL_EDGE_TYPE) {
+        return graph->vertices[inEdges[i].sourceId()].dataAt(layer);
+    } else {
+        return graph->ghostVertices[inEdges[i].sourceId()].dataAt(layer);
     }
 }
 
