@@ -1137,6 +1137,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
 
     // Doing the task.
     Vertex<VertexType, EdgeType>& v = graph.vertices[local_vid];
+    fprintf(stderr, "[[[]]] Processing vid %u | fi = %u\n", local_vid, firstIteration);
     if (!firstIteration)
       vertexProgram->update(v, engineContext);
 
