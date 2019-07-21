@@ -820,7 +820,7 @@ Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void *args) {
             // corresponding recvWaiter's value. If waiters become empty, send a signal in case the workers are
             // waiting on it to be empty at the iteration barrier.
             } else if (graph.globalToLocalId.find(topic) != graph.globalToLocalId.end()) {
-                lockRecvWaiters.lock()
+                lockRecvWaiters.lock();
                 assert(recvWaiters.find(global_vid) != recvWaiters.end());
                 --recvWaiters[global_vid];
                 if (recvWaiters[global_vid] == 0) {
