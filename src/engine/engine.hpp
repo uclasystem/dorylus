@@ -71,9 +71,6 @@ template <typename VertexType, typename EdgeType>
 unsigned Engine<VertexType, EdgeType>::numNodes;
 
 template <typename VertexType, typename EdgeType>
-bool Engine<VertexType, EdgeType>::compDone = false;
-
-template <typename VertexType, typename EdgeType>
 pthread_mutex_t Engine<VertexType, EdgeType>::mtxCompWaiter;
 
 template <typename VertexType, typename EdgeType>
@@ -125,13 +122,13 @@ template <typename VertexType, typename EdgeType>
 bool Engine<VertexType, EdgeType>::halt = false;
 
 template <typename VertexType, typename EdgeType>
-double Engine<VertexType, EdgeType>::timProcess = 0.0;
+double Engine<VertexType, EdgeType>::timeProcess = 0.0;
 
 template <typename VertexType, typename EdgeType>
-double Engine<VertexType, EdgeType>::allTimProcess = 0.0;
+double Engine<VertexType, EdgeType>::allTimeProcess = 0.0;
 
 template <typename VertexType, typename EdgeType>
-double Engine<VertexType, EdgeType>::timInit = 0.0;
+double Engine<VertexType, EdgeType>::timeInit = 0.0;
 
 template <typename VertexType, typename EdgeType>
 std::vector<std::tuple<unsigned long long, IdType, IdType> > Engine<VertexType, EdgeType>::insertStream;
@@ -796,7 +793,7 @@ Engine<VertexType, EdgeType>::worker(unsigned tid, void *args) {
                 pthread_mutex_unlock(&lock_recvWaiters);
 
                 //## Global Iteration barrier. ##//
-                NodeManager::barrier(COMM_BARRIER);
+                NodeManager::barrier(LAYER_BARRIER);
 
                 // Yes there are further scheduled vertices. Please start a new iteration.
                 if (iteration + 1 < NUM_LAYERS) {
@@ -913,6 +910,7 @@ Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void *args) {
  * Print a log message to the log file.
  * 
  */
+template <typename VertexType, typename EdgeType>
 void
 Engine<VertexType, EdgeType>::printLog(const char *format) const {
 
