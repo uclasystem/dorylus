@@ -68,6 +68,12 @@ template <typename VertexType, typename EdgeType>
 Lock Engine<VertexType, EdgeType>::lockRecvWaiters;
 
 template <typename VertexType, typename EdgeType>
+Cond Engine<VertexType, EdgeType>::condRecvWaitersEmpty;
+
+template <typename VertexType, typename EdgeType>
+Lock Engine<VertexType, EdgeType>::lockHalt;
+
+template <typename VertexType, typename EdgeType>
 unsigned Engine<VertexType, EdgeType>::nodeId;
 
 template <typename VertexType, typename EdgeType>
