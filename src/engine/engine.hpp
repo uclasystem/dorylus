@@ -978,7 +978,8 @@ void Engine<VertexType, EdgeType>::run(VertexProgram<VertexType, EdgeType>* vPro
 
 
 template <typename VertexType, typename EdgeType>
-void Engine<VertexType, EdgeType>::processAll(VertexProgram<VertexType, EdgeType>* vProgram) {
+void
+Engine<VertexType, EdgeType>::processAll(VertexProgram<VertexType, EdgeType>* vProgram) {
   vProgram->beforeIteration(engineContext);
 
   for(IdType i=0; i<graph.numLocalVertices; ++i)
@@ -998,7 +999,7 @@ void Engine<VertexType, EdgeType>::processAll(VertexProgram<VertexType, EdgeType
  * 
  */
 template <typename VertexType, typename EdgeType>
-static void
+void
 Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
 
   // Outer while loop. Looping infinitely, looking for a new task to handle.
@@ -1103,7 +1104,7 @@ Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
  * 
  */
 template <typename VertexType, typename EdgeType>
-static void
+void
 Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
   IdType topic;
   VertexType value;
