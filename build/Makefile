@@ -60,8 +60,8 @@ else
 endif
 
 # Targets for you to choose
-all: prompt directories $(BENCH_AGG)_tgt
-$(BENCH_AGG): prompt directories $(BENCH_AGG)_tgt
+all: prompt directories $(BENCH_AGG).bin
+$(BENCH_AGG): prompt directories $(BENCH_AGG).bin
 
 # Phony utilities
 prompt:
@@ -93,8 +93,8 @@ $(OBJ_PATH)/%.o: $(UTILS_PATH)/%.cpp $(UTILS_PATH)/%.hpp
 	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
 
 # Benchmark executable internal targets
-$(BENCH_AGG)_tgt: $(BASE_OBJS) $(BM_PATH)/$(BENCH_AGG).cpp
-	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFALGS) -o $(BENCH_AGG).bin
+$(BENCH_AGG).bin: $(BM_PATH)/$(BENCH_AGG).cpp $(BASE_OBJS)
+	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFALGS) -o $@
 
 # Clean
 .PHONY: clean

@@ -1,5 +1,5 @@
-#ifndef __node_manager_HPP__
-#define __node_manager_HPP__
+#ifndef __NODE_MANAGER_HPP__
+#define __NODE_MANAGER_HPP__
 
 #include <string>
 #include <vector>
@@ -119,4 +119,4 @@ class NodeManager {
     static unsigned getNodeId(std::string& nodeName);
 };
 
-#endif //__node_manager_HPP__
+#endif //__NODE_MANAGER_HPP__
