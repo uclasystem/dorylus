@@ -3,7 +3,7 @@
 #include <cerrno>
 #include <cstring>
 #include <cassert>
-#include <cunistd>
+#include <unistd.h>
 
 zhandle_t* ZKInterface::zh = NULL;
 clientid_t ZKInterface::myId;

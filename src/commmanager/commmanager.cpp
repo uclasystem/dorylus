@@ -1,5 +1,5 @@
 #include <vector>
-#include <cunistd>
+#include <unistd.h>
 #include <zmq.hpp>
 #include "commmanager.hpp"
 #include "../parallel/lock.hpp"
