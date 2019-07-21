@@ -168,7 +168,7 @@ Engine<VertexType, EdgeType>::init(int argc, char *argv[], VertexType dVertex, E
     graph.compactGraph();
 
     timeInit += getTimer();
-    printLog("Engine initialization completes.")
+    printLog("Engine initialization completes.");
 
     // Make sure all nodes finish initailization.
     NodeManager::barrier(INIT_BARRIER);
@@ -482,14 +482,16 @@ Engine<VertexType, EdgeType>::parseArgs(int argc, char *argv[]) {
     boost::program_options::options_description desc("Allowed options");
     desc.add_options()
         ("help", "Produce help message")
+
         ("config", boost::program_options::value<std::string>()->default_value(std::string(DEFAULT_CONFIG_FILE), DEFAULT_CONFIG_FILE), "Config file")
+
         ("graphfile", boost::program_options::value<std::string>(), "Graph file")
         ("featuresfile", boost::program_options::value<std::string>(), "Features file")
 
         ("undirected", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Graph type")
+
         ("dthreads", boost::program_options::value<unsigned>()->default_value(unsigned(NUM_DATA_THREADS), NUM_DATA_THREADS_STR), "Number of data threads")
         ("cthreads", boost::program_options::value<unsigned>()->default_value(unsigned(NUM_COMP_THREADS), NUM_COMP_THREADS_STR), "Number of compute threads")
-        ("pofrequency", boost::program_options::value<unsigned>()->default_value(unsigned(PUSHOUT_FREQUENCY), PUSHOUT_FREQUENCY_STR), "Frequency of pushouts")
         ("dport", boost::program_options::value<unsigned>()->default_value(unsigned(DATA_PORT), DATA_PORT_STR), "Port for data communication")
         ("cport", boost::program_options::value<unsigned>()->default_value(unsigned(CONTROL_PORT_START), CONTROL_PORT_START_STR), "Port start for control communication")
 
@@ -572,7 +574,7 @@ void
 Engine<VertexType, EdgeType>::readFeaturesFile(const std::string& featuresFileName) {
     std::ifstream infile(featuresFileName.c_str());
     if(!infile.good())
-        printLog("Cannot open feature file: %s\n", fileName.c_str());
+        printLog("Cannot open feature file: %s\n", featuresFileName.c_str());
 
     assert(infile.good());
 
@@ -615,9 +617,6 @@ Engine<VertexType, EdgeType>::readFeaturesFile(const std::string& featuresFileNa
             continue;
         }
     }
-
-    return 0;
-
 }
 
 
@@ -801,7 +800,7 @@ Engine<VertexType, EdgeType>::readGraphBS(std::string& fileName, std::set<IdType
     graph.vertices.resize(graph.numLocalVertices);
     for (IdType i = 0; i < graph.numLocalVertices; ++i) {
         lGraph.vertices[i].localIdx = i;
-        lGraph.vertices[i].globalIdx = lGraph.localToGlobalId[i];
+        lGraph.vertices[i].globalIdx = graph.localToGlobalId[i];
         lGraph.vertices[i].vertexLocation = INTERNAL_VERTEX;
         lGraph.vertices[i].vertexData.clear();
         lGraph.vertices[i].vertexData.push_back(defaultVertex);
@@ -829,18 +828,11 @@ Engine<VertexType, EdgeType>::readGraphBS(std::string& fileName, std::set<IdType
         if (srcdst[0] == srcdst[1])
             continue;
 
-        if (graph.numGlobalEdges < originalEdges) {
-            processEdge(srcdst[0], srcdst[1], graph, &inTopics, &oTopics);
-            if(undirected)
-                processEdge(srcdst[1], srcdst[0], graph, &inTopics, &oTopics);
-            ++graph.numGlobalEdges;
-        } else {
-            if (graph.vertexPartitionIds[srcdst[0]] == nodeId || graph.vertexPartitionIds[srcdst[1]] == nodeId)
-                insertStream.push_back(std::make_tuple(globalInsertStreamSize, srcdst[0], srcdst[1]));
-            ++globalInsertStreamSize;
-            if (globalInsertStreamSize > numBatches * batchSize)
-                break;
-        }
+        assert(graph.numGlobalEdges < originalEdges);
+        processEdge(srcdst[0], srcdst[1], graph, &inTopics, &oTopics);
+        if (undirected)
+            processEdge(srcdst[1], srcdst[0], graph, &inTopics, &oTopics);
+        ++graph.numGlobalEdges;
     }
 
     infile.close();
