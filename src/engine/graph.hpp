@@ -5,7 +5,6 @@
 #include <map>
 #include "../parallel/lock.hpp"
 #include "vertex.hpp"
-#include "ghostvertex.hpp"
 #include "edge.hpp"
 
 /*
