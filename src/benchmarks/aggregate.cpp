@@ -22,10 +22,8 @@ class AggregateProgram : public VertexProgram<VertexType, EdgeType> {
 public:
 
     // Define my own update function that to be called in each iteration.
-    bool update(Vertex<VertexType, EdgeType>& vertex, EngineContext& engineContext) {
+    bool update(Vertex<VertexType, EdgeType>& vertex, unsigned layer) {
         VType curr = vertex.data();
-
-        unsigned layer = engineContext.getIteration();
 
         for (unsigned i = 0; i < vertex.numInEdges(); ++i) {
             vector<FeatType> other = vertex.getSourceVertexDataAt(i, layer);

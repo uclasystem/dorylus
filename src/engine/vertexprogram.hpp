@@ -10,10 +10,10 @@ class VertexProgram {
         virtual ~VertexProgram() {
         }
 
-        virtual void beforeIteration(EngineContext& engineContext) {
+        virtual void beforeIteration(unsigned layer) {
         }
 
-        virtual bool update(Vertex<VertexType, EdgeType>& vertex, EngineContext& engineContext) {
+        virtual bool update(Vertex<VertexType, EdgeType>& vertex, unsigned layer) {
             fprintf(stderr, "base update called.\n");
             assert(false);
             return false;
@@ -25,7 +25,7 @@ class VertexProgram {
         }
 
 
-        virtual void afterIteration(EngineContext& engineContext) {
+        virtual void afterIteration(unsigned layer) {
         }
 };
 

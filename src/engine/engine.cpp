@@ -71,9 +71,6 @@ template <typename VertexType, typename EdgeType>
 Barrier Engine<VertexType, EdgeType>::barComp;
 
 template <typename VertexType, typename EdgeType>
-EngineContext Engine<VertexType, EdgeType>::engineContext;
-
-template <typename VertexType, typename EdgeType>
 VertexType Engine<VertexType, EdgeType>::defaultVertex;
 
 template <typename VertexType, typename EdgeType>
@@ -131,10 +128,6 @@ Engine<VertexType, EdgeType>::init(int argc, char *argv[], VertexType dVertex, E
 
     // Read in initial features from the features file.
     readFeaturesFile(featuresFile);
-
-    // Set engine context.
-    engineContext.setNumVertices(graph.numGlobalVertices);
-    engineContext.setIteration(0);
 
     // Initialize synchronization utilities.
     lockCurrId.init();
@@ -231,13 +224,13 @@ Engine<VertexType, EdgeType>::run(VertexProgram<VertexType, EdgeType> *vProgram,
 template <typename VertexType, typename EdgeType>
 void
 Engine<VertexType, EdgeType>::processAll(VertexProgram<VertexType, EdgeType> *vProgram) {
-    vProgram->beforeIteration(engineContext);
+    vProgram->beforeIteration(iteration);
 
     // Loop through all local vertices and process it.
     for (IdType i = 0; i < graph.numLocalVertices; ++i)
         vProgram->processVertex(graph.vertices[i]);
 
-    vProgram->afterIteration(engineContext);
+    vProgram->afterIteration(iteration);
 }
 
 
@@ -323,7 +316,6 @@ Engine<VertexType, EdgeType>::worker(unsigned tid, void *args) {
 
                     // Step forward to a new iteration. 
                     ++iteration;
-                    engineContext.setIteration(iteration);
 
                     // Reset current id.
                     currId = 0;       // This is unprotected by lockCurrId because only master executes.
@@ -353,7 +345,7 @@ Engine<VertexType, EdgeType>::worker(unsigned tid, void *args) {
 
         // Doing the task.
         Vertex<VertexType, EdgeType>& v = graph.vertices[local_vid];
-        vertexProgram->update(v, engineContext);
+        vertexProgram->update(v, iteration);
 
         // If there are any remote edges, should send this vid to others for their ghost's update.
         for (unsigned i = 0; i < v.numOutEdges(); ++i) {

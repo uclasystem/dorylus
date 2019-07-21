@@ -8,7 +8,6 @@
 #include <atomic>
 #include <tuple>
 #include "graph.hpp"
-#include "enginecontext.hpp"
 #include "vertexprogram.hpp"
 #include "../parallel/threadpool.hpp"
 #include "../parallel/lock.hpp"
@@ -65,8 +64,6 @@ template <typename VertexType, typename EdgeType>
 class Engine {
 
 public:
-
-    static EngineContext engineContext;
 
     // Public APIs for benchmarks.
     static void init(int argc, char* argv[], VertexType dVertex = VertexType(), EdgeType dEdge = EdgeType(), EdgeType (*eWeight) (IdType, IdType) = NULL);
