@@ -3,7 +3,7 @@ INCPATH=../installs/out/include
 LIBPATH=../installs/out/lib
 CFLAGS=-O3
 
-all: partitioner repartitioner tobinary
+all: partitioner tobinary
 
 partitioner: partitioner.cpp
 	${CPP} -I${INCPATH} -L${LIBPATH} $< -o $@ -lmetis ${CFLAGS}
