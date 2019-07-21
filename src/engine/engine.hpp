@@ -39,18 +39,6 @@ template <typename VertexType, typename EdgeType>
 std::string Engine<VertexType, EdgeType>::featuresFile;
 
 template <typename VertexType, typename EdgeType>
-unsigned Engine<VertexType, EdgeType>::poFrequency = PUSHOUT_FREQUENCY;
-
-template <typename VertexType, typename EdgeType>
-BitsetScheduler* Engine<VertexType, EdgeType>::scheduler = NULL;
-
-template <typename VertexType, typename EdgeType>
-DenseBitset* Engine<VertexType, EdgeType>::shadowScheduler = NULL;
-
-template <typename VertexType, typename EdgeType>
-DenseBitset* Engine<VertexType, EdgeType>::trimScheduler = NULL;
-
-template <typename VertexType, typename EdgeType>
 VertexProgram<VertexType, EdgeType>* Engine<VertexType, EdgeType>::vertexProgram = NULL;
 
 template <typename VertexType, typename EdgeType>
@@ -84,15 +72,6 @@ template <typename VertexType, typename EdgeType>
 Barrier Engine<VertexType, EdgeType>::barComp;
 
 template <typename VertexType, typename EdgeType>
-Barrier Engine<VertexType, EdgeType>::barCompData;
-
-template <typename VertexType, typename EdgeType>
-pthread_barrier_t Engine<VertexType, EdgeType>::barDebug;
-
-template <typename VertexType, typename EdgeType>
-std::atomic<unsigned> Engine<VertexType, EdgeType>::remPushOut = ATOMIC_VAR_INIT(0);
-
-template <typename VertexType, typename EdgeType>
 EngineContext Engine<VertexType, EdgeType>::engineContext;
 
 template <typename VertexType, typename EdgeType>
@@ -118,18 +97,6 @@ double Engine<VertexType, EdgeType>::allTimeProcess = 0.0;
 
 template <typename VertexType, typename EdgeType>
 double Engine<VertexType, EdgeType>::timeInit = 0.0;
-
-template <typename VertexType, typename EdgeType>
-std::vector<std::tuple<unsigned long long, IdType, IdType> > Engine<VertexType, EdgeType>::insertStream;
-
-template <typename VertexType, typename EdgeType>
-unsigned long long Engine<VertexType, EdgeType>::globalInsertStreamSize = 0;
-
-template <typename VertexType, typename EdgeType>
-std::vector<std::tuple<unsigned long long, IdType, IdType> > Engine<VertexType, EdgeType>::deleteStream;
-
-template <typename VertexType, typename EdgeType>
-unsigned long long Engine<VertexType, EdgeType>::globalDeleteStreamSize = 0;
 
 template <typename VertexType, typename EdgeType>
 unsigned Engine<VertexType, EdgeType>::baseEdges = 0;
