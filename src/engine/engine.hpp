@@ -543,7 +543,7 @@ Engine<VertexType, EdgeType>::parseArgs(int argc, char *argv[]) {
  */
 template <typename VertexType, typename EdgeType>
 void
-Engine<VertexType, EdgeType>::readFeaturesFile(const std::string& featuresFileName) {
+Engine<VertexType, EdgeType>::readFeaturesFile(std::string& featuresFileName) {
     std::ifstream infile(featuresFileName.c_str());
     if(!infile.good())
         printLog("Cannot open feature file: %s\n", featuresFileName.c_str());

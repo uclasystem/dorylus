@@ -13,7 +13,7 @@ cd $( dirname $0 )/../build
 
 case $1 in
 	"agg")
-		make clean; make mode=debug aggregate
+		make clean; make -s mode=debug aggregate
 
 		if [ $? -eq 0 ]; then 
 			cd ..
@@ -23,7 +23,7 @@ case $1 in
 		fi
 		;;
 	*)
-		make clean; make mode=debug aggregate
+		make clean; make -s mode=debug aggregate
 
 		if [ $? -eq 0 ]; then 
 			cd ..
