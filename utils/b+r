@@ -9,8 +9,8 @@
 #
 # Usage: ./b+r [Bench] [Dataset] [Feature-File]
 #
-#   Bench:          agg(*), inc, load
-#   Dataset:        fb(*), data, small
+#   Bench:          agg(*)
+#   Dataset:        fb(*), small
 #   Feature-File:   (*), path_to_file 
 #
 # "(*)" means default.

@@ -240,12 +240,6 @@ public:
     static void setOnDeleteSmartHandler(void (*odSmartHandler) (VertexType& v, LightEdge<VertexType, EdgeType>& e));
 
     static void run(VertexProgram<VertexType, EdgeType>* vProgram, bool printEM);
-    static void streamRun(VertexProgram<VertexType, EdgeType>* vProgram, VertexProgram<VertexType, EdgeType>* wProgram, void (*reset)(void), bool printEM);
-    static void streamRun2(VertexProgram<VertexType, EdgeType>* vProgram, VertexProgram<VertexType, EdgeType>* removeApproximations, VertexProgram<VertexType, EdgeType>* exactProgram, VertexProgram<VertexType, EdgeType>* wProgram, bool smartDeletions, bool printEM);
-    static void streamRun3(VertexProgram<VertexType, EdgeType>* vProgram, VertexProgram<VertexType, EdgeType>* tagProgram, VertexProgram<VertexType, EdgeType>* removeApproximations, VertexProgram<VertexType, EdgeType>* exactProgram, VertexProgram<VertexType, EdgeType>* wProgram, bool smartDeletions, bool printEM);
-    static void streamRun4(VertexProgram<VertexType, EdgeType>* vProgram, VertexProgram<VertexType, EdgeType>* trimProgram, VertexProgram<VertexType, EdgeType>* wProgram, bool smartDeletions, bool printEM);
-
-    static void streamRun5(VertexProgram<VertexType, EdgeType>* vProgram, VertexProgram<VertexType, EdgeType>* trimProgram, VertexProgram<VertexType, EdgeType>* wProgram, bool printEM);
 
     static void processAll(VertexProgram<VertexType, EdgeType>* vProgram);
     static void quickRun(VertexProgram<VertexType, EdgeType>* vProgram, bool metrics = false);
@@ -274,21 +268,9 @@ public:
    
     static void trimmed(IdType vId);
     static void notTrimmed(IdType vId);
-    
-    static void activateEndPoints(IdType from, IdType to, InOutType io, void (*oadHandler) (VertexType& v)); 
-    static void activateEndPoints2(IdType from, IdType to, InOutType io, void (*oadHandler) (VertexType& v, LightEdge<VertexType, EdgeType>& e), LightEdge<VertexType, EdgeType>& edge);
-
-    static void updateGhostVertex(IdType vid, VertexType& value);
-    static void conditionalUpdateGhostVertex(IdType vid, VertexType& value);
-
-    static unsigned getPreviousAliveNodeId(unsigned nId);
-    static unsigned getNextAliveNodeId(unsigned nId);
 
     static IdType numVertices();
     static bool master(); 
-    
-    template<typename T>
-    static T sillyReduce(T value, T (*reducer)(T, T)); 
 };
 
 #endif //__ENGINE_H__

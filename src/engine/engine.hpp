@@ -122,6 +122,9 @@ template <typename VertexType, typename EdgeType>
 bool Engine<VertexType, EdgeType>::undirected = false;
 
 template <typename VertexType, typename EdgeType>
+bool Engine<VertexType, EdgeType>::halt = false;
+
+template <typename VertexType, typename EdgeType>
 double Engine<VertexType, EdgeType>::timProcess = 0.0;
 
 template <typename VertexType, typename EdgeType>
@@ -939,20 +942,13 @@ bool Engine<VertexType, EdgeType>::deleteEdge3(IdType from, IdType to) { // glob
   return treeEdge;
 }
 
-template <typename VertexType, typename EdgeType>
-void Engine<VertexType, EdgeType>::setOnAddDelete(InOutType oa, void (*oaH) (VertexType& v), InOutType od, void (*odH) (VertexType& v)) {
-  onAdd = oa;
-  onAddHandler = oaH;
 
-  onDelete = od;
-  onDeleteHandler = odH;
-}
-
-template <typename VertexType, typename EdgeType>
-void Engine<VertexType, EdgeType>::setOnDeleteSmartHandler(void (*odSmartHandler) (VertexType& v, LightEdge<VertexType, EdgeType>& e)) {
-  onDeleteSmartHandler = odSmartHandler; 
-}
-
+/**
+ *
+ * Run the engine with the given vertex program (whose `update()` member function is customized).
+ * Will start a bunch of worker threads and a bunch of data communicator threads.
+ * 
+ */
 template <typename VertexType, typename EdgeType>
 void Engine<VertexType, EdgeType>::run(VertexProgram<VertexType, EdgeType>* vProgram, bool printEM) {
   NodeManager::barrier("run"); 
@@ -992,6 +988,9 @@ void Engine<VertexType, EdgeType>::processAll(VertexProgram<VertexType, EdgeType
 }
 
 
+///// Below are private functions for the engine. ///
+
+
 /**
  *
  * Major part of the engine's computation logic is done by workers. When the engine runs it wakes threads up from the thread pool
@@ -999,8 +998,8 @@ void Engine<VertexType, EdgeType>::processAll(VertexProgram<VertexType, EdgeType
  * 
  */
 template <typename VertexType, typename EdgeType>
-void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
-  static bool compHalt = false;
+static void
+Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
 
   // Outer while loop. Looping infinitely, looking for a new task to handle.
   while (1) {
@@ -1023,7 +1022,7 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
         barComp.wait();
 
         // If master says halt then go to death; else continue for the new iteration.
-        if (compHalt)
+        if (halt)
           return;
         else
           continue;
@@ -1065,10 +1064,8 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
           fprintf(stderr, "Deciding to halt at iteration %u...\n", iteration);
 
           pthread_mutex_lock(&mtxDataWaiter);
-          compDone = true;    // Set this to true, so the communicator will start the finish-up checking procedure.
+          halt = true;
           pthread_mutex_unlock(&mtxDataWaiter);
-
-          compHalt = true;
 
           //## Worker barrier 2: Going to die. ##//
           barComp.wait();
@@ -1106,23 +1103,24 @@ void Engine<VertexType, EdgeType>::worker(unsigned tid, void* args) {
  * 
  */
 template <typename VertexType, typename EdgeType>
-void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
-  IdType mType;
+static void
+Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
+  IdType topic;
   VertexType value;
 
   // While loop, looping infinitely to get the next message.
   while(1) {
 
     // No message in queue.
-    if (!CommManager::dataPullIn(mType, value)) {
+    if (!CommManager::dataPullIn(topic, value)) {
 
       // Computation workers done their work, so communicator goes to death as well.
-      if (compDone)
+      if (halt)
         return;
 
     // Pull in the next message, and process this message.
     } else {
-      IdType global_vid = mType;
+      IdType global_vid = topic;
 
       // A normal ghost value broadcast.
       if (value.size() != 1) {
@@ -1138,7 +1136,7 @@ void Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void* args) {
       // A respond to a broadcast, and the topic vertex is in my local vertices. I should update the
       // corresponding recvWaiter's value. If waiters become empty, send a signal in case the workers are
       // waiting on it to be empty at the iteration barrier.
-      } else if (graph.globalToLocalId.find(mType) != graph.globalToLocalId.end()) {
+      } else if (graph.globalToLocalId.find(topic) != graph.globalToLocalId.end()) {
         pthread_mutex_lock(&lock_recvWaiters);
         assert(recvWaiters.find(global_vid) != recvWaiters.end());
         --recvWaiters[global_vid];

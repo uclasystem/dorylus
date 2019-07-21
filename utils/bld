@@ -22,26 +22,6 @@ case $1 in
 			return 13
 		fi
 		;;
-	"inc")
-		make clean; make mode=debug increment
-
-		if [ $? -eq 0 ]; then 
-			cd ..
-			./utils/send_file build/increment.bin
-		else 
-			return 13
-		fi
-		;;
-	"load")
-		make clean; make mode=debug loadfeatures
-
-		if [ $? -eq 0 ]; then 
-			cd ..
-			./utils/send_file build/loadfeatures.bin
-		else 
-			return 13
-		fi
-		;;
 	*)
 		make clean; make mode=debug aggregate
 

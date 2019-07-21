@@ -6,8 +6,8 @@
 #
 # Usage: ./ec2run.sh [Bench] [Dataset] [Feature-File]
 #
-#   Bench:          agg(*), inc, load
-#   Dataset:        fb(*), data, small
+#   Bench:          agg(*)
+#   Dataset:        fb(*), small
 #   Feature-File:   (*), path_to_file 
 #
 # "(*)" means default.
@@ -108,12 +108,6 @@ case $1 in
 	"agg")
 		BM=aggregate.bin; BK=AGG;
 		;;
-	"inc")
-		BM=increment.bin; BK=INC;
-		;;
-  "load")
-    BM=loadfeatures.bin; BK=LOAD;
-    ;;
 	*)
 		BM=aggregate.bin; BK=AGG;
 		;;
@@ -121,17 +115,14 @@ esac
 
 # Dataset
 case $2 in
-	"fb")
-		IP=/filepool/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB; SRC=0
-		;;
-	"data")
-		IP=/filepool/parts_${NDS}/data.bsnap; IK=DT; SRC=0;
-		;;
 	"small")
 		IP=../inputs/data/parts_${NDS}/small.graph.bsnap; IK=SM; SRC=0;
     ;;
-	*)
+	"fb")
 		IP=/filepool/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB; SRC=0
+		;;
+	*)
+		IP=../inputs/data/parts_${NDS}/small.graph.bsnap; IK=SM; SRC=0;
 		;;
 esac
 
