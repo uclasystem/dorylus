@@ -32,7 +32,7 @@ Lock *CommManager::lockControlSubscribers = NULL;
  */
 void
 CommManager::init() {
-    printLog("CommManager starts initialization...");
+    printLog(nodeId, "CommManager starts initialization...");
     numNodes = NodeManager::getNumNodes();
     nodeId = NodeManager::getNodeId();
 
@@ -181,7 +181,7 @@ CommManager::init() {
     }
 
     flushControl();
-    printLog("CommManager initialization complete.");
+    printLog(nodeId, "CommManager initialization complete.");
 }
 
 

@@ -134,8 +134,7 @@ private:
     static void setEdgeNormalizations();
     static void readGraphBS(std::string& fileName, std::set<IdType>& inTopics, std::vector<IdType>& outTopics);
 
-    // Log printing.
-    static void printLog(const char *format, ...);
+    // Metric printing.
     static void printEngineMetrics();
 };
 

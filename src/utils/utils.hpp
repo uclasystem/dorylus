@@ -32,6 +32,8 @@ void removeArg(int *argc, char **argv, int i);
 
 double getTimer();
 
+void printLog(const unsigned nodeId, const char *format, ...);
+
 template<typename ParseType>
 bool parse(int* argc, char** argv, const char* str, ParseType* value) {
   int siz = strlen(str);

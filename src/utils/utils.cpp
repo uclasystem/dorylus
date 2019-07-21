@@ -31,6 +31,26 @@ double getTimer() {
     return t.tv_sec * 1000 + t.tv_usec / 1000.0;
 }
 
+
+/**
+ *
+ * Print a log message to the log file.
+ * 
+ */
+void
+printLog(const unsigned nodeId, const char *format, ...) {
+
+    // Print node ID.
+    fprintf(stderr, "[ Node %u ] ", nodeId);
+
+    // Print the log message.
+    va_list argptr;
+    va_start(argptr, format);
+    vfprintf(stderr, format, argptr);
+    va_end(argptr);
+}
+
+
 #ifndef STATICIP
 void getIP(std::string* ip) {
     int fd;

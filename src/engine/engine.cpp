@@ -106,7 +106,7 @@ double Engine<VertexType, EdgeType>::timeInit = 0.0;
 template <typename VertexType, typename EdgeType>
 void
 Engine<VertexType, EdgeType>::init(int argc, char *argv[], VertexType dVertex, EdgeType dEdge, EdgeType (*eWeight) (IdType, IdType)) {
-    printLog("Engine starts initialization...");
+    printLog(nodeId, "Engine starts initialization...");
     timeInit = -getTimer();
 
     // Parse the command line arguments.
@@ -158,7 +158,7 @@ Engine<VertexType, EdgeType>::init(int argc, char *argv[], VertexType dVertex, E
     graph.compactGraph();
 
     timeInit += getTimer();
-    printLog("Engine initialization complete.");
+    printLog(nodeId, "Engine initialization complete.");
 
     // Make sure all nodes finish initailization.
     NodeManager::barrier(INIT_BARRIER);
@@ -190,7 +190,7 @@ Engine<VertexType, EdgeType>::run(VertexProgram<VertexType, EdgeType> *vProgram,
     
     // Make sure engines on all machines start running.
     NodeManager::barrier(RUN_BARRIER); 
-    printLog("Engine starts running...\n");
+    printLog(nodeId, "Engine starts running...\n");
 
     timeProcess = -getTimer();
 
@@ -217,7 +217,7 @@ Engine<VertexType, EdgeType>::run(VertexProgram<VertexType, EdgeType> *vProgram,
     // Join all data communicators.
     dataPool->sync();
 
-    printLog("Engine completes the processing at iteration %u.\n", iteration);
+    printLog(nodeId, "Engine completes the processing at iteration %u.\n", iteration);
     if (master() && printEM)
         printEngineMetrics();
 }
@@ -319,7 +319,7 @@ Engine<VertexType, EdgeType>::worker(unsigned tid, void *args) {
 
                 // Yes there are further scheduled vertices. Please start a new iteration.
                 if (iteration + 1 < NUM_LAYERS) {
-                    printLog("Starting a new iteration %u at %.3lf ms...\n", iteration, timeProcess + getTimer());
+                    printLog(nodeId, "Starting a new iteration %u at %.3lf ms...\n", iteration, timeProcess + getTimer());
 
                     // Step forward to a new iteration. 
                     ++iteration;
@@ -336,7 +336,7 @@ Engine<VertexType, EdgeType>::worker(unsigned tid, void *args) {
                 // No more, so deciding to halt. But still needs the communicator to check if there will be further scheduling invoked by ghost
                 // vertices. If so we are stilling going to the next iteration.
                 } else {
-                    printLog("Deciding to halt at iteration %u...\n", iteration);
+                    printLog(nodeId, "Deciding to halt at iteration %u...\n", iteration);
 
                     // Set this to signal data communicator to end its life.
                     lockHalt.lock();
@@ -430,34 +430,14 @@ Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void *args) {
 
 /**
  *
- * Print a log message to the log file.
- * 
- */
-template <typename VertexType, typename EdgeType>
-void
-Engine<VertexType, EdgeType>::printLog(const char *format, ...) {
-
-    // Print node ID.
-    fprintf(stderr, "[ Node %u ] ", nodeId);
-
-    // Print the log message.
-    va_list argptr;
-    va_start(argptr, format);
-    vfprintf(stderr, format, argptr);
-    va_end(argptr);
-}
-
-
-/**
- *
  * Print engine metrics of processing time.
  * 
  */
 template <typename VertexType, typename EdgeType>
 void
 Engine<VertexType, EdgeType>::printEngineMetrics() {
-    printLog("Engine Metrics: Init time = %.3lf ms\n", timeInit);
-    printLog("Engine Metrics: Processing time = %.3lf ms\n", allTimeProcess);
+    printLog(nodeId, "Engine Metrics: Init time = %.3lf ms\n", timeInit);
+    printLog(nodeId, "Engine Metrics: Processing time = %.3lf ms\n", allTimeProcess);
 }
 
 
@@ -525,13 +505,13 @@ Engine<VertexType, EdgeType>::parseArgs(int argc, char *argv[]) {
     assert(vm.count("cport"));
     CommManager::setControlPortStart(vm["cport"].as<unsigned>());
 
-    printLog("Printing parsed configuration:");
-    printLog("  config = %s\n", cFile.c_str());
-    printLog("  dThreads = %u\n", dThreads);
-    printLog("  cThreads = %u\n", cThreads);
-    printLog("  graphFile = %s\n", graphFile.c_str());
-    printLog("  featuresFile = %s\n", featuresFile.c_str());
-    printLog("  undirected = %s\n", undirected ? "true" : "false");
+    printLog(nodeId, "Printing parsed configuration:");
+    printLog(nodeId, "  config = %s\n", cFile.c_str());
+    printLog(nodeId, "  dThreads = %u\n", dThreads);
+    printLog(nodeId, "  cThreads = %u\n", cThreads);
+    printLog(nodeId, "  graphFile = %s\n", graphFile.c_str());
+    printLog(nodeId, "  featuresFile = %s\n", featuresFile.c_str());
+    printLog(nodeId, "  undirected = %s\n", undirected ? "true" : "false");
 }
 
 
@@ -545,7 +525,7 @@ void
 Engine<VertexType, EdgeType>::readFeaturesFile(std::string& featuresFileName) {
     std::ifstream infile(featuresFileName.c_str());
     if(!infile.good())
-        printLog("Cannot open feature file: %s\n", featuresFileName.c_str());
+        printLog(nodeId, "Cannot open feature file: %s\n", featuresFileName.c_str());
 
     assert(infile.good());
 
@@ -601,7 +581,7 @@ void
 Engine<VertexType, EdgeType>::readPartsFile(std::string& partsFileName, Graph<VertexType, EdgeType>& lGraph) {
     std::ifstream infile(partsFileName.c_str());
     if(!infile.good())
-        printLog("Cannot open patition file: %s\n", partsFileName.c_str());
+        printLog(nodeId, "Cannot open patition file: %s\n", partsFileName.c_str());
 
     assert(infile.good());
 
@@ -733,7 +713,7 @@ void
 Engine<VertexType, EdgeType>::findGhostDegrees(std::string& fileName) {
     std::ifstream infile(fileName.c_str(), std::ios::binary);
     if (!infile.good())
-        printLog("Cannot open BinarySnap file: %s\n", fileName.c_str());
+        printLog(nodeId, "Cannot open BinarySnap file: %s\n", fileName.c_str());
 
     assert(infile.good());
 
@@ -782,7 +762,7 @@ Engine<VertexType, EdgeType>::readGraphBS(std::string& fileName, std::set<IdType
     std::string edgeFileName = fileName + EDGES_EXT;
     std::ifstream infile(edgeFileName.c_str(), std::ios::binary);
     if(!infile.good())
-        printLog("Cannot open BinarySnap file: %s\n", edgeFileName.c_str());
+        printLog(nodeId, "Cannot open BinarySnap file: %s\n", edgeFileName.c_str());
 
     assert(infile.good());
 
