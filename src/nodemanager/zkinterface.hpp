@@ -1,5 +1,5 @@
-#ifndef __ZK_INTERFACE_H__
-#define __ZK_INTERFACE_H__
+#ifndef __ZK_INTERFACE_HPP__
+#define __ZK_INTERFACE_HPP__
 
 #include <zookeeper.h>
 #include <iostream>
@@ -47,4 +47,4 @@ public:
         static int recursiveDeleteZKNode(const char* root);
 };
 
-#endif //__ZK_INTERFACE_H__
+#endif //__ZK_INTERFACE_HPP__

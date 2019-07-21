@@ -1,7 +1,3 @@
-#ifndef __ENGINE_HPP__
-#define __ENGINE_HPP__
-
-
 #include <iostream>
 #include <fstream>
 #include <cmath>
@@ -785,6 +781,3 @@ Engine<VertexType, EdgeType>::readGraphBS(std::string& fileName, std::set<IdType
     for (it = oTopics.begin(); it != oTopics.end(); ++it)
         outTopics.push_back(*it);
 }
-
-
-#endif //__ENGINE_HPP__

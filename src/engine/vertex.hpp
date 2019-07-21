@@ -1,5 +1,5 @@
-#ifndef __VERTEX_H__
-#define __VERTEX_H__
+#ifndef __VERTEX_HPP__
+#define __VERTEX_HPP__
 
 #include <atomic>
 #include <vector>
@@ -123,4 +123,4 @@ class GhostVertex {
 };
 
 
-#endif /* __VERTEX_H__ */
+#endif /* __VERTEX_HPP__ */

@@ -1,5 +1,5 @@
-#ifndef __THREAD_POOL_H__
-#define __THREAD_POOL_H__
+#ifndef __THREAD_POOL_HPP__
+#define __THREAD_POOL_HPP__
 
 #include <pthread.h>
 
@@ -33,4 +33,4 @@ private:
     static void* worker(void* args);
 };
 
-#endif //__THREAD_POOL_H__
+#endif //__THREAD_POOL_HPP__

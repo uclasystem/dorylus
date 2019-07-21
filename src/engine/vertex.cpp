@@ -1,7 +1,3 @@
-#ifndef __VERTEX_HPP__
-#define __VERTEX_HPP__
-
-
 #include <iostream>
 #include <cassert>
 #include <iterator>
@@ -171,5 +167,3 @@ template<typename VertexType, typename EdgeType>
 void Vertex<VertexType, EdgeType>::setParent(IdType p) {
     parentIdx = p;
 }
-
-#endif /* __VERTEX_HPP__ */

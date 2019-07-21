@@ -1,5 +1,5 @@
-#ifndef __COMM_MANAGER_H__
-#define __COMM_MANAGER_H__
+#ifndef __COMM_MANAGER_HPP__
+#define __COMM_MANAGER_HPP__
 
 
 #include <set>
@@ -83,4 +83,4 @@ private:
     static unsigned numLiveNodes;
 };
 
-#endif //__COMM_MANAGER_H__
+#endif //__COMM_MANAGER_HPP__

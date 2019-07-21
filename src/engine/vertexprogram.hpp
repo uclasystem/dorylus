@@ -1,5 +1,5 @@
-#ifndef __LIB_VERTEXPROGRAM_HPP__
-#define __LIB_VERTEXPROGRAM_HPP__
+#ifndef __VERTEXPROGRAM_HPP__
+#define __VERTEXPROGRAM_HPP__
 
 #include "vertex.hpp"
 
@@ -25,4 +25,4 @@ public:
 };
 
 
-#endif /* __LIB_VERTEXPROGRAM_HPP__ */
+#endif /* __VERTEXPROGRAM_HPP__ */

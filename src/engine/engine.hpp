@@ -1,5 +1,5 @@
-#ifndef __ENGINE_H__
-#define __ENGINE_H__
+#ifndef __ENGINE_HPP__
+#define __ENGINE_HPP__
 
 
 #include <set>
@@ -137,4 +137,4 @@ private:
 };
 
 
-#endif //__ENGINE_H__
+#endif //__ENGINE_HPP__

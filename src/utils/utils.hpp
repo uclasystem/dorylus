@@ -1,5 +1,5 @@
-#ifndef __UTILS_H__
-#define __UTILS_H__
+#ifndef __UTILS_HPP__
+#define __UTILS_HPP__
 
 #include <cstdio>
 #include <map>
@@ -49,4 +49,4 @@ bool parse(int* argc, char** argv, const char* str, ParseType* value) {
 
 void getIP(std::string* ip);
 
-#endif //__UTILS_H__
+#endif //__UTILS_HPP__

@@ -1,5 +1,5 @@
-#ifndef __EDGE_H__
-#define __EDGE_H__
+#ifndef __EDGE_HPP__
+#define __EDGE_HPP__
 
 
 #include "../utils/utils.hpp"
@@ -41,4 +41,4 @@ class OutEdge: public Edge<EdgeType> {
         void setDestId(IdType dId);
 };
 
-#endif /* __EDGE_H__ */
+#endif /* __EDGE_HPP__ */
