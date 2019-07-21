@@ -4,8 +4,8 @@
 #include <vector>
 #include <map>
 #include "../parallel/lock.hpp"
-#include "vertex.hpp"
-#include "edge.hpp"
+#include "vertex.cpp"
+#include "edge.cpp"
 
 /*
 struct ScatterVersionType {

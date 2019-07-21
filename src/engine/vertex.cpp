@@ -1,3 +1,7 @@
+#ifndef __VERTEX_CPP__
+#define __VERTEX_CPP__
+
+
 #include <iostream>
 #include <cassert>
 #include <iterator>
@@ -167,3 +171,6 @@ template<typename VertexType, typename EdgeType>
 void Vertex<VertexType, EdgeType>::setParent(IdType p) {
     parentIdx = p;
 }
+
+
+#endif // __VERTEX_CPP__

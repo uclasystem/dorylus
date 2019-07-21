@@ -5,7 +5,7 @@
 #include <vector>
 #include <pthread.h>
 #include "../parallel/rwlock.hpp"
-#include "edge.hpp"
+#include "edge.cpp"
 
 #define INTERNAL_VERTEX 'I'
 #define BOUNDARY_VERTEX 'B'

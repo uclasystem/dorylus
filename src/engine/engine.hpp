@@ -7,7 +7,7 @@
 #include <climits>
 #include <atomic>
 #include <tuple>
-#include "graph.hpp"
+#include "graph.cpp"
 #include "vertexprogram.hpp"
 #include "../commmanager/commmanager.hpp"
 #include "../nodemanager/nodemanager.hpp"

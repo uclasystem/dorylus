@@ -1,3 +1,7 @@
+#ifndef __EDGE_CPP__
+#define __EDGE_CPP__
+
+
 #include <cstring>
 #include "edge.hpp"
 
@@ -65,3 +69,6 @@ template<typename EdgeType>
 void OutEdge<EdgeType>::setDestId(IdType dId) {
     Edge<EdgeType>::otherId = dId;
 }
+
+
+#endif // __EDGE_CPP__

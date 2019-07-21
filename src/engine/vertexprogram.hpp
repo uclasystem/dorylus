@@ -1,7 +1,7 @@
 #ifndef __VERTEXPROGRAM_HPP__
 #define __VERTEXPROGRAM_HPP__
 
-#include "vertex.hpp"
+#include "vertex.cpp"
 
 template<typename VertexType, typename EdgeType>
 class VertexProgram {

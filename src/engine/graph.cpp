@@ -1,3 +1,7 @@
+#ifndef __GRAPH_CPP__
+#define __GRAPH_CPP__
+
+
 #include <cassert>
 #include "graph.hpp"
 
@@ -48,3 +52,6 @@ void ThinGraph<VertexType>::compactGraph() {
     for(it = ghostVertices.begin(); it != ghostVertices.end(); ++it)
         it->second.outEdges.shrink_to_fit();
 }
+
+
+#endif // __GRAPH_CPP__

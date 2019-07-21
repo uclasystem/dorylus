@@ -2,7 +2,7 @@
 #include <fstream>
 #include <vector>
 #include <cassert>
-#include "../engine/engine.hpp"
+#include "../engine/engine.cpp"
 
 
 using namespace std;
