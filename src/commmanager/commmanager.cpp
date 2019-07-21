@@ -347,7 +347,7 @@ void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* o
         //fprintf(stderr, "Node %u: FROM MY END, SUBSCRIPTION IS COMPLETE\n", nodeId);
         NodeManager::barrier(SUBSCRIBEDONE_BARRIER);
         
-        lockDataSubscriber.unlock()
+        lockDataSubscriber.unlock();
         lockDataPublisher.unlock();
 
         flushData(numLiveNodes);
@@ -368,7 +368,7 @@ void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* o
 
         lockDataSubscriber.lock();
         bool ret = dataSubscriber->krecv(&inMsg, ZMQ_DONTWAIT);
-        lockDataSubscriber.unlock()
+        lockDataSubscriber.unlock();
 
         if(!ret)
             return false;
@@ -387,7 +387,7 @@ void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* o
         zmq::message_t inMsg;
         lockDataSubscriber.lock();
         assert(dataSubscriber->krecv(&inMsg));
-        lockDataSubscriber.unlock()
+        lockDataSubscriber.unlock();
 
 		int32_t dataSize = inMsg.size() - sizeof(IdType);
 		int32_t numberOfFeatures = dataSize / sizeof(FeatType);
@@ -481,7 +481,7 @@ void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* o
         }
 
         //pthread_mutex_unlock(&mtx_dataContext);
-        lockDataSubscriber.unlock()
+        lockDataSubscriber.unlock();
         lockDataPublisher.unlock();
         fprintf(stderr, "Flushing data complete ...\n");
     }
