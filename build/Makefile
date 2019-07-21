@@ -59,8 +59,9 @@ else
 	CFLAGS += -DVERBOSE_ERRORS -g -fsanitize=address
 endif
 
-# Overall batch target
-all: prompt directories $(BENCH_AGG)
+# Targets for you to choose
+all: prompt directories $(BENCH_AGG)_tgt
+$(BENCH_AGG): prompt directories $(BENCH_AGG)_tgt
 
 # Phony utilities
 prompt:
@@ -75,7 +76,7 @@ endif
 directories:
 	mkdir -p $(OBJ_PATH) 
 
-# Frameowrk objects targets
+# Frameowrk objects internal targets
 $(OBJ_PATH)/%.o: $(NODE_PATH)/%.cpp $(NODE_PATH)/%.hpp
 	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
 
@@ -91,8 +92,8 @@ $(OBJ_PATH)/%.o: $(PARALLEL_PATH)/%.cpp $(PARALLEL_PATH)/%.hpp
 $(OBJ_PATH)/%.o: $(UTILS_PATH)/%.cpp $(UTILS_PATH)/%.hpp
 	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
 
-# Benchmark targets
-$(BENCH_AGG): $(BM_PATH)/$(BENCH_AGG).cpp $(BASE_OBJS)
+# Benchmark executable internal targets
+$(BENCH_AGG)_tgt: $(BM_PATH)/$(BENCH_AGG).cpp $(BASE_OBJS)
 	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFALGS) -o $(AGG_TARGET_BIN)
 
 # Clean
