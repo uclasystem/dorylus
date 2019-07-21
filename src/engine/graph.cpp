@@ -1,6 +1,7 @@
 #ifndef __GRAPH_HPP__
 #define __GRAPH_HPP__
 
+#include <cassert>
 #include "graph.hpp"
 
 template <typename VertexType, typename EdgeType>
