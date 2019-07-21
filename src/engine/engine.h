@@ -14,6 +14,7 @@
 #include <climits>
 #include <atomic>
 #include <tuple>
+#include <cstdarg>
 
 #define NUM_DATA_THREADS 1
 #define NUM_COMP_THREADS 5
@@ -62,8 +63,9 @@
 #define RESPONSE_VERTEX_END (MAX_IDTYPE - 8)
 // -----
 
-#define DATACOMM_BARRIER "datacomm"
-#define COMM_BARRIER "comm"
+/** Global node barriers. */
+#define LAYER_BARRIER "layer"
+#define RUN_BARRIER "run"
 
 
 
@@ -111,7 +113,9 @@ T sumReducer(T left, T right) {
 
 template <typename VertexType, typename EdgeType>
 class Engine {
+
 public:
+
     static Graph<VertexType, EdgeType> graph;
     static BitsetScheduler* scheduler;
 
@@ -139,7 +143,6 @@ public:
     static unsigned numNodes;
     static bool die;
 
-    static bool compDone;
     static bool halt;
 
     static bool undirected;
@@ -147,9 +150,9 @@ public:
     static bool firstIteration;
     static unsigned iteration;
 
-    static double timProcess;   
-    static double allTimProcess;
-    static double timInit; 
+    static double timeProcess;   
+    static double allTimeProcess;
+    static double timeInit; 
 
     static unsigned baseEdges;
     static unsigned numBatches;
@@ -206,23 +209,7 @@ public:
      */
     static void setEdgeNormalizations();
 
-    /*
-        Usage:This function will read feature file and 
-            set data to feature vectors of both local and 
-            ghost vertices.
-        The function is called in engine::init()
-            The fileName is currently hard coded to "../inputs/features.txt"
-        The file being read should have format of(either "," or " " is fine):
-        f00,f01,f02,....,f0n
-        f10,f11,f12,....,f1n
-        ...
-        fm0,fm1,fm2,....,fmn
-        
 
-        It is also worth noting that since ghost vertex doesn't have attribute Id,
-        it would be easier for you to test by setting the first feature 
-        in the feature vector as nodeId.
-    */
     static int readFeaturesFile(const std::string& fileName);
 
     static void readDeletionStream(std::string& fileName);
@@ -247,8 +234,12 @@ public:
     static IdType numVertices();
     static bool master(); 
 
-    static void worker(unsigned tid, void* args);
-    static void dataCommunicator(unsigned tid, void* args);
+private:
+
+    static void worker(unsigned tid, void *args);
+    static void dataCommunicator(unsigned tid, void *args);
+
+    static printLog(const char *format, ...) const;
 };
 
 
