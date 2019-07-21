@@ -2,6 +2,7 @@
 #define __ENGINE_HPP__
 
 
+#include <iostream>
 #include <fstream>
 #include <cmath>
 #include <boost/program_options.hpp>
