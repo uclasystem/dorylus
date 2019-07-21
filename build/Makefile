@@ -94,7 +94,7 @@ $(OBJ_PATH)/%.o: $(UTILS_PATH)/%.cpp $(UTILS_PATH)/%.hpp
 
 # Benchmark executable internal targets
 $(BENCH_AGG)_tgt: $(BM_PATH)/$(BENCH_AGG).cpp $(BASE_OBJS)
-	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFALGS) -o $(AGG_TARGET_BIN)
+	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFALGS) -o $(BENCH_AGG).bin
 
 # Clean
 .PHONY: clean
