@@ -226,23 +226,13 @@ public:
     static int readFeaturesFile(const std::string& fileName);
 
     static void readDeletionStream(std::string& fileName);
-    static void addEdge(IdType from, IdType to, std::set<IdType>* inTopics);
-    static void deleteEdge(IdType from, IdType to);
-    static LightEdge<VertexType, EdgeType> deleteEdge2(IdType from, IdType to);
-    static bool deleteEdge3(IdType from, IdType to);
-
-    static void receiveNewGhostValues(std::set<IdType>& inTopics);
 
     static void init(int argc, char* argv[], VertexType dVertex = VertexType(), EdgeType dEdge = EdgeType(), EdgeType (*eWeight) (IdType, IdType) = NULL);
     static void destroy();
-    
-    static void setOnAddDelete(InOutType oa, void (*oaHandler) (VertexType& v), InOutType od, void (*odHandler) (VertexType& v));
-    static void setOnDeleteSmartHandler(void (*odSmartHandler) (VertexType& v, LightEdge<VertexType, EdgeType>& e));
 
     static void run(VertexProgram<VertexType, EdgeType>* vProgram, bool printEM);
 
     static void processAll(VertexProgram<VertexType, EdgeType>* vProgram);
-    static void quickRun(VertexProgram<VertexType, EdgeType>* vProgram, bool metrics = false);
 
     static void printEngineMetrics();
 
@@ -252,25 +242,14 @@ public:
     static void initGraph(Graph<VertexType, EdgeType>& lGraph);
     static void processEdge(IdType& from, IdType& to, Graph<VertexType, EdgeType>& lGraph, std::set<IdType>* inTopics, std::set<IdType>* oTopics, bool streaming = false); 
  
-    static void worker(unsigned tid, void* args);
-
-    static bool reachOutputLayer();
-    static void gotoNextLayer();
-
-    static void dataCommunicator(unsigned tid, void* args);
     static void replicationReceiver(unsigned tid, void* args);
-
-    static void signalAll();
-    static void signalVertex(IdType vId);
-    
-    static void shadowSignalVertex(IdType vId);
-    static void shadowUnsignalVertex(IdType vId);
-   
-    static void trimmed(IdType vId);
-    static void notTrimmed(IdType vId);
 
     static IdType numVertices();
     static bool master(); 
+
+    static void worker(unsigned tid, void* args);
+    static void dataCommunicator(unsigned tid, void* args);
 };
+
 
 #endif //__ENGINE_H__

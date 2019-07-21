@@ -76,7 +76,6 @@ int main(int argc, char* argv[]) {
 
     VType defaultVertex = vector<FeatType>(2, 1);
     Engine<VType, EType>::init(argc, argv, defaultVertex);
-    Engine<VType, EType>::signalAll();
 
     AggregateProgram<VType, EType> aggregateProgram;
     Engine<VType, EType>::run(&aggregateProgram, true);
