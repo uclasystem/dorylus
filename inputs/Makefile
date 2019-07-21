@@ -8,12 +8,9 @@ all: partitioner repartitioner tobinary
 partitioner: partitioner.cpp
 	${CPP} -I${INCPATH} -L${LIBPATH} $< -o $@ -lmetis ${CFLAGS}
 
-repartitioner: repartitioner.cpp
-	${CPP} -I${INCPATH} -L${LIBPATH} $< -o $@ -lmetis ${CFLAGS}
-
 tobinary: snapToBinarySnap.cpp
 	${CPP} $< -o $@ ${CFLAGS}
 
 .PHONY: clean
 clean:
-	rm -f partitioner repartitioner tobinary
+	rm -f partitioner tobinary
