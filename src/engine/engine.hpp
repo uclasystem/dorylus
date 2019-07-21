@@ -828,7 +828,7 @@ Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void *args) {
                     if (recvWaiters.empty())
                         condRecvWaitersEmpty.signal();
                 }
-                lockRecvWaiters.unlock()
+                lockRecvWaiters.unlock();
             }
         }
     }
