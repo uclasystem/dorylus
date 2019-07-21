@@ -93,7 +93,7 @@ $(OBJ_PATH)/%.o: $(UTILS_PATH)/%.cpp $(UTILS_PATH)/%.hpp
 	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
 
 # Benchmark executable internal targets
-$(BENCH_AGG)_tgt: $(BM_PATH)/$(BENCH_AGG).cpp $(BASE_OBJS)
+$(BENCH_AGG)_tgt: $(BASE_OBJS) $(BM_PATH)/$(BENCH_AGG).cpp
 	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFALGS) -o $(BENCH_AGG).bin
 
 # Clean
