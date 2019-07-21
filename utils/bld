@@ -11,6 +11,10 @@
 
 cd $( dirname $0 )/../build
 
+function header {
+	echo -e "\e[33;1m######## ${1} ########\e[0m"
+}
+
 case $1 in
 	"agg")
 		make clean; make -s mode=debug aggregate
@@ -34,3 +38,4 @@ case $1 in
 		;;
 esac
 
+header "Successfully built benchmark ${1}"

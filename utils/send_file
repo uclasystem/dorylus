@@ -8,7 +8,6 @@ ASP_DIR=$( dirname $0 )/..
 
 base_files=(src/engine/engine.h src/engine/engine.hpp src/engine/graph.h src/engine/graph.hpp src/engine/vertex.h src/engine/vertex.hpp)
 
-
 file=
 if [ $# -gt 0 ]; then
 	if [[ $1 != "base" ]]; then
@@ -26,11 +25,11 @@ if [[ $file == "base" ]]; then
 	for item in ${base_files[@]}; do
 		file=$( dirname $0 )/../$item
 		for mach in $( cat ~/.dsh/machines.list ); do
-			scp $file $mach:$file
+			scp -q $file $mach:$file
 		done
 	done
 else
 	for mach in $( cat ~/.dsh/machines.list ); do
-		scp $file $mach:$file
+		scp -q $file $mach:$file
 	done
 fi
