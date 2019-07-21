@@ -1,22 +1,20 @@
 #ifndef __ENGINE_HPP__
 #define __ENGINE_HPP__
 
+
 #include "engine.h"
+#include "ghostvertex.hpp"
 #include "../commmanager/commmanager.h"
 #include "../nodemanager/nodemanager.h"
-#include "ghostvertex.hpp"
 #include <fstream>
 #include <cmath>
 #include <boost/program_options.hpp>
 #include <boost/program_options/parsers.hpp>
-#include <boost/algorithm/string/classification.hpp> // Include boost::for is_any_of.
+#include <boost/algorithm/string/classification.hpp>    // Include boost::for is_any_of.
 #include <boost/algorithm/string/split.hpp>
 #include <string>
-#include <stdlib.h>
+#include <cstdlib>
 #include <omp.h>
-
-
-#define NUM_LAYERS 5
 
 
 template <typename VertexType, typename EdgeType>
@@ -142,378 +140,6 @@ unsigned Engine<VertexType, EdgeType>::numBatches = 0;
 template <typename VertexType, typename EdgeType>
 unsigned Engine<VertexType, EdgeType>::batchSize = 0;
 
-template <typename VertexType, typename EdgeType>
-unsigned Engine<VertexType, EdgeType>::deletePercent = 0;
-
-template <typename VertexType, typename EdgeType>
-InOutType Engine<VertexType, EdgeType>::onAdd = NEITHER;
-
-template <typename VertexType, typename EdgeType>
-InOutType Engine<VertexType, EdgeType>::onDelete = NEITHER;
-
-template <typename VertexType, typename EdgeType>
-void (*Engine<VertexType, EdgeType>::onAddHandler) (VertexType& v) = NULL;
-
-template <typename VertexType, typename EdgeType>
-void (*Engine<VertexType, EdgeType>::onDeleteHandler) (VertexType& v) = NULL;
-
-template <typename VertexType, typename EdgeType>
-void (*Engine<VertexType, EdgeType>::onDeleteSmartHandler) (VertexType& v, LightEdge<VertexType, EdgeType>& e) = NULL;
-
-template <typename VertexType, typename EdgeType>
-void Engine<VertexType, EdgeType>::parseArgs(int argc, char* argv[]) {
-    boost::program_options::options_description desc("Allowed options");
-    desc.add_options()
-        ("help", "Produce help message")
-        ("config", boost::program_options::value<std::string>()->default_value(std::string(DEFAULT_CONFIG_FILE), DEFAULT_CONFIG_FILE), "Config file")
-        ("graphfile", boost::program_options::value<std::string>(), "Graph file")
-        ("featuresfile", boost::program_options::value<std::string>(), "Features file")
-
-        ("undirected", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Graph type")
-        ("dthreads", boost::program_options::value<unsigned>()->default_value(unsigned(NUM_DATA_THREADS), NUM_DATA_THREADS_STR), "Number of data threads")
-        ("cthreads", boost::program_options::value<unsigned>()->default_value(unsigned(NUM_COMP_THREADS), NUM_COMP_THREADS_STR), "Number of compute threads")
-        ("pofrequency", boost::program_options::value<unsigned>()->default_value(unsigned(PUSHOUT_FREQUENCY), PUSHOUT_FREQUENCY_STR), "Frequency of pushouts")
-        ("dport", boost::program_options::value<unsigned>()->default_value(unsigned(DATA_PORT), DATA_PORT_STR), "Port for data communication")
-        ("cport", boost::program_options::value<unsigned>()->default_value(unsigned(CONTROL_PORT_START), CONTROL_PORT_START_STR), "Port start for control communication")
-
-        ("baseedges", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Percentage of edges in base graph")
-        ("numbatches", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Number of mini-batches") 
-        ("batchsize", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Size of mini-batches")
-        ("deletepercent", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Deletion percent in mini-batches")
-        ;
-
-    boost::program_options::variables_map vm;
-
-    boost::program_options::store(boost::program_options::command_line_parser(argc, argv).options(desc).allow_unregistered().run(), vm);
-    boost::program_options::notify(vm);
-
-    assert(vm.count("config"));
-
-    std::string cFile = vm["config"].as<std::string>();
-
-    std::ifstream cStream;
-    cStream.open(cFile.c_str());
-
-    boost::program_options::store(boost::program_options::parse_config_file(cStream, desc, true), vm);
-    boost::program_options::notify(vm);
-
-    if (vm.count("help")) {
-        std::cout << desc << std::endl;
-        exit(-1);
-    }
-
-    assert(vm.count("dthreads"));
-    dThreads = vm["dthreads"].as<unsigned>();
-
-    dThreads = 1; // forced to 1
-
-    assert(vm.count("cthreads"));
-    cThreads = vm["cthreads"].as<unsigned>();
-
-    assert(vm.count("graphfile"));
-    graphFile = vm["graphfile"].as<std::string>();
-
-    assert(vm.count("featuresfile"));
-    featuresFile = vm["featuresfile"].as<std::string>();
-
-    assert(vm.count("undirected"));
-    unsigned undir = vm["undirected"].as<unsigned>();
-    undirected = (undir == 0) ? false : true;
-
-    assert(vm.count("dport"));
-    CommManager::setDataPort(vm["dport"].as<unsigned>());
-
-    assert(vm.count("cport"));
-    CommManager::setControlPortStart(vm["cport"].as<unsigned>());
-
-    assert(vm.count("baseedges"));
-    baseEdges = vm["baseedges"].as<unsigned>();
-
-    assert(baseEdges <= 100);
-
-    assert(vm.count("numbatches"));
-    numBatches = vm["numbatches"].as<unsigned>();
-
-    assert(vm.count("batchsize"));
-    batchSize = vm["batchsize"].as<unsigned>();
-
-    assert(vm.count("deletepercent"));
-    deletePercent = vm["deletepercent"].as<unsigned>();
-
-    fprintf(stderr, "config set to %s\n", cFile.c_str());
-    fprintf(stderr, "dThreads set to %u\n", dThreads);
-    fprintf(stderr, "cThreads set to %u\n", cThreads);
-    fprintf(stderr, "graphFile set to %s\n", graphFile.c_str());
-    fprintf(stderr, "featuresFile set to %s\n", featuresFile.c_str());
-    fprintf(stderr, "undirected set to %s\n", undirected ? "true" : "false");
-    fprintf(stderr, "pofrequency set to %u\n", poFrequency);
-
-    fprintf(stderr, "baseEdges (percent) set to %u\n", baseEdges);
-    fprintf(stderr, "numBatches set to %u\n", numBatches);
-    fprintf(stderr, "batchSize set to %u\n", batchSize);
-    fprintf(stderr, "deletePercent set to %u\n", deletePercent);
-}
-
-//shen
-template <typename VertexType, typename EdgeType>
-int Engine<VertexType, EdgeType>::readFeaturesFile(const std::string& fileName) {
-    std::ifstream in;//Open file stream
-    in.open(fileName);
-    if(!in.good()) {
-            fprintf(stderr, "Cannot open feature file: %s\n", fileName.c_str());
-            return 1;
-    }
-
-    static const std::size_t LINE_BUFFER_SIZE=8192;
-    char buffer[LINE_BUFFER_SIZE];
-
-    std::vector<VertexType> feature_mat;
-    //process each line
-    while (in.eof()!=true){
-            in.getline(buffer,LINE_BUFFER_SIZE);
-            std::vector<std::string> splited_strings;
-            VertexType feature_vec=VertexType();
-            std::string line(buffer);
-            //split each line into numbers
-            boost::split(splited_strings, line, boost::is_any_of(", "), boost::token_compress_on);
-
-            for (auto it=splited_strings.begin();it!=splited_strings.end();it++) {
-                    if(it->data()[0]!=0) //check null char at the end
-                            feature_vec.push_back(std::stof(it->data()));
-            }
-            feature_mat.push_back(feature_vec);
-    }
-
-    for(std::size_t i = 0; i < feature_mat.size(); ++i){
-        //is ghost node
-        auto git = graph.ghostVertices.find(i);
-        if (git != graph.ghostVertices.end()){
-            graph.ghostVertices[i].setData(&feature_mat[i]);
-            continue;
-        }
-        //is local node
-        auto lit=graph.globalToLocalId.find(i);
-        if (lit != graph.globalToLocalId.end()){
-            graph.vertices[lit->second].setData(feature_mat[i]);
-            continue;
-        }
-    }
-
-    return 0;
-
-}
-
-template <typename VertexType, typename EdgeType>
-void Engine<VertexType, EdgeType>::readPartsFile(std::string& partsFileName, Graph<VertexType, EdgeType>& lGraph) {
-    std::ifstream infile(partsFileName.c_str());
-    if(!infile.good())
-        fprintf(stderr, "Cannot open patition file: %s\n", partsFileName.c_str());
-
-    assert(infile.good());
-    fprintf(stderr, "Reading patition file: %s\n", partsFileName.c_str());
-
-
-    short partId;
-    IdType lvid = 0; IdType gvid = 0;
-
-    std::string line;
-    while(std::getline(infile, line)) {
-        if(line.size() == 0 || (line[0] < '0' || line[0] > '9'))
-            continue;
-
-        std::istringstream iss(line);
-        if(!(iss >> partId))
-            break;
-
-        lGraph.vertexPartitionIds.push_back(partId);
-
-        if(partId == nodeId) {
-            lGraph.localToGlobalId[lvid] = gvid;
-            lGraph.globalToLocalId[gvid] = lvid;
-
-            ++lvid;
-        }
-        ++gvid;
-    }
-
-    lGraph.numGlobalVertices = gvid;
-    lGraph.numLocalVertices = lvid;
-}
-
-template <typename VertexType, typename EdgeType>
-void Engine<VertexType, EdgeType>::initGraph(Graph<VertexType, EdgeType>& lGraph) {
-    lGraph.vertices.resize(lGraph.numLocalVertices);
-
-    for(IdType i=0; i<lGraph.numLocalVertices; ++i) {
-        lGraph.vertices[i].localIdx = i;
-        lGraph.vertices[i].globalIdx = lGraph.localToGlobalId[i];
-        lGraph.vertices[i].vertexLocation = INTERNAL_VERTEX;
-        lGraph.vertices[i].vertexData.clear();
-        lGraph.vertices[i].vertexData.push_back(defaultVertex);
-        lGraph.vertices[i].graph = &lGraph;
-    }
-}
-
-template <typename VertexType, typename EdgeType>
-void Engine<VertexType, EdgeType>::processEdge(IdType& from, IdType& to, Graph<VertexType, EdgeType>& lGraph, std::set<IdType>* inTopics, std::set<IdType>* oTopics, bool streaming) {
-    if(lGraph.vertexPartitionIds[from] == nodeId) {
-        IdType lFromId = lGraph.globalToLocalId[from];
-        IdType toId;
-        EdgeLocationType eLocation;
-
-        if(lGraph.vertexPartitionIds[to] == nodeId) {
-            toId = lGraph.globalToLocalId[to];
-            eLocation = LOCAL_EDGE_TYPE;
-        } else {
-            toId = to;
-            eLocation = REMOTE_EDGE_TYPE;
-            lGraph.vertices[lFromId].vertexLocation = BOUNDARY_VERTEX;
-            if(oTopics != NULL) oTopics->insert(from);
-            if(streaming) {
-                CommManager::dataPushOut(from, (void*) lGraph.vertices[lFromId].data().data(), lGraph.vertices[lFromId].data().size() * sizeof(FeatType));
-            }
-        }
-
-        if(edgeWeight != NULL)
-            lGraph.vertices[lFromId].outEdges.push_back(OutEdge<EdgeType>(toId, eLocation, edgeWeight(from, to)));
-        else
-            lGraph.vertices[lFromId].outEdges.push_back(OutEdge<EdgeType>(toId, eLocation, defaultEdge));
-    }
-
-    if(lGraph.vertexPartitionIds[to] == nodeId) {
-        IdType lToId = lGraph.globalToLocalId[to];
-        IdType fromId;
-        EdgeLocationType eLocation;
-
-        if(lGraph.vertexPartitionIds[from] == nodeId) {
-            fromId = lGraph.globalToLocalId[from];
-            eLocation = LOCAL_EDGE_TYPE;
-        } else {
-            fromId = from;
-            eLocation = REMOTE_EDGE_TYPE;
-
-            typename std::map< IdType, GhostVertex<VertexType> >::iterator gvit = lGraph.ghostVertices.find(from);
-            if(gvit == lGraph.ghostVertices.end()) {
-                lGraph.ghostVertices[from] = GhostVertex<VertexType>(defaultVertex);
-
-                gvit = lGraph.ghostVertices.find(from);
-            }
-            gvit->second.outEdges.push_back(lToId);
-
-            if(inTopics != NULL) inTopics->insert(from);
-        }
-
-        if(edgeWeight != NULL)
-            lGraph.vertices[lToId].inEdges.push_back(InEdge<EdgeType>(fromId, eLocation, edgeWeight(from, to)));
-        else
-            lGraph.vertices[lToId].inEdges.push_back(InEdge<EdgeType>(fromId, eLocation, defaultEdge));
-    }
-}
-
-template <typename VertexType, typename EdgeType>
-void Engine<VertexType, EdgeType>::readGraphBS(std::string& fileName, std::set<IdType>& inTopics, std::vector<IdType>& outTopics) {
-    // Read the partition file
-    std::string partsFileName = fileName + PARTS_EXT;
-    readPartsFile(partsFileName, graph);
-
-    initGraph(graph);
-    std::set<IdType> oTopics;
-
-    // Read the edge file
-    std::string edgeFileName = fileName + EDGES_EXT;
-    std::ifstream infile(edgeFileName.c_str(), std::ios::binary);
-    if(!infile.good())
-        fprintf(stderr, "Cannot open BinarySnap file: %s\n", edgeFileName.c_str());
-
-    assert(infile.good());
-    fprintf(stderr, "Reading BinarySnap file: %s\n", edgeFileName.c_str());
-
-    BSHeaderType<IdType> bSHeader;
-
-    infile.read((char*) &bSHeader, sizeof(bSHeader));
-
-    assert(bSHeader.sizeOfVertexType == sizeof(IdType));
-    unsigned long long originalEdges = (unsigned long long) ((baseEdges / 100.0) * bSHeader.numEdges);
-
-    graph.numGlobalEdges = 0;
-    IdType srcdst[2];
-    while(infile.read((char*) srcdst, bSHeader.sizeOfVertexType * 2)) {
-        if(srcdst[0] == srcdst[1])
-            continue;
-
-        if(graph.numGlobalEdges < originalEdges) {
-            processEdge(srcdst[0], srcdst[1], graph, &inTopics, &oTopics, false);
-            if(undirected)
-                processEdge(srcdst[1], srcdst[0], graph, &inTopics, &oTopics, false);
-            ++graph.numGlobalEdges;
-        } else {
-            if((graph.vertexPartitionIds[srcdst[0]] == nodeId) || (graph.vertexPartitionIds[srcdst[1]] == nodeId)) {
-                insertStream.push_back(std::make_tuple(globalInsertStreamSize, srcdst[0], srcdst[1]));
-            }
-            ++globalInsertStreamSize;
-            if(globalInsertStreamSize > numBatches * batchSize)
-                break;
-        }
-    }
-
-    infile.close();
-
-    findGhostDegrees(edgeFileName);
-    setEdgeNormalizations();
-
-    typename std::set<IdType>::iterator it;
-    for(it = oTopics.begin(); it != oTopics.end(); ++it)
-        outTopics.push_back(*it);
-}
-
-// Finds the in degree of the ghost vertices
-template <typename VertexType, typename EdgeType>
-void Engine<VertexType, EdgeType>::findGhostDegrees(std::string& fileName) {
-    std::ifstream infile(fileName.c_str(), std::ios::binary);
-    if (!infile.good()) {
-        fprintf(stderr, "Cannot open BinarySnap file: %s\n", fileName.c_str());
-    }
-
-    assert(infile.good());
-    fprintf(stderr, "Calculating the degree of ghost vertices\n");
-
-    BSHeaderType<IdType> bsHeader;
-    infile.read((char*) &bsHeader, sizeof(bsHeader));
-
-    IdType srcdst[2];
-    while (infile.read((char*) srcdst, bsHeader.sizeOfVertexType * 2)) {
-        if (srcdst[0] == srcdst[1]) continue;
-
-        typename std::map< IdType, GhostVertex<VertexType> >::iterator gvit = graph.ghostVertices.find(srcdst[1]);
-        if (gvit != graph.ghostVertices.end()) {
-            (gvit->second).incrementDegree();
-        }   
-    }
-    
-    infile.close();
-}
-
-// Sets the normalization factors on all edges
-template<typename VertexType, typename EdgeType>
-void Engine<VertexType, EdgeType>::setEdgeNormalizations() {
-    for (Vertex<VertexType, EdgeType>& vertex: graph.vertices) {
-        unsigned dstDeg = vertex.numInEdges() + 1;
-        float dstNorm = std::pow(dstDeg, -.5);
-        for (InEdge<EdgeType>& e: vertex.inEdges) {
-            IdType vid = e.sourceId();
-            if (e.getEdgeLocation() == LOCAL_EDGE_TYPE) {
-                unsigned srcDeg = graph.vertices[vid].numInEdges() + 1;
-                float srcNorm = std::pow(srcDeg, -.5);
-                e.setData(srcNorm * dstNorm);
-            } else {
-                unsigned ghostDeg = graph.ghostVertices[vid].degree + 1;
-                float ghostNorm = std::pow(ghostDeg, -.5);
-                e.setData(ghostNorm * dstNorm);
-            }
-        }
-    }
-}
-
 
 /**
  *
@@ -524,6 +150,7 @@ template <typename VertexType, typename EdgeType>
 void
 Engine<VertexType, EdgeType>::init(int argc, char *argv[], VertexType dVertex, EdgeType dEdge, EdgeType (*eWeight) (IdType, IdType)) {
     timeInit = -getTimer();
+    printLog("Engine starts initialization...");
 
     // Parse the command line arguments.
     parseArgs(argc, argv);
@@ -558,23 +185,26 @@ Engine<VertexType, EdgeType>::init(int argc, char *argv[], VertexType dVertex, E
     condRecvWaitersEmpty.init(lockRecvWaiters);
     lockHalt.init();
 
+    // Initialize computation thread barrier.
     barComp.init(cThreads);
-    barCompData.init(2);
 
-    pthread_barrier_init(&barDebug, NULL, cThreads + 10);
-
+    // Create computation workers thread pool.
     computePool = new ThreadPool(cThreads);
     computePool->createPool();
 
+    // Create data communicators thread pool.
     CommManager::flushDataControl();
     dataPool = new ThreadPool(dThreads);
     dataPool->createPool();
 
+    // Compact the graph.
     graph.compactGraph();
 
     timeInit += getTimer();
-    fprintf(stderr, "Init complete\n"); 
-    NodeManager::barrier("init");
+    printLog("Engine initialization completes.")
+
+    // Make sure all nodes finish initailization.
+    NodeManager::barrier(INIT_BARRIER);
 }
 
 
@@ -871,6 +501,390 @@ void
 Engine<VertexType, EdgeType>::printEngineMetrics() {
     printLog("Engine Metrics: Init time = %.3lf ms\n", timeInit);
     printLog("Engine Metrics: Processing time = %.3lf ms\n", allTimeProcess);
+}
+
+
+/**
+ *
+ * Parse command line arguments.
+ * 
+ */
+template <typename VertexType, typename EdgeType>
+void
+Engine<VertexType, EdgeType>::parseArgs(int argc, char *argv[]) {
+    boost::program_options::options_description desc("Allowed options");
+    desc.add_options()
+        ("help", "Produce help message")
+        ("config", boost::program_options::value<std::string>()->default_value(std::string(DEFAULT_CONFIG_FILE), DEFAULT_CONFIG_FILE), "Config file")
+        ("graphfile", boost::program_options::value<std::string>(), "Graph file")
+        ("featuresfile", boost::program_options::value<std::string>(), "Features file")
+
+        ("undirected", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Graph type")
+        ("dthreads", boost::program_options::value<unsigned>()->default_value(unsigned(NUM_DATA_THREADS), NUM_DATA_THREADS_STR), "Number of data threads")
+        ("cthreads", boost::program_options::value<unsigned>()->default_value(unsigned(NUM_COMP_THREADS), NUM_COMP_THREADS_STR), "Number of compute threads")
+        ("pofrequency", boost::program_options::value<unsigned>()->default_value(unsigned(PUSHOUT_FREQUENCY), PUSHOUT_FREQUENCY_STR), "Frequency of pushouts")
+        ("dport", boost::program_options::value<unsigned>()->default_value(unsigned(DATA_PORT), DATA_PORT_STR), "Port for data communication")
+        ("cport", boost::program_options::value<unsigned>()->default_value(unsigned(CONTROL_PORT_START), CONTROL_PORT_START_STR), "Port start for control communication")
+
+        ("baseedges", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Percentage of edges in base graph")
+        ("numbatches", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Number of mini-batches") 
+        ("batchsize", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Size of mini-batches")
+        ;
+
+    boost::program_options::variables_map vm;
+    boost::program_options::store(boost::program_options::command_line_parser(argc, argv).options(desc).allow_unregistered().run(), vm);
+    boost::program_options::notify(vm);
+
+    assert(vm.count("config"));
+
+    std::string cFile = vm["config"].as<std::string>();
+    std::ifstream cStream;
+    cStream.open(cFile.c_str());
+
+    boost::program_options::store(boost::program_options::parse_config_file(cStream, desc, true), vm);
+    boost::program_options::notify(vm);
+
+    if (vm.count("help")) {
+        std::cout << desc << std::endl;
+        exit(-1);
+    }
+
+    assert(vm.count("dthreads"));
+    dThreads = vm["dthreads"].as<unsigned>();   // Communicator threads.
+
+    assert(vm.count("cthreads"));
+    cThreads = vm["cthreads"].as<unsigned>();   // Computation threads.
+
+    assert(vm.count("graphfile"));
+    graphFile = vm["graphfile"].as<std::string>();
+
+    assert(vm.count("featuresfile"));
+    featuresFile = vm["featuresfile"].as<std::string>();
+
+    assert(vm.count("undirected"));
+    undirected = (vm["undirected"].as<unsigned>() == 0) ? false : true;
+
+    assert(vm.count("dport"));
+    CommManager::setDataPort(vm["dport"].as<unsigned>());
+
+    assert(vm.count("cport"));
+    CommManager::setControlPortStart(vm["cport"].as<unsigned>());
+
+    assert(vm.count("baseedges"));
+    baseEdges = vm["baseedges"].as<unsigned>();
+
+    assert(baseEdges <= 100);
+
+    assert(vm.count("numbatches"));
+    numBatches = vm["numbatches"].as<unsigned>();
+
+    assert(vm.count("batchsize"));
+    batchSize = vm["batchsize"].as<unsigned>();
+
+    printLog("Printing parsed configuration:");
+    printLog("  config = %s\n", cFile.c_str());
+    printLog("  dThreads = %u\n", dThreads);
+    printLog("  cThreads = %u\n", cThreads);
+    printLog("  graphFile = %s\n", graphFile.c_str());
+    printLog("  featuresFile = %s\n", featuresFile.c_str());
+    printLog("  undirected = %s\n", undirected ? "true" : "false");
+    printLog("  pofrequency = %u\n", poFrequency);
+    printLog("  baseEdges (percent) = %u\n", baseEdges);
+    printLog("  numBatches = %u\n", numBatches);
+    printLog("  batchSize = %u\n", batchSize);
+}
+
+
+/**
+ *
+ * Read in the initial features file.
+ * 
+ */
+template <typename VertexType, typename EdgeType>
+void
+Engine<VertexType, EdgeType>::readFeaturesFile(const std::string& featuresFileName) {
+    std::ifstream infile(featuresFileName.c_str());
+    if(!infile.good())
+        printLog("Cannot open feature file: %s\n", fileName.c_str());
+
+    assert(infile.good());
+
+    static const std::size_t LINE_BUFFER_SIZE=8192;
+    char buffer[LINE_BUFFER_SIZE];
+
+    std::vector<VertexType> feature_mat;
+
+    // Loop through each line.
+    while (infile.eof()!=true){
+        infile.getline(buffer,LINE_BUFFER_SIZE);
+        std::vector<std::string> splited_strings;
+        VertexType feature_vec=VertexType();
+        std::string line(buffer);
+
+        // Split each line into numbers.
+        boost::split(splited_strings, line, boost::is_any_of(", "), boost::token_compress_on);
+
+        for (auto it = splited_strings.begin(); it != splited_strings.end(); it++) {
+            if (it->data()[0] != 0) // Check null char at the end.
+                feature_vec.push_back(std::stof(it->data()));
+        }
+        feature_mat.push_back(feature_vec);
+    }
+
+    // Set the vertices' initial values.
+    for (std::size_t i = 0; i < feature_mat.size(); ++i){
+        
+        // Is ghost node.
+        auto git = graph.ghostVertices.find(i);
+        if (git != graph.ghostVertices.end()){
+            graph.ghostVertices[i].setData(&feature_mat[i]);
+            continue;
+        }
+        
+        // Is local node.
+        auto lit = graph.globalToLocalId.find(i);
+        if (lit != graph.globalToLocalId.end()){
+            graph.vertices[lit->second].setData(feature_mat[i]);
+            continue;
+        }
+    }
+
+    return 0;
+
+}
+
+
+/**
+ *
+ * Read in the partition file.
+ * 
+ */
+template <typename VertexType, typename EdgeType>
+void
+Engine<VertexType, EdgeType>::readPartsFile(std::string& partsFileName, Graph<VertexType, EdgeType>& lGraph) {
+    std::ifstream infile(partsFileName.c_str());
+    if(!infile.good())
+        printLog("Cannot open patition file: %s\n", partsFileName.c_str());
+
+    assert(infile.good());
+
+    short partId;
+    IdType lvid = 0;
+    IdType gvid = 0;
+
+    std::string line;
+    while (std::getline(infile, line)) {
+        if (line.size() == 0 || (line[0] < '0' || line[0] > '9'))
+            continue;
+
+        std::istringstream iss(line);
+        if (!(iss >> partId))
+            break;
+
+        lGraph.vertexPartitionIds.push_back(partId);
+
+        if (partId == nodeId) {
+            lGraph.localToGlobalId[lvid] = gvid;
+            lGraph.globalToLocalId[gvid] = lvid;
+
+            ++lvid;
+        }
+        ++gvid;
+    }
+
+    lGraph.numGlobalVertices = gvid;
+    lGraph.numLocalVertices = lvid;
+}
+
+
+/**
+ *
+ * Process an edge read from the binary snap file.
+ * 
+ */
+template <typename VertexType, typename EdgeType>
+void
+Engine<VertexType, EdgeType>::processEdge(IdType& from, IdType& to, Graph<VertexType, EdgeType>& lGraph, std::set<IdType> *inTopics, std::set<IdType> *oTopics) {
+    if (lGraph.vertexPartitionIds[from] == nodeId) {
+        IdType lFromId = lGraph.globalToLocalId[from];
+        IdType toId;
+        EdgeLocationType eLocation;
+
+        if (lGraph.vertexPartitionIds[to] == nodeId) {
+            toId = lGraph.globalToLocalId[to];
+            eLocation = LOCAL_EDGE_TYPE;
+        } else {
+            toId = to;
+            eLocation = REMOTE_EDGE_TYPE;
+            lGraph.vertices[lFromId].vertexLocation = BOUNDARY_VERTEX;
+
+            if (oTopics != NULL)
+                oTopics->insert(from);
+        }
+
+        if(edgeWeight != NULL)
+            lGraph.vertices[lFromId].outEdges.push_back(OutEdge<EdgeType>(toId, eLocation, edgeWeight(from, to)));
+        else
+            lGraph.vertices[lFromId].outEdges.push_back(OutEdge<EdgeType>(toId, eLocation, defaultEdge));
+    }
+
+    if (lGraph.vertexPartitionIds[to] == nodeId) {
+        IdType lToId = lGraph.globalToLocalId[to];
+        IdType fromId;
+        EdgeLocationType eLocation;
+
+        if (lGraph.vertexPartitionIds[from] == nodeId) {
+            fromId = lGraph.globalToLocalId[from];
+            eLocation = LOCAL_EDGE_TYPE;
+        } else {
+            fromId = from;
+            eLocation = REMOTE_EDGE_TYPE;
+
+            typename std::map< IdType, GhostVertex<VertexType> >::iterator gvit = lGraph.ghostVertices.find(from);
+            if (gvit == lGraph.ghostVertices.end()) {
+                lGraph.ghostVertices[from] = GhostVertex<VertexType>(defaultVertex);
+                gvit = lGraph.ghostVertices.find(from);
+            }
+            gvit->second.outEdges.push_back(lToId);
+
+            if (inTopics != NULL)
+                inTopics->insert(from);
+        }
+
+        if (edgeWeight != NULL)
+            lGraph.vertices[lToId].inEdges.push_back(InEdge<EdgeType>(fromId, eLocation, edgeWeight(from, to)));
+        else
+            lGraph.vertices[lToId].inEdges.push_back(InEdge<EdgeType>(fromId, eLocation, defaultEdge));
+    }
+}
+
+
+/**
+ *
+ * Set the normalization factors on all edges.
+ * 
+ */
+template<typename VertexType, typename EdgeType>
+void
+Engine<VertexType, EdgeType>::setEdgeNormalizations() {
+    for (Vertex<VertexType, EdgeType>& vertex : graph.vertices) {
+        unsigned dstDeg = vertex.numInEdges() + 1;
+        float dstNorm = std::pow(dstDeg, -.5);
+        for (InEdge<EdgeType>& e : vertex.inEdges) {
+            IdType vid = e.sourceId();
+            if (e.getEdgeLocation() == LOCAL_EDGE_TYPE) {
+                unsigned srcDeg = graph.vertices[vid].numInEdges() + 1;
+                float srcNorm = std::pow(srcDeg, -.5);
+                e.setData(srcNorm * dstNorm);
+            } else {
+                unsigned ghostDeg = graph.ghostVertices[vid].degree + 1;
+                float ghostNorm = std::pow(ghostDeg, -.5);
+                e.setData(ghostNorm * dstNorm);
+            }
+        }
+    }
+}
+
+
+/**
+ *
+ * Finds the in degree of all ghost vertices.
+ * 
+ */
+template <typename VertexType, typename EdgeType>
+void
+Engine<VertexType, EdgeType>::findGhostDegrees(std::string& fileName) {
+    std::ifstream infile(fileName.c_str(), std::ios::binary);
+    if (!infile.good())
+        printLog("Cannot open BinarySnap file: %s\n", fileName.c_str());
+
+    assert(infile.good());
+
+    BSHeaderType<IdType> bsHeader;
+    infile.read((char *) &bsHeader, sizeof(bsHeader));
+
+    IdType srcdst[2];
+    while (infile.read((char *) srcdst, bsHeader.sizeOfVertexType * 2)) {
+        if (srcdst[0] == srcdst[1])
+            continue;
+
+        typename std::map< IdType, GhostVertex<VertexType> >::iterator gvit = graph.ghostVertices.find(srcdst[1]);
+        if (gvit != graph.ghostVertices.end())
+            (gvit->second).incrementDegree();
+    }
+    
+    infile.close();
+}
+
+
+/**
+ *
+ * Read and parse the graph from the graph binary snap file.
+ * 
+ */
+template <typename VertexType, typename EdgeType>
+void
+Engine<VertexType, EdgeType>::readGraphBS(std::string& fileName, std::set<IdType>& inTopics, std::vector<IdType>& outTopics) {
+    
+    // Read in the partition file.
+    std::string partsFileName = fileName + PARTS_EXT;
+    readPartsFile(partsFileName, graph);
+
+    // Initialize the graph based on the partition info.
+    graph.vertices.resize(graph.numLocalVertices);
+    for (IdType i = 0; i < graph.numLocalVertices; ++i) {
+        lGraph.vertices[i].localIdx = i;
+        lGraph.vertices[i].globalIdx = lGraph.localToGlobalId[i];
+        lGraph.vertices[i].vertexLocation = INTERNAL_VERTEX;
+        lGraph.vertices[i].vertexData.clear();
+        lGraph.vertices[i].vertexData.push_back(defaultVertex);
+        lGraph.vertices[i].graph = &graph;
+    }
+
+    // Read in the binary snap edge file.
+    std::string edgeFileName = fileName + EDGES_EXT;
+    std::ifstream infile(edgeFileName.c_str(), std::ios::binary);
+    if(!infile.good())
+        printLog("Cannot open BinarySnap file: %s\n", edgeFileName.c_str());
+
+    assert(infile.good());
+
+    BSHeaderType<IdType> bSHeader;
+    infile.read((char *) &bSHeader, sizeof(bSHeader));
+    assert(bSHeader.sizeOfVertexType == sizeof(IdType));
+
+    // Loop through all edges and process them.
+    unsigned long long originalEdges = (unsigned long long) ((baseEdges / 100.0) * bSHeader.numEdges);
+    std::set<IdType> oTopics;
+    graph.numGlobalEdges = 0;
+    IdType srcdst[2];
+    while (infile.read((char *) srcdst, bSHeader.sizeOfVertexType * 2)) {
+        if (srcdst[0] == srcdst[1])
+            continue;
+
+        if (graph.numGlobalEdges < originalEdges) {
+            processEdge(srcdst[0], srcdst[1], graph, &inTopics, &oTopics);
+            if(undirected)
+                processEdge(srcdst[1], srcdst[0], graph, &inTopics, &oTopics);
+            ++graph.numGlobalEdges;
+        } else {
+            if (graph.vertexPartitionIds[srcdst[0]] == nodeId || graph.vertexPartitionIds[srcdst[1]] == nodeId)
+                insertStream.push_back(std::make_tuple(globalInsertStreamSize, srcdst[0], srcdst[1]));
+            ++globalInsertStreamSize;
+            if (globalInsertStreamSize > numBatches * batchSize)
+                break;
+        }
+    }
+
+    infile.close();
+
+    // Extra works added.
+    findGhostDegrees(edgeFileName);
+    setEdgeNormalizations();
+
+    typename std::set<IdType>::iterator it;
+    for (it = oTopics.begin(); it != oTopics.end(); ++it)
+        outTopics.push_back(*it);
 }
 
 
