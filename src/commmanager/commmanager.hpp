@@ -6,6 +6,7 @@
 #include <vector>
 #include <climits>
 #include <zmq.hpp>
+#include "../parallel/lock.hpp"
 #include "../utils/utils.hpp"
 
 
