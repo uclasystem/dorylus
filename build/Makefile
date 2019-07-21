@@ -24,9 +24,8 @@ BM_PATH         := $(SRC_PATH)/benchmarks
 BUILD_PATH      := .
 OBJ_PATH        := $(BUILD_PATH)/objs
 
-# Benchmarks
-AGG_TARGET      := aggregate
-AGG_TARGET_BIN  := $(AGG_TARGET).bin
+# Benchmark names
+BENCH_AGG       := aggregate
 
 # Libraries source
 OMP_LIBS        := -fopenmp
@@ -43,9 +42,8 @@ ZMQ_INCPATH     := /home/$(USER)/aspire-streaming/installs/out/include
 INC             := -I$(ZK_INCPATH) -I$(ZMQ_INCPATH)
 LDFLAGS         := -Wl,-rpath=$(ZK_LIBPATH) -Wl,-rpath=$(ZMQ_LIBPATH)
 
-# Objects
+# Framwork objects
 BASE_OBJS       := $(OBJ_PATH)/commmanager.o $(OBJ_PATH)/nodemanager.o $(OBJ_PATH)/engine.o $(OBJ_PATH)/vertex.o $(OBJ_PATH)/edge.o $(OBJ_PATH)/graph.o $(OBJ_PATH)/zkinterface.o $(OBJ_PATH)/zkhelper.o $(OBJ_PATH)/utils.o $(OBJ_PATH)/threadpool.o
-AGG_OBJS        := $(BASE_OBJS) $(OBJ_PATH)/$(AGG_TARGET).o
 
 
 #
@@ -62,12 +60,10 @@ else
 endif
 
 # Overall batch target
-all: prompt directories agg_tgt
-
-# Benchmark individual targets
-$(AGG_TARGET):      prompt directories agg_tgt
+all: prompt directories $(BENCH_AGG)
 
 # Phony utilities
+.PHONY: prompt
 prompt:
 ifneq ($(mode),release)
 ifneq ($(mode),debug)
@@ -77,13 +73,11 @@ endif
 endif
 	@echo "\e[33;1mBuilding: On \"$(mode)\" mode.....\e[0m"
 
+.PHONY: directories
 directories:
 	mkdir -p $(OBJ_PATH) 
 
-# Detailed target rules
-agg_tgt: $(AGG_OBJS)
-	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFALGS) -o $(AGG_TARGET_BIN)
-
+# Frameowrk objects targets
 $(OBJ_PATH)/%.o: $(NODE_PATH)/%.cpp $(NODE_PATH)/%.hpp
 	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
 
@@ -99,11 +93,9 @@ $(OBJ_PATH)/%.o: $(PARALLEL_PATH)/%.cpp $(PARALLEL_PATH)/%.hpp
 $(OBJ_PATH)/%.o: $(UTILS_PATH)/%.cpp $(UTILS_PATH)/%.hpp
 	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
 
-$(OBJ_PATH)/%.o: $(BM_PATH)/%.cpp $(BM_PATH)/%.hpp
-	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
-
-$(OBJ_PATH)/%.o: $(BM_PATH)/%.cpp
-	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
+# Benchmark targets
+$(BENCH_AGG): $(BM_PATH)/$(BENCH_AGG).cpp $(BASE_OBJS)
+	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFALGS) -o $(AGG_TARGET_BIN)
 
 # Clean
 .PHONY: clean
