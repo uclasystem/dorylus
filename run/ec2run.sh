@@ -76,7 +76,7 @@ fi
 header "Starting ZooKeeper..."
 
 for i in $(seq 1 ${ZOONDS}); do
-  scp ${ZOODIR}/conf/zoo.cfg ${dshnodes[$i]}:${ZOODIR}/conf/zoo.cfg;
+  scp -q ${ZOODIR}/conf/zoo.cfg ${dshnodes[$i]}:${ZOODIR}/conf/zoo.cfg;
   ${DSH} -M -m ${dshnodes[$i]} -c "mkdir -p ${TMPDIR}/zooDataDir";
   ${DSH} -M -m ${dshnodes[$i]} -c "echo $i > ${TMPDIR}/zooDataDir/myid";
   ${DSH} -M -m ${dshnodes[$i]} -c "cd ${ZOODIR} && ./bin/zkServer.sh start > /dev/null 2&>1";
@@ -162,7 +162,7 @@ for i in $(seq 1 ${ZOONDS}); do
 done;
 
 for i in $(seq 1 ${NDS}); do
-  scp ${ASPIREDIR}/config/hostfile ${ASPIREDIR}/config/zkhostfile ${dshnodes[$i]}:${ASPIREDIR}/config/;
+  scp -q ${ASPIREDIR}/config/hostfile ${ASPIREDIR}/config/zkhostfile ${dshnodes[$i]}:${ASPIREDIR}/config/;
 done;
 
 # Loop over desired number of runs
@@ -186,7 +186,7 @@ for dp in {1..1}; do
   mkdir -p ${DOPDIR};
   for i in $(seq 1 ${NDS}); do
     oid=`expr $i - 1`;
-    scp ${dshnodes[$i]}:${TMPDIR}/output_* ${DOPDIR}/;
+    scp -q ${dshnodes[$i]}:${TMPDIR}/output_* ${DOPDIR}/;
   done;
 
 done;
