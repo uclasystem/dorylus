@@ -526,14 +526,6 @@ Engine<VertexType, EdgeType>::parseArgs(int argc, char *argv[]) {
     assert(vm.count("cport"));
     CommManager::setControlPortStart(vm["cport"].as<unsigned>());
 
-    assert(baseEdges <= 100);
-
-    assert(vm.count("numbatches"));
-    numBatches = vm["numbatches"].as<unsigned>();
-
-    assert(vm.count("batchsize"));
-    batchSize = vm["batchsize"].as<unsigned>();
-
     printLog("Printing parsed configuration:");
     printLog("  config = %s\n", cFile.c_str());
     printLog("  dThreads = %u\n", dThreads);
