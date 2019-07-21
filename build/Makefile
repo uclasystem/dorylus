@@ -63,7 +63,6 @@ endif
 all: prompt directories $(BENCH_AGG)
 
 # Phony utilities
-.PHONY: prompt
 prompt:
 ifneq ($(mode),release)
 ifneq ($(mode),debug)
@@ -73,7 +72,6 @@ endif
 endif
 	@echo "\e[33;1mBuilding: On \"$(mode)\" mode.....\e[0m"
 
-.PHONY: directories
 directories:
 	mkdir -p $(OBJ_PATH) 
 
