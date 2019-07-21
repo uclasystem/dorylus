@@ -239,7 +239,7 @@ private:
     static void worker(unsigned tid, void *args);
     static void dataCommunicator(unsigned tid, void *args);
 
-    static void printLog(const char *format, ...) const;
+    static void printLog(const char *format, ...);
 };
 
 

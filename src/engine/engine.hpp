@@ -565,7 +565,7 @@ void Engine<VertexType, EdgeType>::readDeletionStream(std::string& fileName) {
  */
 template <typename VertexType, typename EdgeType>
 void Engine<VertexType, EdgeType>::init(int argc, char* argv[], VertexType dVertex, EdgeType dEdge, EdgeType (*eWeight) (IdType, IdType)) {
-    timInit = -getTimer();
+    timeInit = -getTimer();
     parseArgs(argc, argv);
     
     NodeManager::init(ZKHOST_FILE, HOST_FILE);
@@ -797,7 +797,7 @@ Engine<VertexType, EdgeType>::worker(unsigned tid, void *args) {
 
                 // Yes there are further scheduled vertices. Please start a new iteration.
                 if (iteration + 1 < NUM_LAYERS) {
-                    printLog("Starting a new iteration %u at %.3lf ms...\n", iteration, timProcess + getTimer());
+                    printLog("Starting a new iteration %u at %.3lf ms...\n", iteration, timeProcess + getTimer());
 
                     // Step forward to a new iteration. 
                     ++iteration;
@@ -912,7 +912,7 @@ Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void *args) {
  */
 template <typename VertexType, typename EdgeType>
 void
-Engine<VertexType, EdgeType>::printLog(const char *format) const {
+Engine<VertexType, EdgeType>::printLog(const char *format) {
 
     // Print node ID.
     fprintf(stderr, "[ Node %u ] ", nodeId);
