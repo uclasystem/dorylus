@@ -9,6 +9,8 @@
 #include <tuple>
 #include "graph.hpp"
 #include "vertexprogram.hpp"
+#include "../commmanager/commmanager.hpp"
+#include "../nodemanager/nodemanager.hpp"
 #include "../parallel/threadpool.hpp"
 #include "../parallel/lock.hpp"
 #include "../parallel/cond.hpp"

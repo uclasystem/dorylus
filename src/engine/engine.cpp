@@ -12,8 +12,6 @@
 #include <cstdlib>
 #include <omp.h>
 #include "engine.hpp"
-#include "../commmanager/commmanager.hpp"
-#include "../nodemanager/nodemanager.hpp"
 
 
 template <typename VertexType, typename EdgeType>

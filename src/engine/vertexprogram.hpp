@@ -5,28 +5,24 @@
 
 template<typename VertexType, typename EdgeType>
 class VertexProgram {
-    public:
-        virtual ~VertexProgram() {
-        }
 
-        virtual void beforeIteration(unsigned layer) {
-        }
+public:
 
-        virtual bool update(Vertex<VertexType, EdgeType>& vertex, unsigned layer) {
-            fprintf(stderr, "base update called.\n");
-            assert(false);
-            return false;
-        }
+    virtual void beforeIteration(unsigned layer) { }
 
-        virtual void processVertex(Vertex<VertexType, EdgeType>& vertex) {
-            fprintf(stderr, "base processVertex called.\n");
-            assert(false);
-        }
+    virtual bool update(Vertex<VertexType, EdgeType>& vertex, unsigned layer) {
+        fprintf(stderr, "base update called.\n");
+        assert(false);
+        return false;
+    }
 
+    virtual void processVertex(Vertex<VertexType, EdgeType>& vertex) {
+        fprintf(stderr, "base processVertex called.\n");
+        assert(false);
+    }
 
-        virtual void afterIteration(unsigned layer) {
-        }
+    virtual void afterIteration(unsigned layer) { }
 };
 
-#endif /* __LIB_VERTEXPROGRAM_HPP__ */
 
+#endif /* __LIB_VERTEXPROGRAM_HPP__ */
