@@ -1,9 +1,9 @@
-#include "nodemanager.h"
-#include "zkinterface.h"
-#include "../utils/utils.h"
 #include <fstream>
 #include <cassert>
 #include <cstring>
+#include "nodemanager.hpp"
+#include "zkinterface.hpp"
+#include "../utils/utils.hpp"
 
 Node NodeManager::me;
 unsigned NodeManager::masterIdx = 0;

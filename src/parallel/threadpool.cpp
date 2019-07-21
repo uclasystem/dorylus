@@ -1,4 +1,4 @@
-#include "threadpool.h"
+#include "threadpool.hpp"
 
 ThreadPool::ThreadPool(unsigned nThreads) : numThreads(nThreads), threads(NULL), die(false), running(false) { 
     threads = new ThreadInfo[numThreads]; 

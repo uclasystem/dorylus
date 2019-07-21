@@ -1,54 +1,119 @@
-#ifndef __GRAPH_HPP__
-#define __GRAPH_HPP__
+#ifndef __GRAPH_H__
+#define __GRAPH_H__
 
-#include "graph.h"
+#include <vector>
+#include <map>
+#include "../parallel/lock.hpp"
+#include "vertex.hpp"
+#include "ghostvertex.hpp"
+#include "edge.hpp"
 
-template <typename VertexType, typename EdgeType>
-VertexType Graph<VertexType, EdgeType>::getVertexValue(IdType vId) {
-//1. look at where it belongs
-//2. send appropriate value, else assert<false>
-    assert(false);
-    return VertexType();
-}
+/*
+struct ScatterVersionType {
+    char version;
+    Lock lock;
 
-template <typename VertexType, typename EdgeType>
-void Graph<VertexType, EdgeType>::updateGhostVertex(IdType vId, VertexType* value) {
-    typename std::map<IdType, GhostVertex<VertexType> >::iterator it = ghostVertices.find(vId);
-    if(it == ghostVertices.end()) {
-        fprintf(stderr, "No ghost vertex with id %u\n", vId);
+    ScatterVersionType(char ver = 0) : version(ver) {
+        lock.init();
+    } 
+
+    ~ScatterVersionType() {
+        lock.destroy();
     }
-    assert(it != ghostVertices.end());
-    it->second.addData(value);
-}
+};
+*/
 
 template <typename VertexType, typename EdgeType>
-void Graph<VertexType, EdgeType>::printGraphMetrics() {
-    fprintf(stderr, "Graph Metrics: numGlobalVertices = %u\n", numGlobalVertices);
-    fprintf(stderr, "Graph Metrics: numGlobalEdges = %llu\n", numGlobalEdges);
-    fprintf(stderr, "Graph Metrics: numLocalVertices = %u\n", numLocalVertices);
-}
+class Graph {
+public:
+    //Vertex<VertexType, EdgeType>* vertices;
+    std::vector<Vertex<VertexType, EdgeType> > vertices;
+    //IdType vIdOffset;
+    IdType numLocalVertices;
+    IdType numGlobalVertices;
+    unsigned long long numGlobalEdges;
 
-template <typename VertexType, typename EdgeType>
-void Graph<VertexType, EdgeType>::compactGraph() {
-    vertexPartitionIds.shrink_to_fit();
-    vertices.shrink_to_fit();
-    for(IdType i=0; i<vertices.size(); ++i) {
-        vertices[i].inEdges.shrink_to_fit();
-        vertices[i].outEdges.shrink_to_fit(); 
-    }
-    typename std::map<IdType, GhostVertex<VertexType> >::iterator it;
-    for(it = ghostVertices.begin(); it != ghostVertices.end(); ++it)
-        it->second.outEdges.shrink_to_fit(); 
+    std::vector<short> vertexPartitionIds;
 
-}
+    std::map<IdType, IdType> globalToLocalId;   // TODO: Can this be optimized to have only boundary vertices?
+    std::map<IdType, IdType> localToGlobalId;
+    
+    std::map<IdType, GhostVertex<VertexType> > ghostVertices;
+    //std::map<IdType, ScatterVersionType> scatterVersions;
+
+    VertexType getVertexValue(IdType vId);
+    void updateGhostVertex(IdType vId, VertexType* value);
+    void printGraphMetrics();
+    void compactGraph();
+};
 
 template <typename VertexType>
-void ThinGraph<VertexType>::compactGraph() {
-    vertices.shrink_to_fit();
+class ThinGraph {
+public:
+    std::vector<VertexType> vertices;
+    std::map<IdType, GhostVertex<VertexType> > ghostVertices;
+    void compactGraph();
+};
 
-    typename std::map<IdType, GhostVertex<VertexType> >::iterator it;
-    for(it = ghostVertices.begin(); it != ghostVertices.end(); ++it)
-        it->second.outEdges.shrink_to_fit();
-}
 
-#endif //__GRAPH_HPP__
+template <typename VertexType>
+class GhostVertex {
+    public:
+        
+        // Use a vector to make data in old iterations persistent.
+        std::vector<VertexType> vertexData;
+
+        //char version;
+        RWLock lock;
+        int32_t degree;
+
+        std::vector<IdType> outEdges;
+
+        GhostVertex() {
+            lock.init();
+            degree = 0;
+        }
+
+        GhostVertex(const VertexType vData) {
+            lock.init();
+            degree = 0;
+            vertexData.clear();
+            vertexData.push_back(vData);
+        }
+
+        ~GhostVertex() {
+            lock.destroy();
+        }
+
+        VertexType data() {     // Get the current value.
+            lock.readLock();
+            VertexType vData = vertexData.back();
+            lock.unlock();
+            return vData;
+        }
+
+        VertexType dataAt(unsigned layer) {     // Get value at specified layer.
+            lock.readLock();
+            assert(layer < vertexData.size());
+            VertexType vData = vertexData[layer];
+            lock.unlock();
+            return vData;
+        }
+
+        void setData(VertexType* value) {   // Modify the current value.
+            lock.writeLock();
+            vertexData.back() = *value;
+            lock.unlock();
+        }
+
+        void addData(VertexType* value) {   // Add a new value of the new iteration.
+            lock.writeLock();
+            vertexData.push_back(*value);
+            lock.unlock();
+        }
+
+        void incrementDegree() { ++degree; }
+};
+
+
+#endif //__GRAPH_H__

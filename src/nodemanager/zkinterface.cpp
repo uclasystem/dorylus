@@ -1,9 +1,9 @@
-#include "zkinterface.h"
-#include "../utils/utils.h"
-#include <errno.h>
+#include "zkinterface.hpp"
+#include "../utils/utils.hpp"
+#include <cerrno>
 #include <cstring>
 #include <cassert>
-#include <unistd.h>
+#include <cunistd>
 
 zhandle_t* ZKInterface::zh = NULL;
 clientid_t ZKInterface::myId;

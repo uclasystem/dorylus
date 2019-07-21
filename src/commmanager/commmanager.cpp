@@ -1,81 +1,77 @@
 #include <vector>
-#include <unistd.h>
-
+#include <cunistd>
 #include <zmq.hpp>
+#include "commmanager.hpp"
+#include "../parallel/lock.hpp"
+#include "../nodemanager/nodemanager.hpp"
 
-#include "commmanager.h"
-#include "../nodemanager/nodemanager.h"
 
-unsigned CommManager::numNodes = 0;
+/** Extern class-wide fields. */
 unsigned CommManager::nodeId = 0;
-
-// data sockets and mutex's
-zmq::context_t CommManager::dataContext;
-zmq::socket_t* CommManager::dataPublisher = NULL;
-zmq::socket_t* CommManager::dataSubscriber = NULL;
-pthread_mutex_t CommManager::mtx_dataPublisher;
-pthread_mutex_t CommManager::mtx_dataSubscriber;
-
-// control sockets and mutex's
-zmq::socket_t** CommManager::controlPublishers = NULL;
-zmq::socket_t** CommManager::controlSubscribers = NULL;
-zmq::context_t CommManager::controlContext;
-pthread_mutex_t* CommManager::mtx_controlPublishers = NULL;
-pthread_mutex_t* CommManager::mtx_controlSubscribers = NULL;
-
+unsigned CommManager::numNodes = 0;
 std::vector<bool> CommManager::nodesAlive;
 unsigned CommManager::numLiveNodes;
 unsigned CommManager::dataPort = DATA_PORT;
 unsigned CommManager::controlPortStart = CONTROL_PORT_START;
+zmq::context_t CommManager::dataContext;                    // Data sockets & locks.
+zmq::socket_t *CommManager::dataPublisher = NULL;
+zmq::socket_t *CommManager::dataSubscriber = NULL;
+Lock CommManager::lockDataPublisher;
+Lock CommManager::lockDataSubscriber;
+zmq::socket_t **CommManager::controlPublishers = NULL;      // Control sockets & locks.
+zmq::socket_t **CommManager::controlSubscribers = NULL;
+zmq::context_t CommManager::controlContext;
+Lock *CommManager::lockControlPublishers = NULL;
+Lock *CommManager::lockControlSubscribers = NULL;
 
 
-bool CommManager::init() {
+/**
+ *
+ * Initialize the communication manager. Should be invoked after the node managers have been settled.
+ * 
+ */
+void
+CommManager::init() {
+    printLog("CommManager starts initialization...");
     numNodes = NodeManager::getNumNodes();
     nodeId = NodeManager::getNodeId();
 
     Node me = NodeManager::getNode(nodeId);
+
+    // Data publisher & subscribers.
     dataPublisher = new zmq::socket_t(dataContext, ZMQ_PUB);
     assert(dataPublisher->ksetsockopt(ZMQ_SNDHWM, INF_WM));
     assert(dataPublisher->ksetsockopt(ZMQ_RCVHWM, INF_WM));
     char hostPort[50];
     sprintf(hostPort, "tcp://%s:%u", me.ip.c_str(), dataPort);
     assert(dataPublisher->kbind(hostPort));
-    fprintf(stderr, "Data bind complete\n");
     dataSubscriber = new zmq::socket_t(dataContext, ZMQ_SUB);
     assert(dataSubscriber->ksetsockopt(ZMQ_SNDHWM, INF_WM));
     assert(dataSubscriber->ksetsockopt(ZMQ_RCVHWM, INF_WM));
 
-    for(unsigned i=0; i<numNodes; ++i) {
-        /*
-           if(i == nodeId)   // After failure, same node can have remote data
-           continue;
-         */
-
-        // Connect to that node
+    // Connect to all the nodes.
+    for (unsigned i = 0; i < numNodes; ++i) {
         Node node = NodeManager::getNode(i);
         char hostPort[50];
         sprintf(hostPort, "tcp://%s:%u", node.ip.c_str(), dataPort);
         dataSubscriber->connect(hostPort);
-
         nodesAlive.push_back(true);
     }
     numLiveNodes = numNodes;
-
-    /*IdType tpc = SUBSCRIPTION_COMPLETE;
-    dataSubscriber->setsockopt(ZMQ_SUBSCRIBE, &tpc, sizeof(IdType));
-    tpc = NULL_CHAR;
-    dataSubscriber->setsockopt(ZMQ_SUBSCRIBE, &tpc, sizeof(IdType));
-    */
-
     dataSubscriber->setsockopt(ZMQ_SUBSCRIBE, NULL, 0);
 
+    lockDataPublisher.init();
+    lockDataSubscriber.init();
+
+    // Control publisher & subscribers.
     controlPublishers = new zmq::socket_t*[numNodes];
     controlSubscribers = new zmq::socket_t*[numNodes];
-    mtx_controlPublishers = new pthread_mutex_t[numNodes];
-    mtx_controlSubscribers = new pthread_mutex_t[numNodes];
+    lockControlPublishers = new Lock[numNodes];
+    lockControlSubscribers = new Lock[numNodes];
 
-    for(unsigned i=0; i<numNodes; ++i) {
-        if(i == nodeId)
+    // Connect to all the nodes.
+    for (unsigned i = 0; i < numNodes; ++i) {
+        if(i == nodeId)     // Skip myself.
             continue;
 
         controlPublishers[i] = new zmq::socket_t(controlContext, ZMQ_PUB);
@@ -85,7 +81,6 @@ bool CommManager::init() {
         char hostPort[50];
         int prt = controlPortStart + i; 
         sprintf(hostPort, "tcp://%s:%d", me.ip.c_str(), prt);
-        fprintf(stderr, "Control publisher %u binding to %s\n", i, hostPort);
         assert(controlPublishers[i]->kbind(hostPort));
 
         controlSubscribers[i] = new zmq::socket_t(controlContext, ZMQ_SUB);
@@ -94,166 +89,148 @@ bool CommManager::init() {
 
         Node node = NodeManager::getNode(i);
         sprintf(hostPort, "tcp://%s:%d", node.ip.c_str(), controlPortStart + me.id);
-        fprintf(stderr, "Control subscriber %u connecting to %s\n", i, hostPort);
         controlSubscribers[i]->connect(hostPort);
         char tpc = CONTROL_MESSAGE_TOPIC;
         controlSubscribers[i]->setsockopt(ZMQ_SUBSCRIBE, &tpc, 1); 
         
-        pthread_mutex_init(&mtx_controlPublishers[i], NULL);
-        pthread_mutex_init(&mtx_controlSubscribers[i], NULL); 
+        lockControlPublishers[i].init();
+        lockControlSubscribers[i].init();
     }
-
-    fprintf(stderr, "Data/control bind/subscribe complete\n");
-
-    /*
-       0. bool[numnodes] saying which have finished. ctr = numnodes - 1. bool[nodeid] = true.
-       1. Send imup to someone
-       2. if receive imup from same, then 
-       2.1 send icu to that node once
-       2.2 receive icu from that node
-       2.3 bool[i] = true. also reduce ctr
-       3. if ctr = 0, break
-       4. move to next node whose bool[i] is false
-     */
-
-    bool subscribed[numNodes];
-    for(unsigned i=0; i<numNodes; ++i)
+    
+    // Subscribe mutually with everyone.
+    bool subscribed[numNodes];  // This arrays says which have been successfully subscribed.
+    for (unsigned i = 0; i < numNodes; ++i)
         subscribed[i] = false;
-
     subscribed[nodeId] = true;
     unsigned remaining = numNodes - 1;
-
+    
     double lastSents[numNodes];
-    for(unsigned i=0; i<numNodes; ++i)
+    for (unsigned i = 0; i < numNodes; ++i)
         lastSents[i] = -getTimer() - 1000.0;
 
     unsigned i = 0;
-    while(1) {
-        if((i == nodeId) || (subscribed[i])) {
+    while (1) {     // Loop until all have been subscribed.
+        if (i == nodeId || subscribed[i]) {     // Skip myself.
             i = (i + 1) % numNodes;
             continue;
         }
 
-        if(lastSents[i] + getTimer() > 500) {
+        // Send IAMUP.
+        if (lastSents[i] + getTimer() > 500) {
             zmq::message_t outMsg(sizeof(ControlMessage));
             ControlMessage cMsg(IAMUP);
-            *((ControlMessage*) outMsg.data()) = cMsg;
+            *((ControlMessage *) outMsg.data()) = cMsg;
             controlPublishers[i]->ksend(outMsg);
             lastSents[i] = -getTimer();
         }
 
+        // Received a message from the same node.
         zmq::message_t inMsg;
-        if(controlSubscribers[i]->krecv(&inMsg, ZMQ_DONTWAIT)) {
-            //fprintf(stderr, "Received something from %s\n", NodeManager::getNode(i).name.c_str());
-            ControlMessage cMsg = *((ControlMessage*) inMsg.data());
+        if (controlSubscribers[i]->krecv(&inMsg, ZMQ_DONTWAIT)) {
+
+            // Received IAMUP from that node.
+            ControlMessage cMsg = *((ControlMessage *) inMsg.data());
             if(cMsg.messageType == IAMUP) {
-                //fprintf(stderr, "Received IAMUP, hence sending ISEEYOUUP to %s\n", NodeManager::getNode(i).name.c_str());
+
+                // Send ISEEYOU.
                 {
                     zmq::message_t outAckMsg(sizeof(ControlMessage));
                     ControlMessage cAckMsg(ISEEYOUUP);
-                    *((ControlMessage*) outAckMsg.data()) = cAckMsg;
+                    *((ControlMessage *) outAckMsg.data()) = cAckMsg;
                     controlPublishers[i]->ksend(outAckMsg);
                 }
 
-                while(1) {
+                // Loop until receiving ISEEYOU from that node.
+                while (1) {
                     zmq::message_t inAckMsg;
-                    if(controlSubscribers[i]->krecv(&inAckMsg, ZMQ_DONTWAIT)) {
-                        cMsg = *((ControlMessage*) inAckMsg.data());
-                        //fprintf(stderr, "Received something from %s again\n", NodeManager::getNode(i).name.c_str());
-                        if(cMsg.messageType == ISEEYOUUP) {
-                            fprintf(stderr, "Control received ISEEYOUUP from %s\n", NodeManager::getNode(i).name.c_str());
-
+                    if (controlSubscribers[i]->krecv(&inAckMsg, ZMQ_DONTWAIT)) {
+                        cMsg = *((ControlMessage *) inAckMsg.data());
+                        if (cMsg.messageType == ISEEYOUUP) {
                             zmq::message_t outAckMsg(sizeof(ControlMessage));
                             ControlMessage cAckMsg(ISEEYOUUP);
-                            *((ControlMessage*) outAckMsg.data()) = cAckMsg;  
+                            *((ControlMessage *) outAckMsg.data()) = cAckMsg;  
                             controlPublishers[i]->ksend(outAckMsg);
 
                             subscribed[i] = true;
                             --remaining;
-                            fprintf(stderr, "Remaining = %u\n", remaining);
                             break;
                         }
                     } else 
                         break;
                 }
 
+            // Received ISEEYOU from that node.
             } else if (cMsg.messageType == ISEEYOUUP) {
-                fprintf(stderr, "Control received ISEEYOUUP from %s (this is head-start)\n", NodeManager::getNode(i).name.c_str());
 
+                // Send ISEEYOU back.
                 zmq::message_t outAckMsg(sizeof(ControlMessage));
                 ControlMessage cAckMsg(ISEEYOUUP);
-                *((ControlMessage*) outAckMsg.data()) = cAckMsg;
+                *((ControlMessage *) outAckMsg.data()) = cAckMsg;
                 controlPublishers[i]->ksend(outAckMsg);
 
                 subscribed[i] = true;
                 --remaining;
-                fprintf(stderr, "Remaining = %u\n", remaining);
             }
         }
 
-        if(remaining == 0)
+        // If all nodes have been subscribed, subsription success; else go check the next node.
+        if (remaining == 0)
             break;
-
-        i = (i + 1) % numNodes;
+        else
+            i = (i + 1) % numNodes;
     }
 
-    //pthread_mutex_init(&mtx_dataContext, NULL);
-    pthread_mutex_init(&mtx_dataPublisher, NULL);
-    pthread_mutex_init(&mtx_dataSubscriber, NULL); 
-    //pthread_mutex_init(&mtx_controlContext, NULL);
-
     flushControl();
-    return true;
+    printLog("CommManager initialization complete.");
 }
 
+
+/**
+ *
+ * Destroy the communication manager.
+ * 
+ */
 void CommManager::destroy() {
+
     flushDataControl();
 
+    // Data publisher & subscriber.
     dataPublisher->close();
     dataSubscriber->close();
 
     delete dataPublisher;
     delete dataSubscriber;
 
-    //fprintf(stderr, "H0.0\n");
+    lockDataPublisher.destroy();
+    lockDataSubscriber.destroy();
 
-    for(unsigned i=0; i<numNodes; ++i) {
-        if(i == nodeId)
+    // Control publishers & subscribers.
+    for (unsigned i = 0; i < numNodes; ++i) {
+        if(i == nodeId)     // Skip myself.
             continue;
 
         controlPublishers[i]->close();
         controlSubscribers[i]->close();
-
         delete controlPublishers[i];
         delete controlSubscribers[i];
     
-        pthread_mutex_destroy(&mtx_controlPublishers[i]);
-        pthread_mutex_destroy(&mtx_controlSubscribers[i]);
+        lockControlPublishers[i].destroy();
+        lockControlSubscribers[i].destroy();
     }
-
-    //fprintf(stderr, "H0.1\n");
 
     delete[] controlPublishers;
     delete[] controlSubscribers;
-
-    delete[] mtx_controlPublishers;
-    delete[] mtx_controlSubscribers;
-
-    //fprintf(stderr, "H0.2\n");
+    delete[] lockControlPublishers;
+    delete[] lockControlSubscribers;
 
     dataContext.close();
-
-    //fprintf(stderr, "H0.3\n");
-
     controlContext.close();
-
-    //fprintf(stderr, "H0.4\n");
 }
 
 void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* outTopics) {
     //pthread_mutex_lock(&mtx_dataContext);
-    pthread_mutex_lock(&mtx_dataPublisher);
-    pthread_mutex_lock(&mtx_dataSubscriber);
+    lockDataPublisher.lock();
+    lockDataSubscriber.lock()
 
     zmq::message_t inMsg;
 
@@ -370,8 +347,8 @@ void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* o
         //fprintf(stderr, "Node %u: FROM MY END, SUBSCRIPTION IS COMPLETE\n", nodeId);
         NodeManager::barrier(SUBSCRIBEDONE_BARRIER);
         
-        pthread_mutex_unlock(&mtx_dataSubscriber);
-        pthread_mutex_unlock(&mtx_dataPublisher);
+        lockDataSubscriber.unlock()
+        lockDataPublisher.unlock();
 
         flushData(numLiveNodes);
     }
@@ -381,17 +358,17 @@ void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* o
         *((IdType*) outMsg.data()) = topic;
         memcpy((void*)(((char*) outMsg.data()) + sizeof(IdType)), value, valSize);
 
-        pthread_mutex_lock(&mtx_dataPublisher);
+        lockDataPublisher.lock();
         dataPublisher->ksend(outMsg, ZMQ_DONTWAIT); 
-        pthread_mutex_unlock(&mtx_dataPublisher);
+        lockDataPublisher.unlock();
     }
 
     bool CommManager::dataPullIn(IdType &topic, std::vector<FeatType>& value) {
         zmq::message_t inMsg;
 
-        pthread_mutex_lock(&mtx_dataSubscriber);
+        lockDataSubscriber.lock()
         bool ret = dataSubscriber->krecv(&inMsg, ZMQ_DONTWAIT);
-        pthread_mutex_unlock(&mtx_dataSubscriber);
+        lockDataSubscriber.unlock()
 
         if(!ret)
             return false;
@@ -408,9 +385,9 @@ void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* o
 
     void CommManager::dataSyncPullIn(IdType& topic, std::vector<FeatType>& value) {
         zmq::message_t inMsg;
-        pthread_mutex_lock(&mtx_dataSubscriber);
+        lockDataSubscriber.lock()
         assert(dataSubscriber->krecv(&inMsg));
-        pthread_mutex_unlock(&mtx_dataSubscriber);
+        lockDataSubscriber.unlock()
 
 		int32_t dataSize = inMsg.size() - sizeof(IdType);
 		int32_t numberOfFeatures = dataSize / sizeof(FeatType);
@@ -427,9 +404,9 @@ void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* o
         *((ControlMessage*) outMsg.data()) = ControlMessage(APPMSG);
         memcpy((void*)(((char*) outMsg.data()) + sizeof(ControlMessage)), value, valSize);
 
-        pthread_mutex_lock(&mtx_controlPublishers[to]);
+        lockControlPublishers[to].lock();
         assert(controlPublishers[to]->ksend(outMsg, ZMQ_DONTWAIT));
-        pthread_mutex_unlock(&mtx_controlPublishers[to]);
+        lockControlPublishers[to].unlock();
     }
 
     bool CommManager::controlPullIn(unsigned from, void* value, unsigned valSize) {
@@ -437,9 +414,9 @@ void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* o
         assert(from != nodeId);
         zmq::message_t inMsg;
 
-        pthread_mutex_lock(&mtx_controlSubscribers[from]);
+        lockControlSubscribers[from].lock();
         bool ret = controlSubscribers[from]->krecv(&inMsg, ZMQ_DONTWAIT);
-        pthread_mutex_unlock(&mtx_controlSubscribers[from]);
+        lockControlSubscribers[from].unlock();
 
         if(ret == false)
             return false;
@@ -463,9 +440,9 @@ void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* o
 
         zmq::message_t inMsg;
         //pthread_mutex_lock(&mtx_controlContext);
-        pthread_mutex_lock(&mtx_controlSubscribers[from]);
+        lockControlSubscribers[from].lock();
         assert(controlSubscribers[from]->krecv(&inMsg));
-        pthread_mutex_unlock(&mtx_controlSubscribers[from]);
+        lockControlSubscribers[from].unlock();
         //pthread_mutex_unlock(&mtx_controlContext);
 
         ControlMessage cM;
@@ -482,8 +459,8 @@ void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* o
     void CommManager::flushData(unsigned nNodes) {
         fprintf(stderr, "Flushing data ...\n");
         //pthread_mutex_lock(&mtx_dataContext);
-        pthread_mutex_lock(&mtx_dataPublisher);
-        pthread_mutex_lock(&mtx_dataSubscriber);
+        lockDataPublisher.lock();
+        lockDataSubscriber.lock()
 
         zmq::message_t outMsg(sizeof(IdType));
         *((IdType*) outMsg.data()) = NULL_CHAR;
@@ -504,8 +481,8 @@ void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* o
         }
 
         //pthread_mutex_unlock(&mtx_dataContext);
-        pthread_mutex_unlock(&mtx_dataSubscriber);
-        pthread_mutex_unlock(&mtx_dataPublisher);
+        lockDataSubscriber.unlock()
+        lockDataPublisher.unlock();
         fprintf(stderr, "Flushing data complete ...\n");
     }
 
@@ -518,8 +495,8 @@ void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* o
             if((i == nodeId) || (nodesAlive[i] == false))
                 continue;
 
-            pthread_mutex_lock(&mtx_controlPublishers[i]);
-            pthread_mutex_lock(&mtx_controlSubscribers[i]);
+            lockControlPublishers[i].lock();
+            lockControlSubscribers[i].lock();
 
             zmq::message_t outAckMsg(sizeof(ControlMessage));
             *((ControlMessage*) outAckMsg.data()) = ControlMessage();
@@ -533,8 +510,8 @@ void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* o
                         break;
                 }
             }
-            pthread_mutex_unlock(&mtx_controlSubscribers[i]);
-            pthread_mutex_unlock(&mtx_controlPublishers[i]);
+            lockControlSubscribers[i].lock();
+            lockControlPublishers[i].unlock();
         }
 
         //pthread_mutex_unlock(&mtx_controlContext);
@@ -547,8 +524,8 @@ void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* o
         fprintf(stderr, "Flushing control %u...\n", i);
 
         //pthread_mutex_lock(&mtx_controlContext);
-        pthread_mutex_lock(&mtx_controlPublishers[i]);
-        pthread_mutex_lock(&mtx_controlSubscribers[i]);
+        lockControlPublishers[i].lock();
+        lockControlSubscribers[i].lock();
 
         zmq::message_t outAckMsg(sizeof(ControlMessage));
         *((ControlMessage*) outAckMsg.data()) = ControlMessage();
@@ -563,8 +540,8 @@ void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* o
             }
         }
 
-        pthread_mutex_unlock(&mtx_controlSubscribers[i]);
-        pthread_mutex_unlock(&mtx_controlPublishers[i]);
+        lockControlSubscribers[i].unlock();
+        lockControlPublishers[i].unlock();
         //pthread_mutex_unlock(&mtx_controlContext);
     }
 

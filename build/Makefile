@@ -84,22 +84,22 @@ directories:
 agg_tgt: $(AGG_OBJS)
 	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFALGS) -o $(AGG_TARGET_BIN)
 
-$(OBJ_PATH)/%.o: $(NODE_PATH)/%.cpp $(NODE_PATH)/%.h
+$(OBJ_PATH)/%.o: $(NODE_PATH)/%.cpp $(NODE_PATH)/%.hpp
 	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
 
-$(OBJ_PATH)/%.o: $(COMM_PATH)/%.cpp $(COMM_PATH)/%.h
+$(OBJ_PATH)/%.o: $(COMM_PATH)/%.cpp $(COMM_PATH)/%.hpp
 	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
 
-$(OBJ_PATH)/%.o: $(ENGINE_PATH)/%.cpp $(ENGINE_PATH)/%.h
+$(OBJ_PATH)/%.o: $(ENGINE_PATH)/%.cpp $(ENGINE_PATH)/%.hpp
 	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
 
-$(OBJ_PATH)/%.o: $(PARALLEL_PATH)/%.cpp $(PARALLEL_PATH)/%.h
+$(OBJ_PATH)/%.o: $(PARALLEL_PATH)/%.cpp $(PARALLEL_PATH)/%.hpp
 	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
 
-$(OBJ_PATH)/%.o: $(UTILS_PATH)/%.cpp $(UTILS_PATH)/%.h
+$(OBJ_PATH)/%.o: $(UTILS_PATH)/%.cpp $(UTILS_PATH)/%.hpp
 	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
 
-$(OBJ_PATH)/%.o: $(BM_PATH)/%.cpp $(BM_PATH)/%.h
+$(OBJ_PATH)/%.o: $(BM_PATH)/%.cpp $(BM_PATH)/%.hpp
 	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
 
 $(OBJ_PATH)/%.o: $(BM_PATH)/%.cpp
@@ -109,4 +109,3 @@ $(OBJ_PATH)/%.o: $(BM_PATH)/%.cpp
 .PHONY: clean
 clean:
 	rm -rf $(OBJ_PATH) $(AGG_TARGET_BIN)
-

@@ -1,73 +1,44 @@
-#ifndef __EDGE_HPP__
-#define __EDGE_HPP__
+#ifndef __EDGE_H__
+#define __EDGE_H__
 
-#include "edge.h"
-#include <cstring>
 
-template<typename EdgeType>
-Edge<EdgeType>::Edge() : otherId(5), edgeData() {
-}
+#include "../utils/utils.hpp"
 
+
+typedef char EdgeLocationType;
 
 template<typename EdgeType>
-Edge<EdgeType>::Edge(IdType oId, EdgeLocationType eLocation, EdgeType eData) : otherId(oId), edgeData(eData), edgeLocation(eLocation) {
-}
+class Edge {
+    public:
+        Edge();
+        Edge(IdType oId, EdgeLocationType eLocation, EdgeType eData = EdgeType());
+        EdgeType data();
+        EdgeLocationType getEdgeLocation();
+        void setEdgeLocation(EdgeLocationType eLoc);
+        void setData(EdgeType value);
+
+    protected:
+        IdType otherId;
+        EdgeType edgeData;
+        EdgeLocationType edgeLocation;
+};
 
 template<typename EdgeType>
-EdgeType Edge<EdgeType>::data() {
-    return edgeData;
-}
+class InEdge: public Edge<EdgeType> {
+    public:
+        InEdge();
+        InEdge(IdType sId, EdgeLocationType eLocation, EdgeType eData = EdgeType());
+        IdType sourceId();
+        void setSourceId(IdType sId);
+};
 
 template<typename EdgeType>
-EdgeLocationType Edge<EdgeType>::getEdgeLocation() {
-    return edgeLocation;
-}
+class OutEdge: public Edge<EdgeType> {
+    public:
+        OutEdge();
+        OutEdge(IdType dId, EdgeLocationType eLocation, EdgeType eData = EdgeType());
+        IdType destId();
+        void setDestId(IdType dId);
+};
 
-template<typename EdgeType>
-void Edge<EdgeType>::setEdgeLocation(EdgeLocationType eLoc) {
-    edgeLocation = eLoc;
-}
-
-template<typename EdgeType>
-void Edge<EdgeType>::setData(EdgeType value) {
-	edgeData = value;
-}
-
-template<typename EdgeType>
-InEdge<EdgeType>::InEdge() {
-}
-
-template<typename EdgeType>
-InEdge<EdgeType>::InEdge(IdType sId, EdgeLocationType eLocation, EdgeType eData) : Edge<EdgeType>(sId, eLocation, eData) {
-}
-
-template<typename EdgeType>
-IdType InEdge<EdgeType>::sourceId() {
-	return Edge<EdgeType>::otherId;
-}
-
-template<typename EdgeType>
-void InEdge<EdgeType>::setSourceId(IdType sId) {
-    Edge<EdgeType>::otherId = sId;
-}
-
-template<typename EdgeType>
-OutEdge<EdgeType>::OutEdge() {
-}
-
-template<typename EdgeType>
-OutEdge<EdgeType>::OutEdge(IdType dId, EdgeLocationType eLocation, EdgeType eData) : Edge<EdgeType>(dId, eLocation, eData) {
-}
-
-template<typename EdgeType>
-IdType OutEdge<EdgeType>::destId() {
-	return Edge<EdgeType>::otherId;
-}
-
-template<typename EdgeType>
-void OutEdge<EdgeType>::setDestId(IdType dId) {
-    Edge<EdgeType>::otherId = dId;
-}
-
-#endif /* __EDGE_HPP__ */
-
+#endif /* __EDGE_H__ */

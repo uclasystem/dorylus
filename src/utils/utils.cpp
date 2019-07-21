@@ -1,14 +1,13 @@
-#include "utils.h"
-#include <unistd.h>
+#include <cunistd>
 #include <sys/time.h>
 #include <fstream>
 #include <iostream>
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include <netinet/in.h>
-#include <unistd.h>
 #include <arpa/inet.h>
 #include <cstring>
+#include "utils.hpp"
 
 std::map<size_t, std::string> typeToFormatSpecifier;
 
