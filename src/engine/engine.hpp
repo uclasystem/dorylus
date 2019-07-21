@@ -673,13 +673,6 @@ bool Engine<VertexType, EdgeType>::master() {
 }
 
 
-template <typename VertexType, typename EdgeType>
-void Engine<VertexType, EdgeType>::signalVertex(IdType vId) {
-  if(graph.vertexPartitionIds[vId] == nodeId) {
-    scheduler->schedule(graph.globalToLocalId[vId]);
-  }
-}
-
 
 template <typename VertexType, typename EdgeType>
 void  Engine<VertexType, EdgeType>::printEngineMetrics() {
