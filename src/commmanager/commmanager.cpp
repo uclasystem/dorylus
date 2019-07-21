@@ -230,7 +230,7 @@ void CommManager::destroy() {
 void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* outTopics) {
     //pthread_mutex_lock(&mtx_dataContext);
     lockDataPublisher.lock();
-    lockDataSubscriber.lock()
+    lockDataSubscriber.lock();
 
     zmq::message_t inMsg;
 
@@ -366,7 +366,7 @@ void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* o
     bool CommManager::dataPullIn(IdType &topic, std::vector<FeatType>& value) {
         zmq::message_t inMsg;
 
-        lockDataSubscriber.lock()
+        lockDataSubscriber.lock();
         bool ret = dataSubscriber->krecv(&inMsg, ZMQ_DONTWAIT);
         lockDataSubscriber.unlock()
 
@@ -385,7 +385,7 @@ void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* o
 
     void CommManager::dataSyncPullIn(IdType& topic, std::vector<FeatType>& value) {
         zmq::message_t inMsg;
-        lockDataSubscriber.lock()
+        lockDataSubscriber.lock();
         assert(dataSubscriber->krecv(&inMsg));
         lockDataSubscriber.unlock()
 
@@ -460,7 +460,7 @@ void CommManager::subscribeData(std::set<IdType>* topics, std::vector<IdType>* o
         fprintf(stderr, "Flushing data ...\n");
         //pthread_mutex_lock(&mtx_dataContext);
         lockDataPublisher.lock();
-        lockDataSubscriber.lock()
+        lockDataSubscriber.lock();
 
         zmq::message_t outMsg(sizeof(IdType));
         *((IdType*) outMsg.data()) = NULL_CHAR;
