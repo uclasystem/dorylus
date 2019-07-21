@@ -77,27 +77,27 @@ directories:
 BASE_OBJS       := $(OBJ_PATH)/commmanager.o $(OBJ_PATH)/nodemanager.o $(OBJ_PATH)/vertex.o $(OBJ_PATH)/edge.o $(OBJ_PATH)/graph.o $(OBJ_PATH)/engine.o $(OBJ_PATH)/zkinterface.o $(OBJ_PATH)/zkhelper.o $(OBJ_PATH)/utils.o $(OBJ_PATH)/threadpool.o
 
 $(OBJ_PATH)/%.o: $(NODE_PATH)/%.cpp $(NODE_PATH)/%.hpp
-	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
+	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) -c $< -o $@
 
 $(OBJ_PATH)/%.o: $(COMM_PATH)/%.cpp $(COMM_PATH)/%.hpp
-	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
+	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) -c $< -o $@
 
 $(OBJ_PATH)/%.o: $(ENGINE_PATH)/%.cpp $(ENGINE_PATH)/%.hpp
-	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
+	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) -c $< -o $@
 
 $(OBJ_PATH)/%.o: $(PARALLEL_PATH)/%.cpp $(PARALLEL_PATH)/%.hpp
-	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
+	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) -c $< -o $@
 
 $(OBJ_PATH)/%.o: $(UTILS_PATH)/%.cpp $(UTILS_PATH)/%.hpp
-	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
+	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) -c $< -o $@
 
 # Benchmark objects internal targets
 $(OBJ_PATH)/%.o: $(BM_PATH)/%.cpp
-	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) $(INC) -c $< -o $@
+	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) -c $< -o $@
 
 # Benchmark executables internal targets
 $(BENCH_AGG).bin: $(OBJ_PATH)/$(BENCH_AGG).o $(BASE_OBJS)
-	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFALGS) $(INC) $^ -o $@
+	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFALGS) -o $@
 
 # Clean
 .PHONY: clean
