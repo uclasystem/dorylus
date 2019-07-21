@@ -65,28 +65,13 @@ template <typename VertexType, typename EdgeType>
 Lock Engine<VertexType, EdgeType>::lockCurrId;
 
 template <typename VertexType, typename EdgeType>
+Lock Engine<VertexType, EdgeType>::lockRecvWaiters;
+
+template <typename VertexType, typename EdgeType>
 unsigned Engine<VertexType, EdgeType>::nodeId;
 
 template <typename VertexType, typename EdgeType>
 unsigned Engine<VertexType, EdgeType>::numNodes;
-
-template <typename VertexType, typename EdgeType>
-pthread_mutex_t Engine<VertexType, EdgeType>::mtxCompWaiter;
-
-template <typename VertexType, typename EdgeType>
-pthread_cond_t Engine<VertexType, EdgeType>::condCompWaiter;
-
-template <typename VertexType, typename EdgeType>
-pthread_mutex_t Engine<VertexType, EdgeType>::mtxDataWaiter;
-
-template <typename VertexType, typename EdgeType>
-pthread_cond_t Engine<VertexType, EdgeType>::condDataWaiter;
-
-template <typename VertexType, typename EdgeType>
-pthread_mutex_t Engine<VertexType, EdgeType>::lock_recvWaiters;
-
-template <typename VertexType, typename EdgeType>
-pthread_cond_t Engine<VertexType, EdgeType>::cond_recvWaiters_empty;
 
 template <typename VertexType, typename EdgeType>
 std::map<IdType, unsigned> Engine<VertexType, EdgeType>::recvWaiters;
@@ -523,114 +508,52 @@ void Engine<VertexType, EdgeType>::setEdgeNormalizations() {
     }
 }
 
-template <typename VertexType, typename EdgeType>
-void Engine<VertexType, EdgeType>::readDeletionStream(std::string& fileName) {
-    // Read the edge file
-    std::string edgeFileName = fileName + DELS_EXT;
-    std::ifstream infile(edgeFileName.c_str(), std::ios::binary);
-    if(!infile.good())
-        fprintf(stderr, "Cannot open BinarySnap file: %s\n", edgeFileName.c_str());
-
-    assert(infile.good());
-    fprintf(stderr, "Reading BinarySnap file: %s\n", edgeFileName.c_str());
-
-    BSHeaderType<IdType> bSHeader;
-
-    infile.read((char*) &bSHeader, sizeof(bSHeader));
-
-    assert(bSHeader.sizeOfVertexType == sizeof(IdType));
-
-    IdType srcdst[2];
-    while(infile.read((char*) srcdst, bSHeader.sizeOfVertexType * 2)) {
-        if(srcdst[0] == srcdst[1])
-            continue;
-
-        if((graph.vertexPartitionIds[srcdst[0]] == nodeId) || (graph.vertexPartitionIds[srcdst[1]] == nodeId)) {
-            deleteStream.push_back(std::make_tuple(globalDeleteStreamSize, srcdst[0], srcdst[1]));
-        }
-        ++globalDeleteStreamSize;
-
-        if(globalDeleteStreamSize > numBatches * (batchSize * (deletePercent / 100.0 + 1)))
-            break;
-    }
-
-    infile.close();
-}
-
 
 /**
  *
- * Initialize the engine.
+ * Initialize the engine with the given command line arguments.
  * 
  */
 template <typename VertexType, typename EdgeType>
-void Engine<VertexType, EdgeType>::init(int argc, char* argv[], VertexType dVertex, EdgeType dEdge, EdgeType (*eWeight) (IdType, IdType)) {
+void
+Engine<VertexType, EdgeType>::init(int argc, char *argv[], VertexType dVertex, EdgeType dEdge, EdgeType (*eWeight) (IdType, IdType)) {
     timeInit = -getTimer();
+
+    // Parse the command line arguments.
     parseArgs(argc, argv);
     
+    // Initialize the node manager and communication manager.
     NodeManager::init(ZKHOST_FILE, HOST_FILE);
-
     CommManager::init();
-
     nodeId = NodeManager::getNodeId();
     numNodes = NodeManager::getNumNodes();
-
-    assert(numNodes <= 256); // ASSUMPTION IS THAT NODES ARE NOT MORE THAN 256.
-
-    std::set<IdType> inTopics;
-    std::vector<IdType> outTopics;
-    inTopics.insert(IAMDONE);
-    inTopics.insert(IAMNOTDONE);
-    inTopics.insert(ITHINKIAMDONE); 
-    outTopics.push_back(IAMDONE);
-    outTopics.push_back(IAMNOTDONE);
-    outTopics.push_back(ITHINKIAMDONE); 
-
-    CommManager::subscribeData(&inTopics, &outTopics);
-    inTopics.clear();
-    outTopics.clear();
+    assert(numNodes <= 256);    // Cluster size limitation.
 
     defaultVertex = dVertex;
     defaultEdge = dEdge;
     edgeWeight = eWeight;
 
-    //fprintf(stderr, "defaultVertex = %.3lf\n", defaultVertex);
+    // Read in the graph and subscribe vertex global ID topics.
+    std::set<IdType> inTopics;
+    std::vector<IdType> outTopics;
     readGraphBS(graphFile, inTopics, outTopics);
     graph.printGraphMetrics();
-    fprintf(stderr, "Insert Stream size = %zd\n", insertStream.size());
 
-    readFeaturesFile(featuresFile); //input filename is hardcoded here
+    // Read in initial features from the features file.
+    readFeaturesFile(featuresFile);
 
-    if (numBatches != 0) {
-        readDeletionStream(graphFile);
-        fprintf(stderr, "Delete Stream size = %zd\n", deleteStream.size());
-    }
-
+    // Set engine context.
     engineContext.setNumVertices(graph.numGlobalVertices);
-
-    //CommManager::subscribeData(&inTopics, &outTopics);
-
-    scheduler = new BitsetScheduler(graph.numLocalVertices);
-    engineContext.setScheduler(scheduler);
-
-    shadowScheduler = new DenseBitset(graph.numLocalVertices);
-    trimScheduler = new DenseBitset(graph.numLocalVertices);
-
     engineContext.setIteration(0);
 
+    // Initialize synchronization utilities.
     lockCurrId.init();
-
-    pthread_mutex_init(&mtxCompWaiter, NULL);
-    pthread_cond_init(&condCompWaiter, NULL);
-
-    pthread_mutex_init(&mtxDataWaiter, NULL);
-    pthread_cond_init(&condDataWaiter, NULL);
-
-    pthread_mutex_init(&lock_recvWaiters, NULL);
-    pthread_cond_init(&cond_recvWaiters_empty, NULL);
+    lockRecvWaiters.init();
+    condRecvWaitersEmpty.init(lockRecvWaiters);
+    lockHalt.init();
 
     barComp.init(cThreads);
-    barCompData.init(2);                            // master cthread and datacommunicator
+    barCompData.init(2);
 
     pthread_barrier_init(&barDebug, NULL, cThreads + 10);
 
@@ -648,33 +571,17 @@ void Engine<VertexType, EdgeType>::init(int argc, char* argv[], VertexType dVert
     NodeManager::barrier("init");
 }
 
-template <typename VertexType, typename EdgeType>
-void Engine<VertexType, EdgeType>::destroy() {
-    NodeManager::destroy();
-    CommManager::destroy();
-    computePool->destroyPool();
-    //fprintf(stderr, "H0\n");
-    //dataPool->sync();
-    dataPool->destroyPool();
-    //fprintf(stderr, "H1\n");
-}
 
-template <typename VertexType, typename EdgeType>
-IdType Engine<VertexType, EdgeType>::numVertices() {
-    return graph.numGlobalVertices;
-}
 
+/**
+ *
+ * Whether I am the master mode or not.
+ * 
+ */
 template <typename VertexType, typename EdgeType>
-bool Engine<VertexType, EdgeType>::master() {
+bool
+Engine<VertexType, EdgeType>::master() {
     return NodeManager::amIMaster();
-}
-
-
-
-template <typename VertexType, typename EdgeType>
-void  Engine<VertexType, EdgeType>::printEngineMetrics() {
-    fprintf(stderr, "Engine Metrics: Init time = %.3lf ms\n", timeInit);
-    fprintf(stderr, "Engine Metrics: Processing time = %.3lf ms\n", allTimeProcess);
 }
 
 
@@ -685,7 +592,8 @@ void  Engine<VertexType, EdgeType>::printEngineMetrics() {
  * 
  */
 template <typename VertexType, typename EdgeType>
-void Engine<VertexType, EdgeType>::run(VertexProgram<VertexType, EdgeType>* vProgram, bool printEM) {
+void
+Engine<VertexType, EdgeType>::run(VertexProgram<VertexType, EdgeType> *vProgram, bool printEM) {
     
     // Make sure engines on all machines start running.
     NodeManager::barrier(RUN_BARRIER); 
@@ -717,7 +625,7 @@ void Engine<VertexType, EdgeType>::run(VertexProgram<VertexType, EdgeType>* vPro
     dataPool->sync();
 
     printLog("Engine completes the processing at iteration %u.\n", iteration);
-    if(master() && printEM)
+    if (master() && printEM)
         printEngineMetrics();
 }
 
@@ -729,13 +637,34 @@ void Engine<VertexType, EdgeType>::run(VertexProgram<VertexType, EdgeType>* vPro
  */
 template <typename VertexType, typename EdgeType>
 void
-Engine<VertexType, EdgeType>::processAll(VertexProgram<VertexType, EdgeType>* vProgram) {
+Engine<VertexType, EdgeType>::processAll(VertexProgram<VertexType, EdgeType> *vProgram) {
     vProgram->beforeIteration(engineContext);
 
+    // Loop through all local vertices and process it.
     for (IdType i = 0; i < graph.numLocalVertices; ++i)
         vProgram->processVertex(graph.vertices[i]);
 
     vProgram->afterIteration(engineContext);
+}
+
+
+/**
+ *
+ * Destroy the engine.
+ * 
+ */
+template <typename VertexType, typename EdgeType>
+void
+Engine<VertexType, EdgeType>::destroy() {
+    NodeManager::destroy();
+    CommManager::destroy();
+    computePool->destroyPool();
+    dataPool->destroyPool();
+
+    lockCurrId.destroy();
+    lockRecvWaiters.destroy();
+    condRecvWaitersEmpty.destroy();
+    lockHalt.destroy();
 }
 
 
@@ -787,10 +716,10 @@ Engine<VertexType, EdgeType>::worker(unsigned tid, void *args) {
                 barComp.wait();
 
                 // Wait for all remote schedulings sent by me to be handled.
-                pthread_mutex_lock(&lock_recvWaiters);
+                lockRecvWaiters.lock();
                 if (!recvWaiters.empty())
-                    pthread_cond_wait(&cond_recvWaiters_empty, &lock_recvWaiters);
-                pthread_mutex_unlock(&lock_recvWaiters);
+                    condRecvWaitersEmpty.wait();
+                lockRecvWaiters.unlock();
 
                 //## Global Iteration barrier. ##//
                 NodeManager::barrier(LAYER_BARRIER);
@@ -816,9 +745,10 @@ Engine<VertexType, EdgeType>::worker(unsigned tid, void *args) {
                 } else {
                     printLog("Deciding to halt at iteration %u...\n", iteration);
 
-                    pthread_mutex_lock(&mtxDataWaiter);
+                    // Set this to signal data communicator to end its life.
+                    lockHalt.lock();
                     halt = true;
-                    pthread_mutex_unlock(&mtxDataWaiter);
+                    lockHalt.unlock();
 
                     //## Worker barrier 2: Going to die. ##//
                     barComp.wait();
@@ -838,9 +768,9 @@ Engine<VertexType, EdgeType>::worker(unsigned tid, void *args) {
                 IdType global_vid = graph.localToGlobalId[local_vid];
 
                 // Record that this vid gets broadcast in this iteration. Should wait for its corresponding respond.
-                pthread_mutex_lock(&lock_recvWaiters);
+                lockRecvWaiters.lock();
                 recvWaiters[global_vid] = numNodes;
-                pthread_mutex_unlock(&lock_recvWaiters);
+                lockRecvWaiters.unlock();
 
                 CommManager::dataPushOut(global_vid, (void *) v.data().data(), sizeof(FeatType) * v.data().size());
                 break;
@@ -890,15 +820,15 @@ Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void *args) {
             // corresponding recvWaiter's value. If waiters become empty, send a signal in case the workers are
             // waiting on it to be empty at the iteration barrier.
             } else if (graph.globalToLocalId.find(topic) != graph.globalToLocalId.end()) {
-                pthread_mutex_lock(&lock_recvWaiters);
+                lockRecvWaiters.lock()
                 assert(recvWaiters.find(global_vid) != recvWaiters.end());
                 --recvWaiters[global_vid];
                 if (recvWaiters[global_vid] == 0) {
                     recvWaiters.erase(global_vid);
                     if (recvWaiters.empty())
-                        pthread_cond_signal(&cond_recvWaiters_empty);
+                        condRecvWaitersEmpty.signal();
                 }
-                pthread_mutex_unlock(&lock_recvWaiters);
+                lockRecvWaiters.unlock()
             }
         }
     }
@@ -922,6 +852,19 @@ Engine<VertexType, EdgeType>::printLog(const char *format, ...) {
     va_start(argptr, format);
     vfprintf(stderr, format, argptr);
     va_end(argptr);
+}
+
+
+/**
+ *
+ * Print engine metrics of processing time.
+ * 
+ */
+template <typename VertexType, typename EdgeType>
+void
+Engine<VertexType, EdgeType>::printEngineMetrics() {
+    printLog("Engine Metrics: Init time = %.3lf ms\n", timeInit);
+    printLog("Engine Metrics: Processing time = %.3lf ms\n", allTimeProcess);
 }
 
 

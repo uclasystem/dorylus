@@ -6,6 +6,7 @@
 #include "bitsetscheduler.hpp"
 #include "vertexprogram.hpp"
 #include "../parallel/lock.hpp"
+#include "../parallel/cond.hpp"
 #include "../parallel/barrier.hpp"
 #include "../utils/utils.h"
 #include "enginecontext.h"
@@ -136,6 +137,11 @@ public:
     static IdType currId;
     static Lock lockCurrId;
 
+    static Lock lockRecvWaiters;
+    static Cond condRecvWaitersEmpty;
+
+    static Lock lockHalt;
+
     static std::string graphFile;
     static std::string featuresFile;
     
@@ -221,7 +227,6 @@ public:
 
     static void processAll(VertexProgram<VertexType, EdgeType>* vProgram);
 
-    static void printEngineMetrics();
 
     static void readPartsFile(std::string& partsFileName, Graph<VertexType, EdgeType>& lGraph);
     static void setRepParts();
@@ -231,7 +236,6 @@ public:
  
     static void replicationReceiver(unsigned tid, void* args);
 
-    static IdType numVertices();
     static bool master(); 
 
 private:
@@ -240,6 +244,7 @@ private:
     static void dataCommunicator(unsigned tid, void *args);
 
     static void printLog(const char *format, ...);
+    static void printEngineMetrics();
 };
 
 
