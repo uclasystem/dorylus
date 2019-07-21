@@ -44,7 +44,7 @@ INC             := -I$(ZK_INCPATH) -I$(ZMQ_INCPATH)
 LDFLAGS         := -Wl,-rpath=$(ZK_LIBPATH) -Wl,-rpath=$(ZMQ_LIBPATH)
 
 # Objects
-BASE_OBJS       := $(OBJ_PATH)/commmanager.o $(OBJ_PATH)/nodemanager.o $(OBJ_PATH)/zkinterface.o $(OBJ_PATH)/zkhelper.o $(OBJ_PATH)/utils.o $(OBJ_PATH)/threadpool.o
+BASE_OBJS       := $(OBJ_PATH)/commmanager.o $(OBJ_PATH)/nodemanager.o $(OBJ_PATH)/engine.o $(OBJ_PATH)/vertex.o $(OBJ_PATH)/edge.o $(OBJ_PATH)/graph.o $(OBJ_PATH)/zkinterface.o $(OBJ_PATH)/zkhelper.o $(OBJ_PATH)/utils.o $(OBJ_PATH)/threadpool.o
 AGG_OBJS        := $(BASE_OBJS) $(OBJ_PATH)/$(AGG_TARGET).o
 
 
