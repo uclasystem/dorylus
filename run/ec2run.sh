@@ -189,8 +189,6 @@ for dp in {1..1}; do
     scp ${dshnodes[$i]}:${TMPDIR}/output_* ${DOPDIR}/;
   done;
 
-  cd ${ASPIREDIR}/build && ./tester.sh ${DOPDIR}/ ${NB};
-
 done;
 
 
