@@ -1,7 +1,6 @@
 #ifndef __LIB_VERTEXPROGRAM_HPP__
 #define __LIB_VERTEXPROGRAM_HPP__
 
-#include "enginecontext.hpp"
 #include "vertex.hpp"
 
 template<typename VertexType, typename EdgeType>
