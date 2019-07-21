@@ -912,7 +912,7 @@ Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void *args) {
  */
 template <typename VertexType, typename EdgeType>
 void
-Engine<VertexType, EdgeType>::printLog(const char *format) {
+Engine<VertexType, EdgeType>::printLog(const char *format, ...) {
 
     // Print node ID.
     fprintf(stderr, "[ Node %u ] ", nodeId);
