@@ -557,7 +557,6 @@ Engine<VertexType, EdgeType>::parseArgs(int argc, char *argv[]) {
     printLog("  graphFile = %s\n", graphFile.c_str());
     printLog("  featuresFile = %s\n", featuresFile.c_str());
     printLog("  undirected = %s\n", undirected ? "true" : "false");
-    printLog("  pofrequency = %u\n", poFrequency);
     printLog("  baseEdges (percent) = %u\n", baseEdges);
     printLog("  numBatches = %u\n", numBatches);
     printLog("  batchSize = %u\n", batchSize);
@@ -799,12 +798,12 @@ Engine<VertexType, EdgeType>::readGraphBS(std::string& fileName, std::set<IdType
     // Initialize the graph based on the partition info.
     graph.vertices.resize(graph.numLocalVertices);
     for (IdType i = 0; i < graph.numLocalVertices; ++i) {
-        lGraph.vertices[i].localIdx = i;
-        lGraph.vertices[i].globalIdx = graph.localToGlobalId[i];
-        lGraph.vertices[i].vertexLocation = INTERNAL_VERTEX;
-        lGraph.vertices[i].vertexData.clear();
-        lGraph.vertices[i].vertexData.push_back(defaultVertex);
-        lGraph.vertices[i].graph = &graph;
+        graph.vertices[i].localIdx = i;
+        graph.vertices[i].globalIdx = graph.localToGlobalId[i];
+        graph.vertices[i].vertexLocation = INTERNAL_VERTEX;
+        graph.vertices[i].vertexData.clear();
+        graph.vertices[i].vertexData.push_back(defaultVertex);
+        graph.vertices[i].graph = &graph;
     }
 
     // Read in the binary snap edge file.
