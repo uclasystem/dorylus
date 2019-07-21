@@ -112,11 +112,7 @@ private:
 
     static double timeProcess;   
     static double allTimeProcess;
-    static double timeInit; 
-
-    static unsigned baseEdges;
-    static unsigned numBatches;
-    static unsigned batchSize;
+    static double timeInit;
 
     static std::map<IdType, unsigned> recvWaiters;
 

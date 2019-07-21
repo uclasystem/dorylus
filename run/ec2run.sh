@@ -138,7 +138,6 @@ BE=100;
 CT=7;
 POF=1;
 KC=10;
-NB=11;
 BS=100000;
 TOA=0;
 TOD=1;
@@ -169,9 +168,6 @@ done;
 # Loop over desired number of runs
 for dp in {1..1}; do
 
-  NB=0;
-  BS=0;
-
   cd ${RUNDIR};
 
   GVID=`cat gvid`;
@@ -183,8 +179,8 @@ for dp in {1..1}; do
   OPFILE=${OUTFILE_DIR}/${GVID}.${BK}.${IK}.out
   echo "GVID = ${GVID}" >> ${OPFILE} 2>&1;
 
-  echo "DSH command (from ${ASPIREDIR}/build): ./${BM} --graphfile ${IP} --featuresfile ${FF} --undirected ${UD} --bm-reset=${RS} --bm-source=${SRC} --bm-tagonadd=${TOA} --bm-tagondelete=${TOD} --bm-smarttagondelete=${STOD} --bm-smartpropagation=${SP} --bm-tmpdir=${TMPDIR} --kcore-maxcore=${KC} --cthreads ${CT} --baseedges ${BE} --numbatches ${NB} --batchsize ${BS} ${XTRAARGS}";
-  ${DSH} -M -f ${DSHFILE} -c "cd ${ASPIREDIR}/build && ./${BM} --graphfile ${IP} --featuresfile ${FF} --undirected ${UD} --bm-reset=${RS} --bm-source=${SRC} --bm-tagonadd=${TOA} --bm-tagondelete=${TOD} --bm-smarttagondelete=${STOD} --bm-smartpropagation=${SP} --bm-tmpdir=${TMPDIR} --kcore-maxcore=${KC} --cthreads ${CT} --baseedges ${BE} --numbatches ${NB} --batchsize ${BS} ${XTRAARGS}" >> ${OPFILE} 2>&1;
+  echo "DSH command (from ${ASPIREDIR}/build): ./${BM} --graphfile ${IP} --featuresfile ${FF} --undirected ${UD} --bm-reset=${RS} --bm-source=${SRC} --bm-tagonadd=${TOA} --bm-tagondelete=${TOD} --bm-smarttagondelete=${STOD} --bm-smartpropagation=${SP} --bm-tmpdir=${TMPDIR} --kcore-maxcore=${KC} --cthreads ${CT} ${XTRAARGS}";
+  ${DSH} -M -f ${DSHFILE} -c "cd ${ASPIREDIR}/build && ./${BM} --graphfile ${IP} --featuresfile ${FF} --undirected ${UD} --bm-reset=${RS} --bm-source=${SRC} --bm-tagonadd=${TOA} --bm-tagondelete=${TOD} --bm-smarttagondelete=${STOD} --bm-smartpropagation=${SP} --bm-tmpdir=${TMPDIR} --kcore-maxcore=${KC} --cthreads ${CT} ${XTRAARGS}" >> ${OPFILE} 2>&1;
 
   DOPDIR=${ASPIREDIR}/build/outputs/${BK}.${IK}/${GVID};
   mkdir -p ${DOPDIR};

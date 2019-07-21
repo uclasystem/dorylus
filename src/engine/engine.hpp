@@ -98,15 +98,6 @@ double Engine<VertexType, EdgeType>::allTimeProcess = 0.0;
 template <typename VertexType, typename EdgeType>
 double Engine<VertexType, EdgeType>::timeInit = 0.0;
 
-template <typename VertexType, typename EdgeType>
-unsigned Engine<VertexType, EdgeType>::baseEdges = 0;
-
-template <typename VertexType, typename EdgeType>
-unsigned Engine<VertexType, EdgeType>::numBatches = 0;
-
-template <typename VertexType, typename EdgeType>
-unsigned Engine<VertexType, EdgeType>::batchSize = 0;
-
 
 /**
  *
@@ -494,10 +485,6 @@ Engine<VertexType, EdgeType>::parseArgs(int argc, char *argv[]) {
         ("cthreads", boost::program_options::value<unsigned>()->default_value(unsigned(NUM_COMP_THREADS), NUM_COMP_THREADS_STR), "Number of compute threads")
         ("dport", boost::program_options::value<unsigned>()->default_value(unsigned(DATA_PORT), DATA_PORT_STR), "Port for data communication")
         ("cport", boost::program_options::value<unsigned>()->default_value(unsigned(CONTROL_PORT_START), CONTROL_PORT_START_STR), "Port start for control communication")
-
-        ("baseedges", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Percentage of edges in base graph")
-        ("numbatches", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Number of mini-batches") 
-        ("batchsize", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Size of mini-batches")
         ;
 
     boost::program_options::variables_map vm;
@@ -539,9 +526,6 @@ Engine<VertexType, EdgeType>::parseArgs(int argc, char *argv[]) {
     assert(vm.count("cport"));
     CommManager::setControlPortStart(vm["cport"].as<unsigned>());
 
-    assert(vm.count("baseedges"));
-    baseEdges = vm["baseedges"].as<unsigned>();
-
     assert(baseEdges <= 100);
 
     assert(vm.count("numbatches"));
@@ -557,9 +541,6 @@ Engine<VertexType, EdgeType>::parseArgs(int argc, char *argv[]) {
     printLog("  graphFile = %s\n", graphFile.c_str());
     printLog("  featuresFile = %s\n", featuresFile.c_str());
     printLog("  undirected = %s\n", undirected ? "true" : "false");
-    printLog("  baseEdges (percent) = %u\n", baseEdges);
-    printLog("  numBatches = %u\n", numBatches);
-    printLog("  batchSize = %u\n", batchSize);
 }
 
 
@@ -819,7 +800,6 @@ Engine<VertexType, EdgeType>::readGraphBS(std::string& fileName, std::set<IdType
     assert(bSHeader.sizeOfVertexType == sizeof(IdType));
 
     // Loop through all edges and process them.
-    unsigned long long originalEdges = (unsigned long long) ((baseEdges / 100.0) * bSHeader.numEdges);
     std::set<IdType> oTopics;
     graph.numGlobalEdges = 0;
     IdType srcdst[2];
@@ -827,7 +807,6 @@ Engine<VertexType, EdgeType>::readGraphBS(std::string& fileName, std::set<IdType
         if (srcdst[0] == srcdst[1])
             continue;
 
-        assert(graph.numGlobalEdges < originalEdges);
         processEdge(srcdst[0], srcdst[1], graph, &inTopics, &oTopics);
         if (undirected)
             processEdge(srcdst[1], srcdst[0], graph, &inTopics, &oTopics);
