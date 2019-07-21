@@ -7,7 +7,6 @@
 #include <climits>
 #include <atomic>
 #include <tuple>
-#include <cstdarg>
 #include "graph.hpp"
 #include "enginecontext.hpp"
 #include "vertexprogram.hpp"

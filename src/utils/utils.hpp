@@ -7,6 +7,7 @@
 #include <string>
 #include <typeinfo>
 #include <climits>
+#include <cstdarg>
 
 #define INTERFACE "eth0" 
 
