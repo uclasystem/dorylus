@@ -341,7 +341,7 @@ NodeManager::parseNodeConfig(const char *hostFile) {
             me.name = name;
             me.master = (role == MASTER_ROLE);
         }
-        masterIdx = (role == MASTER_ROLE) ? allNodes.size() : masterIdx;
+        masterId = (role == MASTER_ROLE) ? allNodes.size() : masterId;
         allNodes.push_back(Node(allNodes.size(), &ip, &name, (role == MASTER_ROLE)));
     }
 
