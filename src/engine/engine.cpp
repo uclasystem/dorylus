@@ -493,7 +493,7 @@ Engine<VertexType, EdgeType>::parseArgs(int argc, char *argv[]) {
     undirected = (vm["undirected"].as<unsigned>() == 0) ? false : true;
 
     assert(vm.count("dport"));
-    unsigned data_port = vm["dport"].as<unsigned>()
+    unsigned data_port = vm["dport"].as<unsigned>();
     CommManager::setDataPort(data_port);
 
     assert(vm.count("cport"));

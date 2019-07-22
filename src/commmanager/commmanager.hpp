@@ -50,8 +50,8 @@ public:
     static void controlPushOut(unsigned to, void* value, unsigned valSize); 
     static bool controlPullIn(unsigned from, void* value, unsigned valSize);
 
-    static void flushData(unsigned nNodes);
     static void flushControl();
+    static void flushData();
 
     static void nodeDie(unsigned nId);
 
