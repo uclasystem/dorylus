@@ -14,7 +14,7 @@
 
 template<typename VertexType, typename EdgeType>
 Vertex<VertexType, EdgeType>::Vertex()
-    : localIdx(0), globalIdx(0), parentIdx(MAX_IDTYPE), graph(NULL) {
+    : localId(0), globalId(0), parentId(MAX_IDTYPE), graph_ptr(NULL) {
     lock.init();
 }
 
@@ -184,7 +184,7 @@ Vertex<VertexType, EdgeType>::setGraphPtr(Graph<VertexType, EdgeType> *ptr) {
 template<typename VertexType, typename EdgeType>
 IdType
 Vertex<VertexType, EdgeType>::parent() {
-    return parentIdx;
+    return parentId;
 }
 
 template<typename VertexType, typename EdgeType>
@@ -193,7 +193,7 @@ Vertex<VertexType, EdgeType>::setParent(IdType p) {
     parentIdx = p;
 }
 
-template<typename VertexType>
+template<typename VertexType, typename EdgeType>
 void
 Vertex<VertexType, EdgeType>::compactVertex() {
     inEdges.shrink_to_fit();

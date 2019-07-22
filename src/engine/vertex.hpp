@@ -81,7 +81,7 @@ private:
 
     Graph<VertexType, EdgeType> *graph_ptr;
 
-    IdType parentIdx;
+    IdType parentId;
 
     RWLock lock;
 };
