@@ -105,13 +105,13 @@ Vertex<VertexType, EdgeType>::setVertexLocation(VertexLocationType loc) {
 
 template<typename VertexType, typename EdgeType>
 unsigned
-Vertex<VertexType, EdgeType>::numInEdges() {
+Vertex<VertexType, EdgeType>::getNumInEdges() {
     return inEdges.size();
 }
 
 template<typename VertexType, typename EdgeType>
 unsigned
-Vertex<VertexType, EdgeType>::numOutEdges() {
+Vertex<VertexType, EdgeType>::getNumOutEdges() {
     return outEdges.size();
 }
 
@@ -195,7 +195,7 @@ Vertex<VertexType, EdgeType>::setGraphPtr(Graph<VertexType, EdgeType> *ptr) {
 
 template<typename VertexType, typename EdgeType>
 IdType
-Vertex<VertexType, EdgeType>::parent() {
+Vertex<VertexType, EdgeType>::getParent() {
     return parentId;
 }
 
@@ -267,8 +267,20 @@ GhostVertex<VertexType>::addData(VertexType value) {
 
 template<typename VertexType>
 void
+GhostVertex<VertexType>::addOutEdge(IdType dId) {
+    outEdges.push_back(dId);
+}
+
+template<typename VertexType>
+void
 GhostVertex<VertexType>::compactVertex() {
     outEdges.shrink_to_fit();
+}
+
+template<typename VertexType>
+int32_t
+GhostVertex<VertexType>::getDegree() {
+    return degree;
 }
 
 

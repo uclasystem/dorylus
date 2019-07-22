@@ -87,6 +87,12 @@ Graph<VertexType, EdgeType>::getVertexPartitionId(IdType vid) {
     return vertexPartitionIds[vid];
 }
 
+template <typename VertexType, typename EdgeType>
+void
+Graph<VertexType, EdgeType>::appendVertexPartitionId(short pid) {
+    vertexPartitionIds.push_back(pid);
+}
+
 
 /**
  *

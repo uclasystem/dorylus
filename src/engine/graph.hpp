@@ -40,6 +40,7 @@ public:
     }
 
     short getVertexPartitionId(IdType vid);
+    void appendVertexPartitionId(short pid);
 
     void updateGhostVertex(IdType vId, VertexType value);
 

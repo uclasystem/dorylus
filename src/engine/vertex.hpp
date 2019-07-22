@@ -63,7 +63,7 @@ public:
     Graph<VertexType, EdgeType> *getGraphPtr();
     void setGraphPtr(Graph<VertexType, EdgeType> *ptr);
 
-    IdType parent();
+    IdType getParent();
     void setParent(IdType p);
 
     void compactVertex();
@@ -106,6 +106,9 @@ public:
     void setData(VertexType value);         // Modify the current value.
     void addData(VertexType value);         // Add a new value of the new iteration.
 
+    void addOutEdge(IdType dId);
+
+    int32_t getDegree();
     void incrementDegree() {
         ++degree;
     }

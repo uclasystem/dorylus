@@ -599,7 +599,7 @@ Engine<VertexType, EdgeType>::readPartsFile(std::string& partsFileName, Graph<Ve
         if (!(iss >> partId))
             break;
 
-        lGraph.getVertexPartitionIds().push_back(partId);
+        lGraph.appendVertexPartitionId(partId);
 
         if (partId == nodeId) {
             lGraph.localToGlobalId[lvid] = gvid;
@@ -634,45 +634,42 @@ Engine<VertexType, EdgeType>::processEdge(IdType& from, IdType& to, Graph<Vertex
         } else {
             toId = to;
             eLocation = REMOTE_EDGE_TYPE;
-            lGraph.getVertices(lFromId).setVertexLocation(BOUNDARY_VERTEX);
+            lGraph.getVertex(lFromId).setVertexLocation(BOUNDARY_VERTEX);
 
             if (oTopics != NULL)
                 oTopics->insert(from);
         }
 
         if(edgeWeight != NULL)
-            lGraph.getVertices(lFromId).addOutEdges(OutEdge<EdgeType>(toId, eLocation, edgeWeight(from, to)));
+            lGraph.getVertex(lFromId).addOutEdges(OutEdge<EdgeType>(toId, eLocation, edgeWeight(from, to)));
         else
-            lGraph.getVertices(lFromId).addOutEdges(OutEdge<EdgeType>(toId, eLocation, defaultEdge));
+            lGraph.getVertex(lFromId).addOutEdges(OutEdge<EdgeType>(toId, eLocation, defaultEdge));
     }
 
-    if (lGraph.vertexPartitionIds[to] == nodeId) {
+    if (lGraph.getVertexPartitionId(to) == nodeId) {
         IdType lToId = lGraph.globalToLocalId[to];
         IdType fromId;
         EdgeLocationType eLocation;
 
-        if (lGraph.vertexPartitionIds[from] == nodeId) {
+        if (lGraph.getVertexPartitionId(from) == nodeId) {
             fromId = lGraph.globalToLocalId[from];
             eLocation = LOCAL_EDGE_TYPE;
         } else {
             fromId = from;
             eLocation = REMOTE_EDGE_TYPE;
 
-            typename std::map< IdType, GhostVertex<VertexType> >::iterator gvit = lGraph.ghostVertices.find(from);
-            if (gvit == lGraph.ghostVertices.end()) {
-                lGraph.ghostVertices[from] = GhostVertex<VertexType>(defaultVertex);
-                gvit = lGraph.ghostVertices.find(from);
-            }
-            gvit->second.outEdges.push_back(lToId);
+            if (!lGraph.containsGhostVertex(from))
+                lGraph.getGhostVertices()[from] = GhostVertex<VertexType>(defaultVertex);
+            lGraph.getGhostVertex(from).addOutEdge(lToId);
 
             if (inTopics != NULL)
                 inTopics->insert(from);
         }
 
         if (edgeWeight != NULL)
-            lGraph.vertices[lToId].addInEdges(InEdge<EdgeType>(fromId, eLocation, edgeWeight(from, to)));
+            lGraph.getVertex(lToId).addInEdges(InEdge<EdgeType>(fromId, eLocation, edgeWeight(from, to)));
         else
-            lGraph.vertices[lToId].addInEdges(InEdge<EdgeType>(fromId, eLocation, defaultEdge));
+            lGraph.getVertex(lToId).addInEdges(InEdge<EdgeType>(fromId, eLocation, defaultEdge));
     }
 }
 
@@ -685,17 +682,18 @@ Engine<VertexType, EdgeType>::processEdge(IdType& from, IdType& to, Graph<Vertex
 template<typename VertexType, typename EdgeType>
 void
 Engine<VertexType, EdgeType>::setEdgeNormalizations() {
-    for (Vertex<VertexType, EdgeType>& vertex : graph.vertices) {
+    for (Vertex<VertexType, EdgeType>& vertex : graph.getVertices()) {
         unsigned dstDeg = vertex.numInEdges() + 1;
         float dstNorm = std::pow(dstDeg, -.5);
-        for (InEdge<EdgeType>& e : vertex.inEdges) {
+        for (unsigned i = 0; i < vertex.getNumInEdges(); ++i) {
+            InEdge<EdgeType>& e = vertex.getInEdge(i);
             IdType vid = e.sourceId();
             if (e.getEdgeLocation() == LOCAL_EDGE_TYPE) {
-                unsigned srcDeg = graph.vertices[vid].numInEdges() + 1;
+                unsigned srcDeg = graph.getVertex(vid).numInEdges() + 1;
                 float srcNorm = std::pow(srcDeg, -.5);
                 e.setData(srcNorm * dstNorm);
             } else {
-                unsigned ghostDeg = graph.ghostVertices[vid].degree + 1;
+                unsigned ghostDeg = graph.getGhostVertex(vid).getDegree() + 1;
                 float ghostNorm = std::pow(ghostDeg, -.5);
                 e.setData(ghostNorm * dstNorm);
             }
@@ -726,9 +724,8 @@ Engine<VertexType, EdgeType>::findGhostDegrees(std::string& fileName) {
         if (srcdst[0] == srcdst[1])
             continue;
 
-        typename std::map< IdType, GhostVertex<VertexType> >::iterator gvit = graph.ghostVertices.find(srcdst[1]);
-        if (gvit != graph.ghostVertices.end())
-            (gvit->second).incrementDegree();
+        if (graph.containsGhostVertex(srcdst[1]))
+            graph.getGhostVertex(srcdst[1]).incrementDegree();
     }
     
     infile.close();
