@@ -123,7 +123,7 @@ Engine<VertexType, EdgeType>::init(int argc, char *argv[], VertexType dVertex, E
     std::set<IdType> inTopics;
     std::vector<IdType> outTopics;
     readGraphBS(graphFile, inTopics, outTopics);
-    graph.printGraphMetrics();
+    printGraphMetrics();
 
     // Read in initial features from the features file.
     readFeaturesFile(featuresFile);
@@ -228,8 +228,8 @@ Engine<VertexType, EdgeType>::processAll(VertexProgram<VertexType, EdgeType> *vP
     vProgram->beforeIteration(iteration);
 
     // Loop through all local vertices and process it.
-    for (IdType i = 0; i < graph.numLocalVertices; ++i)
-        vProgram->processVertex(graph.vertices[i]);
+    for (IdType i = 0; i < graph.getNumLocalVertices(); ++i)
+        vProgram->processVertex(graph.getVertex(i));
 
     vProgram->afterIteration(iteration);
 }
@@ -279,7 +279,7 @@ Engine<VertexType, EdgeType>::worker(unsigned tid, void *args) {
         lockCurrId.unlock();
 
         // All local vertices have been processed. Hit the barrier and wait for next iteration / decide to halt.
-        if (local_vid >= graph.numLocalVertices) {
+        if (local_vid >= graph.getNumLocalVertices()) {
 
             // Non-master threads.
             if (tid != 0) {
@@ -345,7 +345,7 @@ Engine<VertexType, EdgeType>::worker(unsigned tid, void *args) {
         }
 
         // Doing the task.
-        Vertex<VertexType, EdgeType>& v = graph.vertices[local_vid];
+        Vertex<VertexType, EdgeType>& v = graph.getVertex(local_vid);
         vertexProgram->update(v, iteration);
 
         // If there are any remote edges, should send this vid to others for their ghost's update.
@@ -395,7 +395,7 @@ Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void *args) {
             if (value.size() != 1) {
 
                 // Update the ghost vertex if it is one of mine.
-                if (graph.ghostVertices.find(global_vid) != graph.ghostVertices.end())
+                if (graph.containsGhostVertex())
                     graph.updateGhostVertex(global_vid, value);
 
                 // TODO: Using 1-D vec to indicate a respond here. Needs change.
@@ -609,7 +609,7 @@ Engine<VertexType, EdgeType>::readPartsFile(std::string& partsFileName, Graph<Ve
         if (!(iss >> partId))
             break;
 
-        lGraph.vertexPartitionIds.push_back(partId);
+        lGraph.getVertexPartitionIds().push_back(partId);
 
         if (partId == nodeId) {
             lGraph.localToGlobalId[lvid] = gvid;
@@ -620,8 +620,8 @@ Engine<VertexType, EdgeType>::readPartsFile(std::string& partsFileName, Graph<Ve
         ++gvid;
     }
 
-    lGraph.numGlobalVertices = gvid;
-    lGraph.numLocalVertices = lvid;
+    lGraph.setNumGlobalVertices(gvid);
+    lGraph.setNumLocalVertices(lvid);
 }
 
 
@@ -759,14 +759,14 @@ Engine<VertexType, EdgeType>::readGraphBS(std::string& fileName, std::set<IdType
     readPartsFile(partsFileName, graph);
 
     // Initialize the graph based on the partition info.
-    graph.vertices.resize(graph.numLocalVertices);
-    for (IdType i = 0; i < graph.numLocalVertices; ++i) {
-        graph.vertices[i].localIdx = i;
-        graph.vertices[i].globalIdx = graph.localToGlobalId[i];
-        graph.vertices[i].vertexLocation = INTERNAL_VERTEX;
-        graph.vertices[i].vertexData.clear();
-        graph.vertices[i].vertexData.push_back(defaultVertex);
-        graph.vertices[i].graph = &graph;
+    graph.getVertices().resize(graph.getNumLocalVertices());
+    for (IdType i = 0; i < graph.getNumLocalVertices(); ++i) {
+        graph.getVertex(i).localIdx = i;
+        graph.getVertex(i).globalIdx = graph.localToGlobalId[i];
+        graph.getVertex(i).vertexLocation = INTERNAL_VERTEX;
+        graph.getVertex(i).vertexData.clear();
+        graph.getVertex(i).vertexData.push_back(defaultVertex);
+        graph.getVertex(i).graph = &graph;
     }
 
     // Read in the binary snap edge file.
@@ -783,7 +783,6 @@ Engine<VertexType, EdgeType>::readGraphBS(std::string& fileName, std::set<IdType
 
     // Loop through all edges and process them.
     std::set<IdType> oTopics;
-    graph.numGlobalEdges = 0;
     IdType srcdst[2];
     while (infile.read((char *) srcdst, bSHeader.sizeOfVertexType * 2)) {
         if (srcdst[0] == srcdst[1])
@@ -792,7 +791,7 @@ Engine<VertexType, EdgeType>::readGraphBS(std::string& fileName, std::set<IdType
         processEdge(srcdst[0], srcdst[1], graph, &inTopics, &oTopics);
         if (undirected)
             processEdge(srcdst[1], srcdst[0], graph, &inTopics, &oTopics);
-        ++graph.numGlobalEdges;
+        graph.incrementNumGlobalEdges();
     }
 
     infile.close();

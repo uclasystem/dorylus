@@ -13,9 +13,29 @@ Graph<VertexType, EdgeType>::getVertices() {
 }
 
 template <typename VertexType, typename EdgeType>
+Vertex<VertexType, EdgeType>&
+Graph<VertexType, EdgeType>::getVertex(unsigned i) {
+    assert(i < vertices.size());
+    return vertices[i];
+}
+
+template <typename VertexType, typename EdgeType>
 std::map< IdType, GhostVertex<VertexType> >&
 Graph<VertexType, EdgeType>::getGhostVertices() {
     return ghostVertices;
+}
+
+template <typename VertexType, typename EdgeType>
+GhostVertex<VertexType>&
+Graph<VertexType, EdgeType>::getGhostVertex(IdType gvid) {
+    assert(ghostVertices.find(gvid) != ghostVertices.end())
+    return ghostVertices[gvid];
+}
+
+template <typename VertexType, typename EdgeType>
+bool
+Graph<VertexType, EdgeType>::containsGhostVertex(IdType gvid) {
+    return ghostVertices.find(gvid) != ghostVertices.end();
 }
 
 template <typename VertexType, typename EdgeType>
@@ -25,19 +45,31 @@ Graph<VertexType, EdgeType>::getNumLocalVertices() {
 }
 
 template <typename VertexType, typename EdgeType>
+void
+Graph<VertexType, EdgeType>::setNumLocalVertices(IdType num) {
+    numLocalVertices = num;
+}
+
+template <typename VertexType, typename EdgeType>
 IdType
 Graph<VertexType, EdgeType>::getNumGlobalVertices() {
     return numGlobalVertices;
 }
 
 template <typename VertexType, typename EdgeType>
-IdType
+void
+Graph<VertexType, EdgeType>::setNumGlobalVertices(IdType num) {
+    numGlobalVertices = num;
+}
+
+template <typename VertexType, typename EdgeType>
+unsigned long long
 Graph<VertexType, EdgeType>::getNumGlobalEdges() {
     return numGlobalEdges;
 }
 
 template <typename VertexType, typename EdgeType>
-IdType
+std::vector<short>&
 Graph<VertexType, EdgeType>::getVertexPartitionIds() {
     return vertexPartitionIds;
 }

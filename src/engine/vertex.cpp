@@ -118,9 +118,9 @@ VertexType
 Vertex<VertexType, EdgeType>::getSourceVertexDataAt(unsigned i, unsigned layer) {
     assert(i < inEdges.size()); 
     if (inEdges[i].getEdgeLocation() == LOCAL_EDGE_TYPE)
-        return graph->vertices[inEdges[i].sourceId()].dataAt(layer);
+        return graph->getVertex(inEdges[i].sourceId()).dataAt(layer);
     else
-        return graph->ghostVertices[inEdges[i].sourceId()].dataAt(layer);
+        return graph->getGhostVertex(inEdges[i].sourceId()).dataAt(layer);
 }
 
 template<typename VertexType, typename EdgeType>

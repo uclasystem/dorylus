@@ -21,14 +21,23 @@ class Graph {
 public:
 
     std::vector< Vertex<VertexType, EdgeType> >& getVertices();
+    Vertex<VertexType, EdgeType>& getVertex(unsigned i);
+
     std::map< IdType, GhostVertex<VertexType> >& getGhostVertices();
+    GhostVertex<VertexType>& getGhostVertex(IdType gvid);
+    bool containsGhostVertex(IdType gvid);
 
     IdType getNumLocalVertices();
+    void setNumLocalVertices(IdType num);
     IdType getNumGlobalVertices();
+    void setNumGlobalVertices(IdType num);
 
     unsigned long long getNumGlobalEdges();
+    void incrementNumGlobalEdges() {
+        ++numGlobalEdges;
+    }
 
-    std::vector<short> getVertexPartitionIds();
+    std::vector<short>& getVertexPartitionIds();
 
     void updateGhostVertex(IdType vId, VertexType value);
 
@@ -44,8 +53,8 @@ private:
 
     IdType numLocalVertices;
     IdType numGlobalVertices;
-    
-    unsigned long long numGlobalEdges;
+
+    unsigned long long numGlobalEdges = 0;
 
     std::vector<short> vertexPartitionIds;
 };

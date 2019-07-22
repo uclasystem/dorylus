@@ -32,8 +32,6 @@ public:
         }
 
         vertex.addData(curr);   // Push to the back instead of modify the value.
-
-        return false;
     }
 
 private:
