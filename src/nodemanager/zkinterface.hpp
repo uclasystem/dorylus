@@ -65,7 +65,7 @@ class ZKInterface {
 public:
 
     static bool init(const char *hPort);
-    static int freeZKStringVector(struct String_vector *v);
+    static void freeZKStringVector(struct String_vector *v);
     static void createZKNode(const char *path, bool ephemeral, bool sync, void (*func) (int, const char *, const void *));
     static void deleteZKNode(const char *path);
     static bool checkZKExists(const char *path, void (* watcherCB)(const char *));
