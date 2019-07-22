@@ -15,6 +15,7 @@
 #include "engine.hpp"
 
 
+/** Extern class-wide fields. */
 template <typename VertexType, typename EdgeType>
 Graph<VertexType, EdgeType> Engine<VertexType, EdgeType>::graph;
 

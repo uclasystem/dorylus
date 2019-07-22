@@ -1,16 +1,18 @@
-#include "zkinterface.hpp"
-#include "../utils/utils.hpp"
 #include <cerrno>
 #include <cstring>
 #include <cassert>
 #include <unistd.h>
+#include "zkinterface.hpp"
+#include "../utils/utils.hpp"
 
-zhandle_t* ZKInterface::zh = NULL;
+
+/** Extern class-wide fields. */
+zhandle_t *ZKInterface::zh = NULL;
 clientid_t ZKInterface::myId;
-char* ZKInterface::hostPort = NULL;
-char* ZKInterface::clientIdFile = NULL;
-pthread_mutex_t ZKInterface::mtx_watcher;
-pthread_barrier_t ZKInterface::bar_init;
+char *ZKInterface::hostPort = NULL;
+char *ZKInterface::clientIdFile = NULL;
+Lock ZKInterface::lockWatcher;
+Barrier ZKInterface::barInit;
 
 int ZKInterface::freeZKStringVector(struct String_vector *v) {
     if (v->data) {

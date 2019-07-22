@@ -5,28 +5,103 @@
 #include "zkinterface.hpp"
 #include "../utils/utils.hpp"
 
+
+/** Extern class-wide fields. */
 Node NodeManager::me;
-unsigned NodeManager::masterIdx = 0;
+unsigned NodeManager::masterId = 0;
 std::vector<Node> NodeManager::allNodes;
 unsigned NodeManager::numLiveNodes;
-pthread_mutex_t NodeManager::mtx_waiter;
-pthread_cond_t NodeManager::cond_waiter;
+Lock NodeManager::lockWaiter;
+Cond NodeManager::condWaiter;
 Phase NodeManager::phase = REGISTERING;
-pthread_mutex_t NodeManager::mtx_phase; 
+Lock NodeManager::lockPhase; 
 std::map<std::string, BarrierContext> NodeManager::appBarriers;
-pthread_mutex_t NodeManager::mtx_appBarriers;
+Lock NodeManager::lockAppBarriers;
 void (*NodeManager::ndFunc)(unsigned) = NULL;
 std::string NodeManager::zooHostPort;
 std::atomic<bool> NodeManager::forceRelease = ATOMIC_VAR_INIT(false);
 std::atomic<bool> NodeManager::inBarrier = ATOMIC_VAR_INIT(false);
 
-void NodeManager::parseZooConfig(const char* zooHostFile) {
+
+/**
+ *
+ * Initialize the communication manager. Should be done before initializing the CommManager.
+ * 
+ */
+void
+NodeManager::init(const char *zooHostFile, const char *hostFile) {
+    getIP(&me.ip);
+
+    // Parse the config files.
+    parseZooConfig(zooHostFile);
+    parseNodeConfig(hostFile);
+
+    printLog(me.id, "NodeManager starts initialization... (ZK host port = %s)\n", zooHostPort.c_str());
+    assert(ZKInterface::init(zooHostPort.c_str()));
+
+    // Initialize synchronization utilities.
+    lockWaiter.init();
+    condWaiter.init(lockWaiter);
+    lockPhase.init();
+    lockAppBarriers.init();
+
+    // Master node registers the barriers for others.
+    if (me.master) {
+        ZKInterface::recursiveDeleteZKNode(ZK_ROOT_NODE);
+        createNode(ZK_ROOT_NODE, false, true, &createCB);
+        createNode(ZK_MASTER_NODE, false, true, &createCB);
+        createNode(ZK_APPBARRIER_NODE, false, false, &createCB);
+
+        // Master creates a barrier so that everyone must hit here before registration.
+        createNode(ZK_BARRIER_NODE, false, false, &createCB);
+
+        std::string subNode = ZK_MASTER_NODE;
+        subNode += "/";
+        subNode += me.name;
+        createNode(subNode.c_str(), true, false, &createCB);
+
+        // Block till everyone gets registered.
+        waitForAllNodes();
+
+        // Master deletes this barrier, allowing others to proceed.
+        ZKInterface::deleteZKNode(ZK_BARRIER_NODE);
+
+    // Worker nodes wait until the barriers have been registered.
+    } else {
+
+        // Everyone hits here before registration.
+        hitBarrier();
+
+        std::string subNode = ZK_MASTER_NODE;
+        subNode += "/";
+        subNode += me.name;
+        ZKInterface::createZKNode(subNode.c_str(), true, false, &createCB);
+
+        // Block until master deletes the barrier.
+        leaveBarrier();
+
+        watchAllNodes();
+
+        phase = REGISTERED;
+    }
+
+    printLog(me.id, "NodeManager initialization complete.");
+}
+
+
+/**
+ *
+ * Parse the ZooKeeper config file.
+ * 
+ */
+void
+NodeManager::parseZooConfig(const char *zooHostFile) {
     zooHostPort = "";
     bool first = true;
     std::ifstream inFile(zooHostFile);
     std::string host, port;
     while (inFile >> host >> port) {
-        if(first == false)
+        if (!first)
             zooHostPort += ",";
         zooHostPort += host + ":" + port;
         first = false;
@@ -34,11 +109,17 @@ void NodeManager::parseZooConfig(const char* zooHostFile) {
 }
 
 
-void NodeManager::parseNodeConfig(const char* hostFile) {
+/**
+ *
+ * Parse the node config file.
+ * 
+ */
+void
+NodeManager::parseNodeConfig(const char *hostFile) {
     std::ifstream inFile(hostFile); 
     std::string ip, name, role;
     while (inFile >> ip >> name >> role) {
-        if(ip == me.ip) {
+        if (ip == me.ip) {
             me.id = allNodes.size();
             me.name = name;
             me.master = (role == MASTER_ROLE);
@@ -48,31 +129,34 @@ void NodeManager::parseNodeConfig(const char* hostFile) {
     }
 
     numLiveNodes = allNodes.size();
-    for(unsigned i=0; i<allNodes.size(); ++i)
-        fprintf(stderr, "%u %s %s\n", allNodes[i].id, allNodes[i].ip.c_str(), allNodes[i].name.c_str());
-    fprintf(stderr, "Node %u is master\n", masterIdx);
 }
 
-void NodeManager::nodeManagerCB(const char* path) {
-    pthread_mutex_lock(&mtx_phase);
-    switch(phase) {
+
+/**
+ *
+ * Handler when something happens to a node specified by given path.
+ *
+ */
+void
+NodeManager::nodeManagerCB(const char *path) {
+    lockPhase.lock();
+    switch (phase) {
         case REGISTERING:
             countChildren(path);
             break;
         case REGISTERED:
-            fprintf(stderr, "Something happened with node %s. Current phase is REGISTERED, hence do nothing.\n", getNodeName(path).c_str());
-            //assert(false);
+            printLog(me.id, "Something happened on node %s. Current phase is REGISTERED, hence do nothing...\n", getNodeName(path).c_str());
             break;
         case PROCESSING:
             nodeUpDown(path);
             break;
         case UNREGISTERING:
-            fprintf(stderr, "Something happened with node %s. Current phase in UNREGISTERING. Anyways death is upon us now, hence do nothing.\n", getNodeName(path).c_str());
+            printLog(me.id, "Something happened on node %s. Current phase in UNREGISTERING, anyways death is upon us now, hence do nothing...\n", getNodeName(path).c_str());
             break;
         default:
             assert(false);
     }
-    pthread_mutex_unlock(&mtx_phase);
+    lockPhase.unlock();
 }
 
 void NodeManager::nodeUpDown(const char* path) {
@@ -385,49 +469,7 @@ Worker:
 2. Create ZK_MASTER_NODE/<name>
 3. Wait for ZK_BARRIER_NODE to be destoyed
      */
-    bool NodeManager::init(const char* zooHostFile, const char* hostFile) {
-        getIP(&me.ip);
-        parseZooConfig(zooHostFile);
-        parseNodeConfig(hostFile);
 
-        fprintf(stderr, "NodeManager initing zk with: %s\n", zooHostPort.c_str());
-        assert(ZKInterface::init(zooHostPort.c_str()));
-
-        pthread_mutex_init(&mtx_waiter, NULL);
-        pthread_cond_init(&cond_waiter, NULL);
-
-        pthread_mutex_init(&mtx_phase, NULL);
-        pthread_mutex_init(&mtx_appBarriers, NULL);
-
-        if(me.master) {
-            ZKInterface::recursiveDeleteZKNode(ZK_ROOT_NODE);
-            createNode(ZK_ROOT_NODE, false, true, &createCB);
-            createNode(ZK_MASTER_NODE, false, true, &createCB);  // ephemeral? sync?
-            createNode(ZK_APPBARRIER_NODE, false, false, &createCB);
-            createNode(ZK_BARRIER_NODE, false, false, &createCB);
-
-            std::string subNode = ZK_MASTER_NODE;
-            subNode += "/";
-            subNode += me.name;
-            createNode(subNode.c_str(), true, false, &createCB);
-
-            waitForAllNodes();  // block till everyone gets registered
-
-            ZKInterface::deleteZKNode(ZK_BARRIER_NODE);
-        } else {
-            hitBarrier();   // block till the barrier appears
-
-            std::string subNode = ZK_MASTER_NODE;
-            subNode += "/";
-            subNode += me.name;
-            ZKInterface::createZKNode(subNode.c_str(), true, false, &createCB);
-
-            leaveBarrier(); // block till the barrier disappears
-            watchAllNodes();    // Is this required? Basically whenever a node goes down, everyone comes to know?
-            phase = REGISTERED;
-        }
-        return true;
-    }
 
     void NodeManager::destroy() {
         phase = UNREGISTERING;
