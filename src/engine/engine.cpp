@@ -623,27 +623,27 @@ Engine<VertexType, EdgeType>::readPartsFile(std::string& partsFileName, Graph<Ve
 template <typename VertexType, typename EdgeType>
 void
 Engine<VertexType, EdgeType>::processEdge(IdType& from, IdType& to, Graph<VertexType, EdgeType>& lGraph, std::set<IdType> *inTopics, std::set<IdType> *oTopics) {
-    if (lGraph.vertexPartitionIds[from] == nodeId) {
+    if (lGraph.getVertexPartitionId(from) == nodeId) {
         IdType lFromId = lGraph.globalToLocalId[from];
         IdType toId;
         EdgeLocationType eLocation;
 
-        if (lGraph.vertexPartitionIds[to] == nodeId) {
+        if (lGraph.getVertexPartitionId(to) == nodeId) {
             toId = lGraph.globalToLocalId[to];
             eLocation = LOCAL_EDGE_TYPE;
         } else {
             toId = to;
             eLocation = REMOTE_EDGE_TYPE;
-            lGraph.vertices[lFromId].setVertexLocation(BOUNDARY_VERTEX);
+            lGraph.getVertices(lFromId).setVertexLocation(BOUNDARY_VERTEX);
 
             if (oTopics != NULL)
                 oTopics->insert(from);
         }
 
         if(edgeWeight != NULL)
-            lGraph.vertices[lFromId].outEdges.push_back(OutEdge<EdgeType>(toId, eLocation, edgeWeight(from, to)));
+            lGraph.getVertices(lFromId).addOutEdges(OutEdge<EdgeType>(toId, eLocation, edgeWeight(from, to)));
         else
-            lGraph.vertices[lFromId].outEdges.push_back(OutEdge<EdgeType>(toId, eLocation, defaultEdge));
+            lGraph.getVertices(lFromId).addOutEdges(OutEdge<EdgeType>(toId, eLocation, defaultEdge));
     }
 
     if (lGraph.vertexPartitionIds[to] == nodeId) {
@@ -670,9 +670,9 @@ Engine<VertexType, EdgeType>::processEdge(IdType& from, IdType& to, Graph<Vertex
         }
 
         if (edgeWeight != NULL)
-            lGraph.vertices[lToId].inEdges.push_back(InEdge<EdgeType>(fromId, eLocation, edgeWeight(from, to)));
+            lGraph.vertices[lToId].addInEdges(InEdge<EdgeType>(fromId, eLocation, edgeWeight(from, to)));
         else
-            lGraph.vertices[lToId].inEdges.push_back(InEdge<EdgeType>(fromId, eLocation, defaultEdge));
+            lGraph.vertices[lToId].addInEdges(InEdge<EdgeType>(fromId, eLocation, defaultEdge));
     }
 }
 

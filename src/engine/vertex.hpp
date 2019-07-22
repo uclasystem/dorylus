@@ -50,13 +50,13 @@ public:
 
     unsigned numInEdges();
     unsigned numOutEdges();
-
     InEdge<EdgeType>& getInEdge(unsigned i);
+    void addInEdge(InEdge<EdgeType>& edge);
     OutEdge<EdgeType>& getOutEdge(unsigned i);
+    void addOutEdge(OutEdge<EdgeType>& edge);
 
     VertexType getSourceVertexData(unsigned i);
     VertexType getSourceVertexDataAt(unsigned i, unsigned layer);
-
     unsigned getSourceVertexGlobalId(unsigned i);
     unsigned getDestVertexGlobalId(unsigned i);
 

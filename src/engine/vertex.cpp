@@ -44,7 +44,7 @@ Vertex<VertexType, EdgeType>::getGlobalId() {
 template<typename VertexType, typename EdgeType>
 void
 Vertex<VertexType, EdgeType>::setGlobalId(IdType gvid) {
-    glocalId = gvid;
+    globalId = gvid;
 }
 
 template<typename VertexType, typename EdgeType>
@@ -122,9 +122,21 @@ Vertex<VertexType, EdgeType>::getInEdge(unsigned i) {
 }
 
 template<typename VertexType, typename EdgeType>
+void
+Vertex<VertexType, EdgeType>::addInEdge(InEdge<EdgeType>& edge) {
+    inEdges.push_back(edge);
+}
+
+template<typename VertexType, typename EdgeType>
 OutEdge<EdgeType>&
 Vertex<VertexType, EdgeType>::getOutEdge(unsigned i) {
     return outEdges[i];
+}
+
+template<typename VertexType, typename EdgeType>
+void
+Vertex<VertexType, EdgeType>::addOutEdge(OutEdge<EdgeType>& edge) {
+    outEdges.push_back(edge);
 }
 
 template<typename VertexType, typename EdgeType>
@@ -190,7 +202,7 @@ Vertex<VertexType, EdgeType>::parent() {
 template<typename VertexType, typename EdgeType>
 void
 Vertex<VertexType, EdgeType>::setParent(IdType p) {
-    parentIdx = p;
+    parentId = p;
 }
 
 template<typename VertexType, typename EdgeType>

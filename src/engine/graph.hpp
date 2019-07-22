@@ -39,7 +39,7 @@ public:
         ++numGlobalEdges;
     }
 
-    std::vector<short>& getVertexPartitionIds();
+    short getVertexPartitionId(IdType vid);
 
     void updateGhostVertex(IdType vId, VertexType value);
 

@@ -82,9 +82,9 @@ Graph<VertexType, EdgeType>::getNumGlobalEdges() {
 }
 
 template <typename VertexType, typename EdgeType>
-std::vector<short>&
-Graph<VertexType, EdgeType>::getVertexPartitionIds() {
-    return vertexPartitionIds;
+short
+Graph<VertexType, EdgeType>::getVertexPartitionId(IdType vid) {
+    return vertexPartitionIds[vid];
 }
 
 
@@ -115,7 +115,7 @@ void
 Graph<VertexType, EdgeType>::compactGraph() {
     vertexPartitionIds.shrink_to_fit();
     vertices.shrink_to_fit();
-    
+
     for (IdType i = 0; i < vertices.size(); ++i)
         vertices[i].compactVertex();
 
