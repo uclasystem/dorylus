@@ -51,9 +51,9 @@ public:
     unsigned getNumInEdges();
     unsigned getNumOutEdges();
     InEdge<EdgeType>& getInEdge(unsigned i);
-    void addInEdge(InEdge<EdgeType>& edge);
+    void addInEdge(InEdge<EdgeType> edge);
     OutEdge<EdgeType>& getOutEdge(unsigned i);
-    void addOutEdge(OutEdge<EdgeType>& edge);
+    void addOutEdge(OutEdge<EdgeType> edge);
 
     VertexType getSourceVertexData(unsigned i);
     VertexType getSourceVertexDataAt(unsigned i, unsigned layer);
@@ -79,9 +79,9 @@ private:
     std::vector< InEdge<EdgeType> > inEdges;
     std::vector< OutEdge<EdgeType> > outEdges;
 
-    Graph<VertexType, EdgeType> *graph_ptr;
-
     IdType parentId;
+
+    Graph<VertexType, EdgeType> *graph_ptr;
 
     RWLock lock;
 };

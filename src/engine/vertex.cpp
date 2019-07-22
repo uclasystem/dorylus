@@ -123,7 +123,7 @@ Vertex<VertexType, EdgeType>::getInEdge(unsigned i) {
 
 template<typename VertexType, typename EdgeType>
 void
-Vertex<VertexType, EdgeType>::addInEdge(InEdge<EdgeType>& edge) {
+Vertex<VertexType, EdgeType>::addInEdge(InEdge<EdgeType> edge) {
     inEdges.push_back(edge);
 }
 
@@ -135,7 +135,7 @@ Vertex<VertexType, EdgeType>::getOutEdge(unsigned i) {
 
 template<typename VertexType, typename EdgeType>
 void
-Vertex<VertexType, EdgeType>::addOutEdge(OutEdge<EdgeType>& edge) {
+Vertex<VertexType, EdgeType>::addOutEdge(OutEdge<EdgeType> edge) {
     outEdges.push_back(edge);
 }
 

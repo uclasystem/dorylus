@@ -349,7 +349,7 @@ Engine<VertexType, EdgeType>::worker(unsigned tid, void *args) {
         vertexProgram->update(v, iteration);
 
         // If there are any remote edges, should send this vid to others for their ghost's update.
-        for (unsigned i = 0; i < v.numOutEdges(); ++i) {
+        for (unsigned i = 0; i < v.getNumOutEdges(); ++i) {
             if (v.getOutEdge(i).getEdgeLocation() == REMOTE_EDGE_TYPE) {
                 IdType global_vid = graph.localToGlobalId[local_vid];
 
@@ -683,7 +683,7 @@ template<typename VertexType, typename EdgeType>
 void
 Engine<VertexType, EdgeType>::setEdgeNormalizations() {
     for (Vertex<VertexType, EdgeType>& vertex : graph.getVertices()) {
-        unsigned dstDeg = vertex.numInEdges() + 1;
+        unsigned dstDeg = vertex.getNumInEdges() + 1;
         float dstNorm = std::pow(dstDeg, -.5);
         for (unsigned i = 0; i < vertex.getNumInEdges(); ++i) {
             InEdge<EdgeType>& e = vertex.getInEdge(i);

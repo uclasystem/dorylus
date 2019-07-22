@@ -26,7 +26,7 @@ public:
     void update(Vertex<VertexType, EdgeType>& vertex, unsigned layer) {
         VType curr = vertex.data();
 
-        for (unsigned i = 0; i < vertex.numInEdges(); ++i) {
+        for (unsigned i = 0; i < vertex.getNumInEdges(); ++i) {
             vector<FeatType> other = vertex.getSourceVertexDataAt(i, layer);
             sumVectors(curr, other);
         }
@@ -69,7 +69,7 @@ public:
     // Define the output generated for each vertex.
     void processVertex(Vertex<VertexType, EdgeType>& vertex) {
         std::vector<VType>& data_all = vertex.dataAll();
-        outFile << vertex.globalId() << ": ";
+        outFile << vertex.getGlobalId() << ": ";
         for (int i = 0; i < data_all.size(); ++i) {
             VType curr = data_all[i];
             for (int j = 0; j < curr.size(); ++j)
