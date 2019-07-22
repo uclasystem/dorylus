@@ -115,13 +115,13 @@ void
 Graph<VertexType, EdgeType>::compactGraph() {
     vertexPartitionIds.shrink_to_fit();
     vertices.shrink_to_fit();
-    for (IdType i = 0; i < vertices.size(); ++i) {
-        vertices[i].getInEdges().shrink_to_fit();
-        vertices[i].getOutEdges().shrink_to_fit(); 
-    }
+    
+    for (IdType i = 0; i < vertices.size(); ++i)
+        vertices[i].compactVertex();
+
     typename std::map<IdType, GhostVertex<VertexType> >::iterator it;
     for (it = ghostVertices.begin(); it != ghostVertices.end(); ++it)
-        it->second.getOutEdges().shrink_to_fit(); 
+        it->second.compactVertex(); 
 }
 
 

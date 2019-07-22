@@ -33,8 +33,10 @@ public:
     Vertex();
     ~Vertex();
 
-    IdType localId();
-    IdType globalId();
+    IdType getLocalId();
+    void setLocalId(IdType lvid);
+    IdType getGlobalId();
+    void setGlobalId(IdType gvid);
 
     VertexType data();                      // Get the current value.
     VertexType dataAt(unsigned layer);      // Get value at specified layer.
@@ -42,6 +44,9 @@ public:
 
     void setData(VertexType value);         // Modify the current value.
     void addData(VertexType value);         // Add a new value of the new iteration.
+
+    VertexLocationType getVertexLocation();
+    void setVertexLocation(VertexLocationType loc);
 
     unsigned numInEdges();
     unsigned numOutEdges();
@@ -55,13 +60,18 @@ public:
     unsigned getSourceVertexGlobalId(unsigned i);
     unsigned getDestVertexGlobalId(unsigned i);
 
+    Graph<VertexType, EdgeType> *getGraphPtr();
+    void setGraphPtr(Graph<VertexType, EdgeType> *ptr);
+
     IdType parent();
     void setParent(IdType p);
 
+    void compactVertex();
+
 private:
 
-    IdType localIdx;
-    IdType globalIdx;
+    IdType localId;
+    IdType globalId;
 
     std::vector<VertexType> vertexData;     // Use a vector to make data in old iterations persistent.
     VertexLocationType vertexLocation;
@@ -69,13 +79,11 @@ private:
     std::vector< InEdge<EdgeType> > inEdges;
     std::vector< OutEdge<EdgeType> > outEdges;
 
-    Graph<VertexType, EdgeType> *graph;
+    Graph<VertexType, EdgeType> *graph_ptr;
 
     IdType parentIdx;
 
     RWLock lock;
-
-friend class Engine;
 };
 
 
@@ -101,6 +109,8 @@ public:
     void incrementDegree() {
         ++degree;
     }
+
+    void compactVertex();
 
 private:
 

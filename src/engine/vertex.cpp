@@ -25,14 +25,26 @@ Vertex<VertexType, EdgeType>::~Vertex() {
 
 template<typename VertexType, typename EdgeType>
 IdType
-Vertex<VertexType, EdgeType>::localId() {
-    return localIdx;
+Vertex<VertexType, EdgeType>::getLocalId() {
+    return localId;
+}
+
+template<typename VertexType, typename EdgeType>
+void
+Vertex<VertexType, EdgeType>::setLocalId(IdType lvid) {
+    localId = lvid;
 }
 
 template<typename VertexType, typename EdgeType>
 IdType
-Vertex<VertexType, EdgeType>::globalId() {
-    return globalIdx;
+Vertex<VertexType, EdgeType>::getGlobalId() {
+    return globalId;
+}
+
+template<typename VertexType, typename EdgeType>
+void
+Vertex<VertexType, EdgeType>::setGlobalId(IdType gvid) {
+    glocalId = gvid;
 }
 
 template<typename VertexType, typename EdgeType>
@@ -80,6 +92,18 @@ Vertex<VertexType, EdgeType>::addData(VertexType value) {
 }
 
 template<typename VertexType, typename EdgeType>
+VertexLocationType
+Vertex<VertexType, EdgeType>::getVertexLocation() {
+    return vertexLocation;
+}
+
+template<typename VertexType, typename EdgeType>
+void
+Vertex<VertexType, EdgeType>::setVertexLocation(VertexLocationType loc) {
+    vertexLocation = loc;
+}
+
+template<typename VertexType, typename EdgeType>
 unsigned
 Vertex<VertexType, EdgeType>::numInEdges() {
     return inEdges.size();
@@ -108,9 +132,9 @@ VertexType
 Vertex<VertexType, EdgeType>::getSourceVertexData(unsigned i) {
     assert(i < inEdges.size()); 
     if (inEdges[i].getEdgeLocation() == LOCAL_EDGE_TYPE)
-        return graph->vertices[inEdges[i].sourceId()].data();
+        return graph_ptr->vertices[inEdges[i].sourceId()].data();
     else
-        return graph->ghostVertices[inEdges[i].sourceId()].data();
+        return graph_ptr->ghostVertices[inEdges[i].sourceId()].data();
 }
 
 template<typename VertexType, typename EdgeType>
@@ -118,9 +142,9 @@ VertexType
 Vertex<VertexType, EdgeType>::getSourceVertexDataAt(unsigned i, unsigned layer) {
     assert(i < inEdges.size()); 
     if (inEdges[i].getEdgeLocation() == LOCAL_EDGE_TYPE)
-        return graph->getVertex(inEdges[i].sourceId()).dataAt(layer);
+        return graph_ptr->getVertex(inEdges[i].sourceId()).dataAt(layer);
     else
-        return graph->getGhostVertex(inEdges[i].sourceId()).dataAt(layer);
+        return graph_ptr->getGhostVertex(inEdges[i].sourceId()).dataAt(layer);
 }
 
 template<typename VertexType, typename EdgeType>
@@ -128,8 +152,8 @@ unsigned
 Vertex<VertexType, EdgeType>::getSourceVertexGlobalId(unsigned i) {
     assert(i < inEdges.size());
     if (inEdges[i].getEdgeLocation() == LOCAL_EDGE_TYPE) {
-        assert(graph->localToGlobalId.find(inEdges[i].sourceId()) != graph->localToGlobalId.end());
-        return graph->localToGlobalId[inEdges[i].sourceId()];
+        assert(graph_ptr->localToGlobalId.find(inEdges[i].sourceId()) != graph_ptr->localToGlobalId.end());
+        return graph_ptr->localToGlobalId[inEdges[i].sourceId()];
     } else
         return inEdges[i].sourceId();
 }
@@ -139,10 +163,22 @@ unsigned
 Vertex<VertexType, EdgeType>::getDestVertexGlobalId(unsigned i) {
     assert(i < outEdges.size());
     if (outEdges[i].getEdgeLocation() == LOCAL_EDGE_TYPE) {
-        assert(graph->localToGlobalId.find(outEdges[i].destId()) != graph->localToGlobalId.end());
-        return graph->localToGlobalId[outEdges[i].destId()];
+        assert(graph_ptr->localToGlobalId.find(outEdges[i].destId()) != graph_ptr->localToGlobalId.end());
+        return graph_ptr->localToGlobalId[outEdges[i].destId()];
     } else
         return outEdges[i].destId();
+}
+
+template<typename VertexType, typename EdgeType>
+Graph<VertexType, EdgeType> *
+Vertex<VertexType, EdgeType>::getGraphPtr() {
+    return graph_ptr;
+}
+
+template<typename VertexType, typename EdgeType>
+void
+Vertex<VertexType, EdgeType>::setGraphPtr(Graph<VertexType, EdgeType> *ptr) {
+    graph_ptr = ptr;
 }
 
 template<typename VertexType, typename EdgeType>
@@ -155,6 +191,13 @@ template<typename VertexType, typename EdgeType>
 void
 Vertex<VertexType, EdgeType>::setParent(IdType p) {
     parentIdx = p;
+}
+
+template<typename VertexType>
+void
+Vertex<VertexType, EdgeType>::compactVertex() {
+    inEdges.shrink_to_fit();
+    outEdges.shrink_to_fit();
 }
 
 
@@ -208,6 +251,12 @@ GhostVertex<VertexType>::addData(VertexType value) {
     lock.writeLock();
     vertexData.push_back(value);
     lock.unlock();
+}
+
+template<typename VertexType>
+void
+GhostVertex<VertexType>::compactVertex() {
+    outEdges.shrink_to_fit();
 }
 
 

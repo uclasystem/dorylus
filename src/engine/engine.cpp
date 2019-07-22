@@ -634,7 +634,7 @@ Engine<VertexType, EdgeType>::processEdge(IdType& from, IdType& to, Graph<Vertex
         } else {
             toId = to;
             eLocation = REMOTE_EDGE_TYPE;
-            lGraph.vertices[lFromId].vertexLocation = BOUNDARY_VERTEX;
+            lGraph.vertices[lFromId].setVertexLocation(BOUNDARY_VERTEX);
 
             if (oTopics != NULL)
                 oTopics->insert(from);
@@ -751,12 +751,12 @@ Engine<VertexType, EdgeType>::readGraphBS(std::string& fileName, std::set<IdType
     // Initialize the graph based on the partition info.
     graph.getVertices().resize(graph.getNumLocalVertices());
     for (IdType i = 0; i < graph.getNumLocalVertices(); ++i) {
-        graph.getVertex(i).localIdx = i;
-        graph.getVertex(i).globalIdx = graph.localToGlobalId[i];
-        graph.getVertex(i).vertexLocation = INTERNAL_VERTEX;
-        graph.getVertex(i).vertexData.clear();
-        graph.getVertex(i).vertexData.push_back(defaultVertex);
-        graph.getVertex(i).graph = &graph;
+        graph.getVertex(i).setLocalId(i);
+        graph.getVertex(i).setGlobalId(graph.localToGlobalId[i]);
+        graph.getVertex(i).setVertexLocation(INTERNAL_VERTEX);
+        graph.getVertex(i).dataAll().clear();
+        graph.getVertex(i).dataAll().push_back(defaultVertex);
+        graph.getVertex(i).setGraphPtr(&graph);
     }
 
     // Read in the binary snap edge file.
