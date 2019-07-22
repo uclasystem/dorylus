@@ -79,7 +79,10 @@ template<typename VertexType, typename EdgeType>
 void
 Vertex<VertexType, EdgeType>::setData(VertexType value) {
     lock.writeLock();
-    vertexData.back() = value;
+    if (vertexData.empty())
+        vertexData.push_back(value);
+    else
+        vertexData.back() = value;
     lock.unlock();
 }
 
@@ -251,7 +254,10 @@ template<typename VertexType>
 void
 GhostVertex<VertexType>::setData(VertexType value) {
     lock.writeLock();
-    vertexData.back() = value;
+    if (vertexData.empty())
+        vertexData.push_back(value);
+    else
+        vertexData.back() = value;
     lock.unlock();
 }
 
