@@ -14,9 +14,22 @@ Graph<VertexType, EdgeType>::getVertices() {
 
 template <typename VertexType, typename EdgeType>
 Vertex<VertexType, EdgeType>&
-Graph<VertexType, EdgeType>::getVertex(unsigned i) {
-    assert(i < vertices.size());
-    return vertices[i];
+Graph<VertexType, EdgeType>::getVertex(IdType lvid) {
+    assert(lvid < vertices.size());
+    return vertices[lvid];
+}
+
+template <typename VertexType, typename EdgeType>
+Vertex<VertexType, EdgeType>&
+Graph<VertexType, EdgeType>::getVertexByGlobal(IdType gvid) {
+    assert(globalToLocalId.find(gvid) != globalToLocalId.end());
+    return vertices[globalToLocalId[gvid]];
+}
+
+template <typename VertexType, typename EdgeType>
+bool
+Graph<VertexType, EdgeType>::containsVertex(IdType gvid) {
+    return globalToLocalId.find(gvid) != globalToLocalId.end();
 }
 
 template <typename VertexType, typename EdgeType>
@@ -28,7 +41,7 @@ Graph<VertexType, EdgeType>::getGhostVertices() {
 template <typename VertexType, typename EdgeType>
 GhostVertex<VertexType>&
 Graph<VertexType, EdgeType>::getGhostVertex(IdType gvid) {
-    assert(ghostVertices.find(gvid) != ghostVertices.end())
+    assert(ghostVertices.find(gvid) != ghostVertices.end());
     return ghostVertices[gvid];
 }
 
@@ -103,12 +116,12 @@ Graph<VertexType, EdgeType>::compactGraph() {
     vertexPartitionIds.shrink_to_fit();
     vertices.shrink_to_fit();
     for (IdType i = 0; i < vertices.size(); ++i) {
-        vertices[i].inEdges.shrink_to_fit();
-        vertices[i].outEdges.shrink_to_fit(); 
+        vertices[i].getInEdges().shrink_to_fit();
+        vertices[i].getOutEdges().shrink_to_fit(); 
     }
     typename std::map<IdType, GhostVertex<VertexType> >::iterator it;
     for (it = ghostVertices.begin(); it != ghostVertices.end(); ++it)
-        it->second.outEdges.shrink_to_fit(); 
+        it->second.getOutEdges().shrink_to_fit(); 
 }
 
 

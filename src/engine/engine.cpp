@@ -395,7 +395,7 @@ Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void *args) {
             if (value.size() != 1) {
 
                 // Update the ghost vertex if it is one of mine.
-                if (graph.containsGhostVertex())
+                if (graph.containsGhostVertex(global_vid))
                     graph.updateGhostVertex(global_vid, value);
 
                 // TODO: Using 1-D vec to indicate a respond here. Needs change.
@@ -442,9 +442,9 @@ Engine<VertexType, EdgeType>::printEngineMetrics() {
 template <typename VertexType, typename EdgeType>
 void
 Engine<VertexType, EdgeType>::printGraphMetrics() {
-    printLog(nodeId, "Graph Metrics: numGlobalVertices = %u\n", graph.numGlobalVertices);
-    printLog(nodeId, "Graph Metrics: numGlobalEdges = %llu\n", graph.numGlobalEdges);
-    printLog(nodeId, "Graph Metrics: numLocalVertices = %u\n", graph.numLocalVertices);
+    printLog(nodeId, "Graph Metrics: numGlobalVertices = %u\n", graph.getNumGlobalVertices());
+    printLog(nodeId, "Graph Metrics: numGlobalEdges = %llu\n", graph.getNumGlobalEdges());
+    printLog(nodeId, "Graph Metrics: numLocalVertices = %u\n", graph.getNumLocalVertices());
 }
 
 
@@ -564,20 +564,10 @@ Engine<VertexType, EdgeType>::readFeaturesFile(std::string& featuresFileName) {
 
     // Set the vertices' initial values.
     for (std::size_t i = 0; i < feature_mat.size(); ++i){
-        
-        // Is ghost node.
-        auto git = graph.ghostVertices.find(i);
-        if (git != graph.ghostVertices.end()){
-            graph.ghostVertices[i].setData(feature_mat[i]);
-            continue;
-        }
-        
-        // Is local node.
-        auto lit = graph.globalToLocalId.find(i);
-        if (lit != graph.globalToLocalId.end()){
-            graph.vertices[lit->second].setData(feature_mat[i]);
-            continue;
-        }
+        if (graph.containsGhostVertex(i))   // Global vertex.
+            graph.getGhostVertex(i).setData(feature_mat[i]);
+        else if (graph.containsVertex(i))   // Local vertex.
+            graph.getVertexByGlobal(i).setData(feature_mat[i]);
     }
 }
 

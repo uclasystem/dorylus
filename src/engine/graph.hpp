@@ -21,7 +21,9 @@ class Graph {
 public:
 
     std::vector< Vertex<VertexType, EdgeType> >& getVertices();
-    Vertex<VertexType, EdgeType>& getVertex(unsigned i);
+    Vertex<VertexType, EdgeType>& getVertex(IdType lvid);
+    Vertex<VertexType, EdgeType>& getVertexByGlobal(IdType gvid);
+    bool containsVertex(IdType gvid);   // Contain searches with global ID.
 
     std::map< IdType, GhostVertex<VertexType> >& getGhostVertices();
     GhostVertex<VertexType>& getGhostVertex(IdType gvid);
