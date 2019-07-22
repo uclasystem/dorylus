@@ -370,14 +370,14 @@ bool CommManager::dataPullIn(IdType &topic, std::vector<FeatType>& value) {
     bool ret = dataSubscriber->krecv(&inMsg, ZMQ_DONTWAIT);
     lockDataSubscriber.unlock();
 
-    if(!ret)
+    if (!ret)
         return false;
 
-	int32_t dataSize = inMsg.size() - sizeof(IdType);
-	int32_t numberOfFeatures = dataSize / sizeof(FeatType);
-	value.resize(numberOfFeatures);
+    int32_t dataSize = inMsg.size() - sizeof(IdType);
+    int32_t numberOfFeatures = dataSize / sizeof(FeatType);
+    value.resize(numberOfFeatures);
 
-	memcpy(&topic, inMsg.data(), sizeof(IdType));
+    memcpy(&topic, inMsg.data(), sizeof(IdType));
     memcpy(value.data(), ((char*)inMsg.data() + sizeof(IdType)), dataSize);
 
     return true;
@@ -389,12 +389,12 @@ void CommManager::dataSyncPullIn(IdType& topic, std::vector<FeatType>& value) {
     assert(dataSubscriber->krecv(&inMsg));
     lockDataSubscriber.unlock();
 
-	int32_t dataSize = inMsg.size() - sizeof(IdType);
-	int32_t numberOfFeatures = dataSize / sizeof(FeatType);
-	value.resize(numberOfFeatures);
+    int32_t dataSize = inMsg.size() - sizeof(IdType);
+    int32_t numberOfFeatures = dataSize / sizeof(FeatType);
+    value.resize(numberOfFeatures);
 
-	memcpy(&topic, inMsg.data(), sizeof(IdType));
-	memcpy(value.data(), ((char*)inMsg.data() + sizeof(IdType)), dataSize);
+    memcpy(&topic, inMsg.data(), sizeof(IdType));
+    memcpy(value.data(), ((char*)inMsg.data() + sizeof(IdType)), dataSize);
 }
 
 void CommManager::controlPushOut(unsigned to, void* value, unsigned valSize) {
