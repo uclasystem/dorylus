@@ -641,9 +641,9 @@ Engine<VertexType, EdgeType>::processEdge(IdType& from, IdType& to, Graph<Vertex
         }
 
         if(edgeWeight != NULL)
-            lGraph.getVertex(lFromId).addOutEdges(OutEdge<EdgeType>(toId, eLocation, edgeWeight(from, to)));
+            lGraph.getVertex(lFromId).addOutEdge(OutEdge<EdgeType>(toId, eLocation, edgeWeight(from, to)));
         else
-            lGraph.getVertex(lFromId).addOutEdges(OutEdge<EdgeType>(toId, eLocation, defaultEdge));
+            lGraph.getVertex(lFromId).addOutEdge(OutEdge<EdgeType>(toId, eLocation, defaultEdge));
     }
 
     if (lGraph.getVertexPartitionId(to) == nodeId) {
@@ -667,9 +667,9 @@ Engine<VertexType, EdgeType>::processEdge(IdType& from, IdType& to, Graph<Vertex
         }
 
         if (edgeWeight != NULL)
-            lGraph.getVertex(lToId).addInEdges(InEdge<EdgeType>(fromId, eLocation, edgeWeight(from, to)));
+            lGraph.getVertex(lToId).addInEdge(InEdge<EdgeType>(fromId, eLocation, edgeWeight(from, to)));
         else
-            lGraph.getVertex(lToId).addInEdges(InEdge<EdgeType>(fromId, eLocation, defaultEdge));
+            lGraph.getVertex(lToId).addInEdge(InEdge<EdgeType>(fromId, eLocation, defaultEdge));
     }
 }
 

@@ -48,8 +48,8 @@ public:
     VertexLocationType getVertexLocation();
     void setVertexLocation(VertexLocationType loc);
 
-    unsigned numInEdges();
-    unsigned numOutEdges();
+    unsigned getNumInEdges();
+    unsigned getNumOutEdges();
     InEdge<EdgeType>& getInEdge(unsigned i);
     void addInEdge(InEdge<EdgeType>& edge);
     OutEdge<EdgeType>& getOutEdge(unsigned i);
