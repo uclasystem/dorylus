@@ -218,11 +218,9 @@ Vertex<VertexType, EdgeType>::compactVertex() {
 //////////////////////////////
 
 template<typename VertexType>
-GhostVertex<VertexType>::GhostVertex(const VertexType vData)
+GhostVertex<VertexType>::GhostVertex()
     : degree(0) {
     lock.init();
-    vertexData.clear();
-    vertexData.push_back(vData);
 }
 
 template<typename VertexType>

@@ -689,7 +689,7 @@ Engine<VertexType, EdgeType>::setEdgeNormalizations() {
             InEdge<EdgeType>& e = vertex.getInEdge(i);
             IdType vid = e.sourceId();
             if (e.getEdgeLocation() == LOCAL_EDGE_TYPE) {
-                unsigned srcDeg = graph.getVertex(vid).numInEdges() + 1;
+                unsigned srcDeg = graph.getVertex(vid).getNumInEdges() + 1;
                 float srcNorm = std::pow(srcDeg, -.5);
                 e.setData(srcNorm * dstNorm);
             } else {

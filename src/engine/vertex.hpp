@@ -97,7 +97,7 @@ class GhostVertex {
 
 public:
     
-    GhostVertex(const VertexType vData);
+    GhostVertex();
     ~GhostVertex();
 
     VertexType data();                      // Get the current value.
