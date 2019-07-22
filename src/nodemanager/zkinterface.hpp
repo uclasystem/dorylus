@@ -5,6 +5,7 @@
 #include <zookeeper.h>
 #include <iostream>
 #include <pthread.h>
+#include "../parallel/lock.hpp"
 #include "../parallel/barrier.hpp"
 
 
