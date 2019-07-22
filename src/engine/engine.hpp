@@ -132,6 +132,7 @@ private:
     static void readGraphBS(std::string& fileName, std::set<IdType>& inTopics, std::vector<IdType>& outTopics);
 
     // Metric printing.
+    static void printGraphMetrics();
     static void printEngineMetrics();
 };
 

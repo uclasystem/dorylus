@@ -1,134 +1,113 @@
 #ifndef __VERTEX_HPP__
 #define __VERTEX_HPP__
 
+
 #include <atomic>
 #include <vector>
 #include <pthread.h>
 #include "../parallel/rwlock.hpp"
 #include "edge.cpp"
 
+
+/** Vertex type indicators. */
+typedef char VertexLocationType;
 #define INTERNAL_VERTEX 'I'
 #define BOUNDARY_VERTEX 'B'
 
-typedef char VertexLocationType;
 
 template<typename VertexType, typename EdgeType>
 class Graph;
 
+
+/**
+ *
+ * Class for a local vertex.
+ * 
+ */
 template<typename VertexType, typename EdgeType>
 class Vertex {
-    public:
-        IdType localIdx;
-        IdType globalIdx;
-        VertexLocationType vertexLocation;
-        IdType parentIdx;
 
-        RWLock lock;
+public:
 
-        std::vector< InEdge<EdgeType> > inEdges;
-        std::vector< OutEdge<EdgeType> > outEdges;
+    Vertex();
+    ~Vertex();
 
-        // Use a vector to make data in old iterations persistent.
-        std::vector<VertexType> vertexData;
+    IdType localId();
+    IdType globalId();
 
-        //VertexType oldVertexData;
+    VertexType data();                      // Get the current value.
+    VertexType dataAt(unsigned layer);      // Get value at specified layer.
+    std::vector<VertexType>& dataAll();     // Get reference to all old values' vector.
 
-        Graph<VertexType, EdgeType>* graph;
+    void setData(VertexType value);         // Modify the current value.
+    void addData(VertexType value);         // Add a new value of the new iteration.
 
-        Vertex();
-        ~Vertex();
-        IdType localId();
-        IdType globalId();
+    unsigned numInEdges();
+    unsigned numOutEdges();
 
-        VertexType data();                      // Get the current value.
-        VertexType dataAt(unsigned layer);      // Get value at specific layer.
-        std::vector<VertexType>& dataAll();     // Get reference to all old values' vector.
-        void setData(VertexType value);         // Modify the current value.
-        void addData(VertexType value);         // Add a new value of the new iteration.
+    InEdge<EdgeType>& getInEdge(unsigned i);
+    OutEdge<EdgeType>& getOutEdge(unsigned i);
 
-        //VertexType oldData();
-        //void setOldData(VertexType value);
+    VertexType getSourceVertexData(unsigned i);
+    VertexType getSourceVertexDataAt(unsigned i, unsigned layer);
 
-        unsigned numInEdges();
-        unsigned numOutEdges();
+    unsigned getSourceVertexGlobalId(unsigned i);
+    unsigned getDestVertexGlobalId(unsigned i);
 
-        InEdge<EdgeType>& getInEdge(unsigned i);
-        OutEdge<EdgeType>& getOutEdge(unsigned i);
-        void readLock();
-        void writeLock();
-        void unlock();
+    IdType parent();
+    void setParent(IdType p);
 
-        EdgeType getInEdgeData(unsigned i);
-        EdgeType getOutEdgeData(unsigned i);
-        VertexType getSourceVertexData(unsigned i);
-        VertexType getSourceVertexDataAt(unsigned i, unsigned layer);
-        VertexType getDestVertexData(unsigned i);
-        unsigned getSourceVertexGlobalId(unsigned i);
-        unsigned getDestVertexGlobalId(unsigned i);
+private:
 
-        IdType parent();
-        void setParent(IdType p); 
+    IdType localIdx;
+    IdType globalIdx;
+
+    std::vector<VertexType> vertexData;     // Use a vector to make data in old iterations persistent.
+    VertexLocationType vertexLocation;
+
+    std::vector< InEdge<EdgeType> > inEdges;
+    std::vector< OutEdge<EdgeType> > outEdges;
+
+    Graph<VertexType, EdgeType> *graph;
+
+    IdType parentIdx;
+
+    RWLock lock;
 };
 
 
+/**
+ *
+ * Class for a ghost vertex.
+ * 
+ */
 template <typename VertexType>
 class GhostVertex {
-    public:
-        
-        // Use a vector to make data in old iterations persistent.
-        std::vector<VertexType> vertexData;
 
-        //char version;
-        RWLock lock;
-        int32_t degree;
+public:
+    
+    GhostVertex(const VertexType vData);
+    ~GhostVertex();
 
-        std::vector<IdType> outEdges;
+    VertexType data();                      // Get the current value.
+    VertexType dataAt(unsigned layer);      // Get value at specified layer.
 
-        GhostVertex() {
-            lock.init();
-            degree = 0;
-        }
+    void setData(VertexType value);         // Modify the current value.
+    void addData(VertexType value);         // Add a new value of the new iteration.
 
-        GhostVertex(const VertexType vData) {
-            lock.init();
-            degree = 0;
-            vertexData.clear();
-            vertexData.push_back(vData);
-        }
+    void incrementDegree() {
+        ++degree;
+    }
 
-        ~GhostVertex() {
-            lock.destroy();
-        }
+private:
 
-        VertexType data() {     // Get the current value.
-            lock.readLock();
-            VertexType vData = vertexData.back();
-            lock.unlock();
-            return vData;
-        }
+    std::vector<VertexType> vertexData;
 
-        VertexType dataAt(unsigned layer) {   // Get value at specified layer.
-            lock.readLock();
-            assert(layer < vertexData.size());
-            VertexType vData = vertexData[layer];
-            lock.unlock();
-            return vData;
-        }
+    std::vector<IdType> outEdges;
+    int32_t degree;
 
-        void setData(VertexType* value) {   // Modify the current value.
-            lock.writeLock();
-            vertexData.back() = *value;
-            lock.unlock();
-        }
-
-        void addData(VertexType* value) {   // Add a new value of the new iteration.
-            lock.writeLock();
-            vertexData.push_back(*value);
-            lock.unlock();
-        }
-
-        void incrementDegree() { ++degree; }
+    RWLock lock;
 };
 
 
-#endif /* __VERTEX_HPP__ */
+#endif // __VERTEX_HPP__

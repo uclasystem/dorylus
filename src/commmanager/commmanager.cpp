@@ -1,9 +1,6 @@
-#include <vector>
 #include <unistd.h>
-#include <zmq.hpp>
-#include "commmanager.hpp"
-#include "../parallel/lock.hpp"
 #include "../nodemanager/nodemanager.hpp"
+#include "commmanager.hpp"
 
 
 /** Extern class-wide fields. */

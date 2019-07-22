@@ -1,8 +1,15 @@
 #ifndef __VERTEXPROGRAM_HPP__
 #define __VERTEXPROGRAM_HPP__
 
+
 #include "vertex.cpp"
 
+
+/**
+ *
+ * Class of a vertex program. User needs to inherit this base class in their benchmarks.
+ * 
+ */
 template<typename VertexType, typename EdgeType>
 class VertexProgram {
 
@@ -10,14 +17,11 @@ public:
 
     virtual void beforeIteration(unsigned layer) { }
 
-    virtual bool update(Vertex<VertexType, EdgeType>& vertex, unsigned layer) {
-        fprintf(stderr, "base update called.\n");
+    virtual void update(Vertex<VertexType, EdgeType>& vertex, unsigned layer) {
         assert(false);
-        return false;
     }
 
     virtual void processVertex(Vertex<VertexType, EdgeType>& vertex) {
-        fprintf(stderr, "base processVertex called.\n");
         assert(false);
     }
 

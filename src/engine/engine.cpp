@@ -396,7 +396,7 @@ Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void *args) {
 
                 // Update the ghost vertex if it is one of mine.
                 if (graph.ghostVertices.find(global_vid) != graph.ghostVertices.end())
-                    graph.updateGhostVertex(global_vid, &value);
+                    graph.updateGhostVertex(global_vid, value);
 
                 // TODO: Using 1-D vec to indicate a respond here. Needs change.
                 VertexType recv_stub = VertexType(1, 0);
@@ -431,6 +431,20 @@ void
 Engine<VertexType, EdgeType>::printEngineMetrics() {
     printLog(nodeId, "Engine Metrics: Init time = %.3lf ms\n", timeInit);
     printLog(nodeId, "Engine Metrics: Processing time = %.3lf ms\n", allTimeProcess);
+}
+
+
+/**
+ *
+ * Print my graph's metrics.
+ * 
+ */
+template <typename VertexType, typename EdgeType>
+void
+Graph<VertexType, EdgeType>::printGraphMetrics() {
+    printLog(nodeId, "Graph Metrics: numGlobalVertices = %u\n", graph.numGlobalVertices);
+    printLog(nodeId, "Graph Metrics: numGlobalEdges = %llu\n", graph.numGlobalEdges);
+    printLog(nodeId, "Graph Metrics: numLocalVertices = %u\n", graph.numLocalVertices);
 }
 
 
@@ -554,7 +568,7 @@ Engine<VertexType, EdgeType>::readFeaturesFile(std::string& featuresFileName) {
         // Is ghost node.
         auto git = graph.ghostVertices.find(i);
         if (git != graph.ghostVertices.end()){
-            graph.ghostVertices[i].setData(&feature_mat[i]);
+            graph.ghostVertices[i].setData(feature_mat[i]);
             continue;
         }
         

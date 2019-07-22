@@ -11,9 +11,6 @@
 
 #define INTERFACE "eth0" 
 
-#define LOCAL_EDGE_TYPE 'L'
-#define REMOTE_EDGE_TYPE 'R'
-
 #ifdef VERBOSE_ERRORS
 #define efprintf(ofile, fmt, ...) fprintf(ofile, "%s:%s():%d || " fmt, __FILE__, __func__, __LINE__, __VA_ARGS__);
 #else
