@@ -659,7 +659,7 @@ Engine<VertexType, EdgeType>::processEdge(IdType& from, IdType& to, Graph<Vertex
             eLocation = REMOTE_EDGE_TYPE;
 
             if (!lGraph.containsGhostVertex(from))
-                lGraph.getGhostVertices()[from] = GhostVertex<VertexType>(defaultVertex);
+                lGraph.getGhostVertices()[from] = GhostVertex<VertexType>();
             lGraph.getGhostVertex(from).addOutEdge(lToId);
 
             if (inTopics != NULL)
