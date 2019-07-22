@@ -6,6 +6,8 @@
 
 
 /** Structure of a thread's info block. */
+class ThreadPool;
+
 typedef struct threadInfo {
     pthread_t threadHandle;
     unsigned threadId;
