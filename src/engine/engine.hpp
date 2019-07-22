@@ -65,6 +65,15 @@ struct BSHeaderType {
 template <typename VertexType, typename EdgeType>
 class Engine {
 
+public:
+
+    // Public APIs for benchmarks.
+    static void init(int argc, char *argv[], VertexType dVertex = VertexType(), EdgeType dEdge = EdgeType(), EdgeType (*eWeight) (IdType, IdType) = NULL);
+    static void run(VertexProgram<VertexType, EdgeType> *vProgram, bool printEM);
+    static void processAll(VertexProgram<VertexType, EdgeType> *vProgram);
+    static void destroy();
+    static bool master();
+
 private:
 
     static Graph<VertexType, EdgeType> graph;
@@ -124,15 +133,6 @@ private:
 
     // Metric printing.
     static void printEngineMetrics();
-
-public:
-
-    // Public APIs for benchmarks.
-    static void init(int argc, char *argv[], VertexType dVertex = VertexType(), EdgeType dEdge = EdgeType(), EdgeType (*eWeight) (IdType, IdType) = NULL);
-    static void run(VertexProgram<VertexType, EdgeType> *vProgram, bool printEM);
-    static void processAll(VertexProgram<VertexType, EdgeType> *vProgram);
-    static void destroy();
-    static bool master();
 };
 
 

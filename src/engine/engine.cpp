@@ -141,8 +141,10 @@ Engine<VertexType, EdgeType>::init(int argc, char *argv[], VertexType dVertex, E
     computePool = new ThreadPool(cThreads);
     computePool->createPool();
 
+    CommManager::flushControl();
+    CommManager::flushData();
+
     // Create data communicators thread pool.
-    CommManager::flushDataControl();
     dataPool = new ThreadPool(dThreads);
     dataPool->createPool();
 
@@ -491,10 +493,12 @@ Engine<VertexType, EdgeType>::parseArgs(int argc, char *argv[]) {
     undirected = (vm["undirected"].as<unsigned>() == 0) ? false : true;
 
     assert(vm.count("dport"));
-    CommManager::setDataPort(vm["dport"].as<unsigned>());
+    unsigned data_port = vm["dport"].as<unsigned>()
+    CommManager::setDataPort(data_port);
 
     assert(vm.count("cport"));
-    CommManager::setControlPortStart(vm["cport"].as<unsigned>());
+    unsigned control_port = vm["cport"].as<unsigned>();
+    CommManager::setControlPortStart(control_port);
 
     printLog(nodeId, "Printing parsed configuration:");
     printLog(nodeId, "  config = %s\n", cFile.c_str());
@@ -503,6 +507,8 @@ Engine<VertexType, EdgeType>::parseArgs(int argc, char *argv[]) {
     printLog(nodeId, "  graphFile = %s\n", graphFile.c_str());
     printLog(nodeId, "  featuresFile = %s\n", featuresFile.c_str());
     printLog(nodeId, "  undirected = %s\n", undirected ? "true" : "false");
+    printLog(nodeId, "  data port set -> %u", data_port);
+    printLog(nodeId, "  control port set -> %u", control_port);
 }
 
 
