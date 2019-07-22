@@ -121,18 +121,15 @@ private:
     static void countChildren(const char *path);
     static void waitForAllNodes();
 
-    static void checkExists(const char *path);
-    static void checkNotExists(const char *path);
-
+    static void checkNode(const char *path);
     static void hitBarrier();
     static void leaveBarrier();
 
     static void createNode(const char *path, bool ephemeral, bool sync, void (*func)(int, const char *, const void *)); 
     static void createCB(int rc, const char *createdPath, const void *data);
 
+    static void checkBarrier(const char *path);
     static void barrierCB(const char *path);
-    static void checkBarrierExists(const char *path);
-    static void checkBarrierNotExists(const char *path);
     
     static std::string getNodeName(const char *path);
     static unsigned getNodeId(std::string& nodeName);
