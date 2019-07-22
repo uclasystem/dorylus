@@ -29,4 +29,4 @@ public:
 };
 
 
-#endif /* __VERTEXPROGRAM_HPP__ */
+#endif // __VERTEXPROGRAM_HPP__ 

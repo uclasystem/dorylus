@@ -146,24 +146,6 @@ Vertex<VertexType, EdgeType>::getDestVertexGlobalId(unsigned i) {
 }
 
 template<typename VertexType, typename EdgeType>
-void
-Vertex<VertexType, EdgeType>::readLock() {
-    lock.readLock();
-}
-
-template<typename VertexType, typename EdgeType>
-void
-Vertex<VertexType, EdgeType>::writeLock() {
-    lock.writeLock();
-}
-
-template<typename VertexType, typename EdgeType>
-void
-Vertex<VertexType, EdgeType>::unlock() {
-    lock.unlock();
-}
-
-template<typename VertexType, typename EdgeType>
 IdType
 Vertex<VertexType, EdgeType>::parent() {
     return parentIdx;
@@ -204,7 +186,7 @@ GhostVertex<VertexType>::data() {
 
 template<typename VertexType>
 VertexType
-GhostVertex<VertexType>::data(unsigned layer) {
+GhostVertex<VertexType>::dataAt(unsigned layer) {
     lock.readLock();
     assert(layer < vertexData.size());
     VertexType vData = vertexData[layer];

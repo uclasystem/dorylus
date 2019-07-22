@@ -441,7 +441,7 @@ Engine<VertexType, EdgeType>::printEngineMetrics() {
  */
 template <typename VertexType, typename EdgeType>
 void
-Graph<VertexType, EdgeType>::printGraphMetrics() {
+Engine<VertexType, EdgeType>::printGraphMetrics() {
     printLog(nodeId, "Graph Metrics: numGlobalVertices = %u\n", graph.numGlobalVertices);
     printLog(nodeId, "Graph Metrics: numGlobalEdges = %llu\n", graph.numGlobalEdges);
     printLog(nodeId, "Graph Metrics: numLocalVertices = %u\n", graph.numLocalVertices);
