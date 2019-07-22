@@ -379,7 +379,7 @@ Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void *args) {
     VertexType value;
 
     // While loop, looping infinitely to get the next message.
-    while(1) {
+    while (1) {
 
         // No message in queue.
         if (!CommManager::dataPullIn(topic, value)) {

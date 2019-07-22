@@ -21,7 +21,9 @@
 #define ZK_MASTER_NODE      ZK_ROOT_NODE"/nodemanager"
 #define ZK_BARRIER_NODE     ZK_ROOT_NODE"/barrier"
 #define ZK_APPBARRIER_NODE  ZK_ROOT_NODE"/appbarriers"
-#define NM_BARRIER_NODE "nmbarrier"
+
+
+#define DESTROY_BARRIER "destroy" 
 
 
 /** Execution phase of a node. */
@@ -71,8 +73,6 @@ class NodeManager {
 public:
 
     static void init(const char *zooHostPort, const char *hostFile);
-    static void registerNodeDownFunc(void (*func)(unsigned));
-
     static void destroy();
     static std::vector<Node>* getAllNodes();
     static Node getNode(unsigned i);
@@ -83,6 +83,7 @@ public:
     static void releaseAll(const char *bar);
     static bool amIMaster();
     static unsigned getMasterId();
+    static void registerNodeDownFunc(void (*func)(unsigned));
 
 private:
 
@@ -113,10 +114,11 @@ private:
 
     static void nodeManagerCB(const char *path);
     static void nodeUpDown(const char *path);
-    static void countChildren(const char *path);
 
-    static void waitForAllNodes();
     static void watchAllNodes();
+    static void countChildren(const char *path);
+    static void waitForAllNodes();
+
     static void checkExists(const char *path);
     static void checkNotExists(const char *path);
 
