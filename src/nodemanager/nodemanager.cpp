@@ -224,7 +224,7 @@ NodeManager::amIMaster() {
 }
 
 unsigned
-NodeManager::masterId() {
+NodeManager::getMasterId() {
     return masterId; 
 }
 
