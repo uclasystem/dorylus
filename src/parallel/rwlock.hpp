@@ -1,7 +1,19 @@
 #ifndef __RWLOCK_HPP__
 #define __RWLOCK_HPP__
 
+
+#include <pthread.h>
+
+
+/**
+ *
+ * Class of a reader-writer lock.
+ * 
+ */
 class RWLock {
+
+private:
+
     pthread_rwlock_t rwlock;
 
 public:
@@ -25,5 +37,6 @@ public:
         pthread_rwlock_destroy(&rwlock);
     }
 };
+
 
 #endif //__RWLOCK_HPP__

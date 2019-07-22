@@ -2,9 +2,15 @@
 #define __COND_HPP__
 
 
+#include <pthread.h>
 #include "lock.hpp"
 
 
+/**
+ *
+ * Class for a conditional variable.
+ * 
+ */
 class Cond {
 
 private:

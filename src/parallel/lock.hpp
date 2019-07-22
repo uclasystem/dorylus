@@ -2,6 +2,14 @@
 #define __LOCK_HPP__
 
 
+#include <pthread.h>
+
+
+/**
+ *
+ * Class of a mutex lock.
+ * 
+ */
 class Lock {
 
 private:

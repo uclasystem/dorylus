@@ -88,9 +88,9 @@ public:
  */
 int
 main(int argc, char *argv[]) {
-    init();
+    initArgs();
 
-    parse(&argc, argv, "--bm-tmpdir=", tmpDir);
+    parseArgs(&argc, argv, "--bm-tmpdir=", tmpDir);
 
     // Initialize the engine.
     VType defaultVertex = vector<FeatType>(2, 1);
