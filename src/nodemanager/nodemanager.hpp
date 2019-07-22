@@ -40,6 +40,7 @@ typedef struct node {
     bool master;
     bool isAlive;
 
+    node() { }
     node(unsigned i, std::string *ipx, std::string *n, bool mtr) {
         id = i;
         ip = *ipx;
@@ -55,6 +56,7 @@ typedef struct barrierContext {
     std::string path;
     bool ignoreCB;
 
+    barrierContext() { }
     barrierContext(const char *p) : ignoreCB(false) { 
         path = ZK_APPBARRIER_NODE;
         path += "/";
