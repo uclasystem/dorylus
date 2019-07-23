@@ -17,7 +17,7 @@ function header {
 
 case $1 in
 	"agg")
-		make clean; make mode=debug aggregate
+		make clean; make -s mode=debug aggregate
 
 		if [ $? -eq 0 ]; then 
 			cd ..
