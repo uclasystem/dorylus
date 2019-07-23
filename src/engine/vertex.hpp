@@ -6,6 +6,7 @@
 #include <vector>
 #include <pthread.h>
 #include "../parallel/rwlock.hpp"
+#include "edge.hpp"
 #include "graph.hpp"
 
 
