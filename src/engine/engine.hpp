@@ -52,7 +52,7 @@
 /** Binary snap file header struct. */
 struct BSHeaderType {
     int sizeOfVertexType;
-    VertexType numVertices;
+    IdType numVertices;
     unsigned long long numEdges;
 };
 

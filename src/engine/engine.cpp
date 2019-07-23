@@ -572,9 +572,9 @@ Engine::processEdge(IdType& from, IdType& to, Graph& lGraph, std::set<IdType> *i
         }
 
         if(edgeWeight != NULL)
-            lGraph.getVertex(lFromId).addOutEdge(OutEdge<EdgeType>(toId, eLocation, edgeWeight(from, to)));
+            lGraph.getVertex(lFromId).addOutEdge(OutEdge(toId, eLocation, edgeWeight(from, to)));
         else
-            lGraph.getVertex(lFromId).addOutEdge(OutEdge<EdgeType>(toId, eLocation, defaultEdge));
+            lGraph.getVertex(lFromId).addOutEdge(OutEdge(toId, eLocation, defaultEdge));
     }
 
     if (lGraph.getVertexPartitionId(to) == nodeId) {
@@ -598,9 +598,9 @@ Engine::processEdge(IdType& from, IdType& to, Graph& lGraph, std::set<IdType> *i
         }
 
         if (edgeWeight != NULL)
-            lGraph.getVertex(lToId).addInEdge(InEdge<EdgeType>(fromId, eLocation, edgeWeight(from, to)));
+            lGraph.getVertex(lToId).addInEdge(InEdge(fromId, eLocation, edgeWeight(from, to)));
         else
-            lGraph.getVertex(lToId).addInEdge(InEdge<EdgeType>(fromId, eLocation, defaultEdge));
+            lGraph.getVertex(lToId).addInEdge(InEdge(fromId, eLocation, defaultEdge));
     }
 }
 
@@ -610,7 +610,6 @@ Engine::processEdge(IdType& from, IdType& to, Graph& lGraph, std::set<IdType> *i
  * Set the normalization factors on all edges.
  * 
  */
-template<typename VertexType, typename EdgeType>
 void
 Engine::setEdgeNormalizations() {
     for (Vertex& vertex : graph.getVertices()) {
@@ -646,7 +645,7 @@ Engine::findGhostDegrees(std::string& fileName) {
 
     assert(infile.good());
 
-    BSHeaderType<IdType> bsHeader;
+    BSHeaderType bsHeader;
     infile.read((char *) &bsHeader, sizeof(bsHeader));
 
     IdType srcdst[2];
@@ -693,7 +692,7 @@ Engine::readGraphBS(std::string& fileName, std::set<IdType>& inTopics, std::vect
 
     assert(infile.good());
 
-    BSHeaderType<IdType> bSHeader;
+    BSHeaderType bSHeader;
     infile.read((char *) &bSHeader, sizeof(bSHeader));
     assert(bSHeader.sizeOfVertexType == sizeof(IdType));
 
