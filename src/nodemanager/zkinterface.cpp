@@ -203,7 +203,7 @@ ZKInterface::watcher(zhandle_t *zzh, int type, int state, const char *path, void
     else if(type == ZOO_DELETED_EVENT || type == ZOO_CREATED_EVENT || type == ZOO_CHILD_EVENT)
         handleCreatedDeletedEvent(zzh, type, state, path, context);
     else
-        printLog(myId.client_id, "ZK watcher: unknown event type %d. Ignored.", type);
+        printLog(myId.client_id, "ZK watcher: unknown event type %d. Ignored.\n", type);
     lockWatcher.unlock();
 }
 

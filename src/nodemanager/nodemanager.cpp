@@ -85,7 +85,7 @@ NodeManager::init(const char *zooHostFile, const char *hostFile) {
         phase = REGISTERED;
     }
 
-    printLog(me.id, "NodeManager initialization complete.");
+    printLog(me.id, "NodeManager initialization complete.\n");
 }
 
 
@@ -397,7 +397,7 @@ NodeManager::nodeUpDown(const char *path) {
     assert(allNodes[nId].isAlive);
 
     // Send it to death, and if it was the master node, assign another living node as new master.
-    printLog(me.id, "Node %u is sentenced to death...", nId);
+    printLog(me.id, "Node %u is sentenced to death...\n", nId);
     allNodes[nId].isAlive = false;
     if (allNodes[nId].master) {
         while (1) {
@@ -407,7 +407,7 @@ NodeManager::nodeUpDown(const char *path) {
                 allNodes[nId].master = false;
                 if (me.id == nextId) {
                     me.master = true;
-                    printLog(me.id, "New master node is now me: %u.", me.id);
+                    printLog(me.id, "New master node is now me (%u).\n", me.id);
                 }
                 break;
             }

@@ -101,7 +101,7 @@ double Engine<VertexType, EdgeType>::timeInit = 0.0;
 template <typename VertexType, typename EdgeType>
 void
 Engine<VertexType, EdgeType>::init(int argc, char *argv[], VertexType dVertex, EdgeType dEdge, EdgeType (*eWeight) (IdType, IdType)) {
-    printLog(nodeId, "Engine starts initialization...");
+    printLog(nodeId, "Engine starts initialization...\n");
     timeInit = -getTimer();
 
     // Parse the command line arguments.
@@ -151,7 +151,7 @@ Engine<VertexType, EdgeType>::init(int argc, char *argv[], VertexType dVertex, E
     graph.compactGraph();
 
     timeInit += getTimer();
-    printLog(nodeId, "Engine initialization complete.");
+    printLog(nodeId, "Engine initialization complete.\n");
 
     // Make sure all nodes finish initailization.
     NodeManager::barrier(INIT_BARRIER);
@@ -511,15 +511,15 @@ Engine<VertexType, EdgeType>::parseArgs(int argc, char *argv[]) {
     unsigned control_port = vm["cport"].as<unsigned>();
     CommManager::setControlPortStart(control_port);
 
-    printLog(nodeId, "Printing parsed configuration:");
+    printLog(nodeId, "Printing parsed configuration:\n");
     printLog(nodeId, "  config = %s\n", cFile.c_str());
     printLog(nodeId, "  dThreads = %u\n", dThreads);
     printLog(nodeId, "  cThreads = %u\n", cThreads);
     printLog(nodeId, "  graphFile = %s\n", graphFile.c_str());
     printLog(nodeId, "  featuresFile = %s\n", featuresFile.c_str());
     printLog(nodeId, "  undirected = %s\n", undirected ? "true" : "false");
-    printLog(nodeId, "  data port set -> %u", data_port);
-    printLog(nodeId, "  control port set -> %u", control_port);
+    printLog(nodeId, "  data port set -> %u\n", data_port);
+    printLog(nodeId, "  control port set -> %u\n", control_port);
 }
 
 
