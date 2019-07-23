@@ -7,7 +7,7 @@
 # Usage: ./ec2run.sh [Bench] [Dataset] [Feature-File]
 #
 #   Bench:          agg(*)
-#   Dataset:        fb(*), small
+#   Dataset:        small(*), fb
 #   Feature-File:   (*), path_to_file 
 #
 # "(*)" means default.

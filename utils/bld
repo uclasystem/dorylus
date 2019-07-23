@@ -11,10 +11,6 @@
 
 cd $( dirname $0 )/../build
 
-function header {
-	echo -e "\e[33;1m${1}\e[0m"
-}
-
 case $1 in
 	"agg")
 		make clean; make -s mode=debug aggregate
@@ -22,7 +18,6 @@ case $1 in
 		if [ $? -eq 0 ]; then 
 			cd ..
 			./utils/send_file build/aggregate.bin
-			header "Successfully built benchmark agg."
 		else 
 			return 13
 		fi
@@ -33,7 +28,6 @@ case $1 in
 		if [ $? -eq 0 ]; then 
 			cd ..
 			./utils/send_file build/aggregate.bin
-			header "Successfully built default benchmark (agg)."
 		else 
 			return 13
 		fi

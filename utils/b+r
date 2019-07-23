@@ -10,7 +10,7 @@
 # Usage: ./b+r [Bench] [Dataset] [Feature-File]
 #
 #   Bench:          agg(*)
-#   Dataset:        fb(*), small
+#   Dataset:        small(*), fb
 #   Feature-File:   (*), path_to_file 
 #
 # "(*)" means default.
@@ -22,13 +22,43 @@ function header {
 	echo -e "\e[32;1m######## ${1} ########\e[0m"
 }
 
+function prompt {
+    echo -e "\e[33;1m${1}\e[0m"
+}
+
+
 header "BUILDING the engine & benchmark"
+
 ./bld $1
 
 if [ $? -ne 0 ]; then
 	exit
 fi
 
-header "RUNNING the benchmark"
+case $1 in
+    "agg")
+        prompt "Successfully built benchmark \"agg\"."
+        ;;
+    *)
+        prompt "Successfully built the default benchmark (\"agg\")."
+        ;;
+esac
+
+
+header "RUNNING the benchmark on dataset"
+
+case $2 in
+    "small")
+        prompt "Running on dataset \"small\"."
+        ;;
+    "fb")
+        prompt "Running on dataset \"fb\"."
+        ;;
+    *)
+        prompt "Running on the default dataset (\"small\")."
+        ;;
+esac
+
 cd ..
 ./run/ec2run.sh $1 $2 $3
+        
