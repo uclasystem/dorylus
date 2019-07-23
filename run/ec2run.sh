@@ -84,7 +84,7 @@ for i in $(seq 1 ${ZOONDS}); do
   scp -q ${ZOODIR}/conf/zoo.cfg ${dshnodes[$i]}:${ZOODIR}/conf/zoo.cfg;
   ${DSH} -M -m ${dshnodes[$i]} -c "mkdir -p ${TMPDIR}/zooDataDir";
   ${DSH} -M -m ${dshnodes[$i]} -c "echo $i > ${TMPDIR}/zooDataDir/myid";
-  ${DSH} -M -m ${dshnodes[$i]} -c "cd ${ZOODIR} && ./bin/zkServer.sh start > /dev/null 2>&1";
+  ${DSH} -M -m ${dshnodes[$i]} -c "cd ${ZOODIR} && ./bin/zkServer.sh start &> /dev/null";
 done;
 
 header "Checking for Quorum..."
@@ -98,7 +98,7 @@ for i in $(seq 1 ${ZOONDS}); do
   do
     ((count++))
     if [ ${count} -ge ${limit} ]; then
-	    echo -e "\e[31;1m[ERROR] Could not establish quorum\e[0m"
+	    echo -e "\e[31;1m[ERROR]\e[0mCould not establish quorum"
 	    exit
     fi
     str=$(echo stat | nc ${nodes[$i]} 2180 | grep "Mode");
