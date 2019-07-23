@@ -6,16 +6,13 @@
 #include <vector>
 #include <pthread.h>
 #include "../parallel/rwlock.hpp"
-#include "edge.hpp"
+#include "graph.hpp"
 
 
 /** Vertex type indicators. */
 typedef char VertexLocationType;
 #define INTERNAL_VERTEX 'I'
 #define BOUNDARY_VERTEX 'B'
-
-
-class Graph;
 
 
 /**
