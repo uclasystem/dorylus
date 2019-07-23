@@ -534,9 +534,9 @@ Engine<VertexType, EdgeType>::parseArgs(int argc, char *argv[]) {
  */
 template <typename VertexType, typename EdgeType>
 void
-Engine<VertexType, EdgeType>::readFeaturesFile(std::string& featuresFileName) {
+Engine<VertexType, EdgeType>::readFeaturesFile(const std::string& featuresFileName) {
     std::ifstream infile(featuresFileName.c_str());
-    if(!infile.good())
+    if (!infile.good())
         printLog(nodeId, "Cannot open feature file: %s\n", featuresFileName.c_str());
 
     assert(infile.good());
@@ -582,7 +582,7 @@ template <typename VertexType, typename EdgeType>
 void
 Engine<VertexType, EdgeType>::readPartsFile(std::string& partsFileName, Graph<VertexType, EdgeType>& lGraph) {
     std::ifstream infile(partsFileName.c_str());
-    if(!infile.good())
+    if (!infile.good())
         printLog(nodeId, "Cannot open patition file: %s\n", partsFileName.c_str());
 
     assert(infile.good());
