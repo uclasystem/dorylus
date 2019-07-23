@@ -536,9 +536,8 @@ template <typename VertexType, typename EdgeType>
 void
 Engine<VertexType, EdgeType>::readFeaturesFile(std::string& featuresFileName) {
     std::ifstream infile(featuresFileName.c_str());
-    printLog(nodeId, "<<<>>> IO_STATE is eof - %d, failbit - %d, badbit - %d. Error: %s", infile.rdstate() == std::ios_base::eofbit, infile.rdstate() == std::ios_base::failbit, infile.rdstate() == std::ios_base::badbit, std::strerror(errno));
     if (!infile.good())
-        printLog(nodeId, "Cannot open feature file: %s\n", featuresFileName.c_str());
+        printLog(nodeId, "Cannot open feature file: %s [Reason: %s]\n", featuresFileName.c_str(), std::strerror(errno));
 
     assert(infile.good());
 
@@ -584,7 +583,7 @@ void
 Engine<VertexType, EdgeType>::readPartsFile(std::string& partsFileName, Graph<VertexType, EdgeType>& lGraph) {
     std::ifstream infile(partsFileName.c_str());
     if (!infile.good())
-        printLog(nodeId, "Cannot open patition file: %s\n", partsFileName.c_str());
+        printLog(nodeId, "Cannot open patition file: %s [Reason: %s]\n", partsFileName.c_str(), std::strerror(errno));
 
     assert(infile.good());
 
