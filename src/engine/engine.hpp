@@ -107,9 +107,8 @@ private:
 
     static unsigned iteration;
 
-    static double timeProcess;   
-    static double allTimeProcess;
     static double timeInit;
+    static double timeProcess;   
 
     static std::map<IdType, unsigned> recvWaiters;
 

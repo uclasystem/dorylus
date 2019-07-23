@@ -151,7 +151,7 @@ void NodeManager::barrier(const char* bar) {
             condWaiter.wait();
         lockWaiter.unlock();
 
-        printLog(me.id, "Barrier %s: Entered\n", barName.c_str());
+        printLog(me.id, "Barrier %s: Entered.\n", barName.c_str());
 
         if (!forceRelease) {
             std::string subNode = barName;

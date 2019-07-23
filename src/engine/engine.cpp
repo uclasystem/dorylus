@@ -90,9 +90,6 @@ template <typename VertexType, typename EdgeType>
 double Engine<VertexType, EdgeType>::timeProcess = 0.0;
 
 template <typename VertexType, typename EdgeType>
-double Engine<VertexType, EdgeType>::allTimeProcess = 0.0;
-
-template <typename VertexType, typename EdgeType>
 double Engine<VertexType, EdgeType>::timeInit = 0.0;
 
 
@@ -431,8 +428,8 @@ Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void *args) {
 template <typename VertexType, typename EdgeType>
 void
 Engine<VertexType, EdgeType>::printEngineMetrics() {
-    printLog(nodeId, "Engine Metrics: Init time = %.3lf ms\n", timeInit);
-    printLog(nodeId, "Engine Metrics: Processing time = %.3lf ms\n", allTimeProcess);
+    printLog(nodeId, "Engine METRICS: Initialization time = %.3lf ms.\n", timeInit);
+    printLog(nodeId, "Engine METRICS: Processing time = %.3lf ms.\n", timeProcess);
 }
 
 
@@ -444,9 +441,8 @@ Engine<VertexType, EdgeType>::printEngineMetrics() {
 template <typename VertexType, typename EdgeType>
 void
 Engine<VertexType, EdgeType>::printGraphMetrics() {
-    printLog(nodeId, "Graph Metrics: numGlobalVertices = %u\n", graph.getNumGlobalVertices());
-    printLog(nodeId, "Graph Metrics: numGlobalEdges = %llu\n", graph.getNumGlobalEdges());
-    printLog(nodeId, "Graph Metrics: numLocalVertices = %u\n", graph.getNumLocalVertices());
+    printLog(nodeId, "Graph METRICS: %u global vertices, %llu global edges, %u local edges.\n",
+                     graph.getNumGlobalVertices(), graph.getNumGlobalEdges(), graph.getNumLocalVertices());
 }
 
 
