@@ -18,7 +18,7 @@ public:
 
     // Define my own update function that to be called in each iteration.
     void update(Vertex& vertex, unsigned layer) {
-        VType curr = vertex.data();
+        VertexType curr = vertex.data();
 
         for (unsigned i = 0; i < vertex.getNumInEdges(); ++i) {
             vector<FeatType> other = vertex.getSourceVertexDataAt(i, layer);
@@ -61,10 +61,10 @@ public:
 
     // Define the output generated for each vertex.
     void processVertex(Vertex& vertex) {
-        std::vector<VType>& data_all = vertex.dataAll();
+        std::vector<VertexType>& data_all = vertex.dataAll();
         outFile << vertex.getGlobalId() << ": ";
         for (int i = 0; i < data_all.size(); ++i) {
-            VType curr = data_all[i];
+            VertexType curr = data_all[i];
             for (int j = 0; j < curr.size(); ++j)
                 outFile << curr[j] << " ";
             outFile << "| ";
@@ -86,7 +86,7 @@ main(int argc, char *argv[]) {
     parseArgs(&argc, argv, "--bm-tmpdir=", tmpDir);
 
     // Initialize the engine.
-    VType defaultVertex = vector<FeatType>(2, 1);
+    VertexType defaultVertex = vector<FeatType>(2, 1);
     Engine::init(argc, argv, defaultVertex);
 
     // Start one run of the engine, on the aggregate program.
