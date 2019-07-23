@@ -7,7 +7,7 @@
 
 
 /** Helper function: convert from type enum to string. */
-const char *
+static const char *
 type2String(int state) {
     if (state == ZOO_CREATED_EVENT)
         return "CREATED_EVENT";
@@ -27,7 +27,7 @@ type2String(int state) {
 
 
 /** Helper function: convert from state enum to string. */
-const char *
+static const char *
 state2String(int state) {
     if (state == 0)
         return "CLOSED_STATE";
