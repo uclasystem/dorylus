@@ -49,7 +49,7 @@ LDFLAGS         := -Wl,-rpath=$(ZK_LIBPATH) -Wl,-rpath=$(ZMQ_LIBPATH)
 
 # Compiler & Flags
 CPP     := g++ -std=c++11
-CFLAGS  := -DTHREADED -Wall -Wno-sign-compare -MMD
+CFLAGS  := -DTHREADED -Wall -Wno-sign-compare -Wno-unused-function -MMD
 ifeq ($(mode),release)
 	CFLAGS += -O3
 else

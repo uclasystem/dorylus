@@ -14,7 +14,7 @@
 #
 
 
-# Helper function for header displaying
+# Helper function for header & result displaying
 function header {
   echo -e "\e[33;1m|---- ${1} ----> \e[0m"
 }
@@ -206,3 +206,10 @@ done;
 
 echo "Check the output files in \"build/outputs/\" folder."
 echo "Check the running logs under \"~/outfiles/\" folder."
+
+# Display the result
+if [ -e ${DOPDIR}/output_0 ]; then
+  echo -e "\e[92;1mThis round of execution seems successful, congrats ;) ${1} \e[0m"
+else
+  echo -e "\e[91;1mExecution fails (at least on this node), check the log file! ${1} \e[0m"
+fi
