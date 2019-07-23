@@ -39,9 +39,6 @@ template <typename VertexType, typename EdgeType>
 std::string Engine<VertexType, EdgeType>::featuresFile;
 
 template <typename VertexType, typename EdgeType>
-std::string Engine<VertexType, EdgeType>::logFile;
-
-template <typename VertexType, typename EdgeType>
 VertexProgram<VertexType, EdgeType>* Engine<VertexType, EdgeType>::vertexProgram = NULL;
 
 template <typename VertexType, typename EdgeType>
@@ -104,11 +101,13 @@ double Engine<VertexType, EdgeType>::timeInit = 0.0;
 template <typename VertexType, typename EdgeType>
 void
 Engine<VertexType, EdgeType>::init(int argc, char *argv[], VertexType dVertex, EdgeType dEdge, EdgeType (*eWeight) (IdType, IdType)) {
+    parseArgs(argc, argv);
+
+    // Set the log file pointer.
+    logFile_ptr = fopen(logFile, "w");
+
     printLog(nodeId, "Engine starts initialization...\n");
     timeInit = -getTimer();
-
-    // Parse the command line arguments.
-    parseArgs(argc, argv);
     
     // Initialize the node manager and communication manager.
     NodeManager::init(ZKHOST_FILE, HOST_FILE);
@@ -473,8 +472,6 @@ Engine<VertexType, EdgeType>::parseArgs(int argc, char *argv[]) {
         ("cthreads", boost::program_options::value<unsigned>()->default_value(unsigned(NUM_COMP_THREADS), NUM_COMP_THREADS_STR), "Number of compute threads")
         ("dport", boost::program_options::value<unsigned>()->default_value(unsigned(DATA_PORT), DATA_PORT_STR), "Port for data communication")
         ("cport", boost::program_options::value<unsigned>()->default_value(unsigned(CONTROL_PORT_START), CONTROL_PORT_START_STR), "Port start for control communication")
-        
-        ("logfile", boost::program_options::value<std::string>(), "Log file")
         ;
 
     boost::program_options::variables_map vm;
@@ -518,14 +515,10 @@ Engine<VertexType, EdgeType>::parseArgs(int argc, char *argv[]) {
     unsigned control_port = vm["cport"].as<unsigned>();
     CommManager::setControlPortStart(control_port);
 
-    assert(vm.count("logfile"));
-    logFile = vm["logfile"].as<std::string>();
-
     printLog(nodeId, "Parsed configuration: config = %s, dThreads = %u, cThreads = %u, graphFile = %s,"
-                     "featuresFile = %s, undirected = %s, data port set -> %u, control port set -> %u,"
-                     "logFile = %s\n",
+                     "featuresFile = %s, undirected = %s, data port set -> %u, control port set -> %u\n",
                      cFile.c_str(), dThreads, cThreads, graphFile.c_str(), featuresFile.c_str(),
-                     undirected ? "true" : "false", data_port, control_port, logFile.c_str());
+                     undirected ? "true" : "false", data_port, control_port);
 }
 
 

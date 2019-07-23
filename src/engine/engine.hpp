@@ -7,6 +7,7 @@
 #include <climits>
 #include <atomic>
 #include <tuple>
+#include <cstdio>
 #include "graph.cpp"
 #include "vertexprogram.hpp"
 #include "../commmanager/commmanager.hpp"
@@ -97,8 +98,7 @@ private:
 
     static std::string graphFile;
     static std::string featuresFile;
-    static std::string logFile;
-    
+
     static unsigned nodeId;
     static unsigned numNodes;
 
