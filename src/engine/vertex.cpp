@@ -2,6 +2,7 @@
 #include <cassert>
 #include <iterator>
 #include "vertex.hpp"
+#include "graph.hpp"
 
 
 /////////////////////////
