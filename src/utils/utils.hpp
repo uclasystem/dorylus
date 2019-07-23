@@ -23,7 +23,7 @@
 
 /** Default vertex ID type and features type. */
 typedef unsigned IdType;
-typedef float FeatType;
+typedef double FeatType;
 #define MAX_IDTYPE UINT_MAX
 
 
