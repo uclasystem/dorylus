@@ -34,7 +34,7 @@
 #define MILLION 1000000 // 1M
 
 
-/** Input files. */
+/** For files cli options. */
 #define DEFAULT_CONFIG_FILE "../config/kconf.conf"
 #define HOST_FILE "../config/hostfile"
 #define ZKHOST_FILE "../config/zkhostfile"
@@ -97,6 +97,7 @@ private:
 
     static std::string graphFile;
     static std::string featuresFile;
+    static std::string logFile;
     
     static unsigned nodeId;
     static unsigned numNodes;
