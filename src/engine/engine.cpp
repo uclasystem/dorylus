@@ -1,7 +1,3 @@
-#ifndef __ENGINE_CPP__
-#define __ENGINE_CPP__
-
-
 #include <iostream>
 #include <fstream>
 #include <cmath>
@@ -719,6 +715,3 @@ Engine::readGraphBS(std::string& fileName, std::set<IdType>& inTopics, std::vect
     for (it = oTopics.begin(); it != oTopics.end(); ++it)
         outTopics.push_back(*it);
 }
-
-
-#endif // __ENGINE_CPP__

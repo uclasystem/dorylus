@@ -1,7 +1,3 @@
-#ifndef __VERTEX_CPP__
-#define __VERTEX_CPP__
-
-
 #include <iostream>
 #include <cassert>
 #include <iterator>
@@ -249,6 +245,3 @@ int32_t
 GhostVertex::getDegree() {
     return degree;
 }
-
-
-#endif // __VERTEX_CPP__

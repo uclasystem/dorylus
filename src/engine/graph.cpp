@@ -1,7 +1,3 @@
-#ifndef __GRAPH_CPP__
-#define __GRAPH_CPP__
-
-
 #include <cassert>
 #include "graph.hpp"
 
@@ -113,6 +109,3 @@ Graph::compactGraph() {
     for (it = ghostVertices.begin(); it != ghostVertices.end(); ++it)
         it->second.compactVertex(); 
 }
-
-
-#endif // __GRAPH_CPP__

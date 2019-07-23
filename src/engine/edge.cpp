@@ -1,7 +1,3 @@
-#ifndef __EDGE_CPP__
-#define __EDGE_CPP__
-
-
 #include <cstring>
 #include "edge.hpp"
 
@@ -68,6 +64,3 @@ void
 OutEdge::setDestId(IdType dId) {
     Edge::otherId = dId;
 }
-
-
-#endif // __EDGE_CPP__

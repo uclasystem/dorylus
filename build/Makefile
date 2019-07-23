@@ -74,7 +74,7 @@ directories:
 	mkdir -p $(OBJ_PATH) 
 
 # Frameowrk objects internal targets
-BASE_OBJS       := $(OBJ_PATH)/commmanager.o $(OBJ_PATH)/nodemanager.o $(OBJ_PATH)/engine.o $(OBJ_PATH)/vertex.o $(OBJ_PATH)/graph.o $(OBJ_PATH)/edge.o $(OBJ_PATH)/zkinterface.o $(OBJ_PATH)/utils.o $(OBJ_PATH)/threadpool.o
+BASE_OBJS       := $(OBJ_PATH)/commmanager.o $(OBJ_PATH)/nodemanager.o $(OBJ_PATH)/engine.o $(OBJ_PATH)/graph.o $(OBJ_PATH)/vertex.o $(OBJ_PATH)/edge.o $(OBJ_PATH)/zkinterface.o $(OBJ_PATH)/utils.o $(OBJ_PATH)/threadpool.o
 
 $(OBJ_PATH)/%.o: $(NODE_PATH)/%.cpp $(NODE_PATH)/%.hpp
 	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) -c $< -o $@
