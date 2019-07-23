@@ -7,6 +7,7 @@
 #include <pthread.h>
 #include "../parallel/rwlock.hpp"
 #include "graph.hpp"
+#include "edge.hpp"
 
 
 /** Vertex type indicators. */
