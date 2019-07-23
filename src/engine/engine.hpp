@@ -8,7 +8,7 @@
 #include <atomic>
 #include <tuple>
 #include <cstdio>
-#include "graph.cpp"
+#include "graph.hpp"
 #include "vertexprogram.hpp"
 #include "../commmanager/commmanager.hpp"
 #include "../nodemanager/nodemanager.hpp"
