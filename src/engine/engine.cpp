@@ -590,7 +590,7 @@ Engine::processEdge(IdType& from, IdType& to, Graph& lGraph, std::set<IdType> *i
             eLocation = REMOTE_EDGE_TYPE;
 
             if (!lGraph.containsGhostVertex(from))
-                lGraph.getGhostVertices()[from] = GhostVertex<VertexType>();
+                lGraph.getGhostVertices()[from] = GhostVertex();
             lGraph.getGhostVertex(from).addOutEdge(lToId);
 
             if (inTopics != NULL)
@@ -616,7 +616,7 @@ Engine::setEdgeNormalizations() {
         unsigned dstDeg = vertex.getNumInEdges() + 1;
         float dstNorm = std::pow(dstDeg, -.5);
         for (unsigned i = 0; i < vertex.getNumInEdges(); ++i) {
-            InEdge<EdgeType>& e = vertex.getInEdge(i);
+            InEdge& e = vertex.getInEdge(i);
             IdType vid = e.sourceId();
             if (e.getEdgeLocation() == LOCAL_EDGE_TYPE) {
                 unsigned srcDeg = graph.getVertex(vid).getNumInEdges() + 1;
