@@ -197,7 +197,7 @@ for i in $(seq 1 $ZOONDS); do
 done;
 
 echo "Check the output files in \"build/outputs/\" folder."
-echo "Check the running logs under \"~/outfiles/\" folder."
+echo "Check the running logs under \"~/logfiles/\" folder."
 
 # Display the result
 if [ -e ${DOPDIR}/output_0 ]; then
