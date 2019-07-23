@@ -28,12 +28,12 @@ user=$( whoami )
 
 WORKDIR="/home/${user}"
 LOGFILE_DIR="${WORKDIR}/logfiles"
-ASPIREDIR="/home/${user}/aspire-streaming"
-RUNDIR="/home/${user}/aspire-streaming/run"
-DSHFILE="/home/${user}/aspire-streaming/run/dshmachines"
-HOSTFILE="/home/${user}/aspire-streaming/run/hostfile"
+ASPIREDIR="/home/${user}/gnn-lambda"
+RUNDIR="/home/${user}/gnn-lambda/run"
+DSHFILE="/home/${user}/gnn-lambda/run/dshmachines"
+HOSTFILE="/home/${user}/gnn-lambda/run/hostfile"
 TMPDIR="/home/${user}/zktmp"
-ZOODIR=${WORKDIR}/aspire-streaming/installs/zookeeper-release-3.4.6
+ZOODIR=${WORKDIR}/gnn-lambda/installs/zookeeper-release-3.4.6
 
 DSH=dsh
 

@@ -31,14 +31,14 @@ BENCH_AGG       := aggregate
 OMP_LIBS        := -fopenmp
 BOOST_LIBS      := -lboost_system -lboost_filesystem -lboost_program_options
 ZK_LIBS         := -lzookeeper_mt
-ZK_LIBPATH      := /home/$(USER)/aspire-streaming/installs/out/lib
+ZK_LIBPATH      := /home/$(USER)/gnn-lambda/installs/out/lib
 ZMQ_LIBS        := -lzmq
-ZMQ_LIBPATH     := /home/$(USER)/aspire-streaming/installs/out/lib
+ZMQ_LIBPATH     := /home/$(USER)/gnn-lambda/installs/out/lib
 LIBS            := -L$(ZK_LIBPATH) $(ZK_LIBS) -L$(ZMQ_LIBPATH) $(ZMQ_LIBS) -lpthread $(OMP_LIBS) $(BOOST_LIBS)
 
 # Libraries headers & linking
 ZK_INCPATH      := /usr/local/include/zookeeper
-ZMQ_INCPATH     := /home/$(USER)/aspire-streaming/installs/out/include
+ZMQ_INCPATH     := /home/$(USER)/gnn-lambda/installs/out/include
 INC             := -I$(ZK_INCPATH) -I$(ZMQ_INCPATH)
 LDFLAGS         := -Wl,-rpath=$(ZK_LIBPATH) -Wl,-rpath=$(ZMQ_LIBPATH)
 
