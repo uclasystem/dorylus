@@ -101,13 +101,10 @@ double Engine<VertexType, EdgeType>::timeInit = 0.0;
 template <typename VertexType, typename EdgeType>
 void
 Engine<VertexType, EdgeType>::init(int argc, char *argv[], VertexType dVertex, EdgeType dEdge, EdgeType (*eWeight) (IdType, IdType)) {
-    parseArgs(argc, argv);
-
-    // Set the log file pointer.
-    logFile_ptr = fopen(logFile, "w");
-
     printLog(nodeId, "Engine starts initialization...\n");
     timeInit = -getTimer();
+
+    parseArgs(argc, argv);
     
     // Initialize the node manager and communication manager.
     NodeManager::init(ZKHOST_FILE, HOST_FILE);
