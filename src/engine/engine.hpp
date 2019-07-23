@@ -22,8 +22,8 @@
 #define NUM_LAYERS 5
 
 
-#define NUM_DATA_THREADS 1
-#define NUM_COMP_THREADS 5
+#define NUM_DATA_THREADS 1          // These are default values (when cli argument is empty).
+#define NUM_COMP_THREADS 7
 #define NUM_DATA_THREADS_STR "1"
 #define NUM_COMP_THREADS_STR "5"
 

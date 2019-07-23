@@ -108,44 +108,32 @@ header "Starting the benchmark..."
 # Benchmark program
 case $1 in 
 	"agg")
-		BM=aggregate.bin; BK=AGG;
+		BENCHMARK=aggregate.bin; BK=AGG;
 		;;
 	*)
-		BM=aggregate.bin; BK=AGG;
+		BENCHMARK=aggregate.bin; BK=AGG;
 		;;
 esac
 
-# Dataset
+# Datasets
 case $2 in
 	"small")
-		IP=../inputs/data/parts_${NDS}/small.graph.bsnap; IK=SM; SRC=0;
+		INPUT_LOC=../inputs/data/parts_${NDS}/small.graph.bsnap; IK=SM;
     ;;
 	"fb")
-		IP=/filepool/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB; SRC=0
+		INPUT_LOC=/filepool/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB;
 		;;
 	*)
-		IP=../inputs/data/parts_${NDS}/small.graph.bsnap; IK=SM; SRC=0;
+		INPUT_LOC=../inputs/data/parts_${NDS}/small.graph.bsnap; IK=SM;
 		;;
 esac
 
-# Feature file
+# Feature files
 if [ -z $3 ]; then
-  FF=$( dirname ${IP} )/../features;
+  FEATUREFILE=$( dirname ${INPUT_LOC} )/../features;
 else
-  FF=$3;
+  FEATUREFILE=$3;
 fi
-
-UD=0;
-BE=100;
-CT=7;
-POF=1;
-KC=10;
-BS=100000;
-TOA=0;
-TOD=1;
-STOD=1;
-SP=1;
-RS=0;
 
 i=0
 for i in $(seq 1 ${NDS}); do
@@ -170,6 +158,10 @@ done;
 # Loop over desired number of runs
 for dp in {1..1}; do
 
+  UNDIRECTED=0;
+  COMPUTATION_THREADS=7;
+  DATACOMM_THREADS=1;
+
   cd ${RUNDIR};
 
   GVID=`cat gvid`;
@@ -181,8 +173,8 @@ for dp in {1..1}; do
   OPFILE=${OUTFILE_DIR}/${GVID}.${BK}.${IK}.out
   echo "GVID = ${GVID}" >> ${OPFILE} 2>&1;
 
-  echo "DSH command (from ${ASPIREDIR}/build): ./${BM} --graphfile ${IP} --featuresfile ${FF} --undirected ${UD} --bm-reset=${RS} --bm-source=${SRC} --bm-tmpdir=${TMPDIR} --kcore-maxcore=${KC} --cthreads ${CT} ${XTRAARGS}";
-  ${DSH} -M -f ${DSHFILE} -c "cd ${ASPIREDIR}/build && ./${BM} --graphfile ${IP} --featuresfile ${FF} --undirected ${UD} --bm-reset=${RS} --bm-source=${SRC} --bm-tmpdir=${TMPDIR} --kcore-maxcore=${KC} --cthreads ${CT} ${XTRAARGS}" >> ${OPFILE} 2>&1;
+  echo "DSH command (from ${ASPIREDIR}/build): ./${BENCHMARK} --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --undirected ${UNDIRECTED} --bm-tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS}";
+  ${DSH} -M -f ${DSHFILE} -c "cd ${ASPIREDIR}/build && ./${BENCHMARK} --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --undirected ${UNDIRECTED} --bm-tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS}" 1>> /dev/null 2>> ${OPFILE};
 
   DOPDIR=${ASPIREDIR}/build/outputs/${BK}.${IK}/${GVID};
   mkdir -p ${DOPDIR};

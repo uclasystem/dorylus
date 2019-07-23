@@ -511,15 +511,10 @@ Engine<VertexType, EdgeType>::parseArgs(int argc, char *argv[]) {
     unsigned control_port = vm["cport"].as<unsigned>();
     CommManager::setControlPortStart(control_port);
 
-    printLog(nodeId, "Printing parsed configuration:\n");
-    printLog(nodeId, "  config = %s\n", cFile.c_str());
-    printLog(nodeId, "  dThreads = %u\n", dThreads);
-    printLog(nodeId, "  cThreads = %u\n", cThreads);
-    printLog(nodeId, "  graphFile = %s\n", graphFile.c_str());
-    printLog(nodeId, "  featuresFile = %s\n", featuresFile.c_str());
-    printLog(nodeId, "  undirected = %s\n", undirected ? "true" : "false");
-    printLog(nodeId, "  data port set -> %u\n", data_port);
-    printLog(nodeId, "  control port set -> %u\n", control_port);
+    printLog(nodeId, "Parsed configuration: config = %s, dThreads = %u, cThreads = %u, graphFile = %s,"
+                     "featuresFile = %s, undirected = %s, data port set -> %u, control port set -> %u\n",
+                     cFile.c_str(), dThreads, cThreads, graphFile.c_str(), featuresFile.c_str(),
+                     undirected ? "true" : "false", data_port, control_port);
 }
 
 
