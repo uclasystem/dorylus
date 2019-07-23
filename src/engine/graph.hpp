@@ -1,54 +1,66 @@
 #ifndef __GRAPH_HPP__
 #define __GRAPH_HPP__
 
-#include "graph.h"
 
-template <typename VertexType, typename EdgeType>
-VertexType Graph<VertexType, EdgeType>::getVertexValue(IdType vId) {
-//1. look at where it belongs
-//2. send appropriate value, else assert<false>
-    assert(false);
-    return VertexType();
-}
+#include <vector>
+#include <map>
+#include "../parallel/lock.hpp"
+#include "../utils/utils.hpp"
+#include "vertex.cpp"
+#include "edge.cpp"
 
+
+/**
+ *
+ * Class of a graph, composed of vertices and directed edges.
+ * 
+ */
 template <typename VertexType, typename EdgeType>
-void Graph<VertexType, EdgeType>::updateGhostVertex(IdType vId, VertexType* value) {
-    typename std::map<IdType, GhostVertex<VertexType> >::iterator it = ghostVertices.find(vId);
-    if(it == ghostVertices.end()) {
-        fprintf(stderr, "No ghost vertex with id %u\n", vId);
+class Graph {
+
+public:
+
+    std::vector< Vertex<VertexType, EdgeType> >& getVertices();
+    Vertex<VertexType, EdgeType>& getVertex(IdType lvid);
+    Vertex<VertexType, EdgeType>& getVertexByGlobal(IdType gvid);
+    bool containsVertex(IdType gvid);   // Contain searches with global ID.
+
+    std::map< IdType, GhostVertex<VertexType> >& getGhostVertices();
+    GhostVertex<VertexType>& getGhostVertex(IdType gvid);
+    bool containsGhostVertex(IdType gvid);
+
+    IdType getNumLocalVertices();
+    void setNumLocalVertices(IdType num);
+    IdType getNumGlobalVertices();
+    void setNumGlobalVertices(IdType num);
+
+    unsigned long long getNumGlobalEdges();
+    void incrementNumGlobalEdges() {
+        ++numGlobalEdges;
     }
-    assert(it != ghostVertices.end());
-    it->second.addData(value);
-}
 
-template <typename VertexType, typename EdgeType>
-void Graph<VertexType, EdgeType>::printGraphMetrics() {
-    fprintf(stderr, "Graph Metrics: numGlobalVertices = %u\n", numGlobalVertices);
-    fprintf(stderr, "Graph Metrics: numGlobalEdges = %llu\n", numGlobalEdges);
-    fprintf(stderr, "Graph Metrics: numLocalVertices = %u\n", numLocalVertices);
-}
+    short getVertexPartitionId(IdType vid);
+    void appendVertexPartitionId(short pid);
 
-template <typename VertexType, typename EdgeType>
-void Graph<VertexType, EdgeType>::compactGraph() {
-    vertexPartitionIds.shrink_to_fit();
-    vertices.shrink_to_fit();
-    for(IdType i=0; i<vertices.size(); ++i) {
-        vertices[i].inEdges.shrink_to_fit();
-        vertices[i].outEdges.shrink_to_fit(); 
-    }
-    typename std::map<IdType, GhostVertex<VertexType> >::iterator it;
-    for(it = ghostVertices.begin(); it != ghostVertices.end(); ++it)
-        it->second.outEdges.shrink_to_fit(); 
+    void updateGhostVertex(IdType vId, VertexType value);
 
-}
+    void compactGraph();
 
-template <typename VertexType>
-void ThinGraph<VertexType>::compactGraph() {
-    vertices.shrink_to_fit();
+    std::map<IdType, IdType> globalToLocalId;
+    std::map<IdType, IdType> localToGlobalId;
 
-    typename std::map<IdType, GhostVertex<VertexType> >::iterator it;
-    for(it = ghostVertices.begin(); it != ghostVertices.end(); ++it)
-        it->second.outEdges.shrink_to_fit();
-}
+private:
+
+    std::vector< Vertex<VertexType, EdgeType> > vertices;
+    std::map< IdType, GhostVertex<VertexType> > ghostVertices;
+
+    IdType numLocalVertices;
+    IdType numGlobalVertices;
+
+    unsigned long long numGlobalEdges = 0;
+
+    std::vector<short> vertexPartitionIds;
+};
+
 
 #endif //__GRAPH_HPP__

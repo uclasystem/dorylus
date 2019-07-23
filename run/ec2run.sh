@@ -6,15 +6,15 @@
 #
 # Usage: ./ec2run.sh [Bench] [Dataset] [Feature-File]
 #
-#   Bench:          agg(*), inc, load
-#   Dataset:        fb(*), data, small
+#   Bench:          agg(*)
+#   Dataset:        fb(*), small
 #   Feature-File:   (*), path_to_file 
 #
 # "(*)" means default.
 #
 
 
-# Helper function for header displaying
+# Helper function for header & result displaying
 function header {
   echo -e "\e[33;1m|---- ${1} ----> \e[0m"
 }
@@ -27,7 +27,7 @@ function header {
 user=$( whoami )
 
 WORKDIR="/home/${user}"
-OUTFILE_DIR="${WORKDIR}/outfiles"
+LOGFILE_DIR="${WORKDIR}/logfiles"
 ASPIREDIR="/home/${user}/aspire-streaming"
 RUNDIR="/home/${user}/aspire-streaming/run"
 DSHFILE="/home/${user}/aspire-streaming/run/dshmachines"
@@ -37,8 +37,8 @@ ZOODIR=${WORKDIR}/aspire-streaming/installs/zookeeper-release-3.4.6
 
 DSH=dsh
 
-if [ ! -d ${OUTFILE_DIR} ]; then
-	mkdir -p ${OUTFILE_DIR}
+if [ ! -d ${LOGFILE_DIR} ]; then
+	mkdir -p ${LOGFILE_DIR}
 fi
 
 if [ ! -f ${HOSTFILE} ]; then
@@ -63,7 +63,7 @@ header "Detected a cluster of ${NDS} nodes"
 header "Setting up tmp dir & Stopping running ZooKeeper..."
 
 ${DSH} -M -f ${DSHFILE} -c "rm -rf ${TMPDIR} && mkdir ${TMPDIR} && chown ${user}:${user} ${TMPDIR}"
-${DSH} -M -f ${DSHFILE} -c "cd ${ZOODIR} && ./bin/zkServer.sh stop";
+${DSH} -M -f ${DSHFILE} -c "cd ${ZOODIR} && ./bin/zkServer.sh stop > /dev/null 2&>1";
 
 if [ ! -f ${ZOODIR}/conf/zoo.cfg ]; then
 	cat ${RUNDIR}/zoo.basic > ${ZOODIR}/conf/zoo.cfg;
@@ -76,13 +76,15 @@ fi
 header "Starting ZooKeeper..."
 
 for i in $(seq 1 ${ZOONDS}); do
-  scp ${ZOODIR}/conf/zoo.cfg ${dshnodes[$i]}:${ZOODIR}/conf/zoo.cfg;
+  scp -q ${ZOODIR}/conf/zoo.cfg ${dshnodes[$i]}:${ZOODIR}/conf/zoo.cfg;
   ${DSH} -M -m ${dshnodes[$i]} -c "mkdir -p ${TMPDIR}/zooDataDir";
   ${DSH} -M -m ${dshnodes[$i]} -c "echo $i > ${TMPDIR}/zooDataDir/myid";
-  ${DSH} -M -m ${dshnodes[$i]} -c "cd ${ZOODIR} && ./bin/zkServer.sh start";
+  ${DSH} -M -m ${dshnodes[$i]} -c "cd ${ZOODIR} && ./bin/zkServer.sh start > /dev/null 2&>1";
 done;
 
 header "Checking for Quorum..."
+
+sleep 1
 
 for i in $(seq 1 ${ZOONDS}); do
   while true
@@ -106,51 +108,32 @@ header "Starting the benchmark..."
 # Benchmark program
 case $1 in 
 	"agg")
-		BM=aggregate.bin; BK=AGG;
+		BENCHMARK=aggregate.bin; BK=AGG;
 		;;
-	"inc")
-		BM=increment.bin; BK=INC;
-		;;
-  "load")
-    BM=loadfeatures.bin; BK=LOAD;
-    ;;
 	*)
-		BM=aggregate.bin; BK=AGG;
+		BENCHMARK=aggregate.bin; BK=AGG;
 		;;
 esac
 
-# Dataset
+# Datasets
 case $2 in
-	"fb")
-		IP=/filepool/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB; SRC=0
-		;;
-	"data")
-		IP=/filepool/parts_${NDS}/data.bsnap; IK=DT; SRC=0;
-		;;
 	"small")
-		IP=../inputs/parts_${NDS}/small.graph.bsnap; IK=SM; SRC=0;
+		INPUT_LOC=../inputs/data/parts_${NDS}/small.graph.bsnap; IK=SM;
     ;;
+	"fb")
+		INPUT_LOC=/filepool/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB;
+		;;
 	*)
-		IP=/filepool/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB; SRC=0
+		INPUT_LOC=../inputs/data/parts_${NDS}/small.graph.bsnap; IK=SM;
 		;;
 esac
 
-# Feature file
-FF=$3
-
-UD=0;
-BE=100;
-CT=7;
-POF=1;
-KC=10;
-NB=11;
-BS=100000;
-DP=30;
-TOA=0;
-TOD=1;
-STOD=1;
-SP=1;
-RS=0;
+# Feature files
+if [ -z $3 ]; then
+  FEATUREFILE=$( dirname ${INPUT_LOC} )/../features;
+else
+  FEATUREFILE=$3;
+fi
 
 i=0
 for i in $(seq 1 ${NDS}); do
@@ -169,38 +152,36 @@ for i in $(seq 1 ${ZOONDS}); do
 done;
 
 for i in $(seq 1 ${NDS}); do
-  scp ${ASPIREDIR}/config/hostfile ${ASPIREDIR}/config/zkhostfile ${dshnodes[$i]}:${ASPIREDIR}/config/;
+  scp -q ${ASPIREDIR}/config/hostfile ${ASPIREDIR}/config/zkhostfile ${dshnodes[$i]}:${ASPIREDIR}/config/;
 done;
 
 # Loop over desired number of runs
 for dp in {1..1}; do
 
-  NB=0;
-  DP=0;
-  BS=0;
+  UNDIRECTED=0;
+  COMPUTATION_THREADS=7;
+  DATACOMM_THREADS=1;
 
   cd ${RUNDIR};
 
   GVID=`cat gvid`;
   NGVID=$((GVID + 1));
   echo ${NGVID} > gvid;
-  echo "GVID = ${GVID}" >> ${OPFILE} 2>&1;
 
   header "Running GVID #: ${GVID}"
 
-  OPFILE=${OUTFILE_DIR}/${GVID}.${BK}.${IK}.out
+  LOGFILE=${LOGFILE_DIR}/${GVID}.${BK}.${IK}.out
+  echo "This is the log for run: GVID = ${GVID}" >> ${LOGFILE} 2>&1;
 
-  echo "DSH command (from ${ASPIREDIR}/build): ./${BM} --graphfile ${IP} --featuresfile ${FF} --undirected ${UD} --bm-reset=${RS} --bm-source=${SRC} --bm-tagonadd=${TOA} --bm-tagondelete=${TOD} --bm-smarttagondelete=${STOD} --bm-smartpropagation=${SP} --bm-tmpdir=${TMPDIR} --kcore-maxcore=${KC} --cthreads ${CT} --pofrequency ${POF} --baseedges ${BE} --numbatches ${NB} --batchsize ${BS} --deletepercent ${DP} ${XTRAARGS}";
-  ${DSH} -M -f ${DSHFILE} -c "cd ${ASPIREDIR}/build && ./${BM} --graphfile ${IP} --featuresfile ${FF} --undirected ${UD} --bm-reset=${RS} --bm-source=${SRC} --bm-tagonadd=${TOA} --bm-tagondelete=${TOD} --bm-smarttagondelete=${STOD} --bm-smartpropagation=${SP} --bm-tmpdir=${TMPDIR} --kcore-maxcore=${KC} --cthreads ${CT} --pofrequency ${POF} --baseedges ${BE} --numbatches ${NB} --batchsize ${BS} --deletepercent ${DP} ${XTRAARGS}" >> ${OPFILE} 2>&1;
+  echo "DSH command (from ${ASPIREDIR}/build): ./${BENCHMARK} --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --undirected ${UNDIRECTED} --bm-tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS}";
+  ${DSH} -M -f ${DSHFILE} -c "cd ${ASPIREDIR}/build && ./${BENCHMARK} --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --undirected ${UNDIRECTED} --bm-tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS}" 1> /dev/null 2>> ${LOGFILE};
 
   DOPDIR=${ASPIREDIR}/build/outputs/${BK}.${IK}/${GVID};
   mkdir -p ${DOPDIR};
   for i in $(seq 1 ${NDS}); do
     oid=`expr $i - 1`;
-    scp ${dshnodes[$i]}:${TMPDIR}/output_* ${DOPDIR}/;
+    scp -q ${dshnodes[$i]}:${TMPDIR}/output_* ${DOPDIR}/;
   done;
-
-  cd ${ASPIREDIR}/build && ./tester.sh ${DOPDIR}/ ${NB};
 
 done;
 
@@ -212,5 +193,15 @@ done;
 header "Finished. Destroying ZooKeeper..."
 
 for i in $(seq 1 $ZOONDS); do
-  ${DSH} -M -m ${nodes[$i]} -c "cd ${ZOODIR} && ./bin/zkServer.sh stop";
+  ${DSH} -M -m ${nodes[$i]} -c "cd ${ZOODIR} && ./bin/zkServer.sh stop > /dev/null 2&>1";
 done;
+
+echo "Check the output files in \"build/outputs/\" folder."
+echo "Check the running logs under \"~/logfiles/\" folder."
+
+# Display the result
+if [ -e ${DOPDIR}/output_0 ]; then
+  echo -e "\e[92;1mThis round of execution seems successful, congrats ;) ${1} \e[0m"
+else
+  echo -e "\e[91;1mExecution fails (at least on this node), check the log file! ${1} \e[0m"
+fi

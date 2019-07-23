@@ -3,12 +3,9 @@ INCPATH=../installs/out/include
 LIBPATH=../installs/out/lib
 CFLAGS=-O3
 
-all: partitioner repartitioner tobinary
+all: partitioner tobinary
 
 partitioner: partitioner.cpp
-	${CPP} -I${INCPATH} -L${LIBPATH} $< -o $@ -lmetis ${CFLAGS}
-
-repartitioner: repartitioner.cpp
 	${CPP} -I${INCPATH} -L${LIBPATH} $< -o $@ -lmetis ${CFLAGS}
 
 tobinary: snapToBinarySnap.cpp
@@ -16,4 +13,4 @@ tobinary: snapToBinarySnap.cpp
 
 .PHONY: clean
 clean:
-	rm -f partitioner repartitioner tobinary
+	rm -f partitioner tobinary

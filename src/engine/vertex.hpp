@@ -1,168 +1,128 @@
 #ifndef __VERTEX_HPP__
 #define __VERTEX_HPP__
 
-#include "vertex.h"
 
-#include <iostream>
-#include <cassert>
-#include <iterator>
+#include <atomic>
+#include <vector>
+#include <pthread.h>
+#include "../parallel/rwlock.hpp"
+#include "edge.cpp"
 
-template<typename VertexType, typename EdgeType>
-Vertex<VertexType, EdgeType>::Vertex() :
-    localIdx(0), globalIdx(0), parentIdx(MAX_IDTYPE), graph(NULL) {
-    lock.init();
-}
 
-template<typename VertexType, typename EdgeType>
-Vertex<VertexType, EdgeType>::~Vertex() {
-    lock.destroy();
-}
+/** Vertex type indicators. */
+typedef char VertexLocationType;
+#define INTERNAL_VERTEX 'I'
+#define BOUNDARY_VERTEX 'B'
+
 
 template<typename VertexType, typename EdgeType>
-IdType Vertex<VertexType, EdgeType>::localId() {
-    return localIdx;
-}
+class Graph;
 
-template<typename VertexType, typename EdgeType>
-IdType Vertex<VertexType, EdgeType>::globalId() {
-    return globalIdx;
-}
 
+/**
+ *
+ * Class for a local vertex.
+ * 
+ */
 template<typename VertexType, typename EdgeType>
-VertexType Vertex<VertexType, EdgeType>::data() {
-    lock.readLock();
-    VertexType vData = vertexData.back();
-    lock.unlock();
-    return vData;
-}
+class Vertex {
 
-template<typename VertexType, typename EdgeType>
-std::vector<VertexType>& Vertex<VertexType, EdgeType>::dataAll() {
-    lock.readLock();
-    std::vector<VertexType>& vDataAll = vertexData;
-    lock.unlock();
-    return vDataAll;
-}
+public:
 
-/*
-template<typename VertexType, typename EdgeType>
-VertexType Vertex<VertexType, EdgeType>::oldData() {
-  return oldVertexData;
-}
+    Vertex();
+    ~Vertex();
 
-template<typename VertexType, typename EdgeType>
-void Vertex<VertexType, EdgeType>::setOldData(VertexType value) {
-  oldVertexData = value;
-}
-*/
+    IdType getLocalId();
+    void setLocalId(IdType lvid);
+    IdType getGlobalId();
+    void setGlobalId(IdType gvid);
 
-template<typename VertexType, typename EdgeType>
-void Vertex<VertexType, EdgeType>::setData(VertexType value) {
-    lock.writeLock();
-    vertexData.back() = value;
-    lock.unlock();
-}
+    VertexType data();                      // Get the current value.
+    VertexType dataAt(unsigned layer);      // Get value at specified layer.
+    std::vector<VertexType>& dataAll();     // Get reference to all old values' vector.
 
-template<typename VertexType, typename EdgeType>
-void Vertex<VertexType, EdgeType>::addData(VertexType value) {
-    lock.writeLock();
-    vertexData.push_back(value);
-    lock.unlock();
-}
+    void setData(VertexType value);         // Modify the current value.
+    void addData(VertexType value);         // Add a new value of the new iteration.
 
-template<typename VertexType, typename EdgeType>
-unsigned Vertex<VertexType, EdgeType>::numInEdges() {
-    return inEdges.size();
-}
+    VertexLocationType getVertexLocation();
+    void setVertexLocation(VertexLocationType loc);
 
-template<typename VertexType, typename EdgeType>
-unsigned Vertex<VertexType, EdgeType>::numOutEdges() {
-    return outEdges.size();
-}
+    unsigned getNumInEdges();
+    unsigned getNumOutEdges();
+    InEdge<EdgeType>& getInEdge(unsigned i);
+    void addInEdge(InEdge<EdgeType> edge);
+    OutEdge<EdgeType>& getOutEdge(unsigned i);
+    void addOutEdge(OutEdge<EdgeType> edge);
 
-template<typename VertexType, typename EdgeType>
-InEdge<EdgeType>& Vertex<VertexType, EdgeType>::getInEdge(unsigned i) {
-    return inEdges[i];
-}
+    VertexType getSourceVertexData(unsigned i);
+    VertexType getSourceVertexDataAt(unsigned i, unsigned layer);
+    unsigned getSourceVertexGlobalId(unsigned i);
+    unsigned getDestVertexGlobalId(unsigned i);
 
-template<typename VertexType, typename EdgeType>
-OutEdge<EdgeType>& Vertex<VertexType, EdgeType>::getOutEdge(unsigned i) {
-    return outEdges[i];
-}
+    Graph<VertexType, EdgeType> *getGraphPtr();
+    void setGraphPtr(Graph<VertexType, EdgeType> *ptr);
 
-template<typename VertexType, typename EdgeType>
-EdgeType Vertex<VertexType, EdgeType>::getInEdgeData(unsigned i) {
-	assert(i < inEdges.size());
-	return inEdges[i].data();
-}
+    IdType getParent();
+    void setParent(IdType p);
 
-template<typename VertexType, typename EdgeType>
-EdgeType Vertex<VertexType, EdgeType>::getOutEdgeData(unsigned i) {
-    assert(false);
-    return NULL;
-}
+    void compactVertex();
 
-template<typename VertexType, typename EdgeType>
-VertexType Vertex<VertexType, EdgeType>::getSourceVertexData(unsigned i) {
-    assert(i < inEdges.size()); 
-    if(inEdges[i].getEdgeLocation() == LOCAL_EDGE_TYPE) {
-        return graph->vertices[inEdges[i].sourceId()].data();
-    } else {
-        return graph->ghostVertices[inEdges[i].sourceId()].data();
+private:
+
+    IdType localId;
+    IdType globalId;
+
+    std::vector<VertexType> vertexData;     // Use a vector to make data in old iterations persistent.
+    VertexLocationType vertexLocation;
+
+    std::vector< InEdge<EdgeType> > inEdges;
+    std::vector< OutEdge<EdgeType> > outEdges;
+
+    IdType parentId;
+
+    Graph<VertexType, EdgeType> *graph_ptr;
+
+    RWLock lock;
+};
+
+
+/**
+ *
+ * Class for a ghost vertex.
+ * 
+ */
+template <typename VertexType>
+class GhostVertex {
+
+public:
+    
+    GhostVertex();
+    ~GhostVertex();
+
+    VertexType data();                      // Get the current value.
+    VertexType dataAt(unsigned layer);      // Get value at specified layer.
+
+    void setData(VertexType value);         // Modify the current value.
+    void addData(VertexType value);         // Add a new value of the new iteration.
+
+    void addOutEdge(IdType dId);
+
+    int32_t getDegree();
+    void incrementDegree() {
+        ++degree;
     }
-}
 
-template<typename VertexType, typename EdgeType>
-VertexType Vertex<VertexType, EdgeType>::getDestVertexData(unsigned i) {
-    assert(false); 
-    return NULL;
-}
+    void compactVertex();
 
-template<typename VertexType, typename EdgeType>
-unsigned Vertex<VertexType, EdgeType>::getSourceVertexGlobalId(unsigned i) {
-    assert(i < inEdges.size());
-    if(inEdges[i].getEdgeLocation() == LOCAL_EDGE_TYPE) {
-        assert(graph->localToGlobalId.find(inEdges[i].sourceId()) != graph->localToGlobalId.end());
-        return graph->localToGlobalId[inEdges[i].sourceId()];
-    } else {
-        return inEdges[i].sourceId();
-    }
-}
+private:
 
-template<typename VertexType, typename EdgeType>
-unsigned Vertex<VertexType, EdgeType>::getDestVertexGlobalId(unsigned i) {
-    assert(i < outEdges.size());
-    if(outEdges[i].getEdgeLocation() == LOCAL_EDGE_TYPE) {
-        assert(graph->localToGlobalId.find(outEdges[i].destId()) != graph->localToGlobalId.end());
-        return graph->localToGlobalId[outEdges[i].destId()];
-    } else {
-        return outEdges[i].destId();
-    }
-}
+    std::vector<VertexType> vertexData;
 
-template<typename VertexType, typename EdgeType>
-void Vertex<VertexType, EdgeType>::readLock() {
-    lock.readLock();
-}
+    std::vector<IdType> outEdges;
+    int32_t degree;
 
-template<typename VertexType, typename EdgeType>
-void Vertex<VertexType, EdgeType>::writeLock() {
-    lock.writeLock();
-}
+    RWLock lock;
+};
 
-template<typename VertexType, typename EdgeType>
-void Vertex<VertexType, EdgeType>::unlock() {
-    lock.unlock();
-}
 
-template<typename VertexType, typename EdgeType>
-IdType Vertex<VertexType, EdgeType>::parent() {
-    return parentIdx;
-}
-
-template<typename VertexType, typename EdgeType>
-void Vertex<VertexType, EdgeType>::setParent(IdType p) {
-    parentIdx = p;
-}
-
-#endif /* __VERTEX_HPP__ */
+#endif // __VERTEX_HPP__

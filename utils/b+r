@@ -9,8 +9,8 @@
 #
 # Usage: ./b+r [Bench] [Dataset] [Feature-File]
 #
-#   Bench:          agg(*), inc, load
-#   Dataset:        fb(*), data, small
+#   Bench:          agg(*)
+#   Dataset:        fb(*), small
 #   Feature-File:   (*), path_to_file 
 #
 # "(*)" means default.
@@ -22,7 +22,7 @@ function header {
 	echo -e "\e[32;1m######## ${1} ########\e[0m"
 }
 
-header "BUILDING benchmark $1"
+header "BUILDING the engine & benchmark"
 ./bld $1
 
 if [ $? -ne 0 ]; then

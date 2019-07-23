@@ -1,3 +1,5 @@
+# GNN-ASPIRE
+
 Push-based ASPIRE implementation. This project is a cleaned up version of gift (forked on July 06, 2016). Implemented streaming-like processing as in Tornado (SIGMOD'16) paper.
 
 Build the following dependencies and ASPIRE on **ALL** your AWS-EC2 instances (Ubuntu seems to be the easiest) under the **same** location.

@@ -11,46 +11,31 @@
 
 cd $( dirname $0 )/../build
 
+function header {
+	echo -e "\e[33;1m${1}\e[0m"
+}
+
 case $1 in
 	"agg")
-		make clean; make mode=debug aggregate
+		make clean; make -s mode=debug aggregate
 
 		if [ $? -eq 0 ]; then 
 			cd ..
 			./utils/send_file build/aggregate.bin
-		else 
-			return 13
-		fi
-		;;
-	"inc")
-		make clean; make mode=debug increment
-
-		if [ $? -eq 0 ]; then 
-			cd ..
-			./utils/send_file build/increment.bin
-		else 
-			return 13
-		fi
-		;;
-	"load")
-		make clean; make mode=debug loadfeatures
-
-		if [ $? -eq 0 ]; then 
-			cd ..
-			./utils/send_file build/loadfeatures.bin
+			header "Successfully built benchmark agg."
 		else 
 			return 13
 		fi
 		;;
 	*)
-		make clean; make mode=debug aggregate
+		make clean; make -s mode=debug aggregate
 
 		if [ $? -eq 0 ]; then 
 			cd ..
 			./utils/send_file build/aggregate.bin
+			header "Successfully built default benchmark (agg)."
 		else 
 			return 13
 		fi
 		;;
 esac
-
