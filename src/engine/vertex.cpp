@@ -126,7 +126,7 @@ Vertex::getSourceVertexData(unsigned i) {
     if (inEdges[i].getEdgeLocation() == LOCAL_EDGE_TYPE)
         return graph_ptr->getVertex(inEdges[i].sourceId()).data();
     else
-        return graph_ptr->getGhostVertices(inEdges[i].sourceId()).data();
+        return graph_ptr->getGhostVertex(inEdges[i].sourceId()).data();
 }
 
 VertexType
