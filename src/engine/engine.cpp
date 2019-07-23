@@ -139,6 +139,7 @@ Engine<VertexType, EdgeType>::init(int argc, char *argv[], VertexType dVertex, E
     // Create computation workers thread pool.
     computePool = new ThreadPool(cThreads);
     computePool->createPool();
+    printLog(nodeId, "Created %u computation threads.\n", cThreads);
 
     CommManager::flushControl();
     CommManager::flushData();
@@ -146,6 +147,7 @@ Engine<VertexType, EdgeType>::init(int argc, char *argv[], VertexType dVertex, E
     // Create data communicators thread pool.
     dataPool = new ThreadPool(dThreads);
     dataPool->createPool();
+    printLog(nodeId, "Created %u data communicator threads.\n", dThreads);
 
     // Compact the graph.
     graph.compactGraph();
