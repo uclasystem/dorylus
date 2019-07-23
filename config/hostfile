@@ -1,3 +1,3 @@
-172.31.26.176	node1	master
-172.31.21.115	node2	worker
-172.31.22.207	node3	worker
+172.31.33.41	node1	master
+172.31.43.249	node2	worker
+172.31.20.39	node3	worker
