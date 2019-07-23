@@ -39,12 +39,12 @@ InEdge::InEdge(IdType sId, EdgeLocationType eLocation, EdgeType eData)
 
 IdType
 InEdge::sourceId() {
-	return Edge<EdgeType>::otherId;
+	return Edge::otherId;
 }
 
 void
 InEdge::setSourceId(IdType sId) {
-    Edge<EdgeType>::otherId = sId;
+    Edge::otherId = sId;
 }
 
 
