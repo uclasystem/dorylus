@@ -250,7 +250,7 @@ CommManager::dataPushOut(IdType topic, void *value, unsigned valSize) {
  * 
  */
 bool
-CommManager::dataPullIn(IdType &topic, std::vector<FeatType>& value) {
+CommManager::dataPullIn(IdType *topic, std::vector<FeatType>& value) {
     zmq::message_t inMsg;
 
     lockDataSubscriber.lock();
@@ -264,7 +264,7 @@ CommManager::dataPullIn(IdType &topic, std::vector<FeatType>& value) {
     int32_t numberOfFeatures = dataSize / sizeof(FeatType);
     value.resize(numberOfFeatures);
 
-    memcpy(&topic, inMsg.data(), sizeof(IdType));
+    memcpy(topic, inMsg.data(), sizeof(IdType));
     memcpy(value.data(), ((char *)inMsg.data() + sizeof(IdType)), dataSize);
 
     return true;
@@ -296,7 +296,7 @@ CommManager::controlPushOut(unsigned to, void *value, unsigned valSize) {
  * 
  */
 bool
-CommManager::controlPullIn(unsigned from, void *value, unsigned valSize) {
+CommManager::controlPullIn(unsigned from, std::vector<FeatType>& value) {
     assert(from >= 0 && from < numNodes);
     assert(from != nodeId);
     zmq::message_t inMsg;
@@ -311,7 +311,11 @@ CommManager::controlPullIn(unsigned from, void *value, unsigned valSize) {
     ControlMessage cM = *((ControlMessage *) inMsg.data());
     assert(cM.messageType == APPMSG);
 
-    memcpy(value, ((void *)((char *)inMsg.data() + sizeof(ControlMessage))), valSize);
+    int32_t dataSize = inMsg.size() - sizeof(ControlMessage);
+    int32_t numberOfFeatures = dataSize / sizeof(FeatType);
+    value.resize(numberOfFeatures);
+
+    memcpy(value.data(), ((char *)inMsg.data() + sizeof(ControlMessage)), dataSize);
     return true;
 }
 

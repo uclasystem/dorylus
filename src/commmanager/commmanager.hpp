@@ -46,9 +46,9 @@ public:
     static void destroy();
 
     static void dataPushOut(IdType topic, void* value, unsigned valSize);
-    static bool dataPullIn(IdType& topic, std::vector<FeatType>& value);
+    static bool dataPullIn(IdType *topic, std::vector<FeatType>& value);
     static void controlPushOut(unsigned to, void* value, unsigned valSize); 
-    static bool controlPullIn(unsigned from, void* value, unsigned valSize);
+    static bool controlPullIn(unsigned from, std::vector<FeatType>& value);
 
     static void flushControl();
     static void flushData();

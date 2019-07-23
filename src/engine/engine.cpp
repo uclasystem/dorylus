@@ -381,7 +381,7 @@ Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void *args) {
     while (1) {
 
         // No message in queue.
-        if (!CommManager::dataPullIn(topic, value)) {
+        if (!CommManager::dataPullIn(&topic, value)) {
 
             // Computation workers done their work, so communicator goes to death as well.
             if (halt)
