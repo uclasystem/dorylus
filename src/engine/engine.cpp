@@ -12,6 +12,7 @@
 #include <string>
 #include <cstdlib>
 #include <omp.h>
+#include <cerrno>
 #include "engine.hpp"
 
 
@@ -462,7 +463,6 @@ Engine<VertexType, EdgeType>::parseArgs(int argc, char *argv[]) {
         ("help", "Produce help message")
 
         ("config", boost::program_options::value<std::string>()->default_value(std::string(DEFAULT_CONFIG_FILE), DEFAULT_CONFIG_FILE), "Config file")
-
         ("graphfile", boost::program_options::value<std::string>(), "Graph file")
         ("featuresfile", boost::program_options::value<std::string>(), "Features file")
 
@@ -536,7 +536,7 @@ template <typename VertexType, typename EdgeType>
 void
 Engine<VertexType, EdgeType>::readFeaturesFile(std::string& featuresFileName) {
     std::ifstream infile(featuresFileName.c_str());
-    printLog(nodeId, "<<<>>> IO_STATE is eof - %d, failbit - %d, badbit - %d.", infile.rdstate() == std::ios_base::eofbit, infile.rdstate() == std::ios_base::failbit, infile.rdstate() == std::ios_base::badbit);
+    printLog(nodeId, "<<<>>> IO_STATE is eof - %d, failbit - %d, badbit - %d. Error: %s", infile.rdstate() == std::ios_base::eofbit, infile.rdstate() == std::ios_base::failbit, infile.rdstate() == std::ios_base::badbit, std::strerror(errno));
     if (!infile.good())
         printLog(nodeId, "Cannot open feature file: %s\n", featuresFileName.c_str());
 
