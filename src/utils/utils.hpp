@@ -16,7 +16,7 @@
 typedef unsigned IdType;
 typedef float FeatType;
 typedef float EdgeType;
-typedef vector<FeatType> VertexType;
+typedef std::vector<FeatType> VertexType;
 #define MAX_IDTYPE UINT_MAX
 
 
