@@ -12,53 +12,45 @@
 // For `Vertex` class. //
 /////////////////////////
 
-template<typename VertexType, typename EdgeType>
-Vertex<VertexType, EdgeType>::Vertex()
+Vertex::Vertex()
     : localId(0), globalId(0), parentId(MAX_IDTYPE), graph_ptr(NULL) {
     lock.init();
 }
 
-template<typename VertexType, typename EdgeType>
-Vertex<VertexType, EdgeType>::~Vertex() {
+Vertex::~Vertex() {
     lock.destroy();
 }
 
-template<typename VertexType, typename EdgeType>
 IdType
-Vertex<VertexType, EdgeType>::getLocalId() {
+Vertex::getLocalId() {
     return localId;
 }
 
-template<typename VertexType, typename EdgeType>
 void
-Vertex<VertexType, EdgeType>::setLocalId(IdType lvid) {
+Vertex::setLocalId(IdType lvid) {
     localId = lvid;
 }
 
-template<typename VertexType, typename EdgeType>
 IdType
-Vertex<VertexType, EdgeType>::getGlobalId() {
+Vertex::getGlobalId() {
     return globalId;
 }
 
-template<typename VertexType, typename EdgeType>
 void
-Vertex<VertexType, EdgeType>::setGlobalId(IdType gvid) {
+Vertex::setGlobalId(IdType gvid) {
     globalId = gvid;
 }
 
-template<typename VertexType, typename EdgeType>
 VertexType
-Vertex<VertexType, EdgeType>::data() {
+Vertex::data() {
     lock.readLock();
     VertexType vData = vertexData.back();
     lock.unlock();
     return vData;
 }
 
-template<typename VertexType, typename EdgeType>
 VertexType
-Vertex<VertexType, EdgeType>::dataAt(unsigned layer) {
+Vertex::dataAt(unsigned layer) {
     lock.readLock();
     assert(layer < vertexData.size());
     VertexType vData = vertexData[layer];
@@ -66,18 +58,16 @@ Vertex<VertexType, EdgeType>::dataAt(unsigned layer) {
     return vData;
 }
 
-template<typename VertexType, typename EdgeType>
 std::vector<VertexType>&
-Vertex<VertexType, EdgeType>::dataAll() {
+Vertex::dataAll() {
     lock.readLock();
     std::vector<VertexType>& vDataAll = vertexData;
     lock.unlock();
     return vDataAll;
 }
 
-template<typename VertexType, typename EdgeType>
 void
-Vertex<VertexType, EdgeType>::setData(VertexType value) {
+Vertex::setData(VertexType value) {
     lock.writeLock();
     if (vertexData.empty())
         vertexData.push_back(value);
@@ -86,65 +76,55 @@ Vertex<VertexType, EdgeType>::setData(VertexType value) {
     lock.unlock();
 }
 
-template<typename VertexType, typename EdgeType>
 void
-Vertex<VertexType, EdgeType>::addData(VertexType value) {
+Vertex::addData(VertexType value) {
     lock.writeLock();
     vertexData.push_back(value);
     lock.unlock();
 }
 
-template<typename VertexType, typename EdgeType>
 VertexLocationType
-Vertex<VertexType, EdgeType>::getVertexLocation() {
+Vertex::getVertexLocation() {
     return vertexLocation;
 }
 
-template<typename VertexType, typename EdgeType>
 void
-Vertex<VertexType, EdgeType>::setVertexLocation(VertexLocationType loc) {
+Vertex::setVertexLocation(VertexLocationType loc) {
     vertexLocation = loc;
 }
 
-template<typename VertexType, typename EdgeType>
 unsigned
-Vertex<VertexType, EdgeType>::getNumInEdges() {
+Vertex::getNumInEdges() {
     return inEdges.size();
 }
 
-template<typename VertexType, typename EdgeType>
 unsigned
-Vertex<VertexType, EdgeType>::getNumOutEdges() {
+Vertex::getNumOutEdges() {
     return outEdges.size();
 }
 
-template<typename VertexType, typename EdgeType>
-InEdge<EdgeType>&
-Vertex<VertexType, EdgeType>::getInEdge(unsigned i) {
+InEdge&
+Vertex::getInEdge(unsigned i) {
     return inEdges[i];
 }
 
-template<typename VertexType, typename EdgeType>
 void
-Vertex<VertexType, EdgeType>::addInEdge(InEdge<EdgeType> edge) {
+Vertex::addInEdge(InEdge edge) {
     inEdges.push_back(edge);
 }
 
-template<typename VertexType, typename EdgeType>
-OutEdge<EdgeType>&
-Vertex<VertexType, EdgeType>::getOutEdge(unsigned i) {
+OutEdge&
+Vertex::getOutEdge(unsigned i) {
     return outEdges[i];
 }
 
-template<typename VertexType, typename EdgeType>
 void
-Vertex<VertexType, EdgeType>::addOutEdge(OutEdge<EdgeType> edge) {
+Vertex::addOutEdge(OutEdge edge) {
     outEdges.push_back(edge);
 }
 
-template<typename VertexType, typename EdgeType>
 VertexType
-Vertex<VertexType, EdgeType>::getSourceVertexData(unsigned i) {
+Vertex::getSourceVertexData(unsigned i) {
     assert(i < inEdges.size()); 
     if (inEdges[i].getEdgeLocation() == LOCAL_EDGE_TYPE)
         return graph_ptr->vertices[inEdges[i].sourceId()].data();
@@ -152,9 +132,8 @@ Vertex<VertexType, EdgeType>::getSourceVertexData(unsigned i) {
         return graph_ptr->ghostVertices[inEdges[i].sourceId()].data();
 }
 
-template<typename VertexType, typename EdgeType>
 VertexType
-Vertex<VertexType, EdgeType>::getSourceVertexDataAt(unsigned i, unsigned layer) {
+Vertex::getSourceVertexDataAt(unsigned i, unsigned layer) {
     assert(i < inEdges.size()); 
     if (inEdges[i].getEdgeLocation() == LOCAL_EDGE_TYPE)
         return graph_ptr->getVertex(inEdges[i].sourceId()).dataAt(layer);
@@ -162,9 +141,8 @@ Vertex<VertexType, EdgeType>::getSourceVertexDataAt(unsigned i, unsigned layer) 
         return graph_ptr->getGhostVertex(inEdges[i].sourceId()).dataAt(layer);
 }
 
-template<typename VertexType, typename EdgeType>
 unsigned
-Vertex<VertexType, EdgeType>::getSourceVertexGlobalId(unsigned i) {
+Vertex::getSourceVertexGlobalId(unsigned i) {
     assert(i < inEdges.size());
     if (inEdges[i].getEdgeLocation() == LOCAL_EDGE_TYPE) {
         assert(graph_ptr->localToGlobalId.find(inEdges[i].sourceId()) != graph_ptr->localToGlobalId.end());
@@ -173,9 +151,8 @@ Vertex<VertexType, EdgeType>::getSourceVertexGlobalId(unsigned i) {
         return inEdges[i].sourceId();
 }
 
-template<typename VertexType, typename EdgeType>
 unsigned
-Vertex<VertexType, EdgeType>::getDestVertexGlobalId(unsigned i) {
+Vertex::getDestVertexGlobalId(unsigned i) {
     assert(i < outEdges.size());
     if (outEdges[i].getEdgeLocation() == LOCAL_EDGE_TYPE) {
         assert(graph_ptr->localToGlobalId.find(outEdges[i].destId()) != graph_ptr->localToGlobalId.end());
@@ -184,33 +161,28 @@ Vertex<VertexType, EdgeType>::getDestVertexGlobalId(unsigned i) {
         return outEdges[i].destId();
 }
 
-template<typename VertexType, typename EdgeType>
-Graph<VertexType, EdgeType> *
-Vertex<VertexType, EdgeType>::getGraphPtr() {
+Graph *
+Vertex::getGraphPtr() {
     return graph_ptr;
 }
 
-template<typename VertexType, typename EdgeType>
 void
-Vertex<VertexType, EdgeType>::setGraphPtr(Graph<VertexType, EdgeType> *ptr) {
+Vertex::setGraphPtr(Graph *ptr) {
     graph_ptr = ptr;
 }
 
-template<typename VertexType, typename EdgeType>
 IdType
-Vertex<VertexType, EdgeType>::getParent() {
+Vertex::getParent() {
     return parentId;
 }
 
-template<typename VertexType, typename EdgeType>
 void
-Vertex<VertexType, EdgeType>::setParent(IdType p) {
+Vertex::setParent(IdType p) {
     parentId = p;
 }
 
-template<typename VertexType, typename EdgeType>
 void
-Vertex<VertexType, EdgeType>::compactVertex() {
+Vertex::compactVertex() {
     inEdges.shrink_to_fit();
     outEdges.shrink_to_fit();
 }
@@ -220,29 +192,25 @@ Vertex<VertexType, EdgeType>::compactVertex() {
 // For `GhostVertex` class. //
 //////////////////////////////
 
-template<typename VertexType>
-GhostVertex<VertexType>::GhostVertex()
+GhostVertex::GhostVertex()
     : degree(0) {
     lock.init();
 }
 
-template<typename VertexType>
-GhostVertex<VertexType>::~GhostVertex() {
+GhostVertex::~GhostVertex() {
     lock.destroy();
 }
 
-template<typename VertexType>
 VertexType
-GhostVertex<VertexType>::data() {
+GhostVertex::data() {
     lock.readLock();
     VertexType vData = vertexData.back();
     lock.unlock();
     return vData;
 }
 
-template<typename VertexType>
 VertexType
-GhostVertex<VertexType>::dataAt(unsigned layer) {
+GhostVertex::dataAt(unsigned layer) {
     lock.readLock();
     assert(layer < vertexData.size());
     VertexType vData = vertexData[layer];
@@ -250,9 +218,8 @@ GhostVertex<VertexType>::dataAt(unsigned layer) {
     return vData;
 }
 
-template<typename VertexType>
 void
-GhostVertex<VertexType>::setData(VertexType value) {
+GhostVertex::setData(VertexType value) {
     lock.writeLock();
     if (vertexData.empty())
         vertexData.push_back(value);
@@ -261,29 +228,25 @@ GhostVertex<VertexType>::setData(VertexType value) {
     lock.unlock();
 }
 
-template<typename VertexType>
 void
-GhostVertex<VertexType>::addData(VertexType value) {
+GhostVertex::addData(VertexType value) {
     lock.writeLock();
     vertexData.push_back(value);
     lock.unlock();
 }
 
-template<typename VertexType>
 void
-GhostVertex<VertexType>::addOutEdge(IdType dId) {
+GhostVertex::addOutEdge(IdType dId) {
     outEdges.push_back(dId);
 }
 
-template<typename VertexType>
 void
-GhostVertex<VertexType>::compactVertex() {
+GhostVertex::compactVertex() {
     outEdges.shrink_to_fit();
 }
 
-template<typename VertexType>
 int32_t
-GhostVertex<VertexType>::getDegree() {
+GhostVertex::getDegree() {
     return degree;
 }
 

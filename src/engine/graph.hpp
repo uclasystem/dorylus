@@ -6,8 +6,8 @@
 #include <map>
 #include "../parallel/lock.hpp"
 #include "../utils/utils.hpp"
-#include "vertex.cpp"
-#include "edge.cpp"
+#include "vertex.hpp"
+#include "edge.hpp"
 
 
 /**
@@ -15,18 +15,17 @@
  * Class of a graph, composed of vertices and directed edges.
  * 
  */
-template <typename VertexType, typename EdgeType>
 class Graph {
 
 public:
 
-    std::vector< Vertex<VertexType, EdgeType> >& getVertices();
-    Vertex<VertexType, EdgeType>& getVertex(IdType lvid);
-    Vertex<VertexType, EdgeType>& getVertexByGlobal(IdType gvid);
+    std::vector<Vertex>& getVertices();
+    Vertex& getVertex(IdType lvid);
+    Vertex& getVertexByGlobal(IdType gvid);
     bool containsVertex(IdType gvid);   // Contain searches with global ID.
 
-    std::map< IdType, GhostVertex<VertexType> >& getGhostVertices();
-    GhostVertex<VertexType>& getGhostVertex(IdType gvid);
+    std::map<IdType, GhostVertex>& getGhostVertices();
+    GhostVertex& getGhostVertex(IdType gvid);
     bool containsGhostVertex(IdType gvid);
 
     IdType getNumLocalVertices();
@@ -51,8 +50,8 @@ public:
 
 private:
 
-    std::vector< Vertex<VertexType, EdgeType> > vertices;
-    std::map< IdType, GhostVertex<VertexType> > ghostVertices;
+    std::vector<Vertex> vertices;
+    std::map<IdType, GhostVertex> ghostVertices;
 
     IdType numLocalVertices;
     IdType numGlobalVertices;

@@ -17,80 +17,31 @@
 
 
 /** Extern class-wide fields. */
-template <typename VertexType, typename EdgeType>
-Graph<VertexType, EdgeType> Engine<VertexType, EdgeType>::graph;
-
-template <typename VertexType, typename EdgeType>
-ThreadPool* Engine<VertexType, EdgeType>::dataPool = NULL;
-
-template <typename VertexType, typename EdgeType>
-unsigned Engine<VertexType, EdgeType>::dThreads = NUM_DATA_THREADS;
-
-template <typename VertexType, typename EdgeType>
-ThreadPool* Engine<VertexType, EdgeType>::computePool = NULL;
-
-template <typename VertexType, typename EdgeType>
-unsigned Engine<VertexType, EdgeType>::cThreads = NUM_COMP_THREADS;
-
-template <typename VertexType, typename EdgeType>
-std::string Engine<VertexType, EdgeType>::graphFile;
-
-template <typename VertexType, typename EdgeType>
-std::string Engine<VertexType, EdgeType>::featuresFile;
-
-template <typename VertexType, typename EdgeType>
-VertexProgram<VertexType, EdgeType>* Engine<VertexType, EdgeType>::vertexProgram = NULL;
-
-template <typename VertexType, typename EdgeType>
-EdgeType (*Engine<VertexType, EdgeType>::edgeWeight) (IdType, IdType) = NULL;
-
-template <typename VertexType, typename EdgeType>
-IdType Engine<VertexType, EdgeType>::currId = 0;
-
-template <typename VertexType, typename EdgeType>
-Lock Engine<VertexType, EdgeType>::lockCurrId;
-
-template <typename VertexType, typename EdgeType>
-Lock Engine<VertexType, EdgeType>::lockRecvWaiters;
-
-template <typename VertexType, typename EdgeType>
-Cond Engine<VertexType, EdgeType>::condRecvWaitersEmpty;
-
-template <typename VertexType, typename EdgeType>
-Lock Engine<VertexType, EdgeType>::lockHalt;
-
-template <typename VertexType, typename EdgeType>
-unsigned Engine<VertexType, EdgeType>::nodeId;
-
-template <typename VertexType, typename EdgeType>
-unsigned Engine<VertexType, EdgeType>::numNodes;
-
-template <typename VertexType, typename EdgeType>
-std::map<IdType, unsigned> Engine<VertexType, EdgeType>::recvWaiters;
-
-template <typename VertexType, typename EdgeType>
-Barrier Engine<VertexType, EdgeType>::barComp;
-
-template <typename VertexType, typename EdgeType>
-VertexType Engine<VertexType, EdgeType>::defaultVertex;
-
-template <typename VertexType, typename EdgeType>
-EdgeType Engine<VertexType, EdgeType>::defaultEdge;
-
-template <typename VertexType, typename EdgeType>
-unsigned Engine<VertexType, EdgeType>::iteration = 0;
-
-template <typename VertexType, typename EdgeType>
-bool Engine<VertexType, EdgeType>::undirected = false;
-
-template <typename VertexType, typename EdgeType>
-bool Engine<VertexType, EdgeType>::halt = false;
-
-template <typename VertexType, typename EdgeType>
-double Engine<VertexType, EdgeType>::timeProcess = 0.0;
-
-template <typename VertexType, typename EdgeType>
-double Engine<VertexType, EdgeType>::timeInit = 0.0;
+Graph Engine::graph;
+ThreadPool* Engine::dataPool = NULL;
+unsigned Engine::dThreads = NUM_DATA_THREADS;
+ThreadPool* Engine::computePool = NULL;
+unsigned Engine::cThreads = NUM_COMP_THREADS;
+std::string Engine::graphFile;
+std::string Engine::featuresFile;
+VertexProgram* Engine::vertexProgram = NULL;
+EdgeType (*Engine::edgeWeight) (IdType, IdType) = NULL;
+IdType Engine::currId = 0;
+Lock Engine::lockCurrId;
+Lock Engine::lockRecvWaiters;
+Cond Engine::condRecvWaitersEmpty;
+Lock Engine::lockHalt;
+unsigned Engine::nodeId;
+unsigned Engine::numNodes;
+std::map<IdType, unsigned> Engine::recvWaiters;
+Barrier Engine::barComp;
+VertexType Engine::defaultVertex;
+EdgeType Engine::defaultEdge;
+unsigned Engine::iteration = 0;
+bool Engine::undirected = false;
+bool Engine::halt = false;
+double Engine::timeProcess = 0.0;
+double Engine::timeInit = 0.0;
 
 
 /**
@@ -98,9 +49,8 @@ double Engine<VertexType, EdgeType>::timeInit = 0.0;
  * Initialize the engine with the given command line arguments.
  * 
  */
-template <typename VertexType, typename EdgeType>
 void
-Engine<VertexType, EdgeType>::init(int argc, char *argv[], VertexType dVertex, EdgeType dEdge, EdgeType (*eWeight) (IdType, IdType)) {
+Engine::init(int argc, char *argv[], VertexType dVertex, EdgeType dEdge, EdgeType (*eWeight) (IdType, IdType)) {
     printLog(nodeId, "Engine starts initialization...\n");
     timeInit = -getTimer();
 
@@ -165,9 +115,8 @@ Engine<VertexType, EdgeType>::init(int argc, char *argv[], VertexType dVertex, E
  * Whether I am the master mode or not.
  * 
  */
-template <typename VertexType, typename EdgeType>
 bool
-Engine<VertexType, EdgeType>::master() {
+Engine::master() {
     return NodeManager::amIMaster();
 }
 
@@ -178,9 +127,8 @@ Engine<VertexType, EdgeType>::master() {
  * Will start a bunch of worker threads and a bunch of data communicator threads.
  * 
  */
-template <typename VertexType, typename EdgeType>
 void
-Engine<VertexType, EdgeType>::run(VertexProgram<VertexType, EdgeType> *vProgram, bool printEM) {
+Engine::run(VertexProgram *vProgram, bool printEM) {
     
     // Make sure engines on all machines start running.
     NodeManager::barrier(RUN_BARRIER); 
@@ -222,9 +170,8 @@ Engine<VertexType, EdgeType>::run(VertexProgram<VertexType, EdgeType> *vProgram,
  * Process all vertices using the given vertex program. Useful for a writer program.
  * 
  */
-template <typename VertexType, typename EdgeType>
 void
-Engine<VertexType, EdgeType>::processAll(VertexProgram<VertexType, EdgeType> *vProgram) {
+Engine::processAll(VertexProgram *vProgram) {
     vProgram->beforeIteration(iteration);
 
     // Loop through all local vertices and process it.
@@ -240,9 +187,8 @@ Engine<VertexType, EdgeType>::processAll(VertexProgram<VertexType, EdgeType> *vP
  * Destroy the engine.
  * 
  */
-template <typename VertexType, typename EdgeType>
 void
-Engine<VertexType, EdgeType>::destroy() {
+Engine::destroy() {
     NodeManager::destroy();
     CommManager::destroy();
     computePool->destroyPool();
@@ -266,9 +212,8 @@ Engine<VertexType, EdgeType>::destroy() {
  * and assign a worker function for each.
  * 
  */
-template <typename VertexType, typename EdgeType>
 void
-Engine<VertexType, EdgeType>::worker(unsigned tid, void *args) {
+Engine::worker(unsigned tid, void *args) {
 
     // Outer while loop. Looping infinitely, looking for a new task to handle.
     while (1) {
@@ -345,7 +290,7 @@ Engine<VertexType, EdgeType>::worker(unsigned tid, void *args) {
         }
 
         // Doing the task.
-        Vertex<VertexType, EdgeType>& v = graph.getVertex(local_vid);
+        Vertex& v = graph.getVertex(local_vid);
         vertexProgram->update(v, iteration);
 
         // If there are any remote edges, should send this vid to others for their ghost's update.
@@ -371,9 +316,8 @@ Engine<VertexType, EdgeType>::worker(unsigned tid, void *args) {
  * Major part of the engine's communication logic is done by data threads. These threads loop asynchronously with computation workers.
  * 
  */
-template <typename VertexType, typename EdgeType>
 void
-Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void *args) {
+Engine::dataCommunicator(unsigned tid, void *args) {
     IdType topic;
     VertexType value;
 
@@ -426,9 +370,8 @@ Engine<VertexType, EdgeType>::dataCommunicator(unsigned tid, void *args) {
  * Print engine metrics of processing time.
  * 
  */
-template <typename VertexType, typename EdgeType>
 void
-Engine<VertexType, EdgeType>::printEngineMetrics() {
+Engine::printEngineMetrics() {
     printLog(nodeId, "Engine METRICS: Initialization time = %.3lf ms.\n", timeInit);
     printLog(nodeId, "Engine METRICS: Processing time = %.3lf ms.\n", timeProcess);
 }
@@ -439,9 +382,8 @@ Engine<VertexType, EdgeType>::printEngineMetrics() {
  * Print my graph's metrics.
  * 
  */
-template <typename VertexType, typename EdgeType>
 void
-Engine<VertexType, EdgeType>::printGraphMetrics() {
+Engine::printGraphMetrics() {
     printLog(nodeId, "Graph METRICS: %u global vertices, %llu global edges, %u local edges.\n",
                      graph.getNumGlobalVertices(), graph.getNumGlobalEdges(), graph.getNumLocalVertices());
 }
@@ -452,9 +394,8 @@ Engine<VertexType, EdgeType>::printGraphMetrics() {
  * Parse command line arguments.
  * 
  */
-template <typename VertexType, typename EdgeType>
 void
-Engine<VertexType, EdgeType>::parseArgs(int argc, char *argv[]) {
+Engine::parseArgs(int argc, char *argv[]) {
     boost::program_options::options_description desc("Allowed options");
     desc.add_options()
         ("help", "Produce help message")
@@ -524,9 +465,8 @@ Engine<VertexType, EdgeType>::parseArgs(int argc, char *argv[]) {
  * Read in the initial features file.
  * 
  */
-template <typename VertexType, typename EdgeType>
 void
-Engine<VertexType, EdgeType>::readFeaturesFile(std::string& featuresFileName) {
+Engine::readFeaturesFile(std::string& featuresFileName) {
     std::ifstream infile(featuresFileName.c_str());
     if (!infile.good())
         printLog(nodeId, "Cannot open feature file: %s [Reason: %s]\n", featuresFileName.c_str(), std::strerror(errno));
@@ -570,9 +510,8 @@ Engine<VertexType, EdgeType>::readFeaturesFile(std::string& featuresFileName) {
  * Read in the partition file.
  * 
  */
-template <typename VertexType, typename EdgeType>
 void
-Engine<VertexType, EdgeType>::readPartsFile(std::string& partsFileName, Graph<VertexType, EdgeType>& lGraph) {
+Engine::readPartsFile(std::string& partsFileName, Graph& lGraph) {
     std::ifstream infile(partsFileName.c_str());
     if (!infile.good())
         printLog(nodeId, "Cannot open patition file: %s [Reason: %s]\n", partsFileName.c_str(), std::strerror(errno));
@@ -613,9 +552,8 @@ Engine<VertexType, EdgeType>::readPartsFile(std::string& partsFileName, Graph<Ve
  * Process an edge read from the binary snap file.
  * 
  */
-template <typename VertexType, typename EdgeType>
 void
-Engine<VertexType, EdgeType>::processEdge(IdType& from, IdType& to, Graph<VertexType, EdgeType>& lGraph, std::set<IdType> *inTopics, std::set<IdType> *oTopics) {
+Engine::processEdge(IdType& from, IdType& to, Graph& lGraph, std::set<IdType> *inTopics, std::set<IdType> *oTopics) {
     if (lGraph.getVertexPartitionId(from) == nodeId) {
         IdType lFromId = lGraph.globalToLocalId[from];
         IdType toId;
@@ -674,8 +612,8 @@ Engine<VertexType, EdgeType>::processEdge(IdType& from, IdType& to, Graph<Vertex
  */
 template<typename VertexType, typename EdgeType>
 void
-Engine<VertexType, EdgeType>::setEdgeNormalizations() {
-    for (Vertex<VertexType, EdgeType>& vertex : graph.getVertices()) {
+Engine::setEdgeNormalizations() {
+    for (Vertex& vertex : graph.getVertices()) {
         unsigned dstDeg = vertex.getNumInEdges() + 1;
         float dstNorm = std::pow(dstDeg, -.5);
         for (unsigned i = 0; i < vertex.getNumInEdges(); ++i) {
@@ -700,9 +638,8 @@ Engine<VertexType, EdgeType>::setEdgeNormalizations() {
  * Finds the in degree of all ghost vertices.
  * 
  */
-template <typename VertexType, typename EdgeType>
 void
-Engine<VertexType, EdgeType>::findGhostDegrees(std::string& fileName) {
+Engine::findGhostDegrees(std::string& fileName) {
     std::ifstream infile(fileName.c_str(), std::ios::binary);
     if (!infile.good())
         printLog(nodeId, "Cannot open BinarySnap file: %s\n", fileName.c_str());
@@ -730,9 +667,8 @@ Engine<VertexType, EdgeType>::findGhostDegrees(std::string& fileName) {
  * Read and parse the graph from the graph binary snap file.
  * 
  */
-template <typename VertexType, typename EdgeType>
 void
-Engine<VertexType, EdgeType>::readGraphBS(std::string& fileName, std::set<IdType>& inTopics, std::vector<IdType>& outTopics) {
+Engine::readGraphBS(std::string& fileName, std::set<IdType>& inTopics, std::vector<IdType>& outTopics) {
     
     // Read in the partition file.
     std::string partsFileName = fileName + PARTS_EXT;

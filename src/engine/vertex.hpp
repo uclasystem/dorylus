@@ -6,7 +6,7 @@
 #include <vector>
 #include <pthread.h>
 #include "../parallel/rwlock.hpp"
-#include "edge.cpp"
+#include "edge.hpp"
 
 
 /** Vertex type indicators. */
@@ -15,7 +15,6 @@ typedef char VertexLocationType;
 #define BOUNDARY_VERTEX 'B'
 
 
-template<typename VertexType, typename EdgeType>
 class Graph;
 
 
@@ -24,7 +23,6 @@ class Graph;
  * Class for a local vertex.
  * 
  */
-template<typename VertexType, typename EdgeType>
 class Vertex {
 
 public:
@@ -49,18 +47,18 @@ public:
 
     unsigned getNumInEdges();
     unsigned getNumOutEdges();
-    InEdge<EdgeType>& getInEdge(unsigned i);
-    void addInEdge(InEdge<EdgeType> edge);
-    OutEdge<EdgeType>& getOutEdge(unsigned i);
-    void addOutEdge(OutEdge<EdgeType> edge);
+    InEdge& getInEdge(unsigned i);
+    void addInEdge(InEdge edge);
+    OutEdge& getOutEdge(unsigned i);
+    void addOutEdge(OutEdge edge);
 
     VertexType getSourceVertexData(unsigned i);
     VertexType getSourceVertexDataAt(unsigned i, unsigned layer);
     unsigned getSourceVertexGlobalId(unsigned i);
     unsigned getDestVertexGlobalId(unsigned i);
 
-    Graph<VertexType, EdgeType> *getGraphPtr();
-    void setGraphPtr(Graph<VertexType, EdgeType> *ptr);
+    Graph *getGraphPtr();
+    void setGraphPtr(Graph *ptr);
 
     IdType getParent();
     void setParent(IdType p);
@@ -75,12 +73,12 @@ private:
     std::vector<VertexType> vertexData;     // Use a vector to make data in old iterations persistent.
     VertexLocationType vertexLocation;
 
-    std::vector< InEdge<EdgeType> > inEdges;
-    std::vector< OutEdge<EdgeType> > outEdges;
+    std::vector<InEdge> inEdges;
+    std::vector<OutEdge> outEdges;
 
     IdType parentId;
 
-    Graph<VertexType, EdgeType> *graph_ptr;
+    Graph *graph_ptr;
 
     RWLock lock;
 };
@@ -91,7 +89,6 @@ private:
  * Class for a ghost vertex.
  * 
  */
-template <typename VertexType>
 class GhostVertex {
 
 public:

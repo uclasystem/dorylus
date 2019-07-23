@@ -6,90 +6,76 @@
 #include "graph.hpp"
 
 
-template <typename VertexType, typename EdgeType>
-std::vector< Vertex<VertexType, EdgeType> >&
-Graph<VertexType, EdgeType>::getVertices() {
+std::vector<Vertex>&
+Graph::getVertices() {
     return vertices;
 }
 
-template <typename VertexType, typename EdgeType>
-Vertex<VertexType, EdgeType>&
-Graph<VertexType, EdgeType>::getVertex(IdType lvid) {
+Vertex&
+Graph::getVertex(IdType lvid) {
     assert(lvid < vertices.size());
     return vertices[lvid];
 }
 
-template <typename VertexType, typename EdgeType>
-Vertex<VertexType, EdgeType>&
-Graph<VertexType, EdgeType>::getVertexByGlobal(IdType gvid) {
+Vertex&
+Graph::getVertexByGlobal(IdType gvid) {
     assert(globalToLocalId.find(gvid) != globalToLocalId.end());
     return vertices[globalToLocalId[gvid]];
 }
 
-template <typename VertexType, typename EdgeType>
 bool
-Graph<VertexType, EdgeType>::containsVertex(IdType gvid) {
+Graph::containsVertex(IdType gvid) {
     return globalToLocalId.find(gvid) != globalToLocalId.end();
 }
 
-template <typename VertexType, typename EdgeType>
-std::map< IdType, GhostVertex<VertexType> >&
-Graph<VertexType, EdgeType>::getGhostVertices() {
+std::map<IdType, GhostVertex>&
+Graph::getGhostVertices() {
     return ghostVertices;
 }
 
-template <typename VertexType, typename EdgeType>
-GhostVertex<VertexType>&
-Graph<VertexType, EdgeType>::getGhostVertex(IdType gvid) {
+GhostVertex&
+Graph::getGhostVertex(IdType gvid) {
     assert(ghostVertices.find(gvid) != ghostVertices.end());
     return ghostVertices[gvid];
 }
 
-template <typename VertexType, typename EdgeType>
 bool
-Graph<VertexType, EdgeType>::containsGhostVertex(IdType gvid) {
+Graph::containsGhostVertex(IdType gvid) {
     return ghostVertices.find(gvid) != ghostVertices.end();
 }
 
-template <typename VertexType, typename EdgeType>
 IdType
-Graph<VertexType, EdgeType>::getNumLocalVertices() {
+Graph::getNumLocalVertices() {
     return numLocalVertices;
 }
 
-template <typename VertexType, typename EdgeType>
 void
-Graph<VertexType, EdgeType>::setNumLocalVertices(IdType num) {
+Graph::setNumLocalVertices(IdType num) {
     numLocalVertices = num;
 }
 
-template <typename VertexType, typename EdgeType>
 IdType
-Graph<VertexType, EdgeType>::getNumGlobalVertices() {
+Graph::getNumGlobalVertices() {
     return numGlobalVertices;
 }
 
-template <typename VertexType, typename EdgeType>
 void
-Graph<VertexType, EdgeType>::setNumGlobalVertices(IdType num) {
+Graph::setNumGlobalVertices(IdType num) {
     numGlobalVertices = num;
 }
 
-template <typename VertexType, typename EdgeType>
 unsigned long long
-Graph<VertexType, EdgeType>::getNumGlobalEdges() {
+Graph::getNumGlobalEdges() {
     return numGlobalEdges;
 }
 
-template <typename VertexType, typename EdgeType>
 short
-Graph<VertexType, EdgeType>::getVertexPartitionId(IdType vid) {
+Graph::getVertexPartitionId(IdType vid) {
     return vertexPartitionIds[vid];
 }
 
-template <typename VertexType, typename EdgeType>
 void
-Graph<VertexType, EdgeType>::appendVertexPartitionId(short pid) {
+Graph::appendVertexPartitionId(short pid) {
     vertexPartitionIds.push_back(pid);
 }
 
@@ -99,10 +85,9 @@ Graph<VertexType, EdgeType>::appendVertexPartitionId(short pid) {
  * Update a ghost vertex's value.
  * 
  */
-template <typename VertexType, typename EdgeType>
 void
-Graph<VertexType, EdgeType>::updateGhostVertex(IdType vId, VertexType value) {
-    typename std::map<IdType, GhostVertex<VertexType> >::iterator it = ghostVertices.find(vId);
+Graph::updateGhostVertex(IdType vId, VertexType value) {
+    typename std::map<IdType, GhostVertex>::iterator it = ghostVertices.find(vId);
     assert(it != ghostVertices.end());
     it->second.addData(value);
 }
@@ -116,16 +101,15 @@ Graph<VertexType, EdgeType>::updateGhostVertex(IdType vId, VertexType value) {
  *     3. Shrink the vertices and partitions vector.
  * 
  */
-template <typename VertexType, typename EdgeType>
 void
-Graph<VertexType, EdgeType>::compactGraph() {
+Graph::compactGraph() {
     vertexPartitionIds.shrink_to_fit();
     vertices.shrink_to_fit();
 
     for (IdType i = 0; i < vertices.size(); ++i)
         vertices[i].compactVertex();
 
-    typename std::map<IdType, GhostVertex<VertexType> >::iterator it;
+    typename std::map<IdType, GhostVertex>::iterator it;
     for (it = ghostVertices.begin(); it != ghostVertices.end(); ++it)
         it->second.compactVertex(); 
 }

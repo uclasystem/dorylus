@@ -2,7 +2,7 @@
 #include <fstream>
 #include <vector>
 #include <cassert>
-#include "../engine/engine.cpp"
+#include "../engine/engine.hpp"
 
 
 using namespace std;
@@ -11,19 +11,13 @@ using namespace std;
 char tmpDir[256];
 
 
-/** Define the edge & vertex type. */
-typedef float EType;
-typedef vector<FeatType> VType;
-
-
 /** Define the aggregate vertex program. */
-template<typename VertexType, typename EdgeType>
-class AggregateProgram : public VertexProgram<VertexType, EdgeType> {
+class AggregateProgram : public VertexProgram {
 
 public:
 
     // Define my own update function that to be called in each iteration.
-    void update(Vertex<VertexType, EdgeType>& vertex, unsigned layer) {
+    void update(Vertex& vertex, unsigned layer) {
         VType curr = vertex.data();
 
         for (unsigned i = 0; i < vertex.getNumInEdges(); ++i) {
@@ -47,8 +41,7 @@ private:
 
 
 /** Define the writer vertex program for output. */
-template<typename VertexType, typename EdgeType>
-class WriterProgram : public VertexProgram<VertexType, EdgeType> {
+class WriterProgram : public VertexProgram {
 
 private:
 
@@ -67,7 +60,7 @@ public:
     }
 
     // Define the output generated for each vertex.
-    void processVertex(Vertex<VertexType, EdgeType>& vertex) {
+    void processVertex(Vertex& vertex) {
         std::vector<VType>& data_all = vertex.dataAll();
         outFile << vertex.getGlobalId() << ": ";
         for (int i = 0; i < data_all.size(); ++i) {
@@ -94,18 +87,18 @@ main(int argc, char *argv[]) {
 
     // Initialize the engine.
     VType defaultVertex = vector<FeatType>(2, 1);
-    Engine<VType, EType>::init(argc, argv, defaultVertex);
+    Engine::init(argc, argv, defaultVertex);
 
     // Start one run of the engine, on the aggregate program.
-    AggregateProgram<VType, EType> aggregateProgram;
-    Engine<VType, EType>::run(&aggregateProgram, true);
+    AggregateProgram aggregateProgram;
+    Engine::run(&aggregateProgram, true);
 
     // Procude the output files using the writer program.
-    WriterProgram<VType, EType> writerProgram;
-    Engine<VType, EType>::processAll(&writerProgram);
+    WriterProgram writerProgram;
+    Engine::processAll(&writerProgram);
 
     // Destroy the engine.
-    Engine<VType, EType>::destroy();
+    Engine::destroy();
 
     return 0;
 }

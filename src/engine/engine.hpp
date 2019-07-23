@@ -50,7 +50,6 @@
 
 
 /** Binary snap file header struct. */
-template <typename VertexType>
 struct BSHeaderType {
     int sizeOfVertexType;
     VertexType numVertices;
@@ -63,21 +62,20 @@ struct BSHeaderType {
  * Class of an ASPIRE engine executing on a node.
  * 
  */
-template <typename VertexType, typename EdgeType>
 class Engine {
 
 public:
 
     // Public APIs for benchmarks.
     static void init(int argc, char *argv[], VertexType dVertex = VertexType(), EdgeType dEdge = EdgeType(), EdgeType (*eWeight) (IdType, IdType) = NULL);
-    static void run(VertexProgram<VertexType, EdgeType> *vProgram, bool printEM);
-    static void processAll(VertexProgram<VertexType, EdgeType> *vProgram);
+    static void run(VertexProgram *vProgram, bool printEM);
+    static void processAll(VertexProgram *vProgram);
     static void destroy();
     static bool master();
 
 private:
 
-    static Graph<VertexType, EdgeType> graph;
+    static Graph graph;
 
     static unsigned dThreads;
     static ThreadPool *dataPool;
@@ -85,7 +83,7 @@ private:
     static unsigned cThreads;
     static ThreadPool *computePool;
 
-    static VertexProgram<VertexType, EdgeType> *vertexProgram;
+    static VertexProgram *vertexProgram;
     static EdgeType (*edgeWeight) (IdType, IdType);
 
     static IdType currId;
@@ -125,8 +123,8 @@ private:
     // For initialization.
     static void parseArgs(int argc, char* argv[]);
     static void readFeaturesFile(std::string& featuresFileName);
-    static void readPartsFile(std::string& partsFileName, Graph<VertexType, EdgeType>& lGraph);
-    static void processEdge(IdType& from, IdType& to, Graph<VertexType, EdgeType>& lGraph, std::set<IdType>* inTopics, std::set<IdType>* oTopics); 
+    static void readPartsFile(std::string& partsFileName, Graph& lGraph);
+    static void processEdge(IdType& from, IdType& to, Graph& lGraph, std::set<IdType>* inTopics, std::set<IdType>* oTopics); 
     static void findGhostDegrees(std::string& fileName);
     static void setEdgeNormalizations();
     static void readGraphBS(std::string& fileName, std::set<IdType>& inTopics, std::vector<IdType>& outTopics);

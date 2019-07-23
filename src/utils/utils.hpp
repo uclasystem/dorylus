@@ -9,6 +9,15 @@
 #include <typeinfo>
 #include <climits>
 #include <cstdarg>
+#include <vector>
+
+
+/** Default vertex ID type and features type. */
+typedef unsigned IdType;
+typedef float FeatType;
+typedef float EdgeType;
+typedef vector<FeatType> VertexType;
+#define MAX_IDTYPE UINT_MAX
 
 
 #define INTERFACE "eth0" 
@@ -19,12 +28,6 @@
 #else
 #define efprintf(ofile, fmt, ...) fprintf(ofile, fmt, __VA_ARGS__);
 #endif
-
-
-/** Default vertex ID type and features type. */
-typedef unsigned IdType;
-typedef double FeatType;
-#define MAX_IDTYPE UINT_MAX
 
 
 extern std::map<size_t, std::string> typeToFormatSpecifier;

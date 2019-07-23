@@ -16,7 +16,6 @@ typedef char EdgeLocationType;
  * Base class of a directed edge in the graph. Inherited by in / out-coming edge.
  * 
  */
-template<typename EdgeType>
 class Edge {
 
 public:
@@ -42,8 +41,7 @@ protected:
  * Class of an incoming edge.
  * 
  */
-template<typename EdgeType>
-class InEdge: public Edge<EdgeType> {
+class InEdge: public Edge {
 
 public:
 
@@ -59,8 +57,7 @@ public:
  * Class of an outcoming edge.
  * 
  */
-template<typename EdgeType>
-class OutEdge: public Edge<EdgeType> {
+class OutEdge: public Edge {
 
 public:
 
