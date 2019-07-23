@@ -1,8 +1,9 @@
-# GNN-ASPIRE
+# GNN-LAMBDA
 
-Push-based ASPIRE implementation. This project is a cleaned up version of gift (forked on July 06, 2016). Implemented streaming-like processing as in Tornado (SIGMOD'16) paper.
+Originally is a push-based ASPIRE implementation. This project is a cleaned up version of gift (forked on July 06, 2016). Implemented streaming-like processing as in Tornado (SIGMOD'16) paper. Now the main logic of the engine has been completely simplified, and
+we are trying to integrate it with AWS Lambda threads. Ultimate goal is to achieve "*Affordable AI*" using the cheap scalability of serverless computing.
 
-Build the following dependencies and ASPIRE on **ALL** your AWS-EC2 instances (Ubuntu seems to be the easiest) under the **same** location.
+Build the following dependencies and the system on **ALL** your AWS-EC2 instances (Ubuntu seems to be the easiest) under the **same** location.
 
 ## Dependences
 
@@ -19,11 +20,11 @@ Make sure you have installed the following packages by `apt`:
 - `ant`
 - `openjdk-8-jdk`
 
-Assume the ASPIRE directory is `~/aspire-streaming/`. Create a folder called `installs` in this directory where we put dependency source codes, and then make a `out` folder under `installs` to serve as ZeroMQ & Metis install location.
+Assume the system directory is `~/gnn-lambda/`. Create a folder called `installs` in this directory where we put dependency source codes, and then make a `out` folder under `installs` to serve as ZeroMQ & Metis install location.
 
 Folder tree should look like:
 
-    /home/<USER>/aspire-streaming/
+    /home/<USER>/gnn-lambda/
         |- installs/
             |- zeromq-x.x.x/
             |- ...
@@ -50,7 +51,7 @@ Get ZeroMQ 4.1.4 from: [https://archive.org/download/zeromq_4.1.4/zeromq-4.1.4.t
 
 Go inside the `zeromq-4.1.4/` directory and compile it from source:
 
-    $ ./configure --prefix=/home/<USER>/aspire-streaming/installs/out --with-libsodium=no
+    $ ./configure --prefix=/home/<USER>/gnn-lambda/installs/out --with-libsodium=no
     $ make install
     $ sudo ldconfig
 
@@ -82,14 +83,14 @@ Get Metis 5.1.0 from: [http://glaros.dtc.umn.edu/gkhome/fetch/sw/metis/metis-5.1
 
 Go inside the `metis-5.1.0/` directory and compile it from source:
 
-    $ make config prefix=/home/<USER>/aspire-streaming/installs/out
+    $ make config prefix=/home/<USER>/gnn-lambda/installs/out
     $ make install
 
 ## Building ASPIRE
 
 **Ensure all dependencies have been installed correctly** before building ASPIRE.
 
-Go to the `aspire-streaming/build` directory, then run the following for a release build (`-O3`):
+Go to the `gnn-lambda/build` directory, then run the following for a release build (`-O3`):
 
     $ make mode=release [Benchmark-Name]  # Specify benchmark name for individual build, OR omit it to build all benchs
 
