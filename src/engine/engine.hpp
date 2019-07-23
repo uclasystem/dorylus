@@ -124,7 +124,7 @@ private:
 
     // For initialization.
     static void parseArgs(int argc, char* argv[]);
-    static void readFeaturesFile(std::string& fileName);
+    static void readFeaturesFile(const std::string& featuresFileName);
     static void readPartsFile(std::string& partsFileName, Graph<VertexType, EdgeType>& lGraph);
     static void processEdge(IdType& from, IdType& to, Graph<VertexType, EdgeType>& lGraph, std::set<IdType>* inTopics, std::set<IdType>* oTopics); 
     static void findGhostDegrees(std::string& fileName);
