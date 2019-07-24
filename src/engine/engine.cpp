@@ -546,7 +546,7 @@ Engine::aggregateFromNeighbors(IdType lvid) {
 
     // Write the results to the correct position inside serialization dataBuf area.
     memcpy(vertexDataBufPtr(lvid), currDataBuf, numFeats * sizeof(FeatType));
-    printLog(nodeId, "<<<>>> Aggregated %u, now its buffer contains %u, %u, %u\n", lvid, *((FeatType *) vertexDataBufPtr(lvid)), *((FeatType *) vertexDataBufPtr(lvid) + 1), *((FeatType *) vertexDataBufPtr(lvid) + 2));
+    printLog(nodeId, "<<<>>> Aggregated %u, now its buffer contains %f, %f, %f\n", lvid, *((FeatType *) vertexDataBufPtr(lvid)), *((FeatType *) vertexDataBufPtr(lvid) + 1), *((FeatType *) vertexDataBufPtr(lvid) + 2));
 }
 
 
