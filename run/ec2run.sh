@@ -133,19 +133,19 @@ for i in $(seq 1 ${NDS}); do
   ${DSH} -M -m ${dshnodes[$i]} -c "echo ${nodes[$i]} > ${TMPDIR}/myip";
 done;
 
-rm ${ASPIREDIR}/config/hostfile;
-rm ${ASPIREDIR}/config/zkhostfile;
-echo -e "${nodes[1]}\tnode1\tmaster" > ${ASPIREDIR}/config/hostfile;
+rm -f ${CONFIGDIR}/hostfile;
+rm -f ${CONFIGDIR}/zkhostfile;
+echo -e "${nodes[1]}\tnode1\tmaster" > ${CONFIGDIR}/hostfile;
 for i in $(seq 2 ${NDS}); do
-  echo -e "${nodes[$i]}\tnode$i\tworker" >> ${ASPIREDIR}/config/hostfile;
+  echo -e "${nodes[$i]}\tnode$i\tworker" >> ${CONFIGDIR}/hostfile;
 done;
 
 for i in $(seq 1 ${ZOONDS}); do
-  echo -e "${nodes[$i]}\t2180" >> ${ASPIREDIR}/config/zkhostfile;
+  echo -e "${nodes[$i]}\t2180" >> ${CONFIGDIR}/zkhostfile;
 done;
 
 for i in $(seq 1 ${NDS}); do
-  scp -q ${ASPIREDIR}/config/hostfile ${ASPIREDIR}/config/zkhostfile ${dshnodes[$i]}:${ASPIREDIR}/config/;
+  scp -q ${CONFIGDIR}/hostfile ${CONFIGDIR}/zkhostfile ${dshnodes[$i]}:${CONFIGDIR}/;
 done;
 
 # Loop over desired number of runs
