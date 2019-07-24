@@ -7,11 +7,9 @@
 ##	  build and run scripts
 
 #
-# Usage: ./b+r [Dataset] [Feature-File] [Layer-File]
+# Usage: ./b+r [Dataset]
 #
 #   Dataset:        small(*), fb
-#   Feature-File:   (*), path_to_file
-#   Layer-File:     (*), path_to_file
 #
 # "(*)" means default.
 #

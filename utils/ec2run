@@ -32,16 +32,9 @@ case $1 in
         ;;
 esac
 
-if [ -z $2 ]; then
-    prompt "Using default initial features file: \"parts_x/../features\"."
-else
-    prompt "Initial features file to be loaded: \"$2\"."
-fi
+prompt "Using features file: \"parts_x/../features\"."
 
-if [ -z $3 ]; then
-    prompt "Using default layer configuration file: \"parts_x/../layerconfig\"."
-else
-    prompt "Layer configuration file to be loaded: \"$2\"."
-fi
-        
-./run/ec2run.sh $1 $2 $3
+prompt "Using layer configuration file: \"parts_x/../layerconfig\"."
+
+     
+./run/ec2run.sh $1

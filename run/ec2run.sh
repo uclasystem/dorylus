@@ -122,18 +122,10 @@ case $1 in
 esac
 
 # Feature file
-if [ -z $2 ]; then
-  FEATUREFILE=$( dirname ${INPUT_LOC} )/../features;
-else
-  FEATUREFILE=$2;
-fi
+FEATUREFILE=$( dirname ${INPUT_LOC} )/../features;
 
 # Layer configuration file
-if [ -z $3 ]; then
-  LAYERFILE=$( dirname ${INPUT_LOC} )/../layerconfig;
-else
-  LAYERFILE=$3;
-fi
+LAYERFILE=$( dirname ${INPUT_LOC} )/../layerconfig;
 
 i=0
 for i in $(seq 1 ${NDS}); do
