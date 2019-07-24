@@ -12,3 +12,4 @@ rm -f /home/${USER}/logfiles/*
 rm -rf ${ASP_DIR}/build/outputs/*
 echo "1" > ${ASP_DIR}/run/gvid
 
+dsh -M -f ${ASP_DIR}/run/dshmachines -c "rm -f ${ASP_DIR}/installs/zookeeper-release-3.4.6/zookeeper.out"
