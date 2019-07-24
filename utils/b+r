@@ -51,11 +51,11 @@ esac
 
 cd ..
 
-if [ -e $2 ]; then
-    prompt "Initial features file to be loaded: \"$2\""
-    ./run/ec2run.sh $1 $2
-else
+if [ -z $2 ]; then
     prompt "Using default initial features file: \"parts_x/../features\""
     ./run/ec2run.sh $1
+else
+    prompt "Initial features file to be loaded: \"$2\""
+    ./run/ec2run.sh $1 $2
 fi
         
