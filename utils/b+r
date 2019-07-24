@@ -34,4 +34,4 @@ fi
 
 header "RUNNING"
 
-./run $1 $2 $3
+./ec2run $1 $2 $3
