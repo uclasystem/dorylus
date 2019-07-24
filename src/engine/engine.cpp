@@ -31,6 +31,7 @@ unsigned Engine::numNodes;
 std::map<IdType, unsigned> Engine::recvWaiters;
 Barrier Engine::barComp;
 std::vector<unsigned> Engine::layerConfig;
+std::vector<unsigned> Engine::layerConfigPrefixSum;
 unsigned Engine::numLayers = 0;
 FeatType *Engine::verticesDataAll = NULL;
 FeatType *Engine::ghostVerticesDataAll = NULL;
