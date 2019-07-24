@@ -65,7 +65,7 @@ class Engine {
 public:
 
     // Public APIs for benchmarks.
-    static void init(int argc, char *argv[], std::vector<unsigned>& _layerConfig);
+    static void init(int argc, char *argv[]);
     static void run();
     static void output();
     static void destroy();
@@ -105,6 +105,7 @@ private:
     static std::string graphFile;
     static std::string featuresFile;
     static std::string outFile;
+    static std::string layerConfigFile;
 
     static unsigned nodeId;
     static unsigned numNodes;
@@ -142,6 +143,7 @@ private:
 
     // For initialization.
     static void parseArgs(int argc, char* argv[]);
+    static void readLayerConfigFile(std::string& layerConfigFileName);
     static void readFeaturesFile(std::string& featuresFileName);
     static void readPartsFile(std::string& partsFileName, Graph& lGraph);
     static void processEdge(IdType& from, IdType& to, Graph& lGraph, std::set<IdType>* inTopics, std::set<IdType>* oTopics); 

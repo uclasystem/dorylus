@@ -4,11 +4,11 @@
 # Run script. Make sure to set `dshmachines` and `zoo.basic` file in advance before
 # running this script.
 #
-# Usage: ./ec2run.sh [Bench] [Dataset] [Feature-File]
+# Usage: ./ec2run.sh [Dataset] [Feature-File] [Layer-File]
 #
-#   Bench:          agg(*)
 #   Dataset:        small(*), fb
 #   Feature-File:   (*), path_to_file 
+#   Layer-File:     (*), path_to_file
 #
 # "(*)" means default.
 #
@@ -16,7 +16,7 @@
 
 # Helper function for header & result displaying
 function header {
-  echo -e "\e[33;1m|---- ${1} ----> \e[0m"
+  echo -e "\e[33;1m${1}\e[0m"
 }
 
 
@@ -108,7 +108,7 @@ done;
 
 header "Starting the system..."
 
-# Datasets
+# Dataset
 case $1 in
 	"small")
 		INPUT_LOC=../inputs/data/parts_${NDS}/small.graph.bsnap; IK=SM;
@@ -121,11 +121,18 @@ case $1 in
 		;;
 esac
 
-# Feature files
+# Feature file
 if [ -z $2 ]; then
   FEATUREFILE=$( dirname ${INPUT_LOC} )/../features;
 else
   FEATUREFILE=$2;
+fi
+
+# Layer configuration file
+if [ -z $3 ]; then
+  LAYERFILE=$( dirname ${INPUT_LOC} )/../layerconfig;
+else
+  LAYERFILE=$3;
 fi
 
 i=0
@@ -161,13 +168,13 @@ for dp in {1..1}; do
   NGVID=$((GVID + 1));
   echo ${NGVID} > gvid;
 
-  header "Running GVID #: ${GVID}"
+  header "Running GVID [ # ${GVID} ]..."
 
   LOGFILE=${LOGFILEDIR}/${GVID}.${IK}.out
   echo "This is the log for round: GVID = ${GVID}" >> ${LOGFILE} 2&>1;
 
-  echo "DSH command (from ${ASPIREDIR}/build): ./gnn-lambda.bin --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --undirected ${UNDIRECTED} --tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS}";
-  ${DSH} -M -f ${DSHFILE} -c "cd ${ASPIREDIR}/build && ./gnn-lambda.bin --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --undirected ${UNDIRECTED} --tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS}" 1> /dev/null 2>> ${LOGFILE};
+  echo "DSH command (from ${ASPIREDIR}/build): ./gnn-lambda.bin --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --layerfile ${LAYERFILE} --undirected ${UNDIRECTED} --tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS}";
+  ${DSH} -M -f ${DSHFILE} -c "cd ${ASPIREDIR}/build && ./gnn-lambda.bin --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --layerfile ${LAYERFILE} --undirected ${UNDIRECTED} --tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS}" 1> /dev/null 2>> ${LOGFILE};
 
   DOPDIR=${ASPIREDIR}/build/outputs/${GVID}.${IK};
   mkdir -p ${DOPDIR};
@@ -194,7 +201,7 @@ echo "Check the running logs under \"~/logfiles/\" folder."
 
 # Display the result
 if [ -e ${DOPDIR}/output_0 ]; then
-  echo -e "\e[92;1mThis round of execution seems successful, congrats ;) ${1} \e[0m"
+  echo -e "\e[92;1mThis round of execution seems successful, congrats ;)\e[0m"
 else
-  echo -e "\e[91;1mExecution fails (at least on this node), check the log file! ${1} \e[0m"
+  echo -e "\e[91;1mExecution fails (at least on this node), check the log file!\e[0m"
 fi

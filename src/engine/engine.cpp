@@ -52,7 +52,7 @@ double Engine::timeInit = 0.0;
  * 
  */
 void
-Engine::init(int argc, char *argv[], std::vector<unsigned>& _layerConfig) {
+Engine::init(int argc, char *argv[]) {
     printLog(nodeId, "Engine starts initialization...\n");
     timeInit = -getTimer();
 
@@ -67,8 +67,7 @@ Engine::init(int argc, char *argv[], std::vector<unsigned>& _layerConfig) {
     outFile += std::to_string(nodeId);
 
     // Set number of layers and number of features in each layer. Also store the prefix sum of config for offset querying use.
-    assert(_layerConfig.size() > 1);
-    layerConfig = _layerConfig;
+    readLayerConfigFile(layerConfigFile);
     numLayers = layerConfig.size() - 1;
 
     unsigned configSum = 0;
@@ -589,6 +588,7 @@ Engine::parseArgs(int argc, char *argv[]) {
         ("config", boost::program_options::value<std::string>()->default_value(std::string(DEFAULT_CONFIG_FILE), DEFAULT_CONFIG_FILE), "Config file")
         ("graphfile", boost::program_options::value<std::string>(), "Graph file")
         ("featuresfile", boost::program_options::value<std::string>(), "Features file")
+        ("layerfile", boost::program_options::value<std::string>(), "Layer configuration file")
 
         ("tmpdir", boost::program_options::value<std::string>(), "Temporary directory")
 
@@ -630,6 +630,9 @@ Engine::parseArgs(int argc, char *argv[]) {
     assert(vm.count("featuresfile"));
     featuresFile = vm["featuresfile"].as<std::string>();
 
+    assert(vm.count("layerfile"));
+    layerConfigFile = vm["layerfile"].as<std::string>();
+
     assert(vm.count("tmpdir"));
     outFile = vm["tmpdir"].as<std::string>() + "/output_";  // Still needs to append the node id, after node manager set up.
 
@@ -648,6 +651,33 @@ Engine::parseArgs(int argc, char *argv[]) {
                      "featuresFile = %s, undirected = %s, data port set -> %u, control port set -> %u\n",
                      cFile.c_str(), dThreads, cThreads, graphFile.c_str(), featuresFile.c_str(),
                      undirected ? "true" : "false", data_port, control_port);
+}
+
+
+/**
+ *
+ * Read in the layer configuration file.
+ * 
+ */
+void
+Engine::readLayerConfigFile(std::string& layerConfigFileName) {
+    std::ifstream infile(layerConfigFileName.c_str());
+    if (!infile.good())
+        printLog(nodeId, "Cannot open layer configuration file: %s [Reason: %s]\n", layerConfigFileName.c_str(), std::strerror(errno));
+
+    assert(infile.good());
+
+    // Loop through each line.
+    std::string line;
+    while (!infile.eof()) {
+        std::getline(infile, line);
+        boost::algorithm::trim(line);
+
+        if (line.length() > 0)
+            layerConfig.push_back(std::stoul(line));
+    }
+
+    assert(layerConfig.size() > 1);
 }
 
 
