@@ -1,0 +1,36 @@
+#! /bin/bash
+
+## RUN ##
+## Run the "ec2run.sh" script with prompts.
+
+function prompt {
+    echo -e "\e[33;1m${1}\e[0m"
+}
+
+cd ../..
+
+case $1 in
+    "small")
+        prompt "Running on dataset \"small\"."
+        ;;
+    "fb")
+        prompt "Running on dataset \"fb\"."
+        ;;
+    *)
+        prompt "Running on the default dataset (\"small\")."
+        ;;
+esac
+
+if [ -z $2 ]; then
+    prompt "Using default initial features file: \"parts_x/../features\"."
+else
+    prompt "Initial features file to be loaded: \"$2\"."
+fi
+
+if [ -z $3 ]; then
+    prompt "Using default layer configuration file: \"parts_x/../layerconfig\"."
+else
+    prompt "Layer configuration file to be loaded: \"$2\"."
+fi
+        
+./run/ec2run.sh $1 $2 $3
