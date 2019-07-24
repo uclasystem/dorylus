@@ -14,6 +14,7 @@
 
 
 /** Extern class-wide fields. */
+<<<<<<< HEAD
 Graph Engine::graph;
 ThreadPool* Engine::dataPool = NULL;
 unsigned Engine::dThreads = NUM_DATA_THREADS;
@@ -45,6 +46,88 @@ bool Engine::undirected = false;
 bool Engine::halt = false;
 double Engine::timeProcess = 0.0;
 double Engine::timeInit = 0.0;
+=======
+template <typename VertexType, typename EdgeType>
+Graph<VertexType, EdgeType> Engine<VertexType, EdgeType>::graph;
+
+template <typename VertexType, typename EdgeType>
+ThreadPool* Engine<VertexType, EdgeType>::dataPool = NULL;
+
+template <typename VertexType, typename EdgeType>
+unsigned Engine<VertexType, EdgeType>::dThreads = NUM_DATA_THREADS;
+
+template <typename VertexType, typename EdgeType>
+ThreadPool* Engine<VertexType, EdgeType>::computePool = NULL;
+
+template <typename VertexType, typename EdgeType>
+unsigned Engine<VertexType, EdgeType>::cThreads = NUM_COMP_THREADS;
+
+template <typename VertexType, typename EdgeType>
+std::string Engine<VertexType, EdgeType>::graphFile;
+
+template <typename VertexType, typename EdgeType>
+std::string Engine<VertexType, EdgeType>::featuresFile;
+
+template <typename VertexType, typename EdgeType>
+std::string Engine<VertexType, EdgeType>::coordserverIp;
+
+template <typename VertexType, typename EdgeType>
+std::string Engine<VertexType, EdgeType>::coordserverPort;
+
+template <typename VertexType, typename EdgeType>
+VertexProgram<VertexType, EdgeType>* Engine<VertexType, EdgeType>::vertexProgram = NULL;
+
+template <typename VertexType, typename EdgeType>
+EdgeType (*Engine<VertexType, EdgeType>::edgeWeight) (IdType, IdType) = NULL;
+
+template <typename VertexType, typename EdgeType>
+IdType Engine<VertexType, EdgeType>::currId = 0;
+
+template <typename VertexType, typename EdgeType>
+Lock Engine<VertexType, EdgeType>::lockCurrId;
+
+template <typename VertexType, typename EdgeType>
+Lock Engine<VertexType, EdgeType>::lockRecvWaiters;
+
+template <typename VertexType, typename EdgeType>
+Cond Engine<VertexType, EdgeType>::condRecvWaitersEmpty;
+
+template <typename VertexType, typename EdgeType>
+Lock Engine<VertexType, EdgeType>::lockHalt;
+
+template <typename VertexType, typename EdgeType>
+unsigned Engine<VertexType, EdgeType>::nodeId;
+
+template <typename VertexType, typename EdgeType>
+unsigned Engine<VertexType, EdgeType>::numNodes;
+
+template <typename VertexType, typename EdgeType>
+std::map<IdType, unsigned> Engine<VertexType, EdgeType>::recvWaiters;
+
+template <typename VertexType, typename EdgeType>
+Barrier Engine<VertexType, EdgeType>::barComp;
+
+template <typename VertexType, typename EdgeType>
+VertexType Engine<VertexType, EdgeType>::defaultVertex;
+
+template <typename VertexType, typename EdgeType>
+EdgeType Engine<VertexType, EdgeType>::defaultEdge;
+
+template <typename VertexType, typename EdgeType>
+unsigned Engine<VertexType, EdgeType>::iteration = 0;
+
+template <typename VertexType, typename EdgeType>
+bool Engine<VertexType, EdgeType>::undirected = false;
+
+template <typename VertexType, typename EdgeType>
+bool Engine<VertexType, EdgeType>::halt = false;
+
+template <typename VertexType, typename EdgeType>
+double Engine<VertexType, EdgeType>::timeProcess = 0.0;
+
+template <typename VertexType, typename EdgeType>
+double Engine<VertexType, EdgeType>::timeInit = 0.0;
+>>>>>>> 829cabc... Added options for communication with coordination server
 
 
 /**
@@ -592,11 +675,24 @@ Engine::parseArgs(int argc, char *argv[]) {
         ("help", "Produce help message")
 
         ("config", boost::program_options::value<std::string>()->default_value(std::string(DEFAULT_CONFIG_FILE), DEFAULT_CONFIG_FILE), "Config file")
-        ("graphfile", boost::program_options::value<std::string>(), "Graph file")
-        ("featuresfile", boost::program_options::value<std::string>(), "Features file")
-        ("layerfile", boost::program_options::value<std::string>(), "Layer configuration file")
 
-        ("tmpdir", boost::program_options::value<std::string>(), "Temporary directory")
+        ("graphfile", boost::program_options::value<std::string>(),
+	 "Path to the binary file contatining the edge list")
+
+        ("featuresfile", boost::program_options::value<std::string>(),
+	 "Path to the file containing the vertex features")
+
+        ("layerfile", boost::program_options::value<std::string>(),
+	 "Layer configuration file")
+
+        ("tmpdir", boost::program_options::value<std::string>(),
+	 "Temporary directory")
+
+	("coordserverip", boost::program_options::value<std::string>(),
+	 "The private IP address of the coordination server")
+
+	("coordserverport", boost::program_options::value<std::string>(),
+	 "The port of the listener on the coordination server")
 
         ("undirected", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Graph type")
 
@@ -641,6 +737,12 @@ Engine::parseArgs(int argc, char *argv[]) {
 
     assert(vm.count("tmpdir"));
     outFile = vm["tmpdir"].as<std::string>() + "/output_";  // Still needs to append the node id, after node manager set up.
+
+    assert(vm.count("coordserverip"));
+    coordserverIp = vm["coordserverip"].as<std::string>();
+
+    assert(vm.count("coordserverport"));
+    coordserverPort = vm["coordserverport"].as<std::string>();
 
     assert(vm.count("undirected"));
     undirected = (vm["undirected"].as<unsigned>() == 0) ? false : true;

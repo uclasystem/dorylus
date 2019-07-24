@@ -156,6 +156,11 @@ for i in $(seq 1 ${NDS}); do
   scp -q ${CONFIGDIR}/hostfile ${CONFIGDIR}/zkhostfile ${dshnodes[$i]}:${CONFIGDIR}/;
 done;
 
+COORDSERVER_CONF=${RUNDIR}/cserverinfo
+CSERVER_IP=$( cat ${COORDSERVER_CONF} | awk '{print $1}' )
+CSERVER_PORT=$( cat ${COORDSERVER_CONF} | awk '{print $2}' )
+cat ${COORDSERVER_CONF}
+
 # Loop over desired number of runs
 for dp in {1..1}; do
 
@@ -174,8 +179,8 @@ for dp in {1..1}; do
   LOGFILE=${LOGFILEDIR}/${GVID}.${IK}.out
   echo "This is the log for round: GVID = ${GVID}" >> ${LOGFILE};
 
-  echo "DSH command (from ${ASPIREDIR}/build): ./gnn-lambda.bin --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --layerfile ${LAYERFILE} --undirected ${UNDIRECTED} --tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS}";
-  ${DSH} -M -f ${DSHFILE} -c "cd ${ASPIREDIR}/build && ./gnn-lambda.bin --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --layerfile ${LAYERFILE} --undirected ${UNDIRECTED} --tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS}" 1> /dev/null 2>> ${LOGFILE};
+  echo "DSH command (from ${ASPIREDIR}/build): ./${BENCHMARK} --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --coordserverip ${CSERVER_IP} --coordserverport ${CSERVER_PORT} --undirected ${UNDIRECTED} --bm-tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS}";
+  ${DSH} -M -f ${DSHFILE} -c "cd ${ASPIREDIR}/build && ./${BENCHMARK} --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --coordserverip ${CSERVER_IP} --coordserverport ${CSERVER_PORT} --undirected ${UNDIRECTED} --bm-tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS}" 1> /dev/null 2>> ${LOGFILE};
 
   DOPDIR=${ASPIREDIR}/build/outputs/${GVID}.${IK};
   mkdir -p ${DOPDIR};
