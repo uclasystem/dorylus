@@ -132,6 +132,8 @@ private:
     static FeatType *vertexDataBufPtr(IdType lvid);
     static FeatType *ghostVertexDataBufPtr(IdType lvid);
 
+    static void aggregateFromNeighbors(IdType lvid);
+
     // For initialization.
     static void parseArgs(int argc, char* argv[]);
     static void readFeaturesFile(std::string& featuresFileName);
