@@ -14,7 +14,6 @@
 
 
 /** Extern class-wide fields. */
-<<<<<<< HEAD
 Graph Engine::graph;
 ThreadPool* Engine::dataPool = NULL;
 unsigned Engine::dThreads = NUM_DATA_THREADS;
@@ -24,6 +23,8 @@ std::string Engine::graphFile;
 std::string Engine::featuresFile;
 std::string Engine::outFile;
 std::string Engine::layerConfigFile;
+std::string Engine::coordserverIp;
+std::string Engine::coordserverPort;
 IdType Engine::currId = 0;
 Lock Engine::lockCurrId;
 Lock Engine::lockRecvWaiters;
@@ -46,89 +47,6 @@ bool Engine::undirected = false;
 bool Engine::halt = false;
 double Engine::timeProcess = 0.0;
 double Engine::timeInit = 0.0;
-=======
-template <typename VertexType, typename EdgeType>
-Graph<VertexType, EdgeType> Engine<VertexType, EdgeType>::graph;
-
-template <typename VertexType, typename EdgeType>
-ThreadPool* Engine<VertexType, EdgeType>::dataPool = NULL;
-
-template <typename VertexType, typename EdgeType>
-unsigned Engine<VertexType, EdgeType>::dThreads = NUM_DATA_THREADS;
-
-template <typename VertexType, typename EdgeType>
-ThreadPool* Engine<VertexType, EdgeType>::computePool = NULL;
-
-template <typename VertexType, typename EdgeType>
-unsigned Engine<VertexType, EdgeType>::cThreads = NUM_COMP_THREADS;
-
-template <typename VertexType, typename EdgeType>
-std::string Engine<VertexType, EdgeType>::graphFile;
-
-template <typename VertexType, typename EdgeType>
-std::string Engine<VertexType, EdgeType>::featuresFile;
-
-template <typename VertexType, typename EdgeType>
-std::string Engine<VertexType, EdgeType>::coordserverIp;
-
-template <typename VertexType, typename EdgeType>
-std::string Engine<VertexType, EdgeType>::coordserverPort;
-
-template <typename VertexType, typename EdgeType>
-VertexProgram<VertexType, EdgeType>* Engine<VertexType, EdgeType>::vertexProgram = NULL;
-
-template <typename VertexType, typename EdgeType>
-EdgeType (*Engine<VertexType, EdgeType>::edgeWeight) (IdType, IdType) = NULL;
-
-template <typename VertexType, typename EdgeType>
-IdType Engine<VertexType, EdgeType>::currId = 0;
-
-template <typename VertexType, typename EdgeType>
-Lock Engine<VertexType, EdgeType>::lockCurrId;
-
-template <typename VertexType, typename EdgeType>
-Lock Engine<VertexType, EdgeType>::lockRecvWaiters;
-
-template <typename VertexType, typename EdgeType>
-Cond Engine<VertexType, EdgeType>::condRecvWaitersEmpty;
-
-template <typename VertexType, typename EdgeType>
-Lock Engine<VertexType, EdgeType>::lockHalt;
-
-template <typename VertexType, typename EdgeType>
-unsigned Engine<VertexType, EdgeType>::nodeId;
-
-template <typename VertexType, typename EdgeType>
-unsigned Engine<VertexType, EdgeType>::numNodes;
-
-template <typename VertexType, typename EdgeType>
-std::map<IdType, unsigned> Engine<VertexType, EdgeType>::recvWaiters;
-
-template <typename VertexType, typename EdgeType>
-Barrier Engine<VertexType, EdgeType>::barComp;
-
-template <typename VertexType, typename EdgeType>
-VertexType Engine<VertexType, EdgeType>::defaultVertex;
-
-template <typename VertexType, typename EdgeType>
-EdgeType Engine<VertexType, EdgeType>::defaultEdge;
-
-template <typename VertexType, typename EdgeType>
-unsigned Engine<VertexType, EdgeType>::iteration = 0;
-
-template <typename VertexType, typename EdgeType>
-bool Engine<VertexType, EdgeType>::undirected = false;
-
-template <typename VertexType, typename EdgeType>
-bool Engine<VertexType, EdgeType>::halt = false;
-
-template <typename VertexType, typename EdgeType>
-double Engine<VertexType, EdgeType>::timeProcess = 0.0;
-
-template <typename VertexType, typename EdgeType>
-double Engine<VertexType, EdgeType>::timeInit = 0.0;
->>>>>>> 829cabc... Added options for communication with coordination server
-
 
 /**
  *
