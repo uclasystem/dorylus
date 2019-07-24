@@ -401,7 +401,6 @@ Engine::dataCommunicator(unsigned tid, void *args) {
                 if (graph.containsGhostVertex(gvid)) {
                     FeatType *dataBufPtr = ghostVertexDataBufPtr(graph.getGhostVertex(gvid).getLocalId());
                     memcpy(dataBufPtr, msgbuf, getNumFeats() * sizeof(FeatType));
-                    printLog(nodeId, ";;;} Received %f %f %f into ghostBuf\n", dataBufPtr[0], dataBufPtr[1], dataBufPtr[2]);
                 }
 
                 // Using MAX_IDTYPE - gvid as the receive signal topic for vertex gvid.
@@ -543,14 +542,12 @@ Engine::aggregateFromNeighbors(IdType lvid) {
             otherDataPtr = ghostVertexDataAllPtr(v.getSourceVertexLocalId(i), offset);
 
         // TODO: Locks on the data array area is not properly set yet. But does not affect forward prop.
-        printLog(nodeId, "[[[] Summing with %f, %f, %f\n", otherDataPtr[0], otherDataPtr[1], otherDataPtr[2]);
         for (unsigned j = 0; j < numFeats; ++j)
             currDataBuf[j] += otherDataPtr[j];
     }
 
     // Write the results to the correct position inside serialization dataBuf area.
     memcpy(vertexDataBufPtr(lvid), currDataBuf, numFeats * sizeof(FeatType));
-    printLog(nodeId, "<<<>>> Aggregated %u, now its buffer contains %f, %f, %f\n", lvid, *((FeatType *) vertexDataBufPtr(lvid)), *((FeatType *) vertexDataBufPtr(lvid) + 1), *((FeatType *) vertexDataBufPtr(lvid) + 2));
 }
 
 
