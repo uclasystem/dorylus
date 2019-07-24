@@ -310,11 +310,11 @@ Engine::worker(unsigned tid, void *args) {
                 //## Global Iteration barrier. ##//
                 NodeManager::barrier(LAYER_BARRIER);
 
-                // Ghost vertices' flush must happen after all new ghost values received, i.e. global barrier crossed.
+                // Ghost vertices' flush must happen after all new ghost values received, i.e., global barrier crossed.
                 for (IdType id = 0; id < graph.getNumGhostVertices(); ++id)
                     memcpy(ghostVertexDataAllPtr(id, getDataAllOffset()), ghostVertexDataBufPtr(id), getNumFeats() * sizeof(FeatType));
 
-                // Yes there are further scheduled vertices. Please start a new iteration.
+                // There is a new layer ahead, please start a new iteration.
                 if (iteration < numLayers) {
                     printLog(nodeId, "Starting a new iteration %u at %.3lf ms...\n", iteration, timeProcess + getTimer());
 
