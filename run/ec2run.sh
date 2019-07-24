@@ -58,7 +58,7 @@ for i in $(seq 1 ${NDS}); do
   dshnodes[$i]=$(head -n $i ${DSHFILE} | tail -n 1);
 done;
 
-header "Detected a cluster of ${NDS} nodes"
+header "Detected a cluster of ${NDS} nodes."
 
 
 #
