@@ -84,7 +84,7 @@ done;
 
 header "Checking for Quorum..."
 
-sleep 1
+sleep 1;
 
 for i in $(seq 1 ${ZOONDS}); do
   while true
@@ -94,6 +94,7 @@ for i in $(seq 1 ${ZOONDS}); do
     if [[ ${ARR[1]} == "leader" ]] || [[ ${ARR[1]} == "follower" ]]; then
       break;
     fi
+    sleep 1;
   done;
   echo "Found ZooKeeper node at ${nodes[$i]} -- ${str}";
 done;
