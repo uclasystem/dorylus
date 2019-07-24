@@ -10,25 +10,6 @@
 #include "utils.hpp"
 
 
-std::map<size_t, std::string> typeToFormatSpecifier;
-
-
-void initArgs() {
-    typeToFormatSpecifier[typeid(int).hash_code()] = "%d";
-    typeToFormatSpecifier[typeid(float).hash_code()] = "%f";
-    typeToFormatSpecifier[typeid(IdType).hash_code()] = "%llu";
-    typeToFormatSpecifier[typeid(char).hash_code()] = "%s"; 
-}
-
-
-void removeArg(int *argc, char **argv, int i) {
-    if (i < *argc)
-        (*argc)--;
-    for (; i < *argc; i++)
-        argv[i] = argv[i + 1];
-}
-
-
 /**
  *
  * Print a log message to the log file.
