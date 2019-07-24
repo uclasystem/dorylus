@@ -18,14 +18,10 @@ COMM_PATH       := $(SRC_PATH)/commmanager
 ENGINE_PATH     := $(SRC_PATH)/engine
 PARALLEL_PATH   := $(SRC_PATH)/parallel
 UTILS_PATH      := $(SRC_PATH)/utils
-BM_PATH         := $(SRC_PATH)/benchmarks
 
 # Build paths
 BUILD_PATH      := .
 OBJ_PATH        := $(BUILD_PATH)/objs
-
-# Benchmark names
-BENCH_AGG       := aggregate
 
 # Libraries source
 OMP_LIBS        := -fopenmp
@@ -49,7 +45,7 @@ LDFLAGS         := -Wl,-rpath=$(ZK_LIBPATH) -Wl,-rpath=$(ZMQ_LIBPATH)
 
 # Compiler & Flags
 CPP     := g++ -std=c++11
-CFLAGS  := -DTHREADED -Wall -Wno-sign-compare -Wno-unused-function -MMD
+CFLAGS  := -Wall -Wno-sign-compare -Wno-unused-function -MMD
 ifeq ($(mode),release)
 	CFLAGS += -O3
 else
@@ -57,8 +53,7 @@ else
 endif
 
 # Targets for you to choose
-all: prompt directories $(BENCH_AGG).bin
-$(BENCH_AGG): prompt directories $(BENCH_AGG).bin
+all: prompt directories gnn-lambda.bin
 
 # Phony utilities
 prompt:
@@ -74,7 +69,7 @@ directories:
 	mkdir -p $(OBJ_PATH) 
 
 # Frameowrk objects internal targets
-BASE_OBJS       := $(OBJ_PATH)/commmanager.o $(OBJ_PATH)/nodemanager.o $(OBJ_PATH)/engine.o $(OBJ_PATH)/vertex.o $(OBJ_PATH)/graph.o $(OBJ_PATH)/edge.o $(OBJ_PATH)/zkinterface.o $(OBJ_PATH)/utils.o $(OBJ_PATH)/threadpool.o
+BASE_OBJS       := $(OBJ_PATH)/commmanager.o $(OBJ_PATH)/nodemanager.o $(OBJ_PATH)/engine.o $(OBJ_PATH)/graph.o $(OBJ_PATH)/vertex.o $(OBJ_PATH)/edge.o $(OBJ_PATH)/zkinterface.o $(OBJ_PATH)/utils.o $(OBJ_PATH)/threadpool.o
 
 $(OBJ_PATH)/%.o: $(NODE_PATH)/%.cpp $(NODE_PATH)/%.hpp
 	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) -c $< -o $@
@@ -91,15 +86,14 @@ $(OBJ_PATH)/%.o: $(PARALLEL_PATH)/%.cpp $(PARALLEL_PATH)/%.hpp
 $(OBJ_PATH)/%.o: $(UTILS_PATH)/%.cpp $(UTILS_PATH)/%.hpp
 	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) -c $< -o $@
 
-# Benchmark objects internal targets
-$(OBJ_PATH)/%.o: $(BM_PATH)/%.cpp
+# Main executable target
+$(OBJ_PATH)/main.o: $(SRC_PATH)/main.cpp
 	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) -c $< -o $@
 
-# Benchmark executables internal targets
-$(BENCH_AGG).bin: $(OBJ_PATH)/$(BENCH_AGG).o $(BASE_OBJS)
+gnn-lambda.bin: $(OBJ_PATH)/main.o $(BASE_OBJS)
 	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFALGS) -o $@
 
 # Clean
 .PHONY: clean
 clean:
-	rm -rf $(OBJ_PATH) $(AGG_TARGET_BIN)
+	rm -rf $(OBJ_PATH) gnn-lambda.bin

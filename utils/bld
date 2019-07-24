@@ -11,31 +11,14 @@
 
 cd $( dirname $0 )/../build
 
-function header {
-	echo -e "\e[33;1m${1}\e[0m"
-}
+make clean
+make -s mode=debug
 
-case $1 in
-	"agg")
-		make clean; make -s mode=debug aggregate
-
-		if [ $? -eq 0 ]; then 
-			cd ..
-			./utils/send_file build/aggregate.bin
-			header "Successfully built benchmark agg."
-		else 
-			return 13
-		fi
-		;;
-	*)
-		make clean; make -s mode=debug aggregate
-
-		if [ $? -eq 0 ]; then 
-			cd ..
-			./utils/send_file build/aggregate.bin
-			header "Successfully built default benchmark (agg)."
-		else 
-			return 13
-		fi
-		;;
-esac
+if [ $? -eq 0 ]; then 
+	cd ..
+	./utils/send_file build/gnn-lambda.bin
+    echo -e "\e[92;1mSuccessfully built the system, congrats ;)\e[0m"
+else
+    echo -e "\e[91;1mBuild fails!\e[0m"
+	exit 1
+fi

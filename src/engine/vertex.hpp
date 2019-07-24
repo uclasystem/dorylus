@@ -6,7 +6,7 @@
 #include <vector>
 #include <pthread.h>
 #include "../parallel/rwlock.hpp"
-#include "edge.cpp"
+#include "edge.hpp"
 
 
 /** Vertex type indicators. */
@@ -15,7 +15,6 @@ typedef char VertexLocationType;
 #define BOUNDARY_VERTEX 'B'
 
 
-template<typename VertexType, typename EdgeType>
 class Graph;
 
 
@@ -24,63 +23,66 @@ class Graph;
  * Class for a local vertex.
  * 
  */
-template<typename VertexType, typename EdgeType>
 class Vertex {
 
 public:
 
-    Vertex();
-    ~Vertex();
+    Vertex() : localId(0), globalId(0), parentId(MAX_IDTYPE), graph_ptr(NULL) { lock.init(); }
+    ~Vertex() { lock.destroy(); }
 
-    IdType getLocalId();
-    void setLocalId(IdType lvid);
-    IdType getGlobalId();
-    void setGlobalId(IdType gvid);
+    IdType getLocalId() { return localId; }
+    void setLocalId(IdType lvid) { localId = lvid; }
+    IdType getGlobalId() { return globalId; }
+    void setGlobalId(IdType gvid) { globalId = gvid; }
 
-    VertexType data();                      // Get the current value.
-    VertexType dataAt(unsigned layer);      // Get value at specified layer.
-    std::vector<VertexType>& dataAll();     // Get reference to all old values' vector.
+    VertexLocationType getVertexLocation() { return vertexLocation; }
+    void setVertexLocation(VertexLocationType loc) { vertexLocation = loc; }
 
-    void setData(VertexType value);         // Modify the current value.
-    void addData(VertexType value);         // Add a new value of the new iteration.
+    unsigned getNumInEdges() { return inEdges.size(); }
+    unsigned getNumOutEdges() { return outEdges.size(); }
+    InEdge& getInEdge(unsigned i) { return inEdges[i]; }
+    void addInEdge(InEdge edge) { inEdges.push_back(edge); }
+    OutEdge& getOutEdge(unsigned i) { return outEdges[i]; }
+    void addOutEdge(OutEdge edge) { outEdges.push_back(edge); }
 
-    VertexLocationType getVertexLocation();
-    void setVertexLocation(VertexLocationType loc);
+    IdType getSourceVertexLocalId(unsigned i);
+    IdType getSourceVertexGlobalId(unsigned i);
+    IdType getDestVertexLocalId(unsigned i);
+    IdType getDestVertexGlobalId(unsigned i);
 
-    unsigned getNumInEdges();
-    unsigned getNumOutEdges();
-    InEdge<EdgeType>& getInEdge(unsigned i);
-    void addInEdge(InEdge<EdgeType> edge);
-    OutEdge<EdgeType>& getOutEdge(unsigned i);
-    void addOutEdge(OutEdge<EdgeType> edge);
+    EdgeType getNormFactor() { return normFactor; }
+    void setNormFactor(EdgeType factor) { normFactor = factor; }
 
-    VertexType getSourceVertexData(unsigned i);
-    VertexType getSourceVertexDataAt(unsigned i, unsigned layer);
-    unsigned getSourceVertexGlobalId(unsigned i);
-    unsigned getDestVertexGlobalId(unsigned i);
+    Graph *getGraphPtr() { return graph_ptr; }
+    void setGraphPtr(Graph *ptr) { graph_ptr = ptr; }
 
-    Graph<VertexType, EdgeType> *getGraphPtr();
-    void setGraphPtr(Graph<VertexType, EdgeType> *ptr);
-
-    IdType getParent();
-    void setParent(IdType p);
+    IdType getParent() { return parentId; }
+    void setParent(IdType p) { parentId = p; }
 
     void compactVertex();
+
+    void aggregateFromNeighbors();
+    void produceOutput();
+
+    void readLock() { lock.readLock(); }
+    void writeLock() { lock.writeLock(); }
+    void unlock() { lock.unlock(); }
 
 private:
 
     IdType localId;
     IdType globalId;
 
-    std::vector<VertexType> vertexData;     // Use a vector to make data in old iterations persistent.
     VertexLocationType vertexLocation;
 
-    std::vector< InEdge<EdgeType> > inEdges;
-    std::vector< OutEdge<EdgeType> > outEdges;
+    std::vector<InEdge> inEdges;
+    std::vector<OutEdge> outEdges;
+
+    EdgeType normFactor;
 
     IdType parentId;
 
-    Graph<VertexType, EdgeType> *graph_ptr;
+    Graph *graph_ptr;
 
     RWLock lock;
 };
@@ -91,32 +93,30 @@ private:
  * Class for a ghost vertex.
  * 
  */
-template <typename VertexType>
 class GhostVertex {
 
 public:
     
-    GhostVertex();
-    ~GhostVertex();
+    GhostVertex() : degree(0) { lock.init(); }
+    ~GhostVertex() { lock.destroy(); }
 
-    VertexType data();                      // Get the current value.
-    VertexType dataAt(unsigned layer);      // Get value at specified layer.
+    IdType getLocalId() { return localId; }
+    void setLocalId(IdType id) { localId = id; }
 
-    void setData(VertexType value);         // Modify the current value.
-    void addData(VertexType value);         // Add a new value of the new iteration.
+    void addOutEdge(IdType dId) { outEdges.push_back(dId); }
 
-    void addOutEdge(IdType dId);
-
-    int32_t getDegree();
-    void incrementDegree() {
-        ++degree;
-    }
+    int32_t getDegree() { return degree; }
+    void incrementDegree() { ++degree; }
 
     void compactVertex();
 
+    void readLock() { lock.readLock(); }
+    void writeLock() { lock.writeLock(); }
+    void unlock() { lock.unlock(); }
+
 private:
 
-    std::vector<VertexType> vertexData;
+    IdType localId;     // Added to serve as the index in the static values region.
 
     std::vector<IdType> outEdges;
     int32_t degree;

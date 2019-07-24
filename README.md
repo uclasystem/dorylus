@@ -86,7 +86,7 @@ Go inside the `metis-5.1.0/` directory and compile it from source:
     $ make config prefix=/home/<USER>/gnn-lambda/installs/out
     $ make install
 
-## Building ASPIRE
+## Building the System
 
 **Ensure all dependencies have been installed correctly** before building ASPIRE.
 
@@ -125,7 +125,7 @@ This will create a `data/` folder under `input/`, where there is the binary grap
 
 Make sure you put the things in `data/` folder on all machines and under the **same** location, and the `ec2run.sh` script points to it correctly.
 
-## Running ASPIRE
+## Running the System
 
 ### SSH Password-less Login
 
@@ -143,8 +143,9 @@ Setup the content of `zoo.basic` file for configuring ZooKeeper. Basically you n
 
 Use `utils/b+r` script for easy build and run across machines:
 
-    $ ./b+r [Bench] [Dataset] [Feature-File]    # Build, send, and run
-    $ ./b+r     # Default config is: "b+r agg fb"
+    Usage: ./b+r [Dataset]
+        Dataset:        small(*), fb
+    "(*)" means default.
 
 Use `clear_out` script to clean all log files and output files, and reset GVID to 1:
 

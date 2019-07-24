@@ -236,7 +236,8 @@ void
 CommManager::dataPushOut(IdType topic, void *value, unsigned valSize) {
     zmq::message_t outMsg(sizeof(IdType) + valSize);
     *((IdType *) outMsg.data()) = topic;
-    memcpy((void *)(((char *) outMsg.data()) + sizeof(IdType)), value, valSize);
+    if (valSize > 0)
+        memcpy((void *)(((char *) outMsg.data()) + sizeof(IdType)), value, valSize);
 
     lockDataPublisher.lock();
     dataPublisher->ksend(outMsg, ZMQ_DONTWAIT); 
@@ -250,7 +251,7 @@ CommManager::dataPushOut(IdType topic, void *value, unsigned valSize) {
  * 
  */
 bool
-CommManager::dataPullIn(IdType &topic, std::vector<FeatType>& value) {
+CommManager::dataPullIn(IdType *topic, void *value, unsigned maxValSize) {
     zmq::message_t inMsg;
 
     lockDataSubscriber.lock();
@@ -260,12 +261,9 @@ CommManager::dataPullIn(IdType &topic, std::vector<FeatType>& value) {
     if (!ret)
         return false;
 
-    int32_t dataSize = inMsg.size() - sizeof(IdType);
-    int32_t numberOfFeatures = dataSize / sizeof(FeatType);
-    value.resize(numberOfFeatures);
-
-    memcpy(&topic, inMsg.data(), sizeof(IdType));
-    memcpy(value.data(), ((char *)inMsg.data() + sizeof(IdType)), dataSize);
+    assert(inMsg.size() - sizeof(IdType) <= maxValSize);
+    memcpy(topic, inMsg.data(), sizeof(IdType));
+    memcpy(value, ((char *) inMsg.data() + sizeof(IdType)), inMsg.size() - sizeof(IdType));
 
     return true;
 }
@@ -282,7 +280,8 @@ CommManager::controlPushOut(unsigned to, void *value, unsigned valSize) {
     assert(to != nodeId); 
     zmq::message_t outMsg(sizeof(ControlMessage) + valSize);
     *((ControlMessage *) outMsg.data()) = ControlMessage(APPMSG);
-    memcpy((void *)(((char *) outMsg.data()) + sizeof(ControlMessage)), value, valSize);
+    if (valSize > 0)
+        memcpy((void *)(((char *) outMsg.data()) + sizeof(ControlMessage)), value, valSize);
 
     lockControlPublishers[to].lock();
     assert(controlPublishers[to]->ksend(outMsg, ZMQ_DONTWAIT));
@@ -296,7 +295,7 @@ CommManager::controlPushOut(unsigned to, void *value, unsigned valSize) {
  * 
  */
 bool
-CommManager::controlPullIn(unsigned from, void *value, unsigned valSize) {
+CommManager::controlPullIn(unsigned from, void *value, unsigned maxValSize) {
     assert(from >= 0 && from < numNodes);
     assert(from != nodeId);
     zmq::message_t inMsg;
@@ -311,7 +310,9 @@ CommManager::controlPullIn(unsigned from, void *value, unsigned valSize) {
     ControlMessage cM = *((ControlMessage *) inMsg.data());
     assert(cM.messageType == APPMSG);
 
-    memcpy(value, ((void *)((char *)inMsg.data() + sizeof(ControlMessage))), valSize);
+    assert(inMsg.size() - sizeof(ControlMessage) <= maxValSize);
+    memcpy(value, ((char *) inMsg.data() + sizeof(ControlMessage)), inMsg.size() - sizeof(ControlMessage));
+    
     return true;
 }
 

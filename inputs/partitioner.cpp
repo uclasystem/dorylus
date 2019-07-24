@@ -18,7 +18,6 @@ typedef unsigned VertexType;
 
 struct BELHeaderType {
     int sizeOfVertexType;
-//    int sizeOfCountType;
     VertexType numVertices;
     unsigned long long numEdges;
 };

@@ -8,8 +8,7 @@
 #include <atomic>
 #include <tuple>
 #include <cstdio>
-#include "graph.cpp"
-#include "vertexprogram.hpp"
+#include "graph.hpp"
 #include "../commmanager/commmanager.hpp"
 #include "../nodemanager/nodemanager.hpp"
 #include "../parallel/threadpool.hpp"
@@ -17,10 +16,6 @@
 #include "../parallel/cond.hpp"
 #include "../parallel/barrier.hpp"
 #include "../utils/utils.hpp"
-
-
-// TODO: Hardcoded # of layers, should be changed sooner or later.
-#define NUM_LAYERS 5
 
 
 #define NUM_DATA_THREADS 1          // These are default values (when cli argument is empty).
@@ -33,6 +28,9 @@
 #define ZERO_STR "0"
 #define INF 1000000000  // 1B
 #define MILLION 1000000 // 1M
+
+
+#define MAX_MSG_SIZE 8192   // Max size (bytes) for a message received by the data communicator.
 
 
 /** For files cli options. */
@@ -50,10 +48,9 @@
 
 
 /** Binary snap file header struct. */
-template <typename VertexType>
 struct BSHeaderType {
     int sizeOfVertexType;
-    VertexType numVertices;
+    IdType numVertices;
     unsigned long long numEdges;
 };
 
@@ -63,21 +60,20 @@ struct BSHeaderType {
  * Class of an ASPIRE engine executing on a node.
  * 
  */
-template <typename VertexType, typename EdgeType>
 class Engine {
 
 public:
 
     // Public APIs for benchmarks.
-    static void init(int argc, char *argv[], VertexType dVertex = VertexType(), EdgeType dEdge = EdgeType(), EdgeType (*eWeight) (IdType, IdType) = NULL);
-    static void run(VertexProgram<VertexType, EdgeType> *vProgram, bool printEM);
-    static void processAll(VertexProgram<VertexType, EdgeType> *vProgram);
+    static void init(int argc, char *argv[]);
+    static void run();
+    static void output();
     static void destroy();
     static bool master();
 
 private:
 
-    static Graph<VertexType, EdgeType> graph;
+    static Graph graph;
 
     static unsigned dThreads;
     static ThreadPool *dataPool;
@@ -85,8 +81,18 @@ private:
     static unsigned cThreads;
     static ThreadPool *computePool;
 
-    static VertexProgram<VertexType, EdgeType> *vertexProgram;
-    static EdgeType (*edgeWeight) (IdType, IdType);
+    static std::vector<unsigned> layerConfig;   // Config of number of features in each layer.
+    static std::vector<unsigned> layerConfigPrefixSum;   // Prefix sum of layerConfig.
+
+    static unsigned numFeatsTotal;
+    static unsigned numLayers;
+
+    static FeatType *verticesDataAll;   // Global contiguous array for all local vertices' data. Stored in row-wise order:
+                                        // The first bunch of values are data for the 0th vertex, ...
+    static FeatType *ghostVerticesDataAll;  // For ghost vertices similarly.
+    static FeatType *verticesDataBuf;   // A smaller buffer storing current iter's data after aggregation. (Serves as the
+                                        // serialization area naturally.)
+    static FeatType *ghostVerticesDataBuf;  // For ghost vertices similarly.
 
     static IdType currId;
     static Lock lockCurrId;
@@ -98,6 +104,8 @@ private:
 
     static std::string graphFile;
     static std::string featuresFile;
+    static std::string outFile;
+    static std::string layerConfigFile;
 
     static unsigned nodeId;
     static unsigned numNodes;
@@ -115,18 +123,30 @@ private:
 
     static Barrier barComp;
 
-    static VertexType defaultVertex;
-    static EdgeType defaultEdge;
-
     // Worker and communicator thread function.
     static void worker(unsigned tid, void *args);
     static void dataCommunicator(unsigned tid, void *args);
 
+    static unsigned getNumFeats();
+    static unsigned getNumFeats(unsigned iter);
+    static unsigned getDataAllOffset();
+    static unsigned getDataAllOffset(unsigned iter);
+
+    static FeatType *vertexDataAllPtr(IdType lvid, unsigned offset);
+    static FeatType *ghostVertexDataAllPtr(IdType lvid, unsigned offset);
+    static FeatType *vertexDataBufPtr(IdType lvid);
+    static FeatType *vertexDataBufPtr(IdType lvid, unsigned numFeats);
+    static FeatType *ghostVertexDataBufPtr(IdType lvid);
+    static FeatType *ghostVertexDataBufPtr(IdType lvid, unsigned numFeats);
+
+    static void aggregateFromNeighbors(IdType lvid);
+
     // For initialization.
     static void parseArgs(int argc, char* argv[]);
+    static void readLayerConfigFile(std::string& layerConfigFileName);
     static void readFeaturesFile(std::string& featuresFileName);
-    static void readPartsFile(std::string& partsFileName, Graph<VertexType, EdgeType>& lGraph);
-    static void processEdge(IdType& from, IdType& to, Graph<VertexType, EdgeType>& lGraph, std::set<IdType>* inTopics, std::set<IdType>* oTopics); 
+    static void readPartsFile(std::string& partsFileName, Graph& lGraph);
+    static void processEdge(IdType& from, IdType& to, Graph& lGraph, std::set<IdType>* inTopics, std::set<IdType>* oTopics); 
     static void findGhostDegrees(std::string& fileName);
     static void setEdgeNormalizations();
     static void readGraphBS(std::string& fileName, std::set<IdType>& inTopics, std::vector<IdType>& outTopics);

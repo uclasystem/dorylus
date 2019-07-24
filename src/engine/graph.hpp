@@ -6,8 +6,8 @@
 #include <map>
 #include "../parallel/lock.hpp"
 #include "../utils/utils.hpp"
-#include "vertex.cpp"
-#include "edge.cpp"
+#include "vertex.hpp"
+#include "edge.hpp"
 
 
 /**
@@ -15,34 +15,31 @@
  * Class of a graph, composed of vertices and directed edges.
  * 
  */
-template <typename VertexType, typename EdgeType>
 class Graph {
 
 public:
 
-    std::vector< Vertex<VertexType, EdgeType> >& getVertices();
-    Vertex<VertexType, EdgeType>& getVertex(IdType lvid);
-    Vertex<VertexType, EdgeType>& getVertexByGlobal(IdType gvid);
+    std::vector<Vertex>& getVertices() { return vertices; }
+    Vertex& getVertex(IdType lvid);
+    Vertex& getVertexByGlobal(IdType gvid);
     bool containsVertex(IdType gvid);   // Contain searches with global ID.
 
-    std::map< IdType, GhostVertex<VertexType> >& getGhostVertices();
-    GhostVertex<VertexType>& getGhostVertex(IdType gvid);
+    std::map<IdType, GhostVertex>& getGhostVertices() { return ghostVertices; }
+    GhostVertex& getGhostVertex(IdType gvid);
     bool containsGhostVertex(IdType gvid);
 
-    IdType getNumLocalVertices();
-    void setNumLocalVertices(IdType num);
-    IdType getNumGlobalVertices();
-    void setNumGlobalVertices(IdType num);
+    IdType getNumLocalVertices() { return numLocalVertices; }
+    void setNumLocalVertices(IdType num) { numLocalVertices = num; }
+    IdType getNumGlobalVertices() { return numGlobalVertices; }
+    void setNumGlobalVertices(IdType num) { numGlobalVertices = num; }
+    IdType getNumGhostVertices() { return numGhostVertices; }
+    void setNumGhostVertices(IdType num) { numGhostVertices = num; }
 
-    unsigned long long getNumGlobalEdges();
-    void incrementNumGlobalEdges() {
-        ++numGlobalEdges;
-    }
+    unsigned long long getNumGlobalEdges() { return numGlobalEdges; }
+    void incrementNumGlobalEdges() { ++numGlobalEdges; }
 
-    short getVertexPartitionId(IdType vid);
-    void appendVertexPartitionId(short pid);
-
-    void updateGhostVertex(IdType vId, VertexType value);
+    short getVertexPartitionId(IdType vid) { return vertexPartitionIds[vid]; }
+    void appendVertexPartitionId(short pid) { vertexPartitionIds.push_back(pid); }
 
     void compactGraph();
 
@@ -51,11 +48,12 @@ public:
 
 private:
 
-    std::vector< Vertex<VertexType, EdgeType> > vertices;
-    std::map< IdType, GhostVertex<VertexType> > ghostVertices;
+    std::vector<Vertex> vertices;
+    std::map<IdType, GhostVertex> ghostVertices;
 
     IdType numLocalVertices;
     IdType numGlobalVertices;
+    IdType numGhostVertices;
 
     unsigned long long numGlobalEdges = 0;
 

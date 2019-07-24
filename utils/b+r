@@ -7,11 +7,9 @@
 ##	  build and run scripts
 
 #
-# Usage: ./b+r [Bench] [Dataset] [Feature-File]
+# Usage: ./b+r [Dataset]
 #
-#   Bench:          agg(*)
-#   Dataset:        fb(*), small
-#   Feature-File:   (*), path_to_file 
+#   Dataset:        small(*), fb
 #
 # "(*)" means default.
 #
@@ -19,16 +17,19 @@
 cd $( dirname $0 )
 
 function header {
-	echo -e "\e[32;1m######## ${1} ########\e[0m"
+	echo -e "\e[34;1m######## ${1} ########\e[0m"
 }
 
-header "BUILDING the engine & benchmark"
-./bld $1
+
+header "BUILDING"
+
+./bld
 
 if [ $? -ne 0 ]; then
 	exit
 fi
 
-header "RUNNING the benchmark"
-cd ..
-./run/ec2run.sh $1 $2 $3
+
+header "RUNNING"
+
+./ec2run $1 $2 $3
