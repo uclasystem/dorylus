@@ -39,6 +39,12 @@ template <typename VertexType, typename EdgeType>
 std::string Engine<VertexType, EdgeType>::featuresFile;
 
 template <typename VertexType, typename EdgeType>
+std::string Engine<VertexType, EdgeType>::coordserverIp;
+
+template <typename VertexType, typename EdgeType>
+std::string Engine<VertexType, EdgeType>::coordserverPort;
+
+template <typename VertexType, typename EdgeType>
 VertexProgram<VertexType, EdgeType>* Engine<VertexType, EdgeType>::vertexProgram = NULL;
 
 template <typename VertexType, typename EdgeType>
@@ -460,8 +466,18 @@ Engine<VertexType, EdgeType>::parseArgs(int argc, char *argv[]) {
         ("help", "Produce help message")
 
         ("config", boost::program_options::value<std::string>()->default_value(std::string(DEFAULT_CONFIG_FILE), DEFAULT_CONFIG_FILE), "Config file")
-        ("graphfile", boost::program_options::value<std::string>(), "Graph file")
-        ("featuresfile", boost::program_options::value<std::string>(), "Features file")
+
+        ("graphfile", boost::program_options::value<std::string>(),
+	 "Path to the binary file contatining the edge list")
+
+        ("featuresfile", boost::program_options::value<std::string>(),
+	 "Path to the file containing the vertex features")
+
+	("coordserverip", boost::program_options::value<std::string>(),
+	 "The private IP address of the coordination server")
+
+	("coordserverport", boost::program_options::value<std::string>(),
+	 "The port of the listener on the coordination server")
 
         ("undirected", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Graph type")
 
@@ -500,6 +516,12 @@ Engine<VertexType, EdgeType>::parseArgs(int argc, char *argv[]) {
 
     assert(vm.count("featuresfile"));
     featuresFile = vm["featuresfile"].as<std::string>();
+
+    assert(vm.count("coordserverip"));
+    coordserverIp = vm["coordserverip"].as<std::string>();
+
+    assert(vm.count("coordserverport"));
+    coordserverPort = vm["coordserverport"].as<std::string>();
 
     assert(vm.count("undirected"));
     undirected = (vm["undirected"].as<unsigned>() == 0) ? false : true;

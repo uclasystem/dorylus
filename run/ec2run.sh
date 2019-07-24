@@ -79,7 +79,7 @@ for i in $(seq 1 ${ZOONDS}); do
   scp -q ${ZOODIR}/conf/zoo.cfg ${dshnodes[$i]}:${ZOODIR}/conf/zoo.cfg;
   ${DSH} -M -m ${dshnodes[$i]} -c "mkdir -p ${TMPDIR}/zooDataDir";
   ${DSH} -M -m ${dshnodes[$i]} -c "echo $i > ${TMPDIR}/zooDataDir/myid";
-  ${DSH} -M -m ${dshnodes[$i]} -c "cd ${ZOODIR} && ./bin/zkServer.sh start 2&>1 > /dev/null";
+  ${DSH} -M -m ${dshnodes[$i]} -c "cd ${ZOODIR} && ./bin/zkServer.sh start &> /dev/null";
 done;
 
 header "Checking for Quorum..."
@@ -162,6 +162,11 @@ for i in $(seq 1 ${NDS}); do
   scp -q ${ASPIREDIR}/config/hostfile ${ASPIREDIR}/config/zkhostfile ${dshnodes[$i]}:${ASPIREDIR}/config/;
 done;
 
+COORDSERVER_CONF=${RUNDIR}/cserverinfo
+CSERVER_IP=$( cat ${COORDSERVER_CONF} | awk '{print $1}' )
+CSERVER_PORT=$( cat ${COORDSERVER_CONF} | awk '{print $2}' )
+cat ${COORDSERVER_CONF}
+
 # Loop over desired number of runs
 for dp in {1..1}; do
 
@@ -180,8 +185,8 @@ for dp in {1..1}; do
   LOGFILE=${LOGFILE_DIR}/${GVID}.${BK}.${IK}.out
   echo "This is the log for run: GVID = ${GVID}" >> ${LOGFILE} 2>&1;
 
-  echo "DSH command (from ${ASPIREDIR}/build): ./${BENCHMARK} --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --undirected ${UNDIRECTED} --bm-tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS}";
-  ${DSH} -M -f ${DSHFILE} -c "cd ${ASPIREDIR}/build && ./${BENCHMARK} --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --undirected ${UNDIRECTED} --bm-tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS}" 1> /dev/null 2>> ${LOGFILE};
+  echo "DSH command (from ${ASPIREDIR}/build): ./${BENCHMARK} --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --coordserverip ${CSERVER_IP} --coordserverport ${CSERVER_PORT} --undirected ${UNDIRECTED} --bm-tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS}";
+  ${DSH} -M -f ${DSHFILE} -c "cd ${ASPIREDIR}/build && ./${BENCHMARK} --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --coordserverip ${CSERVER_IP} --coordserverport ${CSERVER_PORT} --undirected ${UNDIRECTED} --bm-tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS}" 1> /dev/null 2>> ${LOGFILE};
 
   DOPDIR=${ASPIREDIR}/build/outputs/${BK}.${IK}/${GVID};
   mkdir -p ${DOPDIR};

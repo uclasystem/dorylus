@@ -99,6 +99,9 @@ private:
     static std::string graphFile;
     static std::string featuresFile;
 
+    static std::string coordserverIp;
+    static std::string coordserverPort;
+
     static unsigned nodeId;
     static unsigned numNodes;
 
