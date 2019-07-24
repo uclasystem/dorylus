@@ -50,6 +50,9 @@ public:
     IdType getDestVertexLocalId(unsigned i);
     IdType getDestVertexGlobalId(unsigned i);
 
+    EdgeType getNormFactor() { return normFactor; }
+    void setNormFactor(EdgeType factor) { normFactor = factor; }
+
     Graph *getGraphPtr() { return graph_ptr; }
     void setGraphPtr(Graph *ptr) { graph_ptr = ptr; }
 
@@ -74,6 +77,8 @@ private:
 
     std::vector<InEdge> inEdges;
     std::vector<OutEdge> outEdges;
+
+    EdgeType normFactor;
 
     IdType parentId;
 

@@ -531,10 +531,15 @@ Engine::aggregateFromNeighbors(IdType lvid) {
     FeatType *currDataPtr = vertexDataAllPtr(lvid, offset);
     memcpy(currDataBuf, currDataPtr, numFeats * sizeof(FeatType));
 
-    // Aggregate from incoming neighbors.
+    // Apply normalization factor on the current data.
     Vertex& v = graph.getVertex(lvid);
+    for (unsigned i = 0; i < numFeats; ++i)
+        currDataBuf[i] *= v.getNormFactor();
+
+    // Aggregate from incoming neighbors.
     for (unsigned i = 0; i < v.getNumInEdges(); ++i) {
         FeatType *otherDataPtr;
+        EdgeType normFactor = v.getInEdge(i).getData();
 
         if (v.getInEdge(i).getEdgeLocation() == LOCAL_EDGE_TYPE)    // Local vertex.
             otherDataPtr = vertexDataAllPtr(v.getSourceVertexLocalId(i), offset);
@@ -543,7 +548,7 @@ Engine::aggregateFromNeighbors(IdType lvid) {
 
         // TODO: Locks on the data array area is not properly set yet. But does not affect forward prop.
         for (unsigned j = 0; j < numFeats; ++j)
-            currDataBuf[j] += otherDataPtr[j];
+            currDataBuf[j] += (otherDataPtr[j] * normFactor);
     }
 
     // Write the results to the correct position inside serialization dataBuf area.
@@ -835,6 +840,7 @@ Engine::setEdgeNormalizations() {
     for (Vertex& vertex : graph.getVertices()) {
         unsigned dstDeg = vertex.getNumInEdges() + 1;
         float dstNorm = std::pow(dstDeg, -.5);
+        vertex.setNormFactor(dstNorm * dstNorm);
         for (unsigned i = 0; i < vertex.getNumInEdges(); ++i) {
             InEdge& e = vertex.getInEdge(i);
             IdType vid = e.getSourceId();
