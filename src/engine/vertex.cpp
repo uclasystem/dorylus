@@ -36,10 +36,10 @@ IdType
 Vertex::getDestVertexLocalId(unsigned i) {
     assert(i < outEdges.size());
     if (outEdges[i].getEdgeLocation() == LOCAL_EDGE_TYPE) {
-        assert(graph_ptr->localToGlobalId.find(outEdges[i].getSourceId()) != graph_ptr->localToGlobalId.end());
-        return outEdges[i].getSourceId();
+        assert(graph_ptr->localToGlobalId.find(outEdges[i].getDestId()()) != graph_ptr->localToGlobalId.end());
+        return outEdges[i].getDestId();
     } else {
-        IdType gvid = outEdges[i].getSourceId();
+        IdType gvid = outEdges[i].getDestId();
         assert(graph_ptr->containsGhostVertex(gvid));
         return graph_ptr->getGhostVertex(gvid).getLocalId();
     }
@@ -49,10 +49,10 @@ IdType
 Vertex::getDestVertexGlobalId(unsigned i) {
     assert(i < outEdges.size());
     if (outEdges[i].getEdgeLocation() == LOCAL_EDGE_TYPE) {
-        assert(graph_ptr->localToGlobalId.find(outEdges[i].destId()) != graph_ptr->localToGlobalId.end());
-        return graph_ptr->localToGlobalId[outEdges[i].destId()];
+        assert(graph_ptr->localToGlobalId.find(outEdges[i].getDestId()) != graph_ptr->localToGlobalId.end());
+        return graph_ptr->localToGlobalId[outEdges[i].getDestId()];
     } else
-        return outEdges[i].destId();
+        return outEdges[i].getDestId();
 }
 
 void
