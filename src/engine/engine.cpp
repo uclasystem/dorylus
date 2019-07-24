@@ -203,7 +203,7 @@ Engine::output() {
         unsigned offset = 0;
         for (unsigned& numFeats : layerConfig) {
             for (unsigned i = 0; i < numFeats; ++i)
-                outStream << dataAllPtr[offset++]
+                outStream << dataAllPtr[offset++] << " ";
             outStream << "| ";
         }
         outStream << std::endl;
@@ -230,7 +230,7 @@ Engine::destroy() {
 
     delete[] verticesDataAll;
     delete[] ghostVerticesDataAll;
-    delete[] verticesDataBuf
+    delete[] verticesDataBuf;
     delete[] ghostVerticesDataBuf;
 }
 
@@ -289,7 +289,7 @@ Engine::worker(unsigned tid, void *args) {
                 // Flush the returned values from lambda to dataAll. Currently just flushing the dataBuf. //
                 ////////////////////////////////////////////////////////////////////////////////////////////
 
-                unsigned newNumFeats = getNumFeats(iteration + 1)
+                unsigned newNumFeats = getNumFeats(iteration + 1);
                 unsigned newOffset = getDataOffset(iteration + 1);
 
                 for (IdType id = 0; id < graph.getNumLocalVertices(); ++id)
@@ -342,7 +342,7 @@ Engine::worker(unsigned tid, void *args) {
 
         // Doing the aggregation.
         Vertex& v = graph.getVertex(lvid);
-        v.aggregateFromNeighbors()
+        aggregateFromNeighbors(lvid);
 
         // If there are any remote edges, should send this vid to others for their ghost's update.
         for (unsigned i = 0; i < v.getNumOutEdges(); ++i) {
@@ -372,7 +372,7 @@ Engine::worker(unsigned tid, void *args) {
 void
 Engine::dataCommunicator(unsigned tid, void *args) {
     IdType topic;
-    FeatType *msgbuf = new char[MAX_MSG_SIZE];
+    FeatType *msgbuf = (FeatType *) new char[MAX_MSG_SIZE];
 
     // While loop, looping infinitely to get the next message.
     while (1) {
@@ -388,7 +388,7 @@ Engine::dataCommunicator(unsigned tid, void *args) {
         } else {
 
             // A normal ghost value broadcast.
-            if (0 <= topic < graph.getNumGlobalVertices()) {
+            if (0 <= topic && topic < graph.getNumGlobalVertices()) {
                 IdType gvid = topic;
 
                 // Update the ghost vertex if it is one of mine.
@@ -403,7 +403,7 @@ Engine::dataCommunicator(unsigned tid, void *args) {
             // A respond to a broadcast, and the topic vertex is in my local vertices. I should update the
             // corresponding recvWaiter's value. If waiters become empty, send a signal in case the workers are
             // waiting on it to be empty at the iteration barrier.
-            } else if (MAX_IDTYPE >= topic > MAX_IDTYPE - graph.getNumGlobalVertices()) {
+            } else if (MAX_IDTYPE >= topic && topic > MAX_IDTYPE - graph.getNumGlobalVertices()) {
                 IdType gvid = MAX_IDTYPE - topic;
 
                 if (graph.globalToLocalId.find(gvid) != graph.globalToLocalId.end()) {
@@ -659,9 +659,9 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
         // Set the vertex's initial values, if it is one of mine local vertices / ghost vertices.
         FeatType *dataPtr = NULL;
         if (graph.containsGhostVertex(gvid))   // Global vertex.
-            dataPtr = graph.getGhostVertex(gvid).dataPtrAt(0);
+            dataPtr = ghostVerticesDataAll(graph.getGhostVertex(gvid).getLocalId(), 0);
         else if (graph.containsVertex(gvid))   // Local vertex.
-            dataPtr = graph.getVertexByGlobal(gvid).dataPtrAt(0);
+            dataPtr = verticesDataAll(graph.getVertexByGlobal(gvid).getLocalId(), 0);
         if (dataPtr != NULL)
             memcpy(dataPtr, feature_vec.data(), feature_vec.size() * sizeof(FeatType));
 

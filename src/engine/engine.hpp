@@ -129,8 +129,8 @@ private:
 
     static FeatType *vertexDataAllPtr(IdType lvid, unsigned offset);
     static FeatType *ghostVertexDataAllPtr(IdType lvid, unsigned offset);
-    static FeatType *vertexDataAllPtr(IdType lvid);
-    static FeatType *ghostVertexDataAllPtr(IdType lvid);
+    static FeatType *vertexDataBufPtr(IdType lvid);
+    static FeatType *ghostVertexDataBufPtr(IdType lvid);
 
     // For initialization.
     static void parseArgs(int argc, char* argv[]);
