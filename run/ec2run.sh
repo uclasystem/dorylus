@@ -68,7 +68,7 @@ header "Detected a cluster of ${NDS} nodes"
 header "Setting up tmp dir & Stopping running ZooKeeper..."
 
 ${DSH} -M -f ${DSHFILE} -c "rm -rf ${TMPDIR} && mkdir ${TMPDIR} && chown ${user}:${user} ${TMPDIR}";
-${DSH} -M -f ${DSHFILE} -c "cd ${ZOODIR} && ./bin/zkServer.sh stop > /dev/null 2&>1";
+${DSH} -M -f ${DSHFILE} -c "cd ${ZOODIR} && ./bin/zkServer.sh stop > /dev/null 2>&1";
 
 if [ ! -f ${ZOODIR}/conf/zoo.cfg ]; then
 	cat ${RUNDIR}/zoo.basic > ${ZOODIR}/conf/zoo.cfg;
@@ -84,7 +84,7 @@ for i in $(seq 1 ${ZOONDS}); do
   scp -q ${ZOODIR}/conf/zoo.cfg ${dshnodes[$i]}:${ZOODIR}/conf/zoo.cfg;
   ${DSH} -M -m ${dshnodes[$i]} -c "mkdir -p ${TMPDIR}/zooDataDir";
   ${DSH} -M -m ${dshnodes[$i]} -c "echo $i > ${TMPDIR}/zooDataDir/myid";
-  ${DSH} -M -m ${dshnodes[$i]} -c "cd ${ZOODIR} && ./bin/zkServer.sh start > /dev/null 2&>1";
+  ${DSH} -M -m ${dshnodes[$i]} -c "cd ${ZOODIR} && ./bin/zkServer.sh start > /dev/null 2>&1";
 done;
 
 header "Checking for Quorum..."
@@ -171,7 +171,7 @@ for dp in {1..1}; do
   header "Running GVID [ # ${GVID} ]..."
 
   LOGFILE=${LOGFILEDIR}/${GVID}.${IK}.out
-  echo "This is the log for round: GVID = ${GVID}" >> ${LOGFILE} 2&>1;
+  echo "This is the log for round: GVID = ${GVID}" >> ${LOGFILE};
 
   echo "DSH command (from ${ASPIREDIR}/build): ./gnn-lambda.bin --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --layerfile ${LAYERFILE} --undirected ${UNDIRECTED} --tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS}";
   ${DSH} -M -f ${DSHFILE} -c "cd ${ASPIREDIR}/build && ./gnn-lambda.bin --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --layerfile ${LAYERFILE} --undirected ${UNDIRECTED} --tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS}" 1> /dev/null 2>> ${LOGFILE};
@@ -193,7 +193,7 @@ done;
 header "Finished. Destroying ZooKeeper..."
 
 for i in $(seq 1 $ZOONDS); do
-  ${DSH} -M -m ${nodes[$i]} -c "cd ${ZOODIR} && ./bin/zkServer.sh stop > /dev/null 2&>1";
+  ${DSH} -M -m ${nodes[$i]} -c "cd ${ZOODIR} && ./bin/zkServer.sh stop > /dev/null 2>&1";
 done;
 
 echo "Check the output files in \"build/outputs/\" folder."
