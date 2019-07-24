@@ -143,8 +143,11 @@ Setup the content of `zoo.basic` file for configuring ZooKeeper. Basically you n
 
 Use `utils/b+r` script for easy build and run across machines:
 
-    $ ./b+r [Dataset] [Feature-File]    # Build, send, and run
-    $ ./b+r     # Default config is: "b+r small"
+    Usage: ./b+r [Dataset] [Feature-File] [Layer-File]
+        Dataset:        small(*), fb
+        Feature-File:   (*), path_to_file
+        Layer-File:     (*), path_to_file
+    "(*)" means default.
 
 Use `clear_out` script to clean all log files and output files, and reset GVID to 1:
 
