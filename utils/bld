@@ -12,7 +12,7 @@
 cd $( dirname $0 )/../build
 
 make clean
-make mode=debug
+make -s mode=debug
 
 if [ $? -eq 0 ]; then 
 	cd ..
