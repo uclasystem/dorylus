@@ -298,14 +298,10 @@ Engine::worker(unsigned tid, void *args) {
                 ++iteration;
 
                 // Flush the returned values from lambda to dataAll.
-                unsigned newNumFeats = getNumFeats();
-                unsigned newOffset = getDataAllOffset();
-
                 for (IdType id = 0; id < graph.getNumLocalVertices(); ++id)
-                    memcpy(vertexDataAllPtr(id, newOffset), vertexDataBufPtr(id), newNumFeats * sizeof(FeatType));
-
+                    memcpy(vertexDataAllPtr(id, getDataAllOffset()), vertexDataBufPtr(id), getNumFeats() * sizeof(FeatType));
                 for (IdType id = 0; id < graph.getNumGhostVertices(); ++id)
-                    memcpy(ghostVertexDataAllPtr(id, newOffset), ghostVertexDataBufPtr(id), newNumFeats * sizeof(FeatType));
+                    memcpy(ghostVertexDataAllPtr(id, getDataAllOffset()), ghostVertexDataBufPtr(id), getNumFeats() * sizeof(FeatType));
 
                 // Wait for all remote schedulings sent by me to be handled.
                 lockRecvWaiters.lock();
@@ -550,6 +546,7 @@ Engine::aggregateFromNeighbors(IdType lvid) {
 
     // Write the results to the correct position inside serialization dataBuf area.
     memcpy(vertexDataBufPtr(lvid), currDataBuf, numFeats * sizeof(FeatType));
+    printLog(nodeId, "<<<>>> Aggregated %u, now its buffer contains %u, %u, %u\n", vertexDataBufPtr(lvid)[0], vertexDataBufPtr(lvid)[1], vertexDataBufPtr(lvid)[2]);
 }
 
 
