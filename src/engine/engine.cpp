@@ -540,6 +540,7 @@ Engine::aggregateFromNeighbors(IdType lvid) {
             otherDataPtr = ghostVertexDataAllPtr(v.getSourceVertexLocalId(i), offset);
 
         // TODO: Locks on the data array area is not properly set yet. But does not affect forward prop.
+        printLog(nodeId, "[[[] Summing with %f, %f, %f\n", otherDataPtr[0], otherDataPtr[1], otherDataPtr[2]);
         for (unsigned j = 0; j < numFeats; ++j)
             currDataBuf[j] += otherDataPtr[j];
     }
