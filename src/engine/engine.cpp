@@ -22,6 +22,7 @@ unsigned Engine::cThreads = NUM_COMP_THREADS;
 std::string Engine::graphFile;
 std::string Engine::featuresFile;
 std::string Engine::outFile;
+std::string Engine::layerConfigFile;
 IdType Engine::currId = 0;
 Lock Engine::lockCurrId;
 Lock Engine::lockRecvWaiters;
