@@ -83,6 +83,8 @@ private:
 
     static std::vector<unsigned> layerConfig;   // Config of number of features in each layer.
     static std::vector<unsigned> layerConfigPrefixSum;   // Prefix sum of layerConfig.
+
+    static unsigned numFeatsTotal;
     static unsigned numLayers;
 
     static FeatType *verticesDataAll;   // Global contiguous array for all local vertices' data. Stored in row-wise order:
@@ -124,13 +126,17 @@ private:
     static void worker(unsigned tid, void *args);
     static void dataCommunicator(unsigned tid, void *args);
 
+    static unsigned getNumFeats();
     static unsigned getNumFeats(unsigned iter);
+    static unsigned getDataAllOffset();
     static unsigned getDataAllOffset(unsigned iter);
 
     static FeatType *vertexDataAllPtr(IdType lvid, unsigned offset);
     static FeatType *ghostVertexDataAllPtr(IdType lvid, unsigned offset);
     static FeatType *vertexDataBufPtr(IdType lvid);
+    static FeatType *vertexDataBufPtr(IdType lvid, unsigned numFeats);
     static FeatType *ghostVertexDataBufPtr(IdType lvid);
+    static FeatType *ghostVertexDataBufPtr(IdType lvid, unsigned numFeats);
 
     static void aggregateFromNeighbors(IdType lvid);
 

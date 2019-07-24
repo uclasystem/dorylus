@@ -164,7 +164,7 @@ for dp in {1..1}; do
   header "Running GVID #: ${GVID}"
 
   LOGFILE=${LOGFILEDIR}/${GVID}.${IK}.out
-  echo "This is the log for round: GVID = ${GVID}" >> ${LOGFILE} 2>&1;
+  echo "This is the log for round: GVID = ${GVID}" >> ${LOGFILE} 2&>1;
 
   echo "DSH command (from ${ASPIREDIR}/build): ./gnn-lambda.bin --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --undirected ${UNDIRECTED} --tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS}";
   ${DSH} -M -f ${DSHFILE} -c "cd ${ASPIREDIR}/build && ./gnn-lambda.bin --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --undirected ${UNDIRECTED} --tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS}" 1> /dev/null 2>> ${LOGFILE};

@@ -33,6 +33,7 @@ std::map<IdType, unsigned> Engine::recvWaiters;
 Barrier Engine::barComp;
 std::vector<unsigned> Engine::layerConfig;
 std::vector<unsigned> Engine::layerConfigPrefixSum;
+unsigned Engine::numFeatsTotal = 0;
 unsigned Engine::numLayers = 0;
 FeatType *Engine::verticesDataAll = NULL;
 FeatType *Engine::ghostVerticesDataAll = NULL;
@@ -76,6 +77,8 @@ Engine::init(int argc, char *argv[], std::vector<unsigned>& _layerConfig) {
         configSum += numFeats;
     }
 
+    numFeatsTotal = configSum;
+
     // Read in the graph and subscribe vertex global ID topics.
     std::set<IdType> inTopics;
     std::vector<IdType> outTopics;
@@ -90,7 +93,7 @@ Engine::init(int argc, char *argv[], std::vector<unsigned>& _layerConfig) {
     ghostVerticesDataBuf = new FeatType[layerConfig[0] * graph.getNumGhostVertices() * sizeof(FeatType)];
 
     // Set a local index for all ghost vertices along the way. This index is used for indexing within the ghost data arrays.
-    unsigned ghostCount = 0;
+    IdType ghostCount = 0;
     for (auto it = graph.getGhostVertices().begin(); it != graph.getGhostVertices().end(); ++it)
         it->second.setLocalId(ghostCount++);
 
@@ -291,9 +294,12 @@ Engine::worker(unsigned tid, void *args) {
                 // Buffer receives results from lambda and should be resized according to the number of features in the next layer. //
                 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+                // Step forward to a new iteration. 
+                ++iteration;
+
                 // Flush the returned values from lambda to dataAll.
-                unsigned newNumFeats = getNumFeats(iteration + 1);
-                unsigned newOffset = getDataAllOffset(iteration + 1);
+                unsigned newNumFeats = getNumFeats();
+                unsigned newOffset = getDataAllOffset();
 
                 for (IdType id = 0; id < graph.getNumLocalVertices(); ++id)
                     memcpy(vertexDataAllPtr(id, newOffset), vertexDataBufPtr(id), newNumFeats * sizeof(FeatType));
@@ -311,11 +317,8 @@ Engine::worker(unsigned tid, void *args) {
                 NodeManager::barrier(LAYER_BARRIER);
 
                 // Yes there are further scheduled vertices. Please start a new iteration.
-                if (iteration + 1 < numLayers) {
+                if (iteration < numLayers) {
                     printLog(nodeId, "Starting a new iteration %u at %.3lf ms...\n", iteration, timeProcess + getTimer());
-
-                    // Step forward to a new iteration. 
-                    ++iteration;
 
                     // Reset current id.
                     currId = 0;       // This is unprotected by lockCurrId because only master executes.
@@ -358,7 +361,7 @@ Engine::worker(unsigned tid, void *args) {
                 lockRecvWaiters.unlock();
 
                 FeatType *dataPtr = vertexDataBufPtr(lvid);
-                CommManager::dataPushOut(gvid, dataPtr, getNumFeats(iteration) * sizeof(FeatType));
+                CommManager::dataPushOut(gvid, dataPtr, getNumFeats() * sizeof(FeatType));
 
                 break;
             }
@@ -399,7 +402,7 @@ Engine::dataCommunicator(unsigned tid, void *args) {
                 // Update the ghost vertex if it is one of mine.
                 if (graph.containsGhostVertex(gvid)) {
                     FeatType *dataBufPtr = ghostVertexDataBufPtr(graph.getGhostVertex(gvid).getLocalId());
-                    memcpy(dataBufPtr, msgbuf, getNumFeats(iteration) * sizeof(FeatType));
+                    memcpy(dataBufPtr, msgbuf, getNumFeats() * sizeof(FeatType));
                 }
 
                 // Using MAX_IDTYPE - gvid as the receive signal topic for vertex gvid.
@@ -434,6 +437,11 @@ Engine::dataCommunicator(unsigned tid, void *args) {
  * 
  */
 unsigned
+Engine::getNumFeats() {
+    return layerConfig[iteration];
+}
+
+unsigned
 Engine::getNumFeats(unsigned iter) {
     return layerConfig[iter];
 }
@@ -444,6 +452,11 @@ Engine::getNumFeats(unsigned iter) {
  * Get the feature starting offset in the current layer.
  * 
  */
+unsigned
+Engine::getDataAllOffset() {
+    return layerConfigPrefixSum[iteration];
+}
+
 unsigned
 Engine::getDataAllOffset(unsigned iter) {
     return layerConfigPrefixSum[iter];
@@ -457,7 +470,7 @@ Engine::getDataAllOffset(unsigned iter) {
  */
 FeatType *
 Engine::vertexDataAllPtr(IdType lvid, unsigned offset) {
-    return verticesDataAll + lvid * graph.getNumLocalVertices() + offset;
+    return verticesDataAll + lvid * numFeatsTotal + offset;
 }
 
 
@@ -468,7 +481,7 @@ Engine::vertexDataAllPtr(IdType lvid, unsigned offset) {
  */
 FeatType *
 Engine::ghostVertexDataAllPtr(IdType lvid, unsigned offset) {
-    return ghostVerticesDataAll + lvid * graph.getNumGhostVertices() + offset;
+    return ghostVerticesDataAll + lvid * numFeatsTotal + offset;
 }
 
 
@@ -479,7 +492,12 @@ Engine::ghostVertexDataAllPtr(IdType lvid, unsigned offset) {
  */
 FeatType *
 Engine::vertexDataBufPtr(IdType lvid) {
-    return verticesDataBuf + lvid * graph.getNumLocalVertices();
+    return verticesDataBuf + lvid * getNumFeats();
+}
+
+FeatType *
+Engine::vertexDataBufPtr(IdType lvid, unsigned numFeats) {
+    return verticesDataBuf + lvid * numFeats;
 }
 
 
@@ -490,7 +508,12 @@ Engine::vertexDataBufPtr(IdType lvid) {
  */
 FeatType *
 Engine::ghostVertexDataBufPtr(IdType lvid) {
-    return ghostVerticesDataBuf + lvid * graph.getNumGhostVertices();
+    return ghostVerticesDataBuf + lvid * getNumFeats();
+}
+
+FeatType *
+Engine::ghostVertexDataBufPtr(IdType lvid, unsigned numFeats) {
+    return ghostVerticesDataBuf + lvid * numFeats;
 }
 
 
@@ -502,8 +525,8 @@ Engine::ghostVertexDataBufPtr(IdType lvid) {
  */
 void
 Engine::aggregateFromNeighbors(IdType lvid) {
-    unsigned numFeats = getNumFeats(iteration);
-    unsigned offset = getDataAllOffset(iteration);
+    unsigned numFeats = getNumFeats();
+    unsigned offset = getDataAllOffset();
 
     // Read out data of the current iteration of given vertex.
     FeatType currDataBuf[numFeats];
