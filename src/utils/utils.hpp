@@ -16,8 +16,9 @@
 typedef unsigned IdType;
 typedef float FeatType;
 typedef float EdgeType;
-typedef std::vector<FeatType> VertexType;
-#define MAX_IDTYPE UINT_MAX
+#define MAX_IDTYPE UINT_MAX     // Limit: MAX_IDTYPE must be at least two times the number of global vertices.
+                                // From 0 to numGlobalVertices are normal ghost vertices update message,
+                                // From MAX_IDTYPE downto MAX_IDTYPE - numGlobalVertices are receive signals.
 
 
 #define INTERFACE "eth0" 

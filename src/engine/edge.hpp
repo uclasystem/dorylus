@@ -20,13 +20,14 @@ class Edge {
 
 public:
 
-    Edge(IdType oId, EdgeLocationType eLocation, EdgeType eData = EdgeType());
+    Edge(IdType oId, EdgeLocationType eLocation, EdgeType eData = EdgeType())
+        : otherId(oId), edgeData(eData), edgeLocation(eLocation) { }
 
-    EdgeType data();
-    EdgeLocationType getEdgeLocation();
+    EdgeType getData() { return edgeData; }
+    void setData(EdgeType value) { edgeData = value; }
 
-    void setData(EdgeType value);
-    void setEdgeLocation(EdgeLocationType eLoc);
+    EdgeLocationType getEdgeLocation() { return edgeLocation; }
+    void setEdgeLocation(EdgeLocationType eLoc) { edgeLocation = eLoc; }
 
 protected:
 
@@ -45,10 +46,10 @@ class InEdge: public Edge {
 
 public:
 
-    InEdge(IdType sId, EdgeLocationType eLocation, EdgeType eData = EdgeType());
+    InEdge(IdType sId, EdgeLocationType eLocation, EdgeType eData = EdgeType()) : Edge(sId, eLocation, eData) { }
 
-    IdType sourceId();
-    void setSourceId(IdType sId);
+    IdType getSourceId() { return otherId; }
+    void setSourceId(IdType sId) { otherId = sId; }
 };
 
 
@@ -61,10 +62,10 @@ class OutEdge: public Edge {
 
 public:
 
-    OutEdge(IdType dId, EdgeLocationType eLocation, EdgeType eData = EdgeType());
+    OutEdge(IdType dId, EdgeLocationType eLocation, EdgeType eData = EdgeType()) : Edge(dId, eLocation, eData) { }
     
-    IdType destId();
-    void setDestId(IdType dId);
+    IdType getDestId() { return otherId; }
+    void setDestId(IdType dId) { otherId = dId; }
 };
 
 

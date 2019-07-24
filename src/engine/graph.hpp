@@ -19,29 +19,27 @@ class Graph {
 
 public:
 
-    std::vector<Vertex>& getVertices();
+    std::vector<Vertex>& getVertices() { return vertices; }
     Vertex& getVertex(IdType lvid);
     Vertex& getVertexByGlobal(IdType gvid);
     bool containsVertex(IdType gvid);   // Contain searches with global ID.
 
-    std::map<IdType, GhostVertex>& getGhostVertices();
+    std::map<IdType, GhostVertex>& getGhostVertices() { return ghostVertices; }
     GhostVertex& getGhostVertex(IdType gvid);
     bool containsGhostVertex(IdType gvid);
 
-    IdType getNumLocalVertices();
-    void setNumLocalVertices(IdType num);
-    IdType getNumGlobalVertices();
-    void setNumGlobalVertices(IdType num);
+    IdType getNumLocalVertices() { return numLocalVertices; }
+    void setNumLocalVertices(IdType num) { numLocalVertices = num; }
+    IdType getNumGlobalVertices() { return numGlobalVertices; }
+    void setNumGlobalVertices(IdType num) { numGlobalVertices = num; }
+    IdType getNumGhostVertices() { return numGhostVertices; }
+    void setNumGhostVertices(IdType num) { numGhostVertices = num; }
 
-    unsigned long long getNumGlobalEdges();
-    void incrementNumGlobalEdges() {
-        ++numGlobalEdges;
-    }
+    unsigned long long getNumGlobalEdges() { return numGlobalEdges; }
+    void incrementNumGlobalEdges() { ++numGlobalEdges; }
 
-    short getVertexPartitionId(IdType vid);
-    void appendVertexPartitionId(short pid);
-
-    void updateGhostVertex(IdType vId, VertexType value);
+    short getVertexPartitionId(IdType vid) { return vertexPartitionIds[vid]; }
+    void appendVertexPartitionId(short pid) { vertexPartitionIds.push_back(pid); }
 
     void compactGraph();
 
@@ -55,6 +53,7 @@ private:
 
     IdType numLocalVertices;
     IdType numGlobalVertices;
+    IdType numGhostVertices;
 
     unsigned long long numGlobalEdges = 0;
 

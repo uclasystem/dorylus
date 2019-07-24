@@ -2,11 +2,6 @@
 #include "graph.hpp"
 
 
-std::vector<Vertex>&
-Graph::getVertices() {
-    return vertices;
-}
-
 Vertex&
 Graph::getVertex(IdType lvid) {
     assert(lvid < vertices.size());
@@ -24,11 +19,6 @@ Graph::containsVertex(IdType gvid) {
     return globalToLocalId.find(gvid) != globalToLocalId.end();
 }
 
-std::map<IdType, GhostVertex>&
-Graph::getGhostVertices() {
-    return ghostVertices;
-}
-
 GhostVertex&
 Graph::getGhostVertex(IdType gvid) {
     assert(ghostVertices.find(gvid) != ghostVertices.end());
@@ -38,54 +28,6 @@ Graph::getGhostVertex(IdType gvid) {
 bool
 Graph::containsGhostVertex(IdType gvid) {
     return ghostVertices.find(gvid) != ghostVertices.end();
-}
-
-IdType
-Graph::getNumLocalVertices() {
-    return numLocalVertices;
-}
-
-void
-Graph::setNumLocalVertices(IdType num) {
-    numLocalVertices = num;
-}
-
-IdType
-Graph::getNumGlobalVertices() {
-    return numGlobalVertices;
-}
-
-void
-Graph::setNumGlobalVertices(IdType num) {
-    numGlobalVertices = num;
-}
-
-unsigned long long
-Graph::getNumGlobalEdges() {
-    return numGlobalEdges;
-}
-
-short
-Graph::getVertexPartitionId(IdType vid) {
-    return vertexPartitionIds[vid];
-}
-
-void
-Graph::appendVertexPartitionId(short pid) {
-    vertexPartitionIds.push_back(pid);
-}
-
-
-/**
- *
- * Update a ghost vertex's value.
- * 
- */
-void
-Graph::updateGhostVertex(IdType vId, VertexType value) {
-    typename std::map<IdType, GhostVertex>::iterator it = ghostVertices.find(vId);
-    assert(it != ghostVertices.end());
-    it->second.addData(value);
 }
 
 

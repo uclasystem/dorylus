@@ -9,7 +9,6 @@
 #include <tuple>
 #include <cstdio>
 #include "graph.hpp"
-#include "vertexprogram.hpp"
 #include "../commmanager/commmanager.hpp"
 #include "../nodemanager/nodemanager.hpp"
 #include "../parallel/threadpool.hpp"
@@ -17,10 +16,6 @@
 #include "../parallel/cond.hpp"
 #include "../parallel/barrier.hpp"
 #include "../utils/utils.hpp"
-
-
-// TODO: Hardcoded # of layers, should be changed sooner or later.
-#define NUM_LAYERS 5
 
 
 #define NUM_DATA_THREADS 1          // These are default values (when cli argument is empty).
@@ -33,6 +28,9 @@
 #define ZERO_STR "0"
 #define INF 1000000000  // 1B
 #define MILLION 1000000 // 1M
+
+
+#define MAX_MSG_SIZE 8192   // Max size (bytes) for a message received by the data communicator.
 
 
 /** For files cli options. */
@@ -67,7 +65,7 @@ class Engine {
 public:
 
     // Public APIs for benchmarks.
-    static void init(int argc, char *argv[], VertexType dVertex = VertexType(), EdgeType dEdge = EdgeType(), EdgeType (*eWeight) (IdType, IdType) = NULL);
+    static void init(int argc, char *argv[], EdgeType (*eWeight) (IdType, IdType) = NULL);
     static void run(VertexProgram *vProgram, bool printEM);
     static void processAll(VertexProgram *vProgram);
     static void destroy();
@@ -83,8 +81,16 @@ private:
     static unsigned cThreads;
     static ThreadPool *computePool;
 
-    static VertexProgram *vertexProgram;
-    static EdgeType (*edgeWeight) (IdType, IdType);
+    static std::vector<unsigned> layerConfig;   // Config of number of features in each layer.
+    static std::vector<unsigned> layerConfigPrefixSum;   // Prefix sum of layerConfig.
+    static unsigned numLayers;
+
+    static FeatType *verticesDataAll;   // Global contiguous array for all local vertices' data. Stored in row-wise order:
+                                        // The first bunch of values are data for the 0th vertex, ...
+    static FeatType *ghostVerticesDataAll;  // For ghost vertices similarly.
+    static FeatType *verticesDataBuf;   // A smaller buffer storing current iter's data after aggregation. (Serves as the
+                                        // serialization area naturally.)
+    static FeatType *ghostVerticesDataBuf;  // For ghost vertices similarly.
 
     static IdType currId;
     static Lock lockCurrId;
@@ -113,12 +119,12 @@ private:
 
     static Barrier barComp;
 
-    static VertexType defaultVertex;
-    static EdgeType defaultEdge;
-
     // Worker and communicator thread function.
     static void worker(unsigned tid, void *args);
     static void dataCommunicator(unsigned tid, void *args);
+
+    static unsigned getCurrentNumFeats();
+    static unsigned getCurrentDataAllOffset();
 
     // For initialization.
     static void parseArgs(int argc, char* argv[]);

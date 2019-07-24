@@ -20,8 +20,6 @@ ThreadPool* Engine::computePool = NULL;
 unsigned Engine::cThreads = NUM_COMP_THREADS;
 std::string Engine::graphFile;
 std::string Engine::featuresFile;
-VertexProgram* Engine::vertexProgram = NULL;
-EdgeType (*Engine::edgeWeight) (IdType, IdType) = NULL;
 IdType Engine::currId = 0;
 Lock Engine::lockCurrId;
 Lock Engine::lockRecvWaiters;
@@ -31,8 +29,12 @@ unsigned Engine::nodeId;
 unsigned Engine::numNodes;
 std::map<IdType, unsigned> Engine::recvWaiters;
 Barrier Engine::barComp;
-VertexType Engine::defaultVertex;
-EdgeType Engine::defaultEdge;
+std::vector<unsigned> Engine::layerConfig;
+unsigned Engine::numLayers = 0;
+FeatType *Engine::verticesDataAll = NULL;
+FeatType *Engine::ghostVerticesDataAll = NULL;
+FeatType *Engine::verticesDataBuf = NULL;
+FeatType *Engine::ghostVerticesDataBuf = NULL;
 unsigned Engine::iteration = 0;
 bool Engine::undirected = false;
 bool Engine::halt = false;
@@ -46,7 +48,7 @@ double Engine::timeInit = 0.0;
  * 
  */
 void
-Engine::init(int argc, char *argv[], VertexType dVertex, EdgeType dEdge, EdgeType (*eWeight) (IdType, IdType)) {
+Engine::init(int argc, char *argv[], const std::vector<unsigned>& _layerConfig) {
     printLog(nodeId, "Engine starts initialization...\n");
     timeInit = -getTimer();
 
@@ -59,9 +61,16 @@ Engine::init(int argc, char *argv[], VertexType dVertex, EdgeType dEdge, EdgeTyp
     numNodes = NodeManager::getNumNodes();
     assert(numNodes <= 256);    // Cluster size limitation.
 
-    defaultVertex = dVertex;
-    defaultEdge = dEdge;
-    edgeWeight = eWeight;
+    // Set number of layers and number of features in each layer. Also store the prefix sum of config for offset querying use.
+    assert(_layerConfig.size() > 1);
+    layerConfig = _layerConfig;
+    numLayers = layerConfig.size() - 1;
+
+    unsigned configSum = 0;
+    for (unsigned& numFeats : layerConfig) {
+        layerConfigPrefixSum.push_back(configSum);
+        configSum += numFeats;
+    }
 
     // Read in the graph and subscribe vertex global ID topics.
     std::set<IdType> inTopics;
@@ -69,7 +78,18 @@ Engine::init(int argc, char *argv[], VertexType dVertex, EdgeType dEdge, EdgeTyp
     readGraphBS(graphFile, inTopics, outTopics);
     printGraphMetrics();
 
-    // Read in initial features from the features file.
+    // Create the global contiguous memory for vertices' data, according to the given layer config and number of local vertices.
+    // Create the global contiguous memory for ghost vertices' data similarly.
+    verticesDataAll = new FeatType[configSum * graph.getNumLocalVertices() * sizeof(FeatType)];
+    ghostVerticesDataAll = new FeatType[configSum * graph.getNumGhostVertices() * sizeof(FeatType)];
+    verticesDataBuf = new FeatType[layerConfig[0] * graph.getNumLocalVertices() * sizeof(FeatType)];
+    ghostVerticesDataBuf = new FeatType[layerConfig[0] * graph.getNumGhostVertices() * sizeof(FeatType)];
+
+    unsigned ghostCount = 0;
+    for (GhostVertex& v : graph.getGhostVertices())     // Set a local index for all ghost vertices along the way.
+        v.setLocalId(ghostCount++);                     // This index is used for indexing within the ghost data arrays.
+
+    // Read in initial features (for the 0th layer) from the features file.
     readFeaturesFile(featuresFile);
 
     // Initialize synchronization utilities.
@@ -194,6 +214,11 @@ Engine::destroy() {
     lockRecvWaiters.destroy();
     condRecvWaitersEmpty.destroy();
     lockHalt.destroy();
+
+    delete[] verticesDataAll;
+    delete[] ghostVerticesDataAll;
+    delete[] verticesDataBuf
+    delete[] ghostVerticesDataBuf;
 }
 
 
@@ -216,11 +241,11 @@ Engine::worker(unsigned tid, void *args) {
 
         // Get current vertex that need to be handled.
         lockCurrId.lock();
-        IdType local_vid = currId++;
+        IdType lvid = currId++;
         lockCurrId.unlock();
 
         // All local vertices have been processed. Hit the barrier and wait for next iteration / decide to halt.
-        if (local_vid >= graph.getNumLocalVertices()) {
+        if (lvid >= graph.getNumLocalVertices()) {
 
             // Non-master threads.
             if (tid != 0) {
@@ -253,7 +278,7 @@ Engine::worker(unsigned tid, void *args) {
                 NodeManager::barrier(LAYER_BARRIER);
 
                 // Yes there are further scheduled vertices. Please start a new iteration.
-                if (iteration + 1 < NUM_LAYERS) {
+                if (iteration + 1 < numLayers) {
                     printLog(nodeId, "Starting a new iteration %u at %.3lf ms...\n", iteration, timeProcess + getTimer());
 
                     // Step forward to a new iteration. 
@@ -285,21 +310,24 @@ Engine::worker(unsigned tid, void *args) {
             }
         }
 
-        // Doing the task.
-        Vertex& v = graph.getVertex(local_vid);
-        vertexProgram->update(v, iteration);
+        // Doing the aggregation.
+        Vertex& v = graph.getVertex(lvid);
+        v.aggregateFromNeighbors()
 
         // If there are any remote edges, should send this vid to others for their ghost's update.
         for (unsigned i = 0; i < v.getNumOutEdges(); ++i) {
             if (v.getOutEdge(i).getEdgeLocation() == REMOTE_EDGE_TYPE) {
-                IdType global_vid = graph.localToGlobalId[local_vid];
+                IdType gvid = graph.localToGlobalId[lvid];
 
                 // Record that this vid gets broadcast in this iteration. Should wait for its corresponding respond.
                 lockRecvWaiters.lock();
-                recvWaiters[global_vid] = numNodes;
+                recvWaiters[gvid] = numNodes;
                 lockRecvWaiters.unlock();
 
-                CommManager::dataPushOut(global_vid, (void *) v.data().data(), sizeof(FeatType) * v.data().size());
+                // Remember to lock.
+                FeatType *dataPtr = vertexDataBufPtr(lvid);
+                CommManager::dataPushOut(gvid, dataPtr, getCurrentNumFeats() * sizeof(FeatType));
+
                 break;
             }
         }
@@ -315,13 +343,13 @@ Engine::worker(unsigned tid, void *args) {
 void
 Engine::dataCommunicator(unsigned tid, void *args) {
     IdType topic;
-    VertexType value;
+    FeatType *msgbuf = new char[MAX_MSG_SIZE];
 
     // While loop, looping infinitely to get the next message.
     while (1) {
 
         // No message in queue.
-        if (!CommManager::dataPullIn(&topic, value)) {
+        if (!CommManager::dataPullIn(&topic, msgbuf, MAX_MSG_SIZE)) {
 
             // Computation workers done their work, so communicator goes to death as well.
             if (halt)
@@ -329,35 +357,142 @@ Engine::dataCommunicator(unsigned tid, void *args) {
 
         // Pull in the next message, and process this message.
         } else {
-            IdType global_vid = topic;
 
             // A normal ghost value broadcast.
-            if (value.size() != 1) {
+            if (0 <= topic < graph.getNumGlobalVertices()) {
+                IdType gvid = topic;
 
                 // Update the ghost vertex if it is one of mine.
-                if (graph.containsGhostVertex(global_vid))
-                    graph.updateGhostVertex(global_vid, value);
+                if (graph.containsGhostVertex(gvid)) {
+                    FeatType *dataBufPtr = ghostVerticesDataBuf(graph.getGhostVertex(gvid).getLocalId());
+                    memcpy(dataBufPtr, msgbuf, getCurrentNumFeats() * sizeof(FeatType));
+                }
 
-                // TODO: Using 1-D vec to indicate a respond here. Needs change.
-                VertexType recv_stub = VertexType(1, 0);
-                CommManager::dataPushOut(global_vid, (void *) recv_stub.data(), sizeof(FeatType) * recv_stub.size());
+                // Using MAX_IDTYPE - gvid as the receive signal topic for vertex gvid.
+                CommManager::dataPushOut(MAX_IDTYPE - gvid, NULL, 0);
 
             // A respond to a broadcast, and the topic vertex is in my local vertices. I should update the
             // corresponding recvWaiter's value. If waiters become empty, send a signal in case the workers are
             // waiting on it to be empty at the iteration barrier.
-            } else if (graph.globalToLocalId.find(topic) != graph.globalToLocalId.end()) {
-                lockRecvWaiters.lock();
-                assert(recvWaiters.find(global_vid) != recvWaiters.end());
-                --recvWaiters[global_vid];
-                if (recvWaiters[global_vid] == 0) {
-                    recvWaiters.erase(global_vid);
-                    if (recvWaiters.empty())
-                        condRecvWaitersEmpty.signal();
+            } else if (MAX_IDTYPE >= topic > MAX_IDTYPE - graph.getNumGlobalVertices()) {
+                IdType gvid = MAX_IDTYPE - topic;
+
+                if (graph.globalToLocalId.find(gvid) != graph.globalToLocalId.end()) {
+                    lockRecvWaiters.lock();
+                    assert(recvWaiters.find(gvid) != recvWaiters.end());
+                    --recvWaiters[gvid];
+                    if (recvWaiters[gvid] == 0) {
+                        recvWaiters.erase(gvid);
+                        if (recvWaiters.empty())
+                            condRecvWaitersEmpty.signal();
+                    }
+                    lockRecvWaiters.unlock();
                 }
-                lockRecvWaiters.unlock();
             }
         }
     }
+}
+
+
+/**
+ *
+ * Get number of features in the current layer.
+ * 
+ */
+unsigned
+Engine::getCurrentNumFeats() {
+    return layerConfig[iteration];
+}
+
+
+/**
+ *
+ * Get the feature starting offset in the current layer.
+ * 
+ */
+unsigned
+Engine::getCurrentDataAllOffset() {
+    return layerConfigPrefixSum[iteration];
+}
+
+
+/**
+ *
+ * Get the data pointer to a local vertex's data in the dataAll area.
+ * 
+ */
+FeatType *
+Engine::vertexDataAllPtr(IdType lvid, unsigned offset) {
+    return verticesDataAll + lvid * graph.getNumLocalVertices() + offset;
+}
+
+
+/**
+ *
+ * Get the data pointer to a ghost vertex's data in the dataAll area.
+ * 
+ */
+FeatType *
+Engine::ghostVertexDataAllPtr(IdType lvid, unsigned offset) {
+    return ghostVerticesDataAll + lvid * graph.getNumGhostVertices() + offset;
+}
+
+
+/**
+ *
+ * Get the data pointer to a local vertex's data in the dataBuf area  (i.e. pointing to values after aggregation).
+ * 
+ */
+FeatType *
+Engine::vertexDataBufPtr(IdType lvid) {
+    return verticesDataBuf + lvid * graph.getNumLocalVertices() + offset;
+}
+
+
+/**
+ *
+ * Get the data pointer to a ghost vertex's data in the dataBuf area (i.e. pointing to values after aggregation).
+ * 
+ */
+FeatType *
+Engine::ghostVertexDataBufPtr(IdType lvid) {
+    return ghostVerticesDataBuf + lvid * graph.getNumGhostVertices() + offset;
+}
+
+
+/**
+ *
+ * Aggregate numFeats feature values starting from offset from all neighbors (including self). Then write the results to the
+ * data buffer area for serialization. The results are to be used for being sent to lambda threads.
+ * 
+ */
+void
+Engine::aggregateFromNeighbors(IdType lvid) {
+    unsigned numFeats = getCurrentNumFeats();
+    unsigned offset = getCurrentDataAllOffset();
+
+    // Read out data of the current iteration of given vertex.
+    FeatType currDataBuf[numFeats];
+    FeatType *currDataPtr = vertexDataAllPtr(lvid, getCurrentDataAllOffset());
+    memcpy(currDataBuf, currDataPtr, getCurrentNumFeats() * sizeof(FeatType));
+
+    // Aggregate from incoming neighbors.
+    Vertex& v = graph.getVertex(lvid);
+    for (unsigned i = 0; i < v.getNumInEdges(); ++i) {
+        FeatType *otherDataPtr;
+
+        if (v.getInEdge(i).getEdgeLocation() == LOCAL_EDGE_TYPE)    // Local vertex.
+            otherDataPtr = vertexDataAllPtr(v.getSourceVertexLocalId(i), offset);
+        else                                                        // Ghost vertex.
+            otherDataPtr = ghostVertexDataAllPtr(v.getSourceVertexLocalId(i), offset);
+
+        // TODO: Locks on the data array area is not properly set yet. But does not affect forward prop.
+        for (unsigned j = 0; j < numFeats; ++j)
+            currDataBuf[j] += otherDataPtr[j];
+    }
+
+    // Write the results to the correct position inside serialization dataBuf area.
+    memcpy(vertexDataBufPtr(lvid), currDataBuf, numFeats * sizeof(FeatType));
 }
 
 
@@ -469,34 +604,34 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
 
     assert(infile.good());
 
-    static const std::size_t LINE_BUFFER_SIZE=8192;
-    char buffer[LINE_BUFFER_SIZE];
-
-    std::vector<VertexType> feature_mat;
-
     // Loop through each line.
-    while (infile.eof()!=true){
-        infile.getline(buffer,LINE_BUFFER_SIZE);
+    unsigned gvid = 0;
+    std::string line;
+    while (!infile.eof()) {
+        std::getline(infile, line);
         std::vector<std::string> splited_strings;
-        VertexType feature_vec=VertexType();
-        std::string line(buffer);
+        std::vector<FeatType> feature_vec;
 
         // Split each line into numbers.
         boost::split(splited_strings, line, boost::is_any_of(", "), boost::token_compress_on);
 
-        for (auto it = splited_strings.begin(); it != splited_strings.end(); it++) {
-            if (it->data()[0] != 0) // Check null char at the end.
-                feature_vec.push_back(std::stof(it->data()));
+        for (std::string& substr : splited_strings) {
+            if (substr[0] != '\0')      // In case of the null char at the end.
+                feature_vec.push_back(std::stof(substr));
         }
-        feature_mat.push_back(feature_vec);
-    }
 
-    // Set the vertices' initial values.
-    for (std::size_t i = 0; i < feature_mat.size(); ++i){
-        if (graph.containsGhostVertex(i))   // Global vertex.
-            graph.getGhostVertex(i).setData(feature_mat[i]);
-        else if (graph.containsVertex(i))   // Local vertex.
-            graph.getVertexByGlobal(i).setData(feature_mat[i]);
+        assert(feature_vec.size() == layerConfig[0]);
+
+        // Set the vertex's initial values, if it is one of mine local vertices / ghost vertices.
+        FeatType *dataPtr = NULL;
+        if (graph.containsGhostVertex(gvid))   // Global vertex.
+            dataPtr = graph.getGhostVertex(gvid).dataPtrAt(0);
+        else if (graph.containsVertex(gvid))   // Local vertex.
+            dataPtr = graph.getVertexByGlobal(gvid).dataPtrAt(0);
+        if (dataPtr != NULL)
+            memcpy(dataPtr, feature_vec.data(), feature_vec.size() * sizeof(FeatType));
+
+        ++gvid;
     }
 }
 
@@ -567,10 +702,7 @@ Engine::processEdge(IdType& from, IdType& to, Graph& lGraph, std::set<IdType> *i
                 oTopics->insert(from);
         }
 
-        if(edgeWeight != NULL)
-            lGraph.getVertex(lFromId).addOutEdge(OutEdge(toId, eLocation, edgeWeight(from, to)));
-        else
-            lGraph.getVertex(lFromId).addOutEdge(OutEdge(toId, eLocation, defaultEdge));
+        lGraph.getVertex(lFromId).addOutEdge(OutEdge(toId, eLocation, EdgeType()));
     }
 
     if (lGraph.getVertexPartitionId(to) == nodeId) {
@@ -593,10 +725,7 @@ Engine::processEdge(IdType& from, IdType& to, Graph& lGraph, std::set<IdType> *i
                 inTopics->insert(from);
         }
 
-        if (edgeWeight != NULL)
-            lGraph.getVertex(lToId).addInEdge(InEdge(fromId, eLocation, edgeWeight(from, to)));
-        else
-            lGraph.getVertex(lToId).addInEdge(InEdge(fromId, eLocation, defaultEdge));
+        lGraph.getVertex(lToId).addInEdge(InEdge(fromId, eLocation, EdgeType()));
     }
 }
 
@@ -675,8 +804,6 @@ Engine::readGraphBS(std::string& fileName, std::set<IdType>& inTopics, std::vect
         graph.getVertex(i).setLocalId(i);
         graph.getVertex(i).setGlobalId(graph.localToGlobalId[i]);
         graph.getVertex(i).setVertexLocation(INTERNAL_VERTEX);
-        graph.getVertex(i).dataAll().clear();
-        graph.getVertex(i).dataAll().push_back(defaultVertex);
         graph.getVertex(i).setGraphPtr(&graph);
     }
 
@@ -708,6 +835,7 @@ Engine::readGraphBS(std::string& fileName, std::set<IdType>& inTopics, std::vect
     infile.close();
 
     // Extra works added.
+    graph.setNumGhostVertices(graph.getGhostVertices().size());
     findGhostDegrees(edgeFileName);
     setEdgeNormalizations();
 

@@ -11,35 +11,6 @@ using namespace std;
 char tmpDir[256];
 
 
-/** Define the aggregate vertex program. */
-class AggregateProgram : public VertexProgram {
-
-public:
-
-    // Define my own update function that to be called in each iteration.
-    void update(Vertex& vertex, unsigned layer) {
-        VertexType curr = vertex.data();
-
-        for (unsigned i = 0; i < vertex.getNumInEdges(); ++i) {
-            vector<FeatType> other = vertex.getSourceVertexDataAt(i, layer);
-            sumVectors(curr, other);
-        }
-
-        vertex.addData(curr);   // Push to the back instead of modify the value.
-    }
-
-private:
-
-    // Sum up with a neighbors feature value vector.
-    void sumVectors(vector<FeatType>& curr, vector<FeatType>& other) {
-        assert(curr.size() <= other.size());
-        for (int i = 0; i < curr.size(); ++i) {
-            curr[i] += other[i];
-        }
-    }
-};
-
-
 /** Define the writer vertex program for output. */
 class WriterProgram : public VertexProgram {
 
@@ -86,8 +57,8 @@ main(int argc, char *argv[]) {
     parseArgs(&argc, argv, "--bm-tmpdir=", tmpDir);
 
     // Initialize the engine.
-    VertexType defaultVertex = vector<FeatType>(2, 1);
-    Engine::init(argc, argv, defaultVertex);
+    std::vector<unsigned> layerConfig(5, 3);
+    Engine::init(argc, argv, layerConfig);
 
     // Start one run of the engine, on the aggregate program.
     AggregateProgram aggregateProgram;
