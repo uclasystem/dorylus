@@ -17,7 +17,7 @@ int
 main(int argc, char *argv[]) {
 
     // Initialize the engine.
-    std::vector<unsigned> layerConfig(5, 5);
+    std::vector<unsigned> layerConfig(5, 6);
     Engine::init(argc, argv, layerConfig);
 
     // Start one run of the engine.
