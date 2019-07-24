@@ -70,7 +70,6 @@ ZKInterface::init(const char *hPort) {
 
     zh = zookeeper_init(hostPort, watcher, RECV_TIMEOUT, &myId, NULL, 0);
     if (!zh) {
-        efprintf(stderr, "ERROR initializing ZooKeeper service! [Code = %d, String = %s]\n", errno, strerror(errno));
         return false;
     } else {
         barInit.wait();
