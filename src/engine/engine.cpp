@@ -384,8 +384,10 @@ Engine::dataCommunicator(unsigned tid, void *args) {
         if (!CommManager::dataPullIn(&topic, msgbuf, MAX_MSG_SIZE)) {
 
             // Computation workers done their work, so communicator goes to death as well.
-            if (halt)
+            if (halt) {
+                delete[] msgbuf;
                 return;
+            }
 
         // Pull in the next message, and process this message.
         } else {
