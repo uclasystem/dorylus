@@ -87,9 +87,10 @@ Engine::init(int argc, char *argv[], std::vector<unsigned>& _layerConfig) {
     verticesDataBuf = new FeatType[layerConfig[0] * graph.getNumLocalVertices() * sizeof(FeatType)];
     ghostVerticesDataBuf = new FeatType[layerConfig[0] * graph.getNumGhostVertices() * sizeof(FeatType)];
 
+    // Set a local index for all ghost vertices along the way. This index is used for indexing within the ghost data arrays.
     unsigned ghostCount = 0;
-    for (GhostVertex& v : graph.getGhostVertices())     // Set a local index for all ghost vertices along the way.
-        v.setLocalId(ghostCount++);                     // This index is used for indexing within the ghost data arrays.
+    for (auto it = graph.getGhostVertices().begin(); it != graph.getGhostVertices().end(); ++it)
+        it->second.setLocalId(ghostCount++);
 
     // Read in initial features (for the 0th layer) from the features file.
     readFeaturesFile(featuresFile);
@@ -158,7 +159,6 @@ Engine::run() {
     NodeManager::startProcessing();
 
     // Set initial conditions.
-    vertexProgram = vProgram;
     currId = 0;
     iteration = 0;
     halt = false;
@@ -178,7 +178,7 @@ Engine::run() {
     dataPool->sync();
 
     printLog(nodeId, "Engine completes the processing at iteration %u.\n", iteration);
-    if (master() && printEM)
+    if (master())
         printEngineMetrics();
 }
 
@@ -190,16 +190,23 @@ Engine::run() {
  */
 void
 Engine::output() {
+    std::ofstream outStream(outFile.c_str());
+
+    if (!outStream.good())
+        printLog(nodeId, "Cannot open output file: %s [Reason: %s]\n", outFile.c_str(), std::strerror(errno));
+
+    assert(outStream.good());
+
     for (Vertex& v : graph.getVertices()) {
-        outFile << v.getGlobalId() << ": ";
+        outStream << v.getGlobalId() << ": ";
         FeatType *dataAllPtr = vertexDataAllPtr(v.getLocalId(), 0);
         unsigned offset = 0;
         for (unsigned& numFeats : layerConfig) {
             for (unsigned i = 0; i < numFeats; ++i)
-                outFile << dataAllPtr[offset++]
-            outFile << "| ";
+                outStream << dataAllPtr[offset++]
+            outStream << "| ";
         }
-        outFile << std::endl;
+        outStream << std::endl;
     }
 }
 
@@ -347,9 +354,8 @@ Engine::worker(unsigned tid, void *args) {
                 recvWaiters[gvid] = numNodes;
                 lockRecvWaiters.unlock();
 
-                // Remember to lock.
                 FeatType *dataPtr = vertexDataBufPtr(lvid);
-                CommManager::dataPushOut(gvid, dataPtr, getCurrentNumFeats() * sizeof(FeatType));
+                CommManager::dataPushOut(gvid, dataPtr, getNumFeats(iteration) * sizeof(FeatType));
 
                 break;
             }
@@ -388,7 +394,7 @@ Engine::dataCommunicator(unsigned tid, void *args) {
                 // Update the ghost vertex if it is one of mine.
                 if (graph.containsGhostVertex(gvid)) {
                     FeatType *dataBufPtr = ghostVerticesDataBuf(graph.getGhostVertex(gvid).getLocalId());
-                    memcpy(dataBufPtr, msgbuf, getCurrentNumFeats() * sizeof(FeatType));
+                    memcpy(dataBufPtr, msgbuf, getNumFeats(iteration) * sizeof(FeatType));
                 }
 
                 // Using MAX_IDTYPE - gvid as the receive signal topic for vertex gvid.
@@ -435,7 +441,7 @@ Engine::getNumFeats(unsigned iter) {
  */
 unsigned
 Engine::getDataAllOffset(unsigned iter) {
-    return layerConfigPrefixSum[iteration];
+    return layerConfigPrefixSum[iter];
 }
 
 
@@ -468,7 +474,7 @@ Engine::ghostVertexDataAllPtr(IdType lvid, unsigned offset) {
  */
 FeatType *
 Engine::vertexDataBufPtr(IdType lvid) {
-    return verticesDataBuf + lvid * graph.getNumLocalVertices() + offset;
+    return verticesDataBuf + lvid * graph.getNumLocalVertices();
 }
 
 
@@ -479,7 +485,7 @@ Engine::vertexDataBufPtr(IdType lvid) {
  */
 FeatType *
 Engine::ghostVertexDataBufPtr(IdType lvid) {
-    return ghostVerticesDataBuf + lvid * graph.getNumGhostVertices() + offset;
+    return ghostVerticesDataBuf + lvid * graph.getNumGhostVertices();
 }
 
 
@@ -491,13 +497,13 @@ Engine::ghostVertexDataBufPtr(IdType lvid) {
  */
 void
 Engine::aggregateFromNeighbors(IdType lvid) {
-    unsigned numFeats = getCurrentNumFeats();
-    unsigned offset = getCurrentDataAllOffset();
+    unsigned numFeats = getNumFeats(iteration);
+    unsigned offset = getDataAllOffset(iteration);
 
     // Read out data of the current iteration of given vertex.
     FeatType currDataBuf[numFeats];
-    FeatType *currDataPtr = vertexDataAllPtr(lvid, getCurrentDataAllOffset());
-    memcpy(currDataBuf, currDataPtr, getCurrentNumFeats() * sizeof(FeatType));
+    FeatType *currDataPtr = vertexDataAllPtr(lvid, offset);
+    memcpy(currDataBuf, currDataPtr, numFeats * sizeof(FeatType));
 
     // Aggregate from incoming neighbors.
     Vertex& v = graph.getVertex(lvid);
@@ -770,7 +776,7 @@ Engine::setEdgeNormalizations() {
         float dstNorm = std::pow(dstDeg, -.5);
         for (unsigned i = 0; i < vertex.getNumInEdges(); ++i) {
             InEdge& e = vertex.getInEdge(i);
-            IdType vid = e.sourceId();
+            IdType vid = e.getSourceId();
             if (e.getEdgeLocation() == LOCAL_EDGE_TYPE) {
                 unsigned srcDeg = graph.getVertex(vid).getNumInEdges() + 1;
                 float srcNorm = std::pow(srcDeg, -.5);

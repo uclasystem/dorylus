@@ -124,8 +124,13 @@ private:
     static void worker(unsigned tid, void *args);
     static void dataCommunicator(unsigned tid, void *args);
 
-    static unsigned getCurrentNumFeats();
-    static unsigned getCurrentDataAllOffset();
+    static unsigned getNumFeats(unsigned iter);
+    static unsigned getDataAllOffset(unsigned iter);
+
+    static FeatType *vertexDataAllPtr(IdType lvid, unsigned offset);
+    static FeatType *ghostVertexDataAllPtr(IdType lvid, unsigned offset);
+    static FeatType *vertexDataAllPtr(IdType lvid);
+    static FeatType *ghostVertexDataAllPtr(IdType lvid);
 
     // For initialization.
     static void parseArgs(int argc, char* argv[]);
