@@ -27,9 +27,10 @@ function header {
 user=$( whoami )
 
 WORKDIR="/home/${user}"
-LOGFILE_DIR="${WORKDIR}/logfiles"
+LOGFILEDIR="${WORKDIR}/logfiles"
 ASPIREDIR="/home/${user}/gnn-lambda"
 RUNDIR="/home/${user}/gnn-lambda/run"
+CONFIGDIR="/home/${user}/gnn-lambda/config"
 DSHFILE="/home/${user}/gnn-lambda/run/dshmachines"
 HOSTFILE="/home/${user}/gnn-lambda/run/hostfile"
 TMPDIR="/home/${user}/zktmp"
@@ -37,8 +38,12 @@ ZOODIR=${WORKDIR}/gnn-lambda/installs/zookeeper-release-3.4.6
 
 DSH=dsh
 
-if [ ! -d ${LOGFILE_DIR} ]; then
-	mkdir -p ${LOGFILE_DIR}
+if [ ! -d ${LOGFILEDIR} ]; then
+	mkdir -p ${LOGFILEDIR}
+fi
+
+if [ ! -d ${CONFIGDIR} ]; then
+  mkdir -p ${CONFIGDIR}
 fi
 
 if [ ! -f ${HOSTFILE} ]; then
@@ -158,7 +163,7 @@ for dp in {1..1}; do
 
   header "Running GVID #: ${GVID}"
 
-  LOGFILE=${LOGFILE_DIR}/${GVID}.${IK}.out
+  LOGFILE=${LOGFILEDIR}/${GVID}.${IK}.out
   echo "This is the log for round: GVID = ${GVID}" >> ${LOGFILE} 2>&1;
 
   echo "DSH command (from ${ASPIREDIR}/build): ./gnn-lambda.bin --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --undirected ${UNDIRECTED} --tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS}";
