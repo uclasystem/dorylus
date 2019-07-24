@@ -393,7 +393,7 @@ Engine::dataCommunicator(unsigned tid, void *args) {
 
                 // Update the ghost vertex if it is one of mine.
                 if (graph.containsGhostVertex(gvid)) {
-                    FeatType *dataBufPtr = ghostVerticesDataBufPtr(graph.getGhostVertex(gvid).getLocalId());
+                    FeatType *dataBufPtr = ghostVertexDataBufPtr(graph.getGhostVertex(gvid).getLocalId());
                     memcpy(dataBufPtr, msgbuf, getNumFeats(iteration) * sizeof(FeatType));
                 }
 
@@ -659,9 +659,9 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
         // Set the vertex's initial values, if it is one of mine local vertices / ghost vertices.
         FeatType *dataPtr = NULL;
         if (graph.containsGhostVertex(gvid))   // Global vertex.
-            dataPtr = ghostVerticesDataAllPtr(graph.getGhostVertex(gvid).getLocalId(), 0);
+            dataPtr = ghostVertexDataAllPtr(graph.getGhostVertex(gvid).getLocalId(), 0);
         else if (graph.containsVertex(gvid))   // Local vertex.
-            dataPtr = verticesDataAllPtr(graph.getVertexByGlobal(gvid).getLocalId(), 0);
+            dataPtr = vertexDataAllPtr(graph.getVertexByGlobal(gvid).getLocalId(), 0);
         if (dataPtr != NULL)
             memcpy(dataPtr, feature_vec.data(), feature_vec.size() * sizeof(FeatType));
 
