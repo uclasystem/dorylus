@@ -399,6 +399,7 @@ Engine::dataCommunicator(unsigned tid, void *args) {
                 if (graph.containsGhostVertex(gvid)) {
                     FeatType *dataBufPtr = ghostVertexDataBufPtr(graph.getGhostVertex(gvid).getLocalId());
                     memcpy(dataBufPtr, msgbuf, getNumFeats() * sizeof(FeatType));
+                    printLog(nodeId, ";;;} Received %f %f %f into ghostBuf\n", dataBufPtr[0], dataBufPtr[1], dataBufPtr[2]);
                 }
 
                 // Using MAX_IDTYPE - gvid as the receive signal topic for vertex gvid.
