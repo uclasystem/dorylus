@@ -18,14 +18,10 @@ COMM_PATH       := $(SRC_PATH)/commmanager
 ENGINE_PATH     := $(SRC_PATH)/engine
 PARALLEL_PATH   := $(SRC_PATH)/parallel
 UTILS_PATH      := $(SRC_PATH)/utils
-BM_PATH         := $(SRC_PATH)/benchmarks
 
 # Build paths
 BUILD_PATH      := .
 OBJ_PATH        := $(BUILD_PATH)/objs
-
-# Benchmark names
-BENCH_AGG       := aggregate
 
 # Libraries source
 OMP_LIBS        := -fopenmp
@@ -57,8 +53,7 @@ else
 endif
 
 # Targets for you to choose
-all: prompt directories $(BENCH_AGG).bin
-$(BENCH_AGG): prompt directories $(BENCH_AGG).bin
+all: prompt directories gnn-lambda.bin
 
 # Phony utilities
 prompt:
@@ -91,15 +86,11 @@ $(OBJ_PATH)/%.o: $(PARALLEL_PATH)/%.cpp $(PARALLEL_PATH)/%.hpp
 $(OBJ_PATH)/%.o: $(UTILS_PATH)/%.cpp $(UTILS_PATH)/%.hpp
 	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) -c $< -o $@
 
-# Benchmark objects internal targets
-$(OBJ_PATH)/%.o: $(BM_PATH)/%.cpp
-	$(CPP) $(CFLAGS) $(INC) $(LIBS) $(LDFLAGS) -c $< -o $@
-
-# Benchmark executables internal targets
-$(BENCH_AGG).bin: $(OBJ_PATH)/$(BENCH_AGG).o $(BASE_OBJS)
+# Main executable target for final linking
+gnn-lambda.bin: $(SRC_PATH)/main.cpp $(BASE_OBJS)
 	$(CPP) $(CFLAGS) $^ $(INC) $(LIBS) $(LDFALGS) -o $@
 
 # Clean
 .PHONY: clean
 clean:
-	rm -rf $(OBJ_PATH) $(AGG_TARGET_BIN)
+	rm -rf $(OBJ_PATH) gnn-lambda.bin

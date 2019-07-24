@@ -65,9 +65,9 @@ class Engine {
 public:
 
     // Public APIs for benchmarks.
-    static void init(int argc, char *argv[], EdgeType (*eWeight) (IdType, IdType) = NULL);
-    static void run(VertexProgram *vProgram, bool printEM);
-    static void processAll(VertexProgram *vProgram);
+    static void init(int argc, char *argv[], std::vector<unsigned>& _layerConfig);
+    static void run();
+    static void output();
     static void destroy();
     static bool master();
 
@@ -102,6 +102,7 @@ private:
 
     static std::string graphFile;
     static std::string featuresFile;
+    static std::string outFile;
 
     static unsigned nodeId;
     static unsigned numNodes;

@@ -7,9 +7,8 @@
 ##	  build and run scripts
 
 #
-# Usage: ./b+r [Bench] [Dataset] [Feature-File]
+# Usage: ./b+r [Dataset] [Feature-File]
 #
-#   Bench:          agg(*)
 #   Dataset:        small(*), fb
 #   Feature-File:   (*), path_to_file 
 #
@@ -27,27 +26,18 @@ function prompt {
 }
 
 
-header "BUILDING the engine & benchmark"
+header "BUILDING"
 
-./bld $1
+./bld
 
 if [ $? -ne 0 ]; then
 	exit
 fi
 
+
+header "RUNNING"
+
 case $1 in
-    "agg")
-        prompt "Successfully built benchmark \"agg\"."
-        ;;
-    *)
-        prompt "Successfully built the default benchmark (\"agg\")."
-        ;;
-esac
-
-
-header "RUNNING the benchmark on dataset"
-
-case $2 in
     "small")
         prompt "Running on dataset \"small\"."
         ;;
@@ -60,5 +50,11 @@ case $2 in
 esac
 
 cd ..
-./run/ec2run.sh $1 $2 $3
+
+if [ -e $2 ]; then
+    prompt "Initial features file to be loaded: \"$2\""
+    ./run/ec2run.sh $1 $2
+else
+    prompt "Using default initial features file: \"parts_x/../features\""
+    ./run/ec2run.sh $1
         

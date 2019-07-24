@@ -20,6 +20,7 @@ ThreadPool* Engine::computePool = NULL;
 unsigned Engine::cThreads = NUM_COMP_THREADS;
 std::string Engine::graphFile;
 std::string Engine::featuresFile;
+std::string Engine::outFile;
 IdType Engine::currId = 0;
 Lock Engine::lockCurrId;
 Lock Engine::lockRecvWaiters;
@@ -48,7 +49,7 @@ double Engine::timeInit = 0.0;
  * 
  */
 void
-Engine::init(int argc, char *argv[], const std::vector<unsigned>& _layerConfig) {
+Engine::init(int argc, char *argv[], std::vector<unsigned>& _layerConfig) {
     printLog(nodeId, "Engine starts initialization...\n");
     timeInit = -getTimer();
 
@@ -60,6 +61,7 @@ Engine::init(int argc, char *argv[], const std::vector<unsigned>& _layerConfig) 
     nodeId = NodeManager::getNodeId();
     numNodes = NodeManager::getNumNodes();
     assert(numNodes <= 256);    // Cluster size limitation.
+    outFile += std::to_string(nodeId);
 
     // Set number of layers and number of features in each layer. Also store the prefix sum of config for offset querying use.
     assert(_layerConfig.size() > 1);
@@ -144,7 +146,7 @@ Engine::master() {
  * 
  */
 void
-Engine::run(VertexProgram *vProgram, bool printEM) {
+Engine::run() {
     
     // Make sure engines on all machines start running.
     NodeManager::barrier(RUN_BARRIER); 
@@ -183,18 +185,22 @@ Engine::run(VertexProgram *vProgram, bool printEM) {
 
 /**
  *
- * Process all vertices using the given vertex program. Useful for a writer program.
+ * Write output stuff to the tmp directory for every local vertex.
  * 
  */
 void
-Engine::processAll(VertexProgram *vProgram) {
-    vProgram->beforeIteration(iteration);
-
-    // Loop through all local vertices and process it.
-    for (IdType i = 0; i < graph.getNumLocalVertices(); ++i)
-        vProgram->processVertex(graph.getVertex(i));
-
-    vProgram->afterIteration(iteration);
+Engine::output() {
+    for (Vertex& v : graph.getVertices()) {
+        outFile << v.getGlobalId() << ": ";
+        FeatType *dataAllPtr = vertexDataAllPtr(v.getLocalId(), 0);
+        unsigned offset = 0;
+        for (unsigned& numFeats : layerConfig) {
+            for (unsigned i = 0; i < numFeats; ++i)
+                outFile << dataAllPtr[offset++]
+            outFile << "| ";
+        }
+        outFile << std::endl;
+    }
 }
 
 
@@ -267,6 +273,23 @@ Engine::worker(unsigned tid, void *args) {
 
                 //## Worker barrier 1: Everyone reach to this point, then only master will work. ##//
                 barComp.wait();
+
+                //////////////////////////////////
+                // Send dataBuf to lambda HERE. //
+                //////////////////////////////////
+
+                ////////////////////////////////////////////////////////////////////////////////////////////
+                // Flush the returned values from lambda to dataAll. Currently just flushing the dataBuf. //
+                ////////////////////////////////////////////////////////////////////////////////////////////
+
+                unsigned newNumFeats = getNumFeats(iteration + 1)
+                unsigned newOffset = getDataOffset(iteration + 1);
+
+                for (IdType id = 0; id < graph.getNumLocalVertices(); ++id)
+                    memcpy(vertexDataAllPtr(id, newOffset), vertexDataBufPtr(id), newNumFeats * sizeof(FeatType));
+
+                for (IdType id = 0; id < graph.getNumGhostVertices(); ++id)
+                    memcpy(ghostVertexDataAllPtr(id, newOffset), ghostVertexDataBufPtr(id), newNumFeats * sizeof(FeatType));
 
                 // Wait for all remote schedulings sent by me to be handled.
                 lockRecvWaiters.lock();
@@ -400,8 +423,8 @@ Engine::dataCommunicator(unsigned tid, void *args) {
  * 
  */
 unsigned
-Engine::getCurrentNumFeats() {
-    return layerConfig[iteration];
+Engine::getNumFeats(unsigned iter) {
+    return layerConfig[iter];
 }
 
 
@@ -411,7 +434,7 @@ Engine::getCurrentNumFeats() {
  * 
  */
 unsigned
-Engine::getCurrentDataAllOffset() {
+Engine::getDataAllOffset(unsigned iter) {
     return layerConfigPrefixSum[iteration];
 }
 
@@ -535,6 +558,8 @@ Engine::parseArgs(int argc, char *argv[]) {
         ("graphfile", boost::program_options::value<std::string>(), "Graph file")
         ("featuresfile", boost::program_options::value<std::string>(), "Features file")
 
+        ("tmpdir", boost::program_options::value<std::string>(), "Temporary directory")
+
         ("undirected", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Graph type")
 
         ("dthreads", boost::program_options::value<unsigned>()->default_value(unsigned(NUM_DATA_THREADS), NUM_DATA_THREADS_STR), "Number of data threads")
@@ -572,6 +597,9 @@ Engine::parseArgs(int argc, char *argv[]) {
 
     assert(vm.count("featuresfile"));
     featuresFile = vm["featuresfile"].as<std::string>();
+
+    assert(vm.count("tmpdir"));
+    outFile = vm["tmpdir"].as<std::string>() + "/output_";  // Still needs to append the node id, after node manager set up.
 
     assert(vm.count("undirected"));
     undirected = (vm["undirected"].as<unsigned>() == 0) ? false : true;
