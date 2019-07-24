@@ -169,7 +169,7 @@ for dp in {1..1}; do
   echo "DSH command (from ${ASPIREDIR}/build): ./gnn-lambda.bin --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --undirected ${UNDIRECTED} --tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS}";
   ${DSH} -M -f ${DSHFILE} -c "cd ${ASPIREDIR}/build && ./gnn-lambda.bin --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --undirected ${UNDIRECTED} --tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS}" 1> /dev/null 2>> ${LOGFILE};
 
-  DOPDIR=${ASPIREDIR}/build/outputs/${BK}.${IK}/${GVID};
+  DOPDIR=${ASPIREDIR}/build/outputs/${GVID}.${IK};
   mkdir -p ${DOPDIR};
   for i in $(seq 1 ${NDS}); do
     oid=`expr $i - 1`;
