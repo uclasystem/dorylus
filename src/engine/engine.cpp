@@ -645,6 +645,8 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
     std::string line;
     while (!infile.eof()) {
         std::getline(infile, line);
+        printLog(nodeId, "<<<>>> Got a line: %s\n", line.c_str());
+
         std::vector<std::string> splited_strings;
         std::vector<FeatType> feature_vec;
 
@@ -652,6 +654,7 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
         boost::split(splited_strings, line, boost::is_any_of(", "), boost::token_compress_on);
 
         for (std::string& substr : splited_strings) {
+            printLog(nodeId, "<<<>>> substr: %s\n", substr.c_str());
             if (substr[0] != '\0')      // In case of the null char at the end.
                 feature_vec.push_back(std::stof(substr));
         }
