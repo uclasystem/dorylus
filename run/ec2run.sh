@@ -63,7 +63,7 @@ header "Detected a cluster of ${NDS} nodes"
 header "Setting up tmp dir & Stopping running ZooKeeper..."
 
 ${DSH} -M -f ${DSHFILE} -c "rm -rf ${TMPDIR} && mkdir ${TMPDIR} && chown ${user}:${user} ${TMPDIR}"
-${DSH} -M -f ${DSHFILE} -c "cd ${ZOODIR} && ./bin/zkServer.sh stop > /dev/null 2&>1";
+${DSH} -M -f ${DSHFILE} -c "cd ${ZOODIR} && ./bin/zkServer.sh stop";
 
 if [ ! -f ${ZOODIR}/conf/zoo.cfg ]; then
 	cat ${RUNDIR}/zoo.basic > ${ZOODIR}/conf/zoo.cfg;
