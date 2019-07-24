@@ -5,6 +5,7 @@
 #include <boost/program_options/parsers.hpp>
 #include <boost/algorithm/string/classification.hpp>    // Include boost::for is_any_of.
 #include <boost/algorithm/string/split.hpp>
+#include <boost/algorithm/string/trim.hpp>
 #include <string>
 #include <cstdlib>
 #include <omp.h>
@@ -645,7 +646,7 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
     std::string line;
     while (!infile.eof()) {
         std::getline(infile, line);
-        printLog(nodeId, "<<<>>> Got a line: %s\n", line.c_str());
+        boost::algorithm::trim(line);
 
         std::vector<std::string> splited_strings;
         std::vector<FeatType> feature_vec;
@@ -654,23 +655,24 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
         boost::split(splited_strings, line, boost::is_any_of(", "), boost::token_compress_on);
 
         for (std::string& substr : splited_strings) {
-            printLog(nodeId, "<<<>>> substr: %s\n", substr.c_str());
             if (substr[0] != '\0')      // In case of the null char at the end.
                 feature_vec.push_back(std::stof(substr));
         }
 
-        assert(feature_vec.size() == layerConfig[0]);
+        if (feature_vec.size() > 0) {
+            assert(feature_vec.size() == layerConfig[0]);
 
-        // Set the vertex's initial values, if it is one of mine local vertices / ghost vertices.
-        FeatType *dataPtr = NULL;
-        if (graph.containsGhostVertex(gvid))   // Global vertex.
-            dataPtr = ghostVertexDataAllPtr(graph.getGhostVertex(gvid).getLocalId(), 0);
-        else if (graph.containsVertex(gvid))   // Local vertex.
-            dataPtr = vertexDataAllPtr(graph.getVertexByGlobal(gvid).getLocalId(), 0);
-        if (dataPtr != NULL)
-            memcpy(dataPtr, feature_vec.data(), feature_vec.size() * sizeof(FeatType));
+            // Set the vertex's initial values, if it is one of mine local vertices / ghost vertices.
+            FeatType *dataPtr = NULL;
+            if (graph.containsGhostVertex(gvid))   // Global vertex.
+                dataPtr = ghostVertexDataAllPtr(graph.getGhostVertex(gvid).getLocalId(), 0);
+            else if (graph.containsVertex(gvid))   // Local vertex.
+                dataPtr = vertexDataAllPtr(graph.getVertexByGlobal(gvid).getLocalId(), 0);
+            if (dataPtr != NULL)
+                memcpy(dataPtr, feature_vec.data(), feature_vec.size() * sizeof(FeatType));
 
-        ++gvid;
+            ++gvid;
+        }
     }
 }
 
