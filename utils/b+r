@@ -57,4 +57,5 @@ if [ -e $2 ]; then
 else
     prompt "Using default initial features file: \"parts_x/../features\""
     ./run/ec2run.sh $1
+fi
         
