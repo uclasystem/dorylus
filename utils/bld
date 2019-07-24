@@ -20,5 +20,5 @@ if [ $? -eq 0 ]; then
     echo -e "\e[92;1mSuccessfully built the system, congrats ;)\e[0m"
 else
     echo -e "\e[91;1mBuild fails!\e[0m"
-	return 13
+	exit 1
 fi
