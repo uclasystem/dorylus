@@ -15,8 +15,6 @@ using namespace std;
  */
 int
 main(int argc, char *argv[]) {
-    initArgs();     // Currently useless.
-    parseArgs(&argc, argv);
 
     // Initialize the engine.
     std::vector<unsigned> layerConfig(5, 3);
