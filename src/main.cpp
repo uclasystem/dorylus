@@ -5,9 +5,6 @@
 #include "engine/engine.hpp"
 
 
-using namespace std;
-
-
 /**
  *
  * Main entrance of the aggregate benchmark.
@@ -17,8 +14,7 @@ int
 main(int argc, char *argv[]) {
 
     // Initialize the engine.
-    std::vector<unsigned> layerConfig(5, 6);
-    Engine::init(argc, argv, layerConfig);
+    Engine::init(argc, argv);
 
     // Start one run of the engine.
     Engine::run();
