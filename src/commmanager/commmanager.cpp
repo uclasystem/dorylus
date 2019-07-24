@@ -310,7 +310,7 @@ CommManager::controlPullIn(unsigned from, void *value, unsigned maxValSize) {
     ControlMessage cM = *((ControlMessage *) inMsg.data());
     assert(cM.messageType == APPMSG);
 
-    assert(inMsg.size() - sizeof(ControlMessage) <= maxValSize)
+    assert(inMsg.size() - sizeof(ControlMessage) <= maxValSize);
     memcpy(value, ((char *) inMsg.data() + sizeof(ControlMessage)), inMsg.size() - sizeof(ControlMessage));
     
     return true;
