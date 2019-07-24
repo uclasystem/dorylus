@@ -36,7 +36,7 @@ IdType
 Vertex::getDestVertexLocalId(unsigned i) {
     assert(i < outEdges.size());
     if (outEdges[i].getEdgeLocation() == LOCAL_EDGE_TYPE) {
-        assert(graph_ptr->localToGlobalId.find(outEdges[i].getDestId()()) != graph_ptr->localToGlobalId.end());
+        assert(graph_ptr->localToGlobalId.find(outEdges[i].getDestId()) != graph_ptr->localToGlobalId.end());
         return outEdges[i].getDestId();
     } else {
         IdType gvid = outEdges[i].getDestId();
