@@ -32,7 +32,6 @@ Lock Engine::lockRecvWaiters;
 Cond Engine::condRecvWaitersEmpty;
 Lock Engine::lockHalt;
 unsigned Engine::nodeId;
-Node& Engine::nodeMe;
 unsigned Engine::numNodes;
 std::map<IdType, unsigned> Engine::recvWaiters;
 Barrier Engine::barComp;
@@ -66,7 +65,6 @@ Engine::init(int argc, char *argv[]) {
     NodeManager::init(ZKHOST_FILE, HOST_FILE);
     CommManager::init();
     nodeId = NodeManager::getNodeId();
-    nodeMe = NodeManager::getNode(nodeId);
     numNodes = NodeManager::getNumNodes();
     assert(numNodes <= 256);    // Cluster size limitation.
     outFile += std::to_string(nodeId);
@@ -295,7 +293,8 @@ Engine::worker(unsigned tid, void *args) {
                 // Send dataBuf to lambda HERE. //
                 //////////////////////////////////
                 
-                LambdaComm lambdaComm(verticesDataBuf, nodeMe.ip, 65431, graph.getNumLocalVertices(), getNumFeats(), 2, 1);
+                Node NodeManager::getNode(nodeId);
+                LambdaComm lambdaComm(verticesDataBuf, nodeMe->ip, 65431, graph.getNumLocalVertices(), getNumFeats(), 2, 1);
                 
                 // Create and launch the sender & receiver workers.
                 std::thread t([&] {
