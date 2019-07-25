@@ -32,6 +32,7 @@ Lock Engine::lockRecvWaiters;
 Cond Engine::condRecvWaitersEmpty;
 Lock Engine::lockHalt;
 unsigned Engine::nodeId;
+Node& Engine::nodeMe;
 unsigned Engine::numNodes;
 std::map<IdType, unsigned> Engine::recvWaiters;
 Barrier Engine::barComp;
