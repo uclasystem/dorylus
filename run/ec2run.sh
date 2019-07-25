@@ -156,6 +156,7 @@ for i in $(seq 1 ${NDS}); do
   scp -q ${CONFIGDIR}/hostfile ${CONFIGDIR}/zkhostfile ${dshnodes[$i]}:${CONFIGDIR}/;
 done;
 
+# Coordinate server info
 COORDSERVER_CONF=${RUNDIR}/cserverinfo
 CSERVER_IP=$( cat ${COORDSERVER_CONF} | awk '{print $1}' )
 CSERVER_PORT=$( cat ${COORDSERVER_CONF} | awk '{print $2}' )

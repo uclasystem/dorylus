@@ -65,6 +65,7 @@ Engine::init(int argc, char *argv[]) {
     NodeManager::init(ZKHOST_FILE, HOST_FILE);
     CommManager::init();
     nodeId = NodeManager::getNodeId();
+    nodeMe = NodeManager::getNode(nodeId);
     numNodes = NodeManager::getNumNodes();
     assert(numNodes <= 256);    // Cluster size limitation.
     outFile += std::to_string(nodeId);
@@ -287,29 +288,32 @@ Engine::worker(unsigned tid, void *args) {
 
                 //## Worker barrier 1: Everyone reach to this point, then only master will work. ##//
                 barComp.wait();
+                printLog(nodeId, "Iteration %u finishes at %.3lf ms.\n", iteration, timeProcess + getTimer());
 
                 //////////////////////////////////
                 // Send dataBuf to lambda HERE. //
                 //////////////////////////////////
-		Node me = NodeManager::getNode(nodeId);
-		LambdaComm lambdaComm(verticesDataBuf, me.ip, 65431, graph.getNumLocalVertices(),
-		  layerConfig[iteration], 2, 1);
-		
-		std::thread t([&] {
-			lambdaComm.run();
-		});
-		t.detach();
+                
+                LambdaComm lambdaComm(verticesDataBuf, nodeMe.ip, 65431, graph.getNumLocalVertices(), getNumFeats(), 2, 1);
+                
+                // Create and launch the sender & receiver workers.
+                std::thread t([&] {
+                    lambdaComm.run();
+                });
+                t.detach();
 
-		std::thread t2([&] {
-			lambdaComm.requestLambdas(coordserverIp, coordserverPort, iteration);
-		});
-		t2.join();
+                // Trigger a request towards the coordicate server. Wait until the request completes.
+                std::thread t2([&] {
+                    lambdaComm.requestLambdas(coordserverIp, coordserverPort, iteration);
+                });
+                t2.join();
 
                 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
                 // Buffer receives results from lambda and should be resized according to the number of features in the next layer. //
                 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-		fprintf(stderr, "All lambdas finished. Waiting on new iteration\n");
+                printLog(nodeId, "All lambdas finished. Waiting on new iteration...\n");
+
                 // Step forward to a new iteration. 
                 ++iteration;
 
@@ -608,24 +612,14 @@ Engine::parseArgs(int argc, char *argv[]) {
         ("help", "Produce help message")
 
         ("config", boost::program_options::value<std::string>()->default_value(std::string(DEFAULT_CONFIG_FILE), DEFAULT_CONFIG_FILE), "Config file")
+        ("graphfile", boost::program_options::value<std::string>(), "Path to the binary file contatining the edge list")
+        ("featuresfile", boost::program_options::value<std::string>(), "Path to the file containing the vertex features")
+        ("layerfile", boost::program_options::value<std::string>(), "Layer configuration file")
 
-        ("graphfile", boost::program_options::value<std::string>(),
-	 "Path to the binary file contatining the edge list")
+        ("tmpdir", boost::program_options::value<std::string>(), "Temporary directory")
 
-        ("featuresfile", boost::program_options::value<std::string>(),
-	 "Path to the file containing the vertex features")
-
-        ("layerfile", boost::program_options::value<std::string>(),
-	 "Layer configuration file")
-
-        ("tmpdir", boost::program_options::value<std::string>(),
-	 "Temporary directory")
-
-	("coordserverip", boost::program_options::value<std::string>(),
-	 "The private IP address of the coordination server")
-
-	("coordserverport", boost::program_options::value<std::string>(),
-	 "The port of the listener on the coordination server")
+        ("coordserverip", boost::program_options::value<std::string>(), "The private IP address of the coordination server")
+        ("coordserverport", boost::program_options::value<std::string>(), "The port of the listener on the coordination server")
 
         ("undirected", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Graph type")
 

@@ -112,6 +112,8 @@ private:
     static std::string coordserverPort;
 
     static unsigned nodeId;
+    static Node& nodeMe;
+    
     static unsigned numNodes;
 
     static bool halt;
