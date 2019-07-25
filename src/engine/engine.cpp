@@ -7,6 +7,7 @@
 #include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string/trim.hpp>
 #include <string>
+#include <thread>
 #include <cstdlib>
 #include <omp.h>
 #include <cerrno>
@@ -23,6 +24,8 @@ std::string Engine::graphFile;
 std::string Engine::featuresFile;
 std::string Engine::outFile;
 std::string Engine::layerConfigFile;
+std::string Engine::coordserverIp;
+std::string Engine::coordserverPort;
 IdType Engine::currId = 0;
 Lock Engine::lockCurrId;
 Lock Engine::lockRecvWaiters;
@@ -45,7 +48,6 @@ bool Engine::undirected = false;
 bool Engine::halt = false;
 double Engine::timeProcess = 0.0;
 double Engine::timeInit = 0.0;
-
 
 /**
  *
@@ -289,11 +291,25 @@ Engine::worker(unsigned tid, void *args) {
                 //////////////////////////////////
                 // Send dataBuf to lambda HERE. //
                 //////////////////////////////////
+		Node me = NodeManager::getNode(nodeId);
+		LambdaComm lambdaComm(verticesDataBuf, me.ip, 65431, graph.getNumLocalVertices(),
+		  layerConfig[iteration], 2, 1);
+		
+		std::thread t([&] {
+			lambdaComm.run();
+		});
+		t.detach();
+
+		std::thread t2([&] {
+			lambdaComm.requestLambdas(coordserverIp, coordserverPort, iteration);
+		});
+		t2.join();
 
                 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
                 // Buffer receives results from lambda and should be resized according to the number of features in the next layer. //
                 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+		fprintf(stderr, "All lambdas finished. Waiting on new iteration\n");
                 // Step forward to a new iteration. 
                 ++iteration;
 
@@ -592,11 +608,24 @@ Engine::parseArgs(int argc, char *argv[]) {
         ("help", "Produce help message")
 
         ("config", boost::program_options::value<std::string>()->default_value(std::string(DEFAULT_CONFIG_FILE), DEFAULT_CONFIG_FILE), "Config file")
-        ("graphfile", boost::program_options::value<std::string>(), "Graph file")
-        ("featuresfile", boost::program_options::value<std::string>(), "Features file")
-        ("layerfile", boost::program_options::value<std::string>(), "Layer configuration file")
 
-        ("tmpdir", boost::program_options::value<std::string>(), "Temporary directory")
+        ("graphfile", boost::program_options::value<std::string>(),
+	 "Path to the binary file contatining the edge list")
+
+        ("featuresfile", boost::program_options::value<std::string>(),
+	 "Path to the file containing the vertex features")
+
+        ("layerfile", boost::program_options::value<std::string>(),
+	 "Layer configuration file")
+
+        ("tmpdir", boost::program_options::value<std::string>(),
+	 "Temporary directory")
+
+	("coordserverip", boost::program_options::value<std::string>(),
+	 "The private IP address of the coordination server")
+
+	("coordserverport", boost::program_options::value<std::string>(),
+	 "The port of the listener on the coordination server")
 
         ("undirected", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Graph type")
 
@@ -641,6 +670,12 @@ Engine::parseArgs(int argc, char *argv[]) {
 
     assert(vm.count("tmpdir"));
     outFile = vm["tmpdir"].as<std::string>() + "/output_";  // Still needs to append the node id, after node manager set up.
+
+    assert(vm.count("coordserverip"));
+    coordserverIp = vm["coordserverip"].as<std::string>();
+
+    assert(vm.count("coordserverport"));
+    coordserverPort = vm["coordserverport"].as<std::string>();
 
     assert(vm.count("undirected"));
     undirected = (vm["undirected"].as<unsigned>() == 0) ? false : true;

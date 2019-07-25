@@ -10,6 +10,7 @@
 #include <cstdio>
 #include "graph.hpp"
 #include "../commmanager/commmanager.hpp"
+#include "../commmanager/lambda_comm.hpp"
 #include "../nodemanager/nodemanager.hpp"
 #include "../parallel/threadpool.hpp"
 #include "../parallel/lock.hpp"
@@ -106,6 +107,9 @@ private:
     static std::string featuresFile;
     static std::string outFile;
     static std::string layerConfigFile;
+
+    static std::string coordserverIp;
+    static std::string coordserverPort;
 
     static unsigned nodeId;
     static unsigned numNodes;
