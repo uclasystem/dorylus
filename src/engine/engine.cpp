@@ -7,6 +7,7 @@
 #include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string/trim.hpp>
 #include <string>
+#include <thread>
 #include <cstdlib>
 #include <omp.h>
 #include <cerrno>
@@ -290,11 +291,25 @@ Engine::worker(unsigned tid, void *args) {
                 //////////////////////////////////
                 // Send dataBuf to lambda HERE. //
                 //////////////////////////////////
+		Node me = NodeManager::getNode(nodeId);
+		LambdaComm lambdaComm(verticesDataBuf, me.ip, 65431, graph.getNumLocalVertices(),
+		  layerConfig[iteration], 2, 1);
+		
+		std::thread t([&] {
+			lambdaComm.run();
+		});
+		t.detach();
+
+		std::thread t2([&] {
+			lambdaComm.requestLambdas(coordserverIp, coordserverPort, iteration);
+		});
+		t2.join();
 
                 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
                 // Buffer receives results from lambda and should be resized according to the number of features in the next layer. //
                 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+		fprintf(stderr, "All lambdas finished. Waiting on new iteration\n");
                 // Step forward to a new iteration. 
                 ++iteration;
 

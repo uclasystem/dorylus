@@ -10,6 +10,7 @@
 #include <cstdio>
 #include "graph.hpp"
 #include "../commmanager/commmanager.hpp"
+#include "../commmanager/lambda_comm.hpp"
 #include "../nodemanager/nodemanager.hpp"
 #include "../parallel/threadpool.hpp"
 #include "../parallel/lock.hpp"

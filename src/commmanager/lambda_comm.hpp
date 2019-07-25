@@ -5,10 +5,11 @@
 #include <chrono>
 #include <condition_variable>
 #include <cmath>
+#include <fstream>
+#include <functional>
 #include <iostream>
 #include <mutex>
 #include <random>
-#include <fstream>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -16,9 +17,10 @@
 
 #include <zmq.hpp>
 
+#include "../utils/utils.hpp"
 
-typedef float DTYPE;
-static const int32_t HEADER_SIZE = sizeof(int32_t) * 5;
+
+static const int32_t HEADER_SIZE = sizeof(int32_t) * 4;
 enum OP { PUSH, PULL, REQ, RESP };
 
 // Serialization functions
@@ -36,12 +38,7 @@ T parse(const char* buf, int32_t offset) {
 
 // ID represents either layer or data partition, depending on server responding
 void populateHeader(char* header, int32_t op, int32_t id, int32_t rows = 0,
-    int32_t cols = 0) {
-    serialize<int32_t>(header, 0, op);
-    serialize<int32_t>(header, 1, id);
-    serialize<int32_t>(header, 2, rows);
-    serialize<int32_t>(header, 3, cols);
-}
+    int32_t cols = 0);
 // End serialization functions
 
 
@@ -49,7 +46,7 @@ struct Matrix {
     int32_t rows;
     int32_t cols;
 
-    std::unique_ptr<DTYPE[]> data;
+    FeatType* data;
 
     Matrix() {
         rows = 0;
@@ -61,27 +58,27 @@ struct Matrix {
         cols = _cols;
     }
 
-    Matrix(int _rows, int _cols, DTYPE* _data) {
+    Matrix(int _rows, int _cols, FeatType* _data) {
         rows = _rows;
         cols = _cols;
 
-        data = std::unique_ptr<DTYPE[]>(_data);
+        data = _data;
     }
 
     Matrix(int _rows, int _cols, char* _data) {
         rows = _rows;
         cols = _cols;
 
-        data = std::unique_ptr<DTYPE[]>((DTYPE*)_data);
+        data = (FeatType*)_data;
     }
 
-    DTYPE* getData() const { return data.get(); }
-        size_t getDataSize() const { return rows * cols * sizeof(DTYPE); }
+    FeatType* getData() const { return data; }
+        size_t getDataSize() const { return rows * cols * sizeof(FeatType); }
 
     void setRows(int32_t _rows) { rows = _rows; }
     void setCols(int32_t _cols) { cols = _cols; }
     void setDims(int32_t _rows, int32_t _cols) { rows = _rows; cols = _cols; }
-    void setData(std::unique_ptr<DTYPE[]> _data) { data = std::move(_data); }
+    void setData(FeatType* _data) { data = _data; }
 
     bool empty() { return rows == 0 || cols == 0; }
 
@@ -107,7 +104,7 @@ struct Matrix {
 class server_worker {
 public:
 	server_worker(zmq::context_t& ctx_, int32_t sock_type, int32_t nParts_,
-	  int32_t& counter_, std::shared_ptr<Matrix> data_);
+	  int32_t& counter_, Matrix& data_);
 
 	// Continuously listens for incoming lambda connections
 	// and either sends a partitioned matrix or receives
@@ -129,7 +126,7 @@ private:
 	void recvMatrixChunks(zmq::socket_t& socket, int32_t partId, int32_t rows,
 	  int32_t cols);
 
-	std::shared_ptr<Matrix> data;
+	Matrix& data;
 	zmq::context_t &ctx;
 	zmq::socket_t worker;
 
@@ -147,7 +144,7 @@ private:
 
 class LambdaComm {
 public:
-	LambdaComm(std::shared_ptr<Matrix> data_, unsigned port_, int32_t rows_, int32_t cols_,
+	LambdaComm(FeatType* data_, std::string& nodeIp_, unsigned port_, int32_t rows_, int32_t cols_,
 	  int32_t nParts_, int32_t numListeners_);
 	
 	/**
@@ -166,7 +163,7 @@ public:
 	  std::string& coordserverPort, int32_t layer);
 
 private:
-	std::shared_ptr<Matrix> data;
+	Matrix data;
 		
 	int32_t nParts;
 	int32_t numListeners;
@@ -175,6 +172,7 @@ private:
 	zmq::context_t ctx;
 	zmq::socket_t frontend;
 	zmq::socket_t backend;
+	std::string& nodeIp;
 	unsigned port;
 };
 
