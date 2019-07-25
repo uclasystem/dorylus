@@ -89,9 +89,18 @@ done;
 
 header "Checking for Quorum..."
 
+sleep 1
+
+count=0
+limit=$(( NDS * 10 ))
 for i in $(seq 1 ${ZOONDS}); do
   while true
   do
+    ((count++))
+    if [ ${count} -ge ${limit} ]; then
+	    echo -e "\e[31;1m[ERROR] Could not establish quorum\e[0m"
+	    exit
+    fi
     str=$(echo stat | nc ${nodes[$i]} 2180 | grep "Mode");
     IFS=' ' read -ra ARR <<< ${str};
     if [[ ${ARR[1]} == "leader" ]] || [[ ${ARR[1]} == "follower" ]]; then
@@ -112,7 +121,7 @@ header "Starting the system..."
 case $1 in
 	"small")
 		INPUT_LOC=../inputs/data/parts_${NDS}/small.graph.bsnap; IK=SM;
-    ;;
+		;;
 	"fb")
 		INPUT_LOC=/filepool/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB;
 		;;
