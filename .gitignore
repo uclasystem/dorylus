@@ -7,3 +7,15 @@ installs
 run/hostfile
 run/gvid
 config
+
+manage-ec2
+.venv
+ec2_manager/res
+
+**/build
+**/results
+**/__pycache__
+**/output-files
+**/.out
+**/test
+
