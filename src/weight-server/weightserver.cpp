@@ -159,7 +159,7 @@ private:
 		std::stringstream ss(line);
 
 		uint32_t dim;
-		while(ss >> dim) {
+		while (ss >> dim) {
 			dims.push_back(dim);
 		}
 	}
