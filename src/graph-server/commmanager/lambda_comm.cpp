@@ -103,7 +103,7 @@ ServerWorker::sendMatrixChunk(zmq::socket_t& socket, zmq::message_t& client_id, 
 }
 
 
-void server_worker::recvMatrixChunks(zmq::socket_t& socket, int32_t partId,
+void ServerWorker::recvMatrixChunks(zmq::socket_t& socket, int32_t partId,
   int32_t rows, int32_t cols) {
 	uint32_t offset = partId * partRows * cols;
 	FeatType* thisPartitionZStart = zData + offset;
