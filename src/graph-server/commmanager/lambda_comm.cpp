@@ -163,8 +163,7 @@ LambdaComm::run() {
 	std::vector<ServerWorker *> workers;
 	std::vector<std::thread *> worker_threads;
 	for (int i = 0; i < numListeners; ++i) {
-		workers.push_back(new ServerWorker(ctx, ZMQ_DEALER, nParts,
-		  nextIterCols, counter, data, zData, actData));
+		workers.push_back(new ServerWorker(ctx, ZMQ_DEALER, nParts, nextIterCols, counter, data, zData, actData));
 
 		worker_threads.push_back(new std::thread(std::bind(&ServerWorker::work, workers[i])));
 		worker_threads[i]->detach();
