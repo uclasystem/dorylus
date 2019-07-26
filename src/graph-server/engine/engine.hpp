@@ -139,12 +139,10 @@ private:
     static unsigned getDataAllOffset();
     static unsigned getDataAllOffset(unsigned iter);
 
-    static FeatType *vertexDataAllPtr(IdType lvid, unsigned offset);
-    static FeatType *ghostVertexDataAllPtr(IdType lvid, unsigned offset);
-    static FeatType *vertexDataBufPtr(IdType lvid);
-    static FeatType *vertexDataBufPtr(IdType lvid, unsigned numFeats);
-    static FeatType *ghostVertexDataBufPtr(IdType lvid);
-    static FeatType *ghostVertexDataBufPtr(IdType lvid, unsigned numFeats);
+    static FeatType *vertexZDataPtr(IdType lvid, unsigned offset);
+    static FeatType *ghostVertexZDataPtr(IdType lvid, unsigned offset);
+    static FeatType *vertexActivationDataPtr(IdType lvid, unsigned offset);
+    static FeatType *ghostVertexActivationDataPtr(IdType lvid, unsigned offset);
 
     static void aggregateFromNeighbors(IdType lvid);
 

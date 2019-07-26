@@ -40,8 +40,10 @@ std::vector<unsigned> Engine::layerConfig;
 std::vector<unsigned> Engine::layerConfigPrefixSum;
 unsigned Engine::numFeatsTotal = 0;
 unsigned Engine::numLayers = 0;
-FeatType *Engine::verticesDataAll = NULL;
-FeatType *Engine::ghostVerticesDataAll = NULL;
+FeatType *Engine::verticesZData = NULL;
+FeatType *Engine::ghostVerticesZData = NULL;
+FeatType *Engine::verticesActivationData = NULL;
+FeatType *Engine::ghostVerticesActivationData = NULL;
 FeatType *Engine::verticesDataBuf = NULL;
 FeatType *Engine::ghostVerticesDataBuf = NULL;
 unsigned Engine::iteration = 0;
@@ -322,7 +324,7 @@ Engine::worker(unsigned tid, void *args) {
 
                 // Reset buffer area to be the activation data array from LambdaComm. This reduces 1 realloc() for resizing the buffer.
                 // Previous buffer should be called on delete at lambdaComm destruction.
-                vertexDataBuf = lambdaComm.getActivationData();
+                verticesDataBuf = lambdaComm.getActivationData();
 
                 // Flush the returned values from lambda to dataAll.
                 for (IdType id = 0; id < graph.getNumLocalVertices(); ++id) {
@@ -533,22 +535,6 @@ Engine::vertexActivationDataPtr(IdType lvid, unsigned offset) {
 FeatType *
 Engine::ghostVertexActivationDataPtr(IdType lvid, unsigned offset) {
     return ghostVerticesActivationData + lvid * numFeatsTotal + offset;
-}
-
-
-/**
- *
- * Get the data pointer to a ghost vertex's data in the dataBuf area (i.e. pointing to values after aggregation).
- * 
- */
-FeatType *
-Engine::ghostVertexDataBufPtr(IdType lvid) {
-    return ghostVerticesDataBuf + lvid * getNumFeats();
-}
-
-FeatType *
-Engine::ghostVertexDataBufPtr(IdType lvid, unsigned numFeats) {
-    return ghostVerticesDataBuf + lvid * numFeats;
 }
 
 
