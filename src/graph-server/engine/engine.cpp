@@ -90,8 +90,10 @@ Engine::init(int argc, char *argv[]) {
 
     // Create the global contiguous memory for vertices' data, according to the given layer config and number of local vertices.
     // Create the global contiguous memory for ghost vertices' data similarly.
-    verticesDataAll = new FeatType[configSum * graph.getNumLocalVertices() * sizeof(FeatType)];
-    ghostVerticesDataAll = new FeatType[configSum * graph.getNumGhostVertices() * sizeof(FeatType)];
+    verticesZData = new FeatType[configSum * graph.getNumLocalVertices() * sizeof(FeatType)];
+    ghostVerticesZData = new FeatType[configSum * graph.getNumGhostVertices() * sizeof(FeatType)];
+    verticesActivationData = new FeatType[configSum * graph.getNumLocalVertices() * sizeof(FeatType)];
+    ghostVerticesActivationData = new FeatType[configSum * graph.getNumGhostVertices() * sizeof(FeatType)];
     verticesDataBuf = new FeatType[layerConfig[0] * graph.getNumLocalVertices() * sizeof(FeatType)];
     ghostVerticesDataBuf = new FeatType[layerConfig[0] * graph.getNumGhostVertices() * sizeof(FeatType)];
 
@@ -236,8 +238,10 @@ Engine::destroy() {
     condRecvWaitersEmpty.destroy();
     lockHalt.destroy();
 
-    delete[] verticesDataAll;
-    delete[] ghostVerticesDataAll;
+    delete[] verticesZData;
+    delete[] ghostVerticesZData;
+    delete[] verticesActivationData;
+    delete[] ghostVerticesActivationData;
     delete[] verticesDataBuf;
     delete[] ghostVerticesDataBuf;
 }
@@ -288,7 +292,7 @@ Engine::worker(unsigned tid, void *args) {
 
                 //## Worker barrier 1: Everyone reach to this point, then only master will work. ##//
                 barComp.wait();
-                printLog(nodeId, "Iteration %u finishes at %.3lf ms.\n", iteration, timeProcess + getTimer());
+                printLog(nodeId, "Iteration %u finishes at %.3lf ms. Invoking lambda...\n", iteration, timeProcess + getTimer());
 
                 //////////////////////////////////
                 // Send dataBuf to lambda HERE. //
@@ -313,14 +317,20 @@ Engine::worker(unsigned tid, void *args) {
                 // Buffer receives results from lambda and should be resized according to the number of features in the next layer. //
                 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-                printLog(nodeId, "All lambdas finished. Waiting on new iteration...\n");
-
                 // Step forward to a new iteration. 
                 ++iteration;
 
+                // Reset buffer area to be the activation data array from LambdaComm. This reduces 1 realloc() for resizing the buffer.
+                // Previous buffer should be called on delete at lambdaComm destruction.
+                vertexDataBuf = lambdaComm.getActivationData();
+
                 // Flush the returned values from lambda to dataAll.
-                for (IdType id = 0; id < graph.getNumLocalVertices(); ++id)
-                    memcpy(vertexDataAllPtr(id, getDataAllOffset()), vertexDataBufPtr(id), getNumFeats() * sizeof(FeatType));
+                for (IdType id = 0; id < graph.getNumLocalVertices(); ++id) {
+                    memcpy(vertexZDataPtr(id, getDataAllOffset()), lambdaComm.getZData() + id * getNumFeats(), getNumFeats() * sizeof(FeatType));
+                    memcpy(vertexActivationDataPtr(id, getDataAllOffset()), vertexDataBuf + id * getNumFeats(), getNumFeats() * sizeof(FeatType));
+                }
+
+                printLog(nodeId, "All lambdas finished. Waiting on new iteration...\n");
 
                 // Wait for all remote schedulings sent by me to be handled.
                 lockRecvWaiters.lock();
@@ -488,8 +498,8 @@ Engine::getDataAllOffset(unsigned iter) {
  * 
  */
 FeatType *
-Engine::vertexDataAllPtr(IdType lvid, unsigned offset) {
-    return verticesDataAll + lvid * numFeatsTotal + offset;
+Engine::vertexZDataPtr(IdType lvid, unsigned offset) {
+    return verticesZData + lvid * numFeatsTotal + offset;
 }
 
 
@@ -499,24 +509,30 @@ Engine::vertexDataAllPtr(IdType lvid, unsigned offset) {
  * 
  */
 FeatType *
-Engine::ghostVertexDataAllPtr(IdType lvid, unsigned offset) {
-    return ghostVerticesDataAll + lvid * numFeatsTotal + offset;
+Engine::ghostVertexZDataPtr(IdType lvid, unsigned offset) {
+    return ghostVerticesZData + lvid * numFeatsTotal + offset;
 }
 
 
 /**
  *
- * Get the data pointer to a local vertex's data in the dataBuf area  (i.e. pointing to values after aggregation).
+ * Get the data pointer to a local vertex's data in the dataAll area.
  * 
  */
 FeatType *
-Engine::vertexDataBufPtr(IdType lvid) {
-    return verticesDataBuf + lvid * getNumFeats();
+Engine::vertexActivationDataPtr(IdType lvid, unsigned offset) {
+    return verticesActivationData + lvid * numFeatsTotal + offset;
 }
 
+
+/**
+ *
+ * Get the data pointer to a ghost vertex's data in the dataAll area.
+ * 
+ */
 FeatType *
-Engine::vertexDataBufPtr(IdType lvid, unsigned numFeats) {
-    return verticesDataBuf + lvid * numFeats;
+Engine::ghostVertexActivationDataPtr(IdType lvid, unsigned offset) {
+    return ghostVerticesActivationData + lvid * numFeatsTotal + offset;
 }
 
 
@@ -756,13 +772,18 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
             assert(feature_vec.size() == layerConfig[0]);
 
             // Set the vertex's initial values, if it is one of mine local vertices / ghost vertices.
-            FeatType *dataPtr = NULL;
-            if (graph.containsGhostVertex(gvid))   // Global vertex.
-                dataPtr = ghostVertexDataAllPtr(graph.getGhostVertex(gvid).getLocalId(), 0);
-            else if (graph.containsVertex(gvid))   // Local vertex.
-                dataPtr = vertexDataAllPtr(graph.getVertexByGlobal(gvid).getLocalId(), 0);
-            if (dataPtr != NULL)
-                memcpy(dataPtr, feature_vec.data(), feature_vec.size() * sizeof(FeatType));
+            FeatType *zDataPtr = NULL, *actDataPtr = NULL;
+            if (graph.containsGhostVertex(gvid)) {      // Global vertex.
+                zDataPtr = ghostVertexZDataPtr(graph.getGhostVertex(gvid).getLocalId(), 0);
+                actDataPtr = ghostVertexActivationDataPtr(graph.getGhostVertex(gvid).getLocalId(), 0);
+            } else if (graph.containsVertex(gvid)) {    // Local vertex.
+                zDataPtr = vertexZDataPtr(graph.getVertexByGlobal(gvid).getLocalId(), 0);
+                actDataPtr = vertexActivationDataPtr(graph.getVertexByGlobal(gvid).getLocalId(), 0);
+            }
+            if (zDataPtr != NULL && actDataPtr != NULL) {
+                memcpy(zDataPtr, feature_vec.data(), feature_vec.size() * sizeof(FeatType));
+                memcpy(actDataPtr, feature_vec.data(), feature_vec.size() * sizeof(FeatType));
+            }
 
             ++gvid;
         }

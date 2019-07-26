@@ -88,12 +88,14 @@ private:
     static unsigned numFeatsTotal;
     static unsigned numLayers;
 
-    static FeatType *verticesDataAll;   // Global contiguous array for all local vertices' data. Stored in row-wise order:
+    static FeatType *verticesZData;     // Global contiguous array for all vertices' data. Stored in row-wise order:
                                         // The first bunch of values are data for the 0th vertex, ...
-    static FeatType *ghostVerticesDataAll;  // For ghost vertices similarly.
+    static FeatType *ghostVerticesZData;
+    static FeatType *verticesActivationData;
+    static FeatType *ghostVerticesActivationData;
     static FeatType *verticesDataBuf;   // A smaller buffer storing current iter's data after aggregation. (Serves as the
                                         // serialization area naturally.)
-    static FeatType *ghostVerticesDataBuf;  // For ghost vertices similarly.
+    static FeatType *ghostVerticesDataBuf;
 
     static IdType currId;
     static Lock lockCurrId;

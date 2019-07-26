@@ -1,6 +1,7 @@
 #ifndef __LAMBDA_COMM_HPP__
 #define __LAMBDA_COMM_HPP__
 
+
 #include <algorithm>
 #include <chrono>
 #include <condition_variable>
@@ -29,13 +30,13 @@ enum OP { PUSH, PULL, REQ, RESP };
  */
 template<class T>
 static void
-serialize(char* buf, int32_t offset, T val) {
+serialize(char *buf, int32_t offset, T val) {
     std::memcpy(buf + (offset * sizeof(T)), &val, sizeof(T));
 }
 
 template<class T>
 static T
-parse(const char* buf, int32_t offset) {
+parse(const char *buf, int32_t offset) {
     T val;
     std::memcpy(&val, buf + (offset * sizeof(T)), sizeof(T));
     return val;
@@ -43,7 +44,7 @@ parse(const char* buf, int32_t offset) {
 
 // ID represents either layer or data partition, depending on server responding.
 static void
-populateHeader(char* header, int32_t op, int32_t id, int32_t rows = 0, int32_t cols = 0) {
+populateHeader(char *header, int32_t op, int32_t id, int32_t rows = 0, int32_t cols = 0) {
     serialize<int32_t>(header, 0, op);
     serialize<int32_t>(header, 1, id);
     serialize<int32_t>(header, 2, rows);
@@ -59,32 +60,12 @@ populateHeader(char* header, int32_t op, int32_t id, int32_t rows = 0, int32_t c
 struct Matrix {
     int32_t rows;
     int32_t cols;
-
     FeatType *data;
 
-    Matrix() {
-        rows = 0;
-        cols = 0;
-    }
-
-    Matrix(int _rows, int _cols) {
-        rows = _rows;
-        cols = _cols;
-    }
-
-    Matrix(int _rows, int _cols, FeatType *_data) {
-        rows = _rows;
-        cols = _cols;
-
-        data = _data;
-    }
-
-    Matrix(int _rows, int _cols, char *_data) {
-        rows = _rows;
-        cols = _cols;
-
-        data = (FeatType *) _data;
-    }
+    Matrix() { rows = 0; cols = 0; }
+    Matrix(int _rows, int _cols) { rows = _rows; cols = _cols; }
+    Matrix(int _rows, int _cols, FeatType *_data) { rows = _rows; cols = _cols; data = _data; }
+    Matrix(int _rows, int _cols, char *_data) { rows = _rows; cols = _cols; data = (FeatType *) _data; }
 
     FeatType *getData() const { return data; }
     size_t getDataSize() const { return rows * cols * sizeof(FeatType); }
@@ -97,18 +78,6 @@ struct Matrix {
     bool empty() { return rows == 0 || cols == 0; }
 
     std::string shape() { return "(" + std::to_string(rows) + "," + std::to_string(cols) + ")"; }
-
-    std::string str() {
-        std::stringstream output;
-        output << "Matrix Dims: " << shape() << "\n";
-        for (int32_t i = 0; i < rows; ++i) {
-            for (int32_t j = 0; j < cols; ++j)
-                output << data[i * cols + j] << " ";
-            output << "\n";
-        }
-
-        return output.str();
-    }
 };
 
 
@@ -121,7 +90,15 @@ class ServerWorker {
 
 public:
 
-    ServerWorker(zmq::context_t& ctx_, int32_t sock_type, int32_t nParts_, int32_t nextIterCols, int32_t& counter_, Matrix& data_, FeatType *zData_, FeatType *actData_);
+    ServerWorker(zmq::context_t& ctx_, int32_t sock_type, int32_t nParts_, int32_t nextIterCols, int32_t& counter_,
+                 Matrix& matrix_, FeatType *zData_, FeatType *actData_)
+        : matrix(matrix_), ctx(ctx_), worker(ctx, sock_type), nextIterCols(nextIterCols_), nParts(nParts_),
+          zData(zData_), actData(actData_), count(counter_) {
+        partCols = matrix.cols;
+        partRows = std::ceil((float) matrix.rows / (float) nParts);
+        offset = partRows * partCols;
+        bufSize = offset * sizeof(FeatType);
+    }
 
     // Continuously listens for incoming lambda connections and either sends
     // a partitioned matrix or receives computed results.
@@ -137,7 +114,7 @@ private:
     // two matrices, a 'Z' matrix and the 'activations' matrix.
     void recvMatrixChunks(zmq::socket_t& socket, int32_t partId, int32_t rows, int32_t cols);
 
-    Matrix& data;
+    Matrix& matrix;
 
     int32_t nextIterCols;
     FeatType* zData;
@@ -167,9 +144,20 @@ class LambdaComm {
 
 public:
 
-    LambdaComm(FeatType* data_, std::string& nodeIp_, unsigned dataserverPort_, int32_t rows_, int32_t cols_,
-               int32_t nextIterCols_, int32_t nParts_, int32_t numListeners_);
+    LambdaComm(FeatType *dataBuf_, std::string& nodeIp_, unsigned dataserverPort_, int32_t rows_, int32_t cols_,
+               int32_t nextIterCols_, int32_t nParts_, int32_t numListeners_)
+        : nextIterCols(nextIterCols_), nParts(nParts_), numListeners(numListeners_), counter(0), ctx(1),
+          frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), nodeIp(nodeIp_), dataserverPort(dataserverPort_) {
+        matrix = Matrix(rows_, cols_, dataBuf_);
+        zData = new FeatType[rows_ * nextIterCols];
+        actData = new FeatType[rows_ * nextIterCols];
+    }
     
+    LambdaComm::~LambdaComm() {
+        delete[] zData;
+        delete[] matrix.data;   // Delete last iter's data buffer. The engine must reset its buf ptr to getActivationData().
+    }
+
     // Binds to a public port and a backend routing port for the 
     // worker threads to connect to. Spawns 'numListeners' number
     // of workers and connects the frontend socket to the backend
@@ -180,26 +168,19 @@ public:
     // number of lambda threads.
     void requestLambdas(std::string& coordserverIp, unsigned coordserverPort, int32_t layer);
 
-	/**
-	 * Return a contiguous buffer representing the Z data for this
-	 * partition
-	 */
-	FeatType* getZData();
 
-	/**
-	 * Return a contiguous buffer representing the activations data
-	 * for this partition
-	 */
-	FeatType* getActivationData();
+    // Buffers for received results.
+	FeatType* getZData() { return zData; }             // Z values.
+	FeatType* getActivationData() { return actData; }  // After activation.
 
 
 private:
 
-	Matrix data;
+	Matrix matrix;
 
 	int32_t nextIterCols;
-	FeatType* zData;
-	FeatType* actData;
+	FeatType *zData;
+	FeatType *actData;
 		
 	int32_t nParts;
 	int32_t numListeners;

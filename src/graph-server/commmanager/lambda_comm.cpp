@@ -3,6 +3,7 @@
 
 std::mutex m;
 std::condition_variable cv;
+std::mutex ServerWorker::count_mutex;
 
 
 /**
@@ -10,17 +11,6 @@ std::condition_variable cv;
  * ServerWorker is a wrapper over the sender & receiver thread.
  * 
  */
-ServerWorker::ServerWorker(zmq::context_t& ctx_, int sock_type, int32_t nParts_, int32_t nextIterCols_, int32_t& counter_, Matrix& data_, FeatType *zData_, FeatType *actData_) 
-  	: data(data_), ctx(ctx_), worker(ctx, sock_type), nParts(nParts_), nextIterCols(nextIterCols_), count(counter_), zData(zData_), actData(actData_) {
-	partCols = data.cols;
-	partRows = std::ceil((float) data.rows / (float) nParts);
-	offset = partRows * partCols;
-	bufSize = offset * sizeof(FeatType);
-
-	fprintf(stderr, "worker data.shape(): %s\n", data.shape().c_str());
-	fprintf(stderr, "partRows: %d, partCols: %d, offset: %d\n", partRows, partCols, offset);
-}
-
 void
 ServerWorker::work() {
 	worker.connect("inproc://backend");
@@ -83,8 +73,8 @@ ServerWorker::sendMatrixChunk(zmq::socket_t& socket, zmq::message_t& client_id, 
 		int32_t diff = 0;
 		int32_t thisPartRows = partRows;
 		int32_t thisBufSize = bufSize;
-		if ((partId * partRows + partRows) > data.rows) {
-			diff = (partId * partRows + partRows) - data.rows;
+		if ((partId * partRows + partRows) > matrix.rows) {
+			diff = (partId * partRows + partRows) - matrix.rows;
 			thisPartRows = partRows - diff;
 			thisBufSize = thisPartRows * partCols * sizeof(FeatType);
 		}
@@ -92,7 +82,7 @@ ServerWorker::sendMatrixChunk(zmq::socket_t& socket, zmq::message_t& client_id, 
 		fprintf(stderr, "thisPartRows: %d, partCols: %d\n", thisPartRows, partCols);
 
 		populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, partCols);
-		FeatType *partition_start = (data.getData()) + (partId * offset);
+		FeatType *partition_start = (matrix.getData()) + (partId * offset);
 		zmq::message_t partitionData(thisBufSize);
 		std::memcpy(partitionData.data(), partition_start, thisBufSize);
 
@@ -102,9 +92,8 @@ ServerWorker::sendMatrixChunk(zmq::socket_t& socket, zmq::message_t& client_id, 
 	}
 }
 
-
-void ServerWorker::recvMatrixChunks(zmq::socket_t& socket, int32_t partId,
-  int32_t rows, int32_t cols) {
+void
+ServerWorker::recvMatrixChunks(zmq::socket_t& socket, int32_t partId, int32_t rows, int32_t cols) {
 	uint32_t offset = partId * partRows * cols;
 	FeatType* thisPartitionZStart = zData + offset;
 	FeatType* thisPartitionActStart = actData + offset;
@@ -119,9 +108,6 @@ void ServerWorker::recvMatrixChunks(zmq::socket_t& socket, int32_t partId,
 	Matrix z(rows, cols, thisPartitionZStart);
 	Matrix act(rows, cols, thisPartitionActStart);
 
-	fprintf(stderr, "Partition %d activations\n%s\n", partId,
-	  act.str().c_str());
-
 	std::lock_guard<std::mutex> lock(count_mutex);
 	++count;
 
@@ -130,25 +116,11 @@ void ServerWorker::recvMatrixChunks(zmq::socket_t& socket, int32_t partId,
 }
 
 
-std::mutex ServerWorker::count_mutex;
-
-
 /**
  *
  * LambdaComm instance is created when a lambda connection is desired.
  * 
  */
-LambdaComm::LambdaComm(FeatType *data_, std::string& nodeIp_, unsigned dataserverPort_, int32_t rows_, int32_t cols_,
-					   int32_t nextIterCols_, int32_t nParts_, int32_t numListeners_)
-  	: nextIterCols(nextIterCols_), nParts(nParts_), numListeners(numListeners_), counter(0), ctx(1), frontend(ctx, ZMQ_ROUTER),
-	  backend(ctx, ZMQ_DEALER), nodeIp(nodeIp_), dataserverPort(dataserverPort_) {
-	data = Matrix(rows_, cols_, data_);
-	std::cerr << "Data Matrix dimensions " << data.shape() << std::endl;
-
-	zData = new FeatType[rows_ * nextIterCols];
-	actData = new FeatType[rows_ * nextIterCols];
-}
-
 void
 LambdaComm::run() {
 	char host_port[50];
@@ -213,6 +185,3 @@ LambdaComm::requestLambdas(std::string& coordserverIp, unsigned coordserverPort,
 
 	std::cerr << "All partitions received" << std::endl;
 }
-
-FeatType* LambdaComm::getZData() { return zData; }
-FeatType* LambdaComm::getActivationData() { return actData; }
