@@ -293,7 +293,7 @@ Engine::worker(unsigned tid, void *args) {
                 //////////////////////////////////
 		Node me = NodeManager::getNode(nodeId);
 		LambdaComm lambdaComm(verticesDataBuf, me.ip, 65431, graph.getNumLocalVertices(),
-		  layerConfig[iteration], 2, 1);
+		  layerConfig[iteration], layerConfig[iteration+1], 2, 1);
 		
 		std::thread t([&] {
 			lambdaComm.run();

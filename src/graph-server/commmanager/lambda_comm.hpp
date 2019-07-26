@@ -104,7 +104,8 @@ struct Matrix {
 class server_worker {
 public:
 	server_worker(zmq::context_t& ctx_, int32_t sock_type, int32_t nParts_,
-	  int32_t& counter_, Matrix& data_);
+	  int32_t nextIterCols_, int32_t& counter_, Matrix& data_,
+	  FeatType* zData_, FeatType* actData_);
 
 	// Continuously listens for incoming lambda connections
 	// and either sends a partitioned matrix or receives
@@ -127,6 +128,11 @@ private:
 	  int32_t cols);
 
 	Matrix& data;
+
+	int32_t nextIterCols;
+	FeatType* zData;
+	FeatType* actData;
+
 	zmq::context_t &ctx;
 	zmq::socket_t worker;
 
@@ -144,7 +150,8 @@ private:
 
 class LambdaComm {
 public:
-	LambdaComm(FeatType* data_, std::string& nodeIp_, unsigned port_, int32_t rows_, int32_t cols_,
+	LambdaComm(FeatType* data_, std::string& nodeIp_, unsigned port_,
+	  int32_t rows_, int32_t cols_, int32_t nextIterCols_,
 	  int32_t nParts_, int32_t numListeners_);
 	
 	/**
@@ -162,8 +169,25 @@ public:
 	void requestLambdas(std::string& coordserverIp,
 	  std::string& coordserverPort, int32_t layer);
 
+	/**
+	 * Return a contiguous buffer representing the Z data for this
+	 * partition
+	 */
+	FeatType* getZData();
+
+	/**
+	 * Return a contiguous buffer representing the activations data
+	 * for this partition
+	 */
+	FeatType* getActivationData();
+
+
 private:
 	Matrix data;
+
+	int32_t nextIterCols;
+	FeatType* zData;
+	FeatType* actData;
 		
 	int32_t nParts;
 	int32_t numListeners;
