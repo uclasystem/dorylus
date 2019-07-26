@@ -143,7 +143,7 @@ LambdaComm::LambdaComm(FeatType *data_, std::string& nodeIp_, unsigned dataserve
 void
 LambdaComm::run() {
 	char host_port[50];
-	sprintf(host_port, "tcp://*:%u", port);
+	sprintf(host_port, "tcp://*:%u", dataserverPort);
 	std::cerr << "Binding to " << host_port << std::endl;
 	frontend.bind(host_port);
 	backend.bind("inproc://backend");
