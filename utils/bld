@@ -19,6 +19,6 @@ if [ $? -eq 0 ]; then
 	./utils/send_file build/gnn-lambda.bin
     echo -e "\e[92;1mSuccessfully built the system, congrats ;)\e[0m"
 else
-    echo -e "\e[91;1mBuild fails!\e[0m"
+    echo -e "\e[91;1mBuild failed!\e[0m"
 	exit 1
 fi

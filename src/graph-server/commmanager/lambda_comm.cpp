@@ -102,19 +102,25 @@ ServerWorker::sendMatrixChunk(zmq::socket_t& socket, zmq::message_t& client_id, 
 	}
 }
 
-void
-ServerWorker::recvMatrixChunks(zmq::socket_t& socket, int32_t partId, int32_t rows, int32_t cols) {
+
+void server_worker::recvMatrixChunks(zmq::socket_t& socket, int32_t partId,
+  int32_t rows, int32_t cols) {
+	uint32_t offset = partId * partRows * cols;
+	FeatType* thisPartitionZStart = zData + offset;
+	FeatType* thisPartitionActStart = actData + offset;
+
 	zmq::message_t data;
 	socket.recv(&data);
-	char *zBuffer = new char[data.size()];
-	std::memcpy(zBuffer, data.data(), data.size());
+	std::memcpy(thisPartitionZStart, data.data(), data.size());
 
 	socket.recv(&data);
-	char *actBuffer = new char[data.size()];
-	std::memcpy(actBuffer, data.data(), data.size());
+	std::memcpy(thisPartitionActStart, data.data(), data.size());
 
-	Matrix z(rows, cols, zBuffer);
-	Matrix act(rows, cols, actBuffer);
+	Matrix z(rows, cols, thisPartitionZStart);
+	Matrix act(rows, cols, thisPartitionActStart);
+
+	fprintf(stderr, "Partition %d activations\n%s\n", partId,
+	  act.str().c_str());
 
 	std::lock_guard<std::mutex> lock(count_mutex);
 	++count;
@@ -133,11 +139,14 @@ std::mutex ServerWorker::count_mutex;
  * 
  */
 LambdaComm::LambdaComm(FeatType *data_, std::string& nodeIp_, unsigned dataserverPort_, int32_t rows_, int32_t cols_,
-					   int32_t nParts_, int32_t numListeners_)
-  	: nParts(nParts_), numListeners(numListeners_), counter(0), ctx(1), frontend(ctx, ZMQ_ROUTER),
+					   int32_t nextIterCols_, int32_t nParts_, int32_t numListeners_)
+  	: nextIterCols(nextIterCols_), nParts(nParts_), numListeners(numListeners_), counter(0), ctx(1), frontend(ctx, ZMQ_ROUTER),
 	  backend(ctx, ZMQ_DEALER), nodeIp(nodeIp_), dataserverPort(dataserverPort_) {
 	data = Matrix(rows_, cols_, data_);
 	std::cerr << "Data Matrix dimensions " << data.shape() << std::endl;
+
+	zData = new FeatType[rows_ * nextIterCols];
+	actData = new FeatType[rows_ * nextIterCols];
 }
 
 void
@@ -154,12 +163,19 @@ LambdaComm::run() {
 	std::vector<ServerWorker *> workers;
 	std::vector<std::thread *> worker_threads;
 	for (int i = 0; i < numListeners; ++i) {
-		workers.push_back(new ServerWorker(ctx, ZMQ_DEALER, nParts, counter, data));
+		workers.push_back(new server_worker(ctx, ZMQ_DEALER, nParts,
+		  nextIterCols, counter, data, zData, actData));
 
 		worker_threads.push_back(new std::thread(std::bind(&ServerWorker::work, workers[i])));
 		worker_threads[i]->detach();
 	}
 
+	// TODO:
+	//   Either find a termination condition for this listener or 
+	//   make the class a member of Engine so that it is not spawning
+	//   new listeners every iteration that do not die.
+	//   Probably best to integrate the listener into Engine and add 
+	//   "set" APIs to change its config every iteration
 	try {
 		zmq::proxy(static_cast<void *>(frontend), static_cast<void *>(backend), nullptr);
 	} catch (std::exception& ex) {
@@ -187,7 +203,6 @@ LambdaComm::requestLambdas(std::string& coordserverIp, unsigned coordserverPort,
 	zmq::message_t ip_msg(nodeIp.size());
 	std::memcpy(ip_msg.data(), nodeIp.c_str(), nodeIp.size());
 	socket.send(ip_msg);
-	std::cerr << "Messages send to coordination server" << std::endl;
 	
 	zmq::message_t reply;
 	socket.recv(&reply);
@@ -199,3 +214,6 @@ LambdaComm::requestLambdas(std::string& coordserverIp, unsigned coordserverPort,
 
 	std::cerr << "All partitions received" << std::endl;
 }
+
+FeatType* LambdaComm::getZData() { return zData; }
+FeatType* LambdaComm::getActivationData() { return actData; }

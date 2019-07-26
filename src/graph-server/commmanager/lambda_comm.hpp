@@ -120,6 +120,7 @@ struct Matrix {
 class ServerWorker {
 
 public:
+
     ServerWorker(zmq::context_t& ctx_, int32_t sock_type, int32_t nParts_, int32_t& counter_, Matrix& data_);
 
     // Continuously listens for incoming lambda connections and either sends
@@ -137,6 +138,11 @@ private:
     void recvMatrixChunks(zmq::socket_t& socket, int32_t partId, int32_t rows, int32_t cols);
 
     Matrix& data;
+
+    int32_t nextIterCols;
+    FeatType* zData;
+    FeatType* actData;
+
     zmq::context_t& ctx;
     zmq::socket_t worker;
 
@@ -162,7 +168,7 @@ class LambdaComm {
 public:
 
     LambdaComm(FeatType* data_, std::string& nodeIp_, unsigned dataserverPort_, int32_t rows_, int32_t cols_,
-               int32_t nParts_, int32_t numListeners_);
+               int32_t nextIterCols_, int32_t nParts_, int32_t numListeners_);
     
     // Binds to a public port and a backend routing port for the 
     // worker threads to connect to. Spawns 'numListeners' number
@@ -174,19 +180,36 @@ public:
     // number of lambda threads.
     void requestLambdas(std::string& coordserverIp, unsigned coordserverPort, int32_t layer);
 
+	/**
+	 * Return a contiguous buffer representing the Z data for this
+	 * partition
+	 */
+	FeatType* getZData();
+
+	/**
+	 * Return a contiguous buffer representing the activations data
+	 * for this partition
+	 */
+	FeatType* getActivationData();
+
+
 private:
 
-    Matrix data;
-        
-    int32_t nParts;
-    int32_t numListeners;
-    int32_t counter;
+	Matrix data;
 
-    zmq::context_t ctx;
-    zmq::socket_t frontend;
-    zmq::socket_t backend;
-    std::string& nodeIp;
-    unsigned dataserverPort;
+	int32_t nextIterCols;
+	FeatType* zData;
+	FeatType* actData;
+		
+	int32_t nParts;
+	int32_t numListeners;
+	int32_t counter;
+
+	zmq::context_t ctx;
+	zmq::socket_t frontend;
+	zmq::socket_t backend;
+	std::string& nodeIp;
+	unsigned port;
 };
 
 
