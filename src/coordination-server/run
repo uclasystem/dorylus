@@ -9,5 +9,5 @@ if [ ! -d ./results ]; then
 	mkdir results
 fi
 
-./build/lambda_sample 65430 $(${EC2} prip) 65432 65431
+./build/lambda_sample 55430 $(${EC2} prip) 55432 55431
 
