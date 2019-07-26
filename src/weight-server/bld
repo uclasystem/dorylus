@@ -1,0 +1,15 @@
+#! /bin/bash
+
+cd $(dirname "$0")
+
+if [ ! -d build ]; then
+	mkdir build
+fi
+
+cd build
+
+cmake .. 
+
+if [ $? -eq 0 ]; then
+	make
+fi	
