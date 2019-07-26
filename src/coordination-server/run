@@ -2,7 +2,7 @@
 
 cd $( dirname $0 )
 
-EC2="../../../scripts/ec2"
+EC2="../../utils/ec2"
 
 
 if [ ! -d ./results ]; then
