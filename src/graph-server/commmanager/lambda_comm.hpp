@@ -209,7 +209,7 @@ private:
 	zmq::socket_t frontend;
 	zmq::socket_t backend;
 	std::string& nodeIp;
-	unsigned port;
+	unsigned dataserverPort;
 };
 
 
