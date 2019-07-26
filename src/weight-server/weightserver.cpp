@@ -113,6 +113,10 @@ public:
 
 			layers.push_back(Matrix(dims[u], dims[u+1], dptr));
 		}
+
+		for (uint32_t u = 0; u < layers.size(); ++u) {
+			fprintf(stderr, "Layer %u Dims: %s\n", u, layers[u].shape().c_str());
+		}
 	}
 
 	enum { kMaxThreads = 2 };
