@@ -1,0 +1,13 @@
+#! /bin/bash
+
+cd $( dirname $0 )
+
+EC2="../../../scripts/ec2"
+
+
+if [ ! -d ./results ]; then
+	mkdir results
+fi
+
+./build/lambda_sample 65430 $(${EC2} prip) 65432 65431
+

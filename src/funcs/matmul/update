@@ -1,0 +1,8 @@
+#! /bin/bash
+
+func_name=matmul-cpp
+file=matmul.zip
+
+cd build
+
+aws lambda update-function-code --function-name $func_name --zip-file fileb://$file

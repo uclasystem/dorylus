@@ -1,0 +1,7 @@
+#! /bin/bash
+
+cd $( dirname $0 )
+
+configFile=$1
+
+./build/weightserver 65432 ${configFile:=weight.conf}
