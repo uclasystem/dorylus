@@ -129,13 +129,13 @@ LambdaComm::run() {
 	frontend.bind(host_port);
 	backend.bind("inproc://backend");
 
-	fprintf(stderr, "data.shape(): %s\n", data.shape().c_str());
+	fprintf(stderr, "data.shape(): %s\n", matrix.shape().c_str());
 
 	// Create workers (each for a partition) and detach them.
 	std::vector<ServerWorker *> workers;
 	std::vector<std::thread *> worker_threads;
 	for (int i = 0; i < numListeners; ++i) {
-		workers.push_back(new ServerWorker(ctx, ZMQ_DEALER, nParts, nextIterCols, counter, data, zData, actData));
+		workers.push_back(new ServerWorker(ctx, ZMQ_DEALER, nParts, nextIterCols, counter, matrix, zData, actData));
 
 		worker_threads.push_back(new std::thread(std::bind(&ServerWorker::work, workers[i])));
 		worker_threads[i]->detach();

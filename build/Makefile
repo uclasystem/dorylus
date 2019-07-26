@@ -45,7 +45,7 @@ LDFLAGS         := -Wl,-rpath=$(ZK_LIBPATH) -Wl,-rpath=$(ZMQ_LIBPATH)
 
 # Compiler & Flags
 CXX         := g++
-CXXFLAGS    := -Wall -Wno-sign-compare -Wno-unused-function -MMD -std=c++11
+CXXFLAGS    := -Wall -Wno-sign-compare -Wno-unused-function -Wno-reorder -MMD -std=c++11
 ifeq ($(mode),release)
 	CXXFLAGS += -O3
 else
