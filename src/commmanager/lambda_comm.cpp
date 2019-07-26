@@ -91,7 +91,7 @@ ServerWorker::sendMatrixChunk(zmq::socket_t& socket, zmq::message_t& client_id, 
 
 		fprintf(stderr, "thisPartRows: %d, partCols: %d\n", thisPartRows, partCols);
 
-		populateHeader((char*)header.data(), OP::RESP, 0, thisPartRows, partCols);
+		populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, partCols);
 		FeatType *partition_start = (data.getData()) + (partId * offset);
 		zmq::message_t partitionData(thisBufSize);
 		std::memcpy(partitionData.data(), partition_start, thisBufSize);
@@ -132,10 +132,10 @@ std::mutex ServerWorker::count_mutex;
  * LambdaComm instance is created when a lambda connection is desired.
  * 
  */
-LambdaComm::LambdaComm(FeatType* data_, std::string& nodeIp_, unsigned port_, int32_t rows_, int32_t cols_,
+LambdaComm::LambdaComm(FeatType *data_, std::string& nodeIp_, unsigned dataserverPort_, int32_t rows_, int32_t cols_,
 					   int32_t nParts_, int32_t numListeners_)
   	: nParts(nParts_), numListeners(numListeners_), counter(0), ctx(1), frontend(ctx, ZMQ_ROUTER),
-	  backend(ctx, ZMQ_DEALER), nodeIp(nodeIp_), port(port_) {
+	  backend(ctx, ZMQ_DEALER), nodeIp(nodeIp_), dataserverPort(dataserverPort_) {
 	data = Matrix(rows_, cols_, data_);
 	std::cerr << "Data Matrix dimensions " << data.shape() << std::endl;
 }
@@ -173,9 +173,9 @@ LambdaComm::run() {
 }
 
 void
-LambdaComm::requestLambdas(std::string& coordserverIp, std::string& port, int32_t layer) {
+LambdaComm::requestLambdas(std::string& coordserverIp, unsigned coordserverPort, int32_t layer) {
 	char chost_port[50];
-	sprintf(chost_port, "tcp://%s:%s", coordserverIp.c_str(), port.c_str());
+	sprintf(chost_port, "tcp://%s:%u", coordserverIp.c_str(), coordserverPort);
 	zmq::socket_t socket(ctx, ZMQ_REQ);
 	std::cerr << "Connecting to " << chost_port << std::endl;
 	socket.connect(chost_port);
@@ -199,4 +199,3 @@ LambdaComm::requestLambdas(std::string& coordserverIp, std::string& port, int32_
 
 	std::cerr << "All partitions received" << std::endl;
 }
-

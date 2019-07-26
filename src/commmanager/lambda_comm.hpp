@@ -161,7 +161,7 @@ class LambdaComm {
 
 public:
 
-    LambdaComm(FeatType* data_, std::string& nodeIp_, unsigned port_, int32_t rows_, int32_t cols_,
+    LambdaComm(FeatType* data_, std::string& nodeIp_, unsigned dataserverPort_, int32_t rows_, int32_t cols_,
                int32_t nParts_, int32_t numListeners_);
     
     // Binds to a public port and a backend routing port for the 
@@ -172,7 +172,7 @@ public:
 
     // Sends a request to the coordination server for a given
     // number of lambda threads.
-    void requestLambdas(std::string& coordserverIp, std::string& coordserverPort, int32_t layer);
+    void requestLambdas(std::string& coordserverIp, unsigned coordserverPort, int32_t layer);
 
 private:
 
@@ -186,7 +186,7 @@ private:
     zmq::socket_t frontend;
     zmq::socket_t backend;
     std::string& nodeIp;
-    unsigned port;
+    unsigned dataserverPort;
 };
 
 

@@ -108,8 +108,9 @@ private:
     static std::string outFile;
     static std::string layerConfigFile;
 
+    static unsigned dataserverPort;
     static std::string coordserverIp;
-    static std::string coordserverPort;
+    static unsigned coordserverPort;
 
     static unsigned nodeId;
     static unsigned numNodes;

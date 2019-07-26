@@ -24,8 +24,9 @@ std::string Engine::graphFile;
 std::string Engine::featuresFile;
 std::string Engine::outFile;
 std::string Engine::layerConfigFile;
+unsigned Engine::dataserverPort;
 std::string Engine::coordserverIp;
-std::string Engine::coordserverPort;
+unsigned Engine::coordserverPort;
 IdType Engine::currId = 0;
 Lock Engine::lockCurrId;
 Lock Engine::lockRecvWaiters;
@@ -294,7 +295,7 @@ Engine::worker(unsigned tid, void *args) {
                 //////////////////////////////////
                 
                 Node nodeMe = NodeManager::getNode(nodeId);
-                LambdaComm lambdaComm(verticesDataBuf, nodeMe.ip, 65431, graph.getNumLocalVertices(), getNumFeats(), 2, 1);
+                LambdaComm lambdaComm(verticesDataBuf, nodeMe.ip, dataserverPort, graph.getNumLocalVertices(), getNumFeats(), 2, 1);
                 
                 // Create and launch the sender & receiver workers.
                 std::thread t([&] {
@@ -618,8 +619,9 @@ Engine::parseArgs(int argc, char *argv[]) {
 
         ("tmpdir", boost::program_options::value<std::string>(), "Temporary directory")
 
+        ("dataserverport", boost::program_options::value<unsigned>(), "The port exposing to the coordination server")
         ("coordserverip", boost::program_options::value<std::string>(), "The private IP address of the coordination server")
-        ("coordserverport", boost::program_options::value<std::string>(), "The port of the listener on the coordination server")
+        ("coordserverport", boost::program_options::value<unsigned>(), "The port of the listener on the coordination server")
 
         ("undirected", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Graph type")
 
@@ -665,11 +667,14 @@ Engine::parseArgs(int argc, char *argv[]) {
     assert(vm.count("tmpdir"));
     outFile = vm["tmpdir"].as<std::string>() + "/output_";  // Still needs to append the node id, after node manager set up.
 
+    assert(vm.count("dataserverport"));
+    dataserverPort = vm["dataserverport"].as<unsigned>();
+
     assert(vm.count("coordserverip"));
     coordserverIp = vm["coordserverip"].as<std::string>();
 
     assert(vm.count("coordserverport"));
-    coordserverPort = vm["coordserverport"].as<std::string>();
+    coordserverPort = vm["coordserverport"].as<unsigned>();
 
     assert(vm.count("undirected"));
     undirected = (vm["undirected"].as<unsigned>() == 0) ? false : true;
