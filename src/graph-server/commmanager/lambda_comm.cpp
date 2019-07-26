@@ -10,8 +10,8 @@ std::condition_variable cv;
  * ServerWorker is a wrapper over the sender & receiver thread.
  * 
  */
-ServerWorker::ServerWorker(zmq::context_t& ctx_, int sock_type, int32_t nParts_, int32_t nextIterCols_, int32_t& counter_, Matrix& data_) 
-  	: data(data_), ctx(ctx_), worker(ctx, sock_type), nParts(nParts_), nextIterCols(nextIterCols_), count(counter_) {
+ServerWorker::ServerWorker(zmq::context_t& ctx_, int sock_type, int32_t nParts_, int32_t nextIterCols_, int32_t& counter_, Matrix& data_, FeatType *zData_, FeatType *actData_) 
+  	: data(data_), ctx(ctx_), worker(ctx, sock_type), nParts(nParts_), nextIterCols(nextIterCols_), count(counter_), zData(zData_), actData(actData_) {
 	partCols = data.cols;
 	partRows = std::ceil((float) data.rows / (float) nParts);
 	offset = partRows * partCols;

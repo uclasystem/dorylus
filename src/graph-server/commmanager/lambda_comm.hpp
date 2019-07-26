@@ -121,7 +121,7 @@ class ServerWorker {
 
 public:
 
-    ServerWorker(zmq::context_t& ctx_, int32_t sock_type, int32_t nParts_, int32_t nextIterCols, int32_t& counter_, Matrix& data_);
+    ServerWorker(zmq::context_t& ctx_, int32_t sock_type, int32_t nParts_, int32_t nextIterCols, int32_t& counter_, Matrix& data_, FeatType *zData_, FeatType *actData_);
 
     // Continuously listens for incoming lambda connections and either sends
     // a partitioned matrix or receives computed results.
