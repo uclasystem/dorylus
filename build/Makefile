@@ -12,7 +12,7 @@
 USER            := $(shell whoami)
 
 # Source paths
-SRC_PATH        := ../src
+SRC_PATH        := ../src/graph-server
 NODE_PATH       := $(SRC_PATH)/nodemanager
 COMM_PATH       := $(SRC_PATH)/commmanager
 ENGINE_PATH     := $(SRC_PATH)/engine
