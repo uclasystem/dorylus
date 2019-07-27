@@ -583,9 +583,9 @@ Engine::aggregateFromNeighbors(IdType lvid) {
         EdgeType normFactor = v.getInEdge(i).getData();
 
         if (v.getInEdge(i).getEdgeLocation() == LOCAL_EDGE_TYPE)    // Local vertex.
-            otherDataPtr = vertexActivationDataAPtr(v.getSourceVertexLocalId(i), offset);
+            otherDataPtr = vertexActivationDataPtr(v.getSourceVertexLocalId(i), offset);
         else                                                        // Ghost vertex.
-            otherDataPtr = ghostVertexActivationDataAPtr(v.getSourceVertexLocalId(i), offset);
+            otherDataPtr = ghostVertexActivationDataPtr(v.getSourceVertexLocalId(i), offset);
 
         // TODO: Locks on the data array area is not properly set yet. But does not affect forward prop.
         for (unsigned j = 0; j < numFeats; ++j)

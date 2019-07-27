@@ -17,8 +17,6 @@ ServerWorker::work() {
 
 	try {
 		while (true) {
-			fprintf(stderr, "Waiting for lambda connections\n");
-
 			zmq::message_t identity;
 			zmq::message_t header;
 			worker.recv(&identity);
@@ -34,7 +32,7 @@ ServerWorker::work() {
 			std::string accMsg = "[ACCEPTED] " + opStr + " from thread "
 								 + std::to_string(cli_id) + " for partition "
 								 + std::to_string(partId);
-			std::cerr << accMsg << std::endl;
+			std::cerr << accMsg << "." << std::endl;
 
 			switch (op) {
 				case (OP::PULL):
@@ -44,7 +42,7 @@ ServerWorker::work() {
 					recvMatrixChunks(worker, partId, rows, cols);
 					break;
 				default:
-					std::cerr << "Unknown Op code" << std::endl;
+					std::cerr << "SW: Unknown Op code." << std::endl;
 			}
 		}
 	} catch (std::exception& ex) {
@@ -59,14 +57,12 @@ ServerWorker::sendMatrixChunk(zmq::socket_t& socket, zmq::message_t& client_id, 
 
 	// Reject a send request if the partition id is invalid.
 	if (partId >= nParts) {
-		fprintf(stderr, "Rejecting request for %d as this partition does not exist\n", partId);
 		populateHeader((char *) header.data(), -1, -1, -1, -1);
 		socket.send(client_id);
 		socket.send(header);
 
 	// Partition id is valid, so send the matrix segment.
 	} else {
-		fprintf(stderr, "Request for partition %d accepted\n", partId);
 
 		// Check to make sure that the bounds of this partition do not exceed the bounds of the data array.
 		// If they do, set partition end to the end of the array.
@@ -78,8 +74,6 @@ ServerWorker::sendMatrixChunk(zmq::socket_t& socket, zmq::message_t& client_id, 
 			thisPartRows = partRows - diff;
 			thisBufSize = thisPartRows * partCols * sizeof(FeatType);
 		}
-
-		fprintf(stderr, "thisPartRows: %d, partCols: %d\n", thisPartRows, partCols);
 
 		populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, partCols);
 		FeatType *partition_start = (matrix.getData()) + (partId * offset);
@@ -125,11 +119,8 @@ void
 LambdaComm::run() {
 	char host_port[50];
 	sprintf(host_port, "tcp://*:%u", dataserverPort);
-	std::cerr << "Binding to " << host_port << std::endl;
 	frontend.bind(host_port);
 	backend.bind("inproc://backend");
-
-	fprintf(stderr, "data.shape(): %s\n", matrix.shape().c_str());
 
 	// Create workers (each for a partition) and detach them.
 	std::vector<ServerWorker *> workers;
@@ -164,7 +155,6 @@ LambdaComm::requestLambdas(std::string& coordserverIp, unsigned coordserverPort,
 	char chost_port[50];
 	sprintf(chost_port, "tcp://%s:%u", coordserverIp.c_str(), coordserverPort);
 	zmq::socket_t socket(ctx, ZMQ_REQ);
-	std::cerr << "Connecting to " << chost_port << std::endl;
 	socket.connect(chost_port);
 
 	zmq::message_t header(HEADER_SIZE);
@@ -177,11 +167,8 @@ LambdaComm::requestLambdas(std::string& coordserverIp, unsigned coordserverPort,
 	
 	zmq::message_t reply;
 	socket.recv(&reply);
-	std::cerr << "Received reply. Waiting for threads to finish" << std::endl;
 
 	// Block until all parts have been handled.
 	std::unique_lock<std::mutex> lk(m);
 	cv.wait(lk, [&]{ return counter == nParts; });
-
-	std::cerr << "All partitions received" << std::endl;
 }
