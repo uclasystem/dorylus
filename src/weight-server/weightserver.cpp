@@ -115,7 +115,7 @@ public:
 		}
 
 		for (uint32_t u = 0; u < layers.size(); ++u) {
-			fprintf(stderr, "Layer %u Dims: %s\n", u, layers[u].shape().c_str());
+			fprintf(stderr, "Layer %u Weights: %s\n", u, layers[u].str().c_str());
 		}
 	}
 
