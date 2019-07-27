@@ -502,17 +502,6 @@ Engine::vertexZDataPtr(IdType lvid, unsigned offset) {
 
 /**
  *
- * Get the data pointer to a ghost vertex's data in the dataAll area.
- * 
- */
-FeatType *
-Engine::ghostVertexZDataPtr(IdType lvid, unsigned offset) {
-    return ghostVerticesZData + lvid * numFeatsTotal + offset;
-}
-
-
-/**
- *
  * Get the data pointer to a local vertex's data in the dataAll area.
  * 
  */
@@ -541,17 +530,6 @@ Engine::ghostVertexActivationDataPtr(IdType lvid, unsigned offset) {
 FeatType *
 Engine::vertexDataBufPtr(IdType lvid, unsigned numFeats) {
     return verticesDataBuf + lvid * numFeats;
-}
-
-
-/**
- *
- * Get the data pointer to a ghost vertex's data buffer.
- * 
- */
-FeatType *
-Engine::ghostVertexDataBufPtr(IdType lvid, unsigned numFeats) {
-    return ghostVerticesDataBuf + lvid * numFeats;
 }
 
 
