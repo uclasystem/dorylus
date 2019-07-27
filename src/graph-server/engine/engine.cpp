@@ -321,8 +321,10 @@ Engine::worker(unsigned tid, void *args) {
 
                 // Flush the returned values from lambda to dataAll region.
                 for (IdType id = 0; id < graph.getNumLocalVertices(); ++id) {
-                    memcpy(vertexZDataPtr(id, getDataAllOffset()), lambdaComm.getZData() + id * getNumFeats(iteration + 1), getNumFeats(iteration + 1) * sizeof(FeatType));
-                    memcpy(vertexActivationDataPtr(id, getDataAllOffset()), verticesDataBuf + id * getNumFeats(iteration + 1), getNumFeats(iteration + 1) * sizeof(FeatType));
+                    memcpy(vertexZDataPtr(id, getDataAllOffset(iteration + 1)), lambdaComm.getZData() + id * getNumFeats(iteration + 1),
+                           getNumFeats(iteration + 1) * sizeof(FeatType));
+                    memcpy(vertexActivationDataPtr(id, getDataAllOffset(iteration + 1)), verticesDataBuf + id * getNumFeats(iteration + 1),
+                           getNumFeats(iteration + 1) * sizeof(FeatType));
                 }
 
                 // Loop through all local vertices and do the data send out work. If there are any remote edges for a vertex, should send this vid to
