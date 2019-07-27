@@ -142,12 +142,11 @@ private:
     static unsigned getDataAllOffset(unsigned iter);
 
     static FeatType *vertexZDataPtr(IdType lvid, unsigned offset);
-    static FeatType *ghostVertexZDataPtr(IdType lvid, unsigned offset);
     static FeatType *vertexActivationDataPtr(IdType lvid, unsigned offset);
+    
     static FeatType *ghostVertexActivationDataPtr(IdType lvid, unsigned offset);
 
     static FeatType *vertexDataBufPtr(IdType lvid, unsigned numFeats);
-    static FeatType *ghostVertexDataBufPtr(IdType lvid, unsigned numFeats);
 
     // Aggregation operation (along with normalization).
     static void aggregateFromNeighbors(IdType lvid);
