@@ -211,7 +211,7 @@ Engine::output() {
 
     for (Vertex& v : graph.getVertices()) {
         outStream << v.getGlobalId() << ": ";
-        FeatType *dataAllPtr = vertexDataAllPtr(v.getLocalId(), 0);
+        FeatType *dataAllPtr = vertexActivationDataPtr(v.getLocalId(), 0);
         unsigned offset = 0;
         for (unsigned& numFeats : layerConfig) {
             for (unsigned i = 0; i < numFeats; ++i)
@@ -329,7 +329,7 @@ Engine::worker(unsigned tid, void *args) {
                 // Flush the returned values from lambda to dataAll.
                 for (IdType id = 0; id < graph.getNumLocalVertices(); ++id) {
                     memcpy(vertexZDataPtr(id, getDataAllOffset()), lambdaComm.getZData() + id * getNumFeats(), getNumFeats() * sizeof(FeatType));
-                    memcpy(vertexActivationDataPtr(id, getDataAllOffset()), vertexDataBuf + id * getNumFeats(), getNumFeats() * sizeof(FeatType));
+                    memcpy(vertexActivationDataPtr(id, getDataAllOffset()), verticesDataBuf + id * getNumFeats(), getNumFeats() * sizeof(FeatType));
                 }
 
                 printLog(nodeId, "All lambdas finished. Waiting on new iteration...\n");
@@ -342,10 +342,6 @@ Engine::worker(unsigned tid, void *args) {
 
                 //## Global Iteration barrier. ##//
                 NodeManager::barrier(LAYER_BARRIER);
-
-                // Ghost vertices' flush must happen after all new ghost values received, i.e., global barrier crossed.
-                for (IdType id = 0; id < graph.getNumGhostVertices(); ++id)
-                    memcpy(ghostVertexDataAllPtr(id, getDataAllOffset()), ghostVertexDataBufPtr(id), getNumFeats() * sizeof(FeatType));
 
                 // There is a new layer ahead, please start a new iteration.
                 if (iteration < numLayers) {
@@ -391,7 +387,7 @@ Engine::worker(unsigned tid, void *args) {
                 recvWaiters[gvid] = numNodes;
                 lockRecvWaiters.unlock();
 
-                FeatType *dataPtr = vertexDataBufPtr(lvid);
+                FeatType *dataPtr = vertexDataBufPtr(lvid, getNumFeats());
                 CommManager::dataPushOut(gvid, dataPtr, getNumFeats() * sizeof(FeatType));
 
                 break;
@@ -432,7 +428,7 @@ Engine::dataCommunicator(unsigned tid, void *args) {
 
                 // Update the ghost vertex if it is one of mine.
                 if (graph.containsGhostVertex(gvid)) {
-                    FeatType *dataBufPtr = ghostVertexDataBufPtr(graph.getGhostVertex(gvid).getLocalId());
+                    FeatType *dataBufPtr = ghostVertexDataBufPtr(graph.getGhostVertex(gvid).getLocalId(), getNumFeats());
                     memcpy(dataBufPtr, msgbuf, getNumFeats() * sizeof(FeatType));
                 }
 
@@ -540,6 +536,28 @@ Engine::ghostVertexActivationDataPtr(IdType lvid, unsigned offset) {
 
 /**
  *
+ * Get the data pointer to a local vertex's data buffer.
+ * 
+ */
+FeatType *
+Engine::vertexDataBufPtr(IdType lvid, unsigned numFeats) {
+    return verticesDataBuf + lvid * numFeats;
+}
+
+
+/**
+ *
+ * Get the data pointer to a ghost vertex's data buffer.
+ * 
+ */
+FeatType *
+Engine::ghostVertexDataBufPtr(IdType lvid, unsigned numFeats) {
+    return ghostVerticesDataBuf + lvid * numFeats;
+}
+
+
+/**
+ *
  * Aggregate numFeats feature values starting from offset from all neighbors (including self). Then write the results to the
  * data buffer area for serialization. The results are to be used for being sent to lambda threads.
  * 
@@ -551,7 +569,7 @@ Engine::aggregateFromNeighbors(IdType lvid) {
 
     // Read out data of the current iteration of given vertex.
     FeatType currDataBuf[numFeats];
-    FeatType *currDataPtr = vertexDataAllPtr(lvid, offset);
+    FeatType *currDataPtr = vertexActivationDataPtr(lvid, offset);
     memcpy(currDataBuf, currDataPtr, numFeats * sizeof(FeatType));
 
     // Apply normalization factor on the current data.
@@ -565,9 +583,9 @@ Engine::aggregateFromNeighbors(IdType lvid) {
         EdgeType normFactor = v.getInEdge(i).getData();
 
         if (v.getInEdge(i).getEdgeLocation() == LOCAL_EDGE_TYPE)    // Local vertex.
-            otherDataPtr = vertexDataAllPtr(v.getSourceVertexLocalId(i), offset);
+            otherDataPtr = vertexActivationDataAPtr(v.getSourceVertexLocalId(i), offset);
         else                                                        // Ghost vertex.
-            otherDataPtr = ghostVertexDataAllPtr(v.getSourceVertexLocalId(i), offset);
+            otherDataPtr = ghostVertexActivationDataAPtr(v.getSourceVertexLocalId(i), offset);
 
         // TODO: Locks on the data array area is not properly set yet. But does not affect forward prop.
         for (unsigned j = 0; j < numFeats; ++j)
@@ -575,7 +593,7 @@ Engine::aggregateFromNeighbors(IdType lvid) {
     }
 
     // Write the results to the correct position inside serialization dataBuf area.
-    memcpy(vertexDataBufPtr(lvid), currDataBuf, numFeats * sizeof(FeatType));
+    memcpy(vertexDataBufPtr(lvid, getNumFeats()), currDataBuf, numFeats * sizeof(FeatType));
 }
 
 

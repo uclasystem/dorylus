@@ -134,8 +134,10 @@ private:
     static void worker(unsigned tid, void *args);
     static void dataCommunicator(unsigned tid, void *args);
 
+    // About the global data arrays.
     static unsigned getNumFeats();
     static unsigned getNumFeats(unsigned iter);
+
     static unsigned getDataAllOffset();
     static unsigned getDataAllOffset(unsigned iter);
 
@@ -144,6 +146,10 @@ private:
     static FeatType *vertexActivationDataPtr(IdType lvid, unsigned offset);
     static FeatType *ghostVertexActivationDataPtr(IdType lvid, unsigned offset);
 
+    static FeatType *vertexDataBufPtr(IdType lvid, unsigned numFeats);
+    static FeatType *ghostVertexDataBufPtr(IdType lvid, unsigned numFeats);
+
+    // Aggregation operation (along with normalization).
     static void aggregateFromNeighbors(IdType lvid);
 
     // For initialization.
