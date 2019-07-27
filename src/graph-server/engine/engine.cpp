@@ -237,11 +237,9 @@ Engine::destroy() {
     lockHalt.destroy();
 
     delete[] verticesZData;
-    delete[] ghostVerticesZData;
     delete[] verticesActivationData;
     delete[] ghostVerticesActivationData;
     delete[] verticesDataBuf;
-    delete[] ghostVerticesDataBuf;
 }
 
 
