@@ -33,15 +33,6 @@ static std::shared_ptr<Aws::Lambda::LambdaClient> m_client;
 using namespace std::chrono;
 
 
-/** Parse the serialized ZMQ message header. */
-template<class T>
-T parse(const char* buf, int32_t offset) {
-	T val;
-	std::memcpy(&val, buf + (offset * sizeof(T)), sizeof(T));
-	return val;
-}
-
-
 /**
  *
  * Callback function to be called after receiving the respond from lambda threads.
