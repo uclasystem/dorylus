@@ -61,20 +61,20 @@ message(std::string id, std::string msg) {
 struct Matrix {
     int32_t rows;
     int32_t cols;
-    FeatType *data;
+    DTYPE *data;
 
     Matrix() { rows = 0; cols = 0; }
     Matrix(int _rows, int _cols) { rows = _rows; cols = _cols; }
-    Matrix(int _rows, int _cols, FeatType *_data) { rows = _rows; cols = _cols; data = _data; }
-    Matrix(int _rows, int _cols, char *_data) { rows = _rows; cols = _cols; data = (FeatType *) _data; }
+    Matrix(int _rows, int _cols, DTYPE *_data) { rows = _rows; cols = _cols; data = _data; }
+    Matrix(int _rows, int _cols, char *_data) { rows = _rows; cols = _cols; data = (DTYPE *) _data; }
 
-    FeatType *getData() const { return data; }
-    size_t getDataSize() const { return rows * cols * sizeof(FeatType); }
+    DTYPE *getData() const { return data; }
+    size_t getDataSize() const { return rows * cols * sizeof(DTYPE); }
 
     void setRows(int32_t _rows) { rows = _rows; }
     void setCols(int32_t _cols) { cols = _cols; }
     void setDims(int32_t _rows, int32_t _cols) { rows = _rows; cols = _cols; }
-    void setData(FeatType* _data) { data = _data; }
+    void setData(DTYPE *_data) { data = _data; }
 
     bool empty() { return rows == 0 || cols == 0; }
 
@@ -85,7 +85,7 @@ struct Matrix {
         output << "Matrix Dims: " << shape() << "\n";
         for (int32_t i = 0; i < rows; ++i) {
             for (int32_t j = 0; j < cols; ++j) {
-                output << data[i*cols + j] << " ";
+                output << data[i * cols + j] << " ";
             }
             output << "\n";
         }

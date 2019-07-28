@@ -10,6 +10,7 @@
 #include <thread>
 #include <vector>
 #include <zmq.hpp>
+#include <boost/algorithm/string/trim.hpp>
 #include "../utils/utils.h"
 
 
@@ -130,11 +131,11 @@ public:
 		frontend.bind(host_port);
 		backend.bind("inproc://backend");
 
-		std::vector<server_worker *> workers;
+		std::vector<ServerWorker *> workers;
 		std::vector<std::thread *> worker_threads;
 		for (int i = 0; i < kMaxThreads; ++i) {
-			workers.push_back(new server_worker(ctx, ZMQ_DEALER, layers));
-			worker_threads.push_back(new std::thread(std::bind(&server_worker::work, workers[i])));
+			workers.push_back(new ServerWorker(ctx, ZMQ_DEALER, layers));
+			worker_threads.push_back(new std::thread(std::bind(&ServerWorker::work, workers[i])));
 			worker_threads[i]->detach();
 		}
 
@@ -157,7 +158,7 @@ private:
 
 		std::ifstream infile(configFileName.c_str());
 		if (!infile.good())
-		    fprintf(stderr, "[ERROR] Cannot open layer configuration file: %s [Reason: %s]\n", layerConfigFileName.c_str(), std::strerror(errno));
+		    fprintf(stderr, "[ERROR] Cannot open layer configuration file: %s [Reason: %s]\n", configFileName.c_str(), std::strerror(errno));
 
 		assert(infile.good());
 

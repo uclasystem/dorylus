@@ -73,7 +73,7 @@ struct Matrix {
     void setRows(int32_t _rows) { rows = _rows; }
     void setCols(int32_t _cols) { cols = _cols; }
     void setDims(int32_t _rows, int32_t _cols) { rows = _rows; cols = _cols; }
-    void setData(FeatType* _data) { data = _data; }
+    void setData(FeatType *_data) { data = _data; }
 
     bool empty() { return rows == 0 || cols == 0; }
 
