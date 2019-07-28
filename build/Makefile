@@ -1,6 +1,5 @@
 #
-# Makefile for building ASPIRE. Make sure everything has been setup according to
-# README, strictly in the designed place.
+# Make sure everything has been setup according to README, strictly in the designed place.
 #
 
 
