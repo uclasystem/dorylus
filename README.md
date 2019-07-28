@@ -95,6 +95,8 @@ Clean the build by:
 
 ### D.3 Preparing Input Graph
 
+#### D.3.1 Get Binary Snap Graph
+
 First we should have a text graph file with vertices numbered from 0 and each line representing an edge. Example content of a text graph file `test_graph.txt`:
 
     # Example with 6 vertices and 5 edges
@@ -115,6 +117,22 @@ Then convert the graph to partitioned binary by:
 This will create a `data/` folder under `input/`, where there is the binary graph file `*.bsnap` and a folder `parts_<Num-Partitions>/` containing partitioning infos inside.
 
 Make sure you put the things in `data/` folder on all machines and under the **same** location, and the `ec2run.sh` script points to it correctly.
+
+#### D.3.2 Prepare Input Features
+
+Prepare a binary features file (In-progress)...
+
+Name the file `features` and put it at location `parts_x/../features` along with the graph.
+
+#### D.3.3 Set GNN Layer Configurations
+
+Prepare a layer configuration file, where each line indicates the number of features (i.e., feature dimension) of that layer, and the number of lines indicates total number of layers. Example with 3 layers (2 propagation steps):
+
+    8
+    4
+    2
+
+Name the file `layerconfig` and put it at location `parts_x/../layerconfig` along with the graph.
 
 ### D.4 Running the System
 
@@ -203,7 +221,9 @@ Under `src/weight-server/` folder, do:
 
 ### W.2 Run the Weightserver
 
-Under `src/weight-server/` folder, configure a proper `run` script. Then do:
+Under `src/weight-server/` folder, first ensure that the `layerconfig` file is exactly **the same** with the layer configuration file at the dataserver.
+
+Then configure a proper `run` script. Then do:
     
     $ ./run
 

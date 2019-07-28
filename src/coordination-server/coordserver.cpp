@@ -17,6 +17,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <zmq.hpp>
+#include "../utils/utils.h"
 
 
 std::mutex m;
@@ -149,8 +150,8 @@ main(int argc, char *argv[]) {
 			return 13;
 		}
 
-		int32_t layer = parse<int32_t>((char *)header.data(), 1);
-		int32_t nThreadsReq = parse<int32_t>((char *)header.data(), 2);
+		int32_t layer = parse<int32_t>((char *) header.data(), 1);
+		int32_t nThreadsReq = parse<int32_t>((char *) header.data(), 2);
 
 		std::string accMsg = "[ACCEPTED] Req for " + std::to_string(nThreadsReq) + " lambdas for layer " + std::to_string(layer);
 		std::cout << accMsg << std::endl;
@@ -159,7 +160,7 @@ main(int argc, char *argv[]) {
 		// Get a request. Issue a bunch of lambda threads to serve the request.
 		{
 			for (int i = 0; i < nThreadsReq; i++)
-				invokeFunction("matmul-cpp", (char *)dataserverIp.data(), argv[4], argv[2], argv[3], layer, i);
+				invokeFunction("matmul-cpp", (char *) dataserverIp.data(), argv[4], argv[2], argv[3], layer, i);
 		}
 	}
 
