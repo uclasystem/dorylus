@@ -37,6 +37,7 @@ template<class T>
 T parse(const char* buf, int32_t offset) {
 	T val;
 	std::memcpy(&val, buf + (offset * sizeof(T)), sizeof(T));
+}
 
 
 /**
