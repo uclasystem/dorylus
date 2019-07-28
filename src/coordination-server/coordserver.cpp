@@ -32,6 +32,13 @@ static std::shared_ptr<Aws::Lambda::LambdaClient> m_client;
 using namespace std::chrono;
 
 
+/** Parse the serialized ZMQ message header. */
+template<class T>
+T parse(const char* buf, int32_t offset) {
+	T val;
+	std::memcpy(&val, buf + (offset * sizeof(T)), sizeof(T));
+
+
 /**
  *
  * Callback function to be called after receiving the respond from lambda threads.
@@ -138,8 +145,8 @@ main(int argc, char *argv[]) {
 			return 13;
 		}
 
-		int32_t layer = parse<int32_t>((char*)header.data(), 1);
-		int32_t nThreadsReq = parse<int32_t>((char*)header.data(), 2);
+		int32_t layer = parse<int32_t>((char *)header.data(), 1);
+		int32_t nThreadsReq = parse<int32_t>((char *)header.data(), 2);
 
 		std::string accMsg = "[ACCEPTED] Req for " + std::to_string(nThreadsReq) + " lambdas for layer " + std::to_string(layer);
 		std::cout << accMsg << std::endl;

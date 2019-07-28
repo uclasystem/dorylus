@@ -10,12 +10,7 @@ template<class T>
 void serialize(char* buf, int32_t offset, T val) {
 	std::memcpy(buf + (offset * sizeof(T)), &val, sizeof(T));
 }
-
-template<class T>
-T parse(const char* buf, int32_t offset) {
-	T val;
-	std::memcpy(&val, buf + (offset * sizeof(T)), sizeof(T));
-	return val;
+return val;
 }
 
 // ID represents either layer or data partition, depending on server responding.
