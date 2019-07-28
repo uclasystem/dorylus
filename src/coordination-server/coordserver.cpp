@@ -115,6 +115,8 @@ main(int argc, char *argv[]) {
 	Aws::SDKOptions options;
 	Aws::InitAPI(options);
 
+	assert(argc == 5);
+
 	// Setup ZeroMQ.
 	zmq::context_t ctx(1);
 	zmq::socket_t frontend(ctx, ZMQ_REP);
