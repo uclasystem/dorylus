@@ -10,8 +10,7 @@ template<class T>
 void serialize(char* buf, int32_t offset, T val) {
 	std::memcpy(buf + (offset * sizeof(T)), &val, sizeof(T));
 }
-return val;
-}
+
 
 // ID represents either layer or data partition, depending on server responding.
 void populateHeader(char* header, int32_t op, int32_t id, int32_t rows = 0,
