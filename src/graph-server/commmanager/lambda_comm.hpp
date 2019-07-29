@@ -173,7 +173,6 @@ public:
 	FeatType* getZData() { return zData; }             // Z values.
 	FeatType* getActivationData() { return actData; }  // After activation.
 
-
 private:
 
 	Matrix matrix;

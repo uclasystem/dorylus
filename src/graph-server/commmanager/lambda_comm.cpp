@@ -137,7 +137,7 @@ LambdaComm::run() {
 	//   make the class a member of Engine so that it is not spawning
 	//   new listeners every iteration that do not die.
 	//   Probably best to integrate the listener into Engine and add 
-	//   "set" APIs to change its config every iteration
+	//   "set" APIs to change its config every iteration.
 	try {
 		zmq::proxy(static_cast<void *>(frontend), static_cast<void *>(backend), nullptr);
 	} catch (std::exception& ex) {

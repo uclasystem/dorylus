@@ -28,8 +28,7 @@ parse(const char *buf, int32_t offset) {
 }
 
 // ID represents either layer or data partition, depending on server responding.
-void populateHeader(char* header, int32_t op, int32_t id, int32_t rows = 0,
-	int32_t cols = 0) {
+void populateHeader(char* header, int32_t op, int32_t id, int32_t rows = 0, int32_t cols = 0) {
 	serialize<int32_t>(header, 0, op);
 	serialize<int32_t>(header, 1, id);
 	serialize<int32_t>(header, 2, rows);

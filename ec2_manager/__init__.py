@@ -13,7 +13,6 @@ EC2_DIR = BASE_DIR + "/ec2_manager/"
 RES_DIR = EC2_DIR + "res/"
 
 ec2_cli = boto3.client('ec2')
-arn = "arn:aws:iam::754699445878:role/lambda-cpp-demo"
 
 def get_instances_info(tag):
 	from ec2_manager.instance_info import Instance
@@ -71,10 +70,21 @@ def process_options(ctx, args):
 		elif args[1] == 'arn':
 			print(arn)
 		elif args[1] == 'info':
+			quoted_tag = "'" + ctx.tag + "'"
+			print("Getting instance info for " + quoted_tag)
+			response = ec2_cli.describe_instances(Filters=[{ 'Name': 'tag:Type', 'Values': [eval(quoted_tag)] }])
+
+			running = 0
+			for res in response['Reservations']:
+				for inst in res['Instances']:
+					if inst['State']['Name'] == 'running':
+						running += 1
+
 			print("User:", ctx.user)
 			print("Key:", ctx.key)
 			print("Tag:", ctx.tag)
 			print("Number of Instances:", len(ctx.instances))
+			print(str(running) + " out of " + str(len(ctx.instances)) + " instances running")
 		elif args[1] == 'help':
 			help_str = ("Usage: python3 -m ec2_manager info\n"
 						"	    python3 -m ec2_manager all <command>\n"
