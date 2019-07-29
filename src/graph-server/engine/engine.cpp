@@ -762,9 +762,6 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
                 memcpy(dataPtr, feature_vec.data(), feature_vec.size() * sizeof(FeatType));
 
             ++gvid;
-            for(int i=0;i<feature_vec.size();++i)
-                printLog(nodeId,"%f ",dataPtr[i]);
-            printLog(nodeId,"\n");
             feature_vec.clear();
         }
     }

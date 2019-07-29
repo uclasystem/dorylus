@@ -52,6 +52,8 @@ void readWriteFile(std::string featuresFileName) {
          }
     }
 }
+
+//used for debug
 void test(std::string featuresFileName){
     cout<<"test\n";
 
@@ -96,8 +98,6 @@ int main(int argc, char* argv[]) {
         return -1;
     }
     readWriteFile(featureFile);
-    // test(featureFile);
-    
 
     return 0;
 }
