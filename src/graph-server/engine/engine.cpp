@@ -295,7 +295,7 @@ Engine::worker(unsigned tid, void *args) {
                 // Send dataBuf to lambda HERE. //
                 //////////////////////////////////
                 Node nodeMe = NodeManager::getNode(nodeId);
-                LambdaComm lambdaComm(verticesDataBuf, nodeMe.ip, dataserverPort, graph.getNumLocalVertices(), getNumFeats(), getNumFeats(iteration + 1), 2, 1);
+                LambdaComm lambdaComm(verticesDataBuf, nodeMe.pubip, dataserverPort, graph.getNumLocalVertices(), getNumFeats(), getNumFeats(iteration + 1), 5, 1);
                 
                 // Create and launch the sender & receiver workers.
                 std::thread t([&] {
@@ -734,11 +734,11 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
 
     FeaturesHeaderType fHeader;
     infile.read((char *) &fHeader, sizeof(FeaturesHeaderType));
-    assert(fHeader.numFeautures == layerConfig[0]);
+    assert(fHeader.numFeatures == layerConfig[0]);
 
     unsigned gvid = 0;
 
-    unsigned nFeats=fHeader.numFeautures;
+    unsigned nFeats=fHeader.numFeatures;
     std::vector<FeatType> feature_vec;
     feature_vec.reserve(nFeats);
     FeatType curr;

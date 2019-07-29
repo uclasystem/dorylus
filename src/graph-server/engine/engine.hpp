@@ -57,7 +57,7 @@ struct BSHeaderType {
 
 /** Binary features file header struct. */
 struct FeaturesHeaderType {
-    unsigned int numFeautures;
+    unsigned int numFeatures;
 };
 
 /**
