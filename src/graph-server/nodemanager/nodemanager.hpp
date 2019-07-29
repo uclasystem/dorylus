@@ -36,14 +36,16 @@ enum Phase { REGISTERING, REGISTERED, PROCESSING, UNREGISTERING };
 typedef struct node {
     unsigned id;
     std::string ip;
+    std::string pubip;
     std::string name;
     bool master;
     bool isAlive;
 
     node() { }
-    node(unsigned i, std::string *ipx, std::string *n, bool mtr) {
+    node(unsigned i, std::string *ipx, std::string *pip, std::string *n, bool mtr) {
         id = i;
         ip = *ipx;
+	pubip = *pip;
         name = *n;
         master = mtr;
         isAlive = false;

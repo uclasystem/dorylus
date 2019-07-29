@@ -141,7 +141,8 @@ main(int argc, char *argv[]) {
 	zmq::socket_t frontend(ctx, ZMQ_REP);
 	char host_port[50];
 	sprintf(host_port, "tcp://*:%s", argv[1]);
-	std::cout << "Binding to dataserver port " << host_port << "..." << std::endl;
+	std::cout << "Binding coordination server to "
+           << host_port << "..." << std::endl;
 	frontend.bind(host_port);
 
 	// Setup lambda client.
@@ -161,7 +162,7 @@ main(int argc, char *argv[]) {
 	std::size_t count=0;
 
 	// Keeps listening on dataserver's requests.
-	std::cout << "[Coord] Starts listening on dataserver's requests..." << std::endl;
+	std::cout << "[Coord] Starts listening for dataserver's requests..." << std::endl;
 	while (1) {
 		zmq::message_t header;
 		zmq::message_t dataserverIp;
@@ -177,11 +178,21 @@ main(int argc, char *argv[]) {
 			std::cerr << ex.what() << std::endl;
 			return 13;
 		}
+		char* datservIp = new char[dataserverIp.size()+1];
+		std::memcpy(datservIp, dataserverIp.data(), dataserverIp.size());
+		datservIp[dataserverIp.size()] = '\0';
+
+                std::string dataserverip = datservIp;
+                std::string dport = argv[2];
+                std::string wghtserverip = argv[3];
+                std::string wport = argv[4];
 
 		int32_t layer = parse<int32_t>((char *) header.data(), 1);
 		int32_t nThreadsReq = parse<int32_t>((char *) header.data(), 2);
 
-		std::string accMsg = "[ACCEPTED] Req for " + std::to_string(nThreadsReq) + " lambdas for layer " + std::to_string(layer);
+		std::string accMsg = "[ACCEPTED] Req for " + std::to_string(nThreadsReq)
+		  + " lambdas for layer " + std::to_string(layer)
+		  + " from " + datservIp;
 		std::cout << accMsg << std::endl;
 		total = nThreadsReq;
 
@@ -193,6 +204,7 @@ main(int argc, char *argv[]) {
 				char * waddr=addresses[count%numWeightServers];
 				char * wport=ports[count%numWeightServers];
 				invokeFunction("matmul-cpp", (char *) dataserverIp.data(), argv[3], waddr, wport, layer, i);
+				// invokeFunction("forward-prop-cpp", (char*)dataserverIp.data(), argv[4], argv[2], argv[3], layer, i);
 				count++;
 				printf("c: %zu\n", count);
 			}

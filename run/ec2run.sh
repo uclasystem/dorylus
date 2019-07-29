@@ -84,7 +84,7 @@ for i in $(seq 1 ${ZOONDS}); do
   scp -q ${ZOODIR}/conf/zoo.cfg ${dshnodes[$i]}:${ZOODIR}/conf/zoo.cfg;
   ${DSH} -M -m ${dshnodes[$i]} -c "mkdir -p ${TMPDIR}/zooDataDir";
   ${DSH} -M -m ${dshnodes[$i]} -c "echo $i > ${TMPDIR}/zooDataDir/myid";
-  ${DSH} -M -m ${dshnodes[$i]} -c "cd ${ZOODIR} && ./bin/zkServer.sh start > /dev/null 2>&1";
+  ${DSH} -M -m ${dshnodes[$i]} -c "cd ${ZOODIR} && ./bin/zkServer.sh start &> /dev/null";
 done;
 
 header "Checking for Quorum..."
@@ -131,7 +131,7 @@ case $1 in
 esac
 
 # Feature file
-FEATUREFILE=$( dirname ${INPUT_LOC} )/../features;
+FEATUREFILE=$( dirname ${INPUT_LOC} )/../features.bsnap;
 
 # Layer configuration file
 LAYERFILE=$( dirname ${INPUT_LOC} )/../layerconfig;
