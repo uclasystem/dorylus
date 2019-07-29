@@ -6,6 +6,7 @@ inputs/data
 installs
 run/hostfile
 run/gvid
+run/nodeIp
 config
 
 manage-ec2
