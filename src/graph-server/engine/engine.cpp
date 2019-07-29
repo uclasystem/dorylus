@@ -295,7 +295,7 @@ Engine::worker(unsigned tid, void *args) {
                 // Send dataBuf to lambda HERE. //
                 //////////////////////////////////
                 Node nodeMe = NodeManager::getNode(nodeId);
-                LambdaComm lambdaComm(verticesDataBuf, nodeMe.pubip, dataserverPort, graph.getNumLocalVertices(), getNumFeats(), getNumFeats(iteration + 1), 1, 1);
+                LambdaComm lambdaComm(verticesDataBuf, nodeMe.pubip, dataserverPort, graph.getNumLocalVertices(), getNumFeats(), getNumFeats(iteration + 1), 5, 1);
                 
                 // Create and launch the sender & receiver workers.
                 std::thread t([&] {
