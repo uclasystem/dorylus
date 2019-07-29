@@ -1,6 +1,5 @@
 #
-# Makefile for building ASPIRE. Make sure everything has been setup according to
-# README, strictly in the designed place.
+# Make sure everything has been setup according to README, strictly in the designed place.
 #
 
 
@@ -44,8 +43,8 @@ LDFLAGS         := -Wl,-rpath=$(ZK_LIBPATH) -Wl,-rpath=$(ZMQ_LIBPATH)
 #
 
 # Compiler & Flags
-CXX     := g++
-CXXFLAGS  := -Wall -Wno-sign-compare -Wno-unused-function -MMD -std=c++11
+CXX         := g++
+CXXFLAGS    := -Wall -Wno-sign-compare -Wno-unused-function -Wno-reorder -MMD -std=c++11
 ifeq ($(mode),release)
 	CXXFLAGS += -O3
 else
@@ -70,7 +69,7 @@ directories:
 	mkdir -p $(OBJ_PATH) 
 
 # Frameowrk objects internal targets
-BASE_OBJS       := $(OBJ_PATH)/lambda_comm.o $(OBJ_PATH)/commmanager.o $(OBJ_PATH)/nodemanager.o $(OBJ_PATH)/engine.o $(OBJ_PATH)/graph.o $(OBJ_PATH)/vertex.o $(OBJ_PATH)/edge.o $(OBJ_PATH)/zkinterface.o $(OBJ_PATH)/utils.o $(OBJ_PATH)/threadpool.o
+BASE_OBJS   := $(OBJ_PATH)/lambda_comm.o $(OBJ_PATH)/commmanager.o $(OBJ_PATH)/nodemanager.o $(OBJ_PATH)/engine.o $(OBJ_PATH)/graph.o $(OBJ_PATH)/vertex.o $(OBJ_PATH)/edge.o $(OBJ_PATH)/zkinterface.o $(OBJ_PATH)/utils.o $(OBJ_PATH)/threadpool.o
 
 $(OBJ_PATH)/%.o: $(NODE_PATH)/%.cpp $(NODE_PATH)/%.hpp
 	$(CXX) $(CXXFLAGS) $(INC) -c $< -o $@

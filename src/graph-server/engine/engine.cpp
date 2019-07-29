@@ -24,8 +24,9 @@ std::string Engine::graphFile;
 std::string Engine::featuresFile;
 std::string Engine::outFile;
 std::string Engine::layerConfigFile;
+unsigned Engine::dataserverPort;
 std::string Engine::coordserverIp;
-std::string Engine::coordserverPort;
+unsigned Engine::coordserverPort;
 IdType Engine::currId = 0;
 Lock Engine::lockCurrId;
 Lock Engine::lockRecvWaiters;
@@ -39,15 +40,16 @@ std::vector<unsigned> Engine::layerConfig;
 std::vector<unsigned> Engine::layerConfigPrefixSum;
 unsigned Engine::numFeatsTotal = 0;
 unsigned Engine::numLayers = 0;
-FeatType *Engine::verticesDataAll = NULL;
-FeatType *Engine::ghostVerticesDataAll = NULL;
+FeatType *Engine::verticesZData = NULL;
+FeatType *Engine::verticesActivationData = NULL;
+FeatType *Engine::ghostVerticesActivationData = NULL;
 FeatType *Engine::verticesDataBuf = NULL;
-FeatType *Engine::ghostVerticesDataBuf = NULL;
 unsigned Engine::iteration = 0;
 bool Engine::undirected = false;
 bool Engine::halt = false;
 double Engine::timeProcess = 0.0;
 double Engine::timeInit = 0.0;
+
 
 /**
  *
@@ -89,10 +91,10 @@ Engine::init(int argc, char *argv[]) {
 
     // Create the global contiguous memory for vertices' data, according to the given layer config and number of local vertices.
     // Create the global contiguous memory for ghost vertices' data similarly.
-    verticesDataAll = new FeatType[configSum * graph.getNumLocalVertices() * sizeof(FeatType)];
-    ghostVerticesDataAll = new FeatType[configSum * graph.getNumGhostVertices() * sizeof(FeatType)];
+    verticesZData = new FeatType[configSum * graph.getNumLocalVertices() * sizeof(FeatType)];
+    verticesActivationData = new FeatType[configSum * graph.getNumLocalVertices() * sizeof(FeatType)];
+    ghostVerticesActivationData = new FeatType[configSum * graph.getNumGhostVertices() * sizeof(FeatType)];
     verticesDataBuf = new FeatType[layerConfig[0] * graph.getNumLocalVertices() * sizeof(FeatType)];
-    ghostVerticesDataBuf = new FeatType[layerConfig[0] * graph.getNumGhostVertices() * sizeof(FeatType)];
 
     // Set a local index for all ghost vertices along the way. This index is used for indexing within the ghost data arrays.
     IdType ghostCount = 0;
@@ -206,7 +208,7 @@ Engine::output() {
 
     for (Vertex& v : graph.getVertices()) {
         outStream << v.getGlobalId() << ": ";
-        FeatType *dataAllPtr = vertexDataAllPtr(v.getLocalId(), 0);
+        FeatType *dataAllPtr = vertexActivationDataPtr(v.getLocalId(), 0);
         unsigned offset = 0;
         for (unsigned& numFeats : layerConfig) {
             for (unsigned i = 0; i < numFeats; ++i)
@@ -235,10 +237,10 @@ Engine::destroy() {
     condRecvWaitersEmpty.destroy();
     lockHalt.destroy();
 
-    delete[] verticesDataAll;
-    delete[] ghostVerticesDataAll;
+    delete[] verticesZData;
+    delete[] verticesActivationData;
+    delete[] ghostVerticesActivationData;
     delete[] verticesDataBuf;
-    delete[] ghostVerticesDataBuf;
 }
 
 
@@ -287,35 +289,64 @@ Engine::worker(unsigned tid, void *args) {
 
                 //## Worker barrier 1: Everyone reach to this point, then only master will work. ##//
                 barComp.wait();
+                printLog(nodeId, "Iteration %u finishes at %.3lf ms. Invoking lambda...\n", iteration, timeProcess + getTimer());
 
                 //////////////////////////////////
                 // Send dataBuf to lambda HERE. //
                 //////////////////////////////////
-		Node me = NodeManager::getNode(nodeId);
-		LambdaComm lambdaComm(verticesDataBuf, me.ip, 12431, graph.getNumLocalVertices(),
-		  layerConfig[iteration], layerConfig[iteration+1], 2, 1);
-		
-		std::thread t([&] {
-			lambdaComm.run();
-		});
-		t.detach();
+                Node nodeMe = NodeManager::getNode(nodeId);
+                LambdaComm lambdaComm(verticesDataBuf, nodeMe.ip, dataserverPort, graph.getNumLocalVertices(), getNumFeats(), getNumFeats(iteration + 1), 2, 1);
+                
+                // Create and launch the sender & receiver workers.
+                std::thread t([&] {
+                    lambdaComm.run();
+                });
+                t.detach();
 
-		std::thread t2([&] {
-			lambdaComm.requestLambdas(coordserverIp, coordserverPort, iteration);
-		});
-		t2.join();
+                // Trigger a request towards the coordicate server. Wait until the request completes.
+                std::thread t2([&] {
+                    lambdaComm.requestLambdas(coordserverIp, coordserverPort, iteration);
+                });
+                t2.join();
 
-                //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-                // Buffer receives results from lambda and should be resized according to the number of features in the next layer. //
-                //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                //////////////////////////////
+                // Lambda threads finished. //
+                //////////////////////////////
 
-		fprintf(stderr, "All lambdas finished. Waiting on new iteration\n");
-                // Step forward to a new iteration. 
-                ++iteration;
+                printLog(nodeId, "All lambdas finished. Waiting on new iteration...\n");
 
-                // Flush the returned values from lambda to dataAll.
-                for (IdType id = 0; id < graph.getNumLocalVertices(); ++id)
-                    memcpy(vertexDataAllPtr(id, getDataAllOffset()), vertexDataBufPtr(id), getNumFeats() * sizeof(FeatType));
+                // Reset buffer area to be the activation data array from LambdaComm. This reduces 1 realloc() for resizing the buffer.
+                // Previous buffer should be called on delete at lambdaComm destruction.
+                verticesDataBuf = lambdaComm.getActivationData();
+
+                // Flush the returned values from lambda to dataAll region.
+                for (IdType id = 0; id < graph.getNumLocalVertices(); ++id) {
+                    memcpy(vertexZDataPtr(id, getDataAllOffset(iteration + 1)), lambdaComm.getZData() + id * getNumFeats(iteration + 1),
+                           getNumFeats(iteration + 1) * sizeof(FeatType));
+                    memcpy(vertexActivationDataPtr(id, getDataAllOffset(iteration + 1)), verticesDataBuf + id * getNumFeats(iteration + 1),
+                           getNumFeats(iteration + 1) * sizeof(FeatType));
+                }
+
+                // Loop through all local vertices and do the data send out work. If there are any remote edges for a vertex, should send this vid to
+                // other nodes for their ghost's update.
+                for (IdType id = 0; id < graph.getNumLocalVertices(); ++id) {
+                    Vertex& v = graph.getVertex(id);
+                    for (unsigned i = 0; i < v.getNumOutEdges(); ++i) {
+                        if (v.getOutEdge(i).getEdgeLocation() == REMOTE_EDGE_TYPE) {
+                            IdType gvid = graph.localToGlobalId[id];
+
+                            // Record that this vid gets broadcast in this iteration. Should wait for its corresponding respond.
+                            lockRecvWaiters.lock();
+                            recvWaiters[gvid] = numNodes;
+                            lockRecvWaiters.unlock();
+
+                            FeatType *dataPtr = vertexDataBufPtr(id, getNumFeats(iteration + 1));
+                            CommManager::dataPushOut(gvid, dataPtr, getNumFeats(iteration + 1) * sizeof(FeatType));
+
+                            break;
+                        }
+                    }
+                }
 
                 // Wait for all remote schedulings sent by me to be handled.
                 lockRecvWaiters.lock();
@@ -326,11 +357,10 @@ Engine::worker(unsigned tid, void *args) {
                 //## Global Iteration barrier. ##//
                 NodeManager::barrier(LAYER_BARRIER);
 
-                // Ghost vertices' flush must happen after all new ghost values received, i.e. global barrier crossed.
-                for (IdType id = 0; id < graph.getNumGhostVertices(); ++id)
-                    memcpy(ghostVertexDataAllPtr(id, getDataAllOffset()), ghostVertexDataBufPtr(id), getNumFeats() * sizeof(FeatType));
+                // Step forward to a new iteration. 
+                ++iteration;
 
-                // Yes there are further scheduled vertices. Please start a new iteration.
+                // There is a new layer ahead, please start a new iteration.
                 if (iteration < numLayers) {
                     printLog(nodeId, "Starting a new iteration %u at %.3lf ms...\n", iteration, timeProcess + getTimer());
 
@@ -360,26 +390,8 @@ Engine::worker(unsigned tid, void *args) {
             }
         }
 
-        // Doing the aggregation.
-        Vertex& v = graph.getVertex(lvid);
+        // Doing the aggregation. Data send out used to be here, but we changed it to after lambda finishes.
         aggregateFromNeighbors(lvid);
-
-        // If there are any remote edges, should send this vid to others for their ghost's update.
-        for (unsigned i = 0; i < v.getNumOutEdges(); ++i) {
-            if (v.getOutEdge(i).getEdgeLocation() == REMOTE_EDGE_TYPE) {
-                IdType gvid = graph.localToGlobalId[lvid];
-
-                // Record that this vid gets broadcast in this iteration. Should wait for its corresponding respond.
-                lockRecvWaiters.lock();
-                recvWaiters[gvid] = numNodes;
-                lockRecvWaiters.unlock();
-
-                FeatType *dataPtr = vertexDataBufPtr(lvid);
-                CommManager::dataPushOut(gvid, dataPtr, getNumFeats() * sizeof(FeatType));
-
-                break;
-            }
-        }
     }
 }
 
@@ -415,8 +427,8 @@ Engine::dataCommunicator(unsigned tid, void *args) {
 
                 // Update the ghost vertex if it is one of mine.
                 if (graph.containsGhostVertex(gvid)) {
-                    FeatType *dataBufPtr = ghostVertexDataBufPtr(graph.getGhostVertex(gvid).getLocalId());
-                    memcpy(dataBufPtr, msgbuf, getNumFeats() * sizeof(FeatType));
+                    FeatType *dataPtr = ghostVertexActivationDataPtr(graph.getGhostVertex(gvid).getLocalId(), getDataAllOffset(iteration + 1));
+                    memcpy(dataPtr, msgbuf, getNumFeats(iteration + 1) * sizeof(FeatType));
                 }
 
                 // Using MAX_IDTYPE - gvid as the receive signal topic for vertex gvid.
@@ -483,8 +495,19 @@ Engine::getDataAllOffset(unsigned iter) {
  * 
  */
 FeatType *
-Engine::vertexDataAllPtr(IdType lvid, unsigned offset) {
-    return verticesDataAll + lvid * numFeatsTotal + offset;
+Engine::vertexZDataPtr(IdType lvid, unsigned offset) {
+    return verticesZData + lvid * numFeatsTotal + offset;
+}
+
+
+/**
+ *
+ * Get the data pointer to a local vertex's data in the dataAll area.
+ * 
+ */
+FeatType *
+Engine::vertexActivationDataPtr(IdType lvid, unsigned offset) {
+    return verticesActivationData + lvid * numFeatsTotal + offset;
 }
 
 
@@ -494,40 +517,19 @@ Engine::vertexDataAllPtr(IdType lvid, unsigned offset) {
  * 
  */
 FeatType *
-Engine::ghostVertexDataAllPtr(IdType lvid, unsigned offset) {
-    return ghostVerticesDataAll + lvid * numFeatsTotal + offset;
+Engine::ghostVertexActivationDataPtr(IdType lvid, unsigned offset) {
+    return ghostVerticesActivationData + lvid * numFeatsTotal + offset;
 }
 
 
 /**
  *
- * Get the data pointer to a local vertex's data in the dataBuf area  (i.e. pointing to values after aggregation).
+ * Get the data pointer to a local vertex's data buffer.
  * 
  */
-FeatType *
-Engine::vertexDataBufPtr(IdType lvid) {
-    return verticesDataBuf + lvid * getNumFeats();
-}
-
 FeatType *
 Engine::vertexDataBufPtr(IdType lvid, unsigned numFeats) {
     return verticesDataBuf + lvid * numFeats;
-}
-
-
-/**
- *
- * Get the data pointer to a ghost vertex's data in the dataBuf area (i.e. pointing to values after aggregation).
- * 
- */
-FeatType *
-Engine::ghostVertexDataBufPtr(IdType lvid) {
-    return ghostVerticesDataBuf + lvid * getNumFeats();
-}
-
-FeatType *
-Engine::ghostVertexDataBufPtr(IdType lvid, unsigned numFeats) {
-    return ghostVerticesDataBuf + lvid * numFeats;
 }
 
 
@@ -544,7 +546,7 @@ Engine::aggregateFromNeighbors(IdType lvid) {
 
     // Read out data of the current iteration of given vertex.
     FeatType currDataBuf[numFeats];
-    FeatType *currDataPtr = vertexDataAllPtr(lvid, offset);
+    FeatType *currDataPtr = vertexActivationDataPtr(lvid, offset);
     memcpy(currDataBuf, currDataPtr, numFeats * sizeof(FeatType));
 
     // Apply normalization factor on the current data.
@@ -558,9 +560,9 @@ Engine::aggregateFromNeighbors(IdType lvid) {
         EdgeType normFactor = v.getInEdge(i).getData();
 
         if (v.getInEdge(i).getEdgeLocation() == LOCAL_EDGE_TYPE)    // Local vertex.
-            otherDataPtr = vertexDataAllPtr(v.getSourceVertexLocalId(i), offset);
+            otherDataPtr = vertexActivationDataPtr(v.getSourceVertexLocalId(i), offset);
         else                                                        // Ghost vertex.
-            otherDataPtr = ghostVertexDataAllPtr(v.getSourceVertexLocalId(i), offset);
+            otherDataPtr = ghostVertexActivationDataPtr(v.getSourceVertexLocalId(i), offset);
 
         // TODO: Locks on the data array area is not properly set yet. But does not affect forward prop.
         for (unsigned j = 0; j < numFeats; ++j)
@@ -568,7 +570,7 @@ Engine::aggregateFromNeighbors(IdType lvid) {
     }
 
     // Write the results to the correct position inside serialization dataBuf area.
-    memcpy(vertexDataBufPtr(lvid), currDataBuf, numFeats * sizeof(FeatType));
+    memcpy(vertexDataBufPtr(lvid, getNumFeats()), currDataBuf, numFeats * sizeof(FeatType));
 }
 
 
@@ -608,24 +610,15 @@ Engine::parseArgs(int argc, char *argv[]) {
         ("help", "Produce help message")
 
         ("config", boost::program_options::value<std::string>()->default_value(std::string(DEFAULT_CONFIG_FILE), DEFAULT_CONFIG_FILE), "Config file")
+        ("graphfile", boost::program_options::value<std::string>(), "Path to the binary file contatining the edge list")
+        ("featuresfile", boost::program_options::value<std::string>(), "Path to the file containing the vertex features")
+        ("layerfile", boost::program_options::value<std::string>(), "Layer configuration file")
 
-        ("graphfile", boost::program_options::value<std::string>(),
-	 "Path to the binary file contatining the edge list")
+        ("tmpdir", boost::program_options::value<std::string>(), "Temporary directory")
 
-        ("featuresfile", boost::program_options::value<std::string>(),
-	 "Path to the file containing the vertex features")
-
-        ("layerfile", boost::program_options::value<std::string>(),
-	 "Layer configuration file")
-
-        ("tmpdir", boost::program_options::value<std::string>(),
-	 "Temporary directory")
-
-	("coordserverip", boost::program_options::value<std::string>(),
-	 "The private IP address of the coordination server")
-
-	("coordserverport", boost::program_options::value<std::string>(),
-	 "The port of the listener on the coordination server")
+        ("dataserverport", boost::program_options::value<unsigned>(), "The port exposing to the coordination server")
+        ("coordserverip", boost::program_options::value<std::string>(), "The private IP address of the coordination server")
+        ("coordserverport", boost::program_options::value<unsigned>(), "The port of the listener on the coordination server")
 
         ("undirected", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Graph type")
 
@@ -671,11 +664,14 @@ Engine::parseArgs(int argc, char *argv[]) {
     assert(vm.count("tmpdir"));
     outFile = vm["tmpdir"].as<std::string>() + "/output_";  // Still needs to append the node id, after node manager set up.
 
+    assert(vm.count("dataserverport"));
+    dataserverPort = vm["dataserverport"].as<unsigned>();
+
     assert(vm.count("coordserverip"));
     coordserverIp = vm["coordserverip"].as<std::string>();
 
     assert(vm.count("coordserverport"));
-    coordserverPort = vm["coordserverport"].as<std::string>();
+    coordserverPort = vm["coordserverport"].as<unsigned>();
 
     assert(vm.count("undirected"));
     undirected = (vm["undirected"].as<unsigned>() == 0) ? false : true;
@@ -753,13 +749,16 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
         feature_vec.push_back(curr);
         if (feature_vec.size() == nFeats) {
             // Set the vertex's initial values, if it is one of mine local vertices / ghost vertices.
-            FeatType *dataPtr = NULL;
-            if (graph.containsGhostVertex(gvid))   // Global vertex.
-                dataPtr = ghostVertexDataAllPtr(graph.getGhostVertex(gvid).getLocalId(), 0);
-            else if (graph.containsVertex(gvid))   // Local vertex.
-                dataPtr = vertexDataAllPtr(graph.getVertexByGlobal(gvid).getLocalId(), 0);
-            if (dataPtr != NULL)
-                memcpy(dataPtr, feature_vec.data(), feature_vec.size() * sizeof(FeatType));
+            FeatType *zDataPtr = NULL, *actDataPtr = NULL;
+            if (graph.containsGhostVertex(gvid)) {      // Global vertex.
+                actDataPtr = ghostVertexActivationDataPtr(graph.getGhostVertex(gvid).getLocalId(), 0);
+                memcpy(actDataPtr, feature_vec.data(), feature_vec.size() * sizeof(FeatType));
+            } else if (graph.containsVertex(gvid)) {    // Local vertex.
+                zDataPtr = vertexZDataPtr(graph.getVertexByGlobal(gvid).getLocalId(), 0);
+                actDataPtr = vertexActivationDataPtr(graph.getVertexByGlobal(gvid).getLocalId(), 0);
+                memcpy(zDataPtr, feature_vec.data(), feature_vec.size() * sizeof(FeatType));
+                memcpy(actDataPtr, feature_vec.data(), feature_vec.size() * sizeof(FeatType));
+            }
 
             ++gvid;
             feature_vec.clear();

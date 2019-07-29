@@ -1,19 +1,24 @@
 cmake_minimum_required(VERSION 3.5)
+
 set(CMAKE_CXX_STANDARD 11)
 project(lambda_sample LANGUAGES CXX)
+
 
 execute_process(COMMAND whoami OUTPUT_VARIABLE USER)
 string(REGEX REPLACE "\n$" "" USER "${USER}")	# Remove new-line char
 
-set(INST /home/${USER}/gnn-lambda/installs/out)
 
+set(INST /home/${USER}/gnn-lambda/installs/out)
 set(ZMQ_INC ${INST}/include)
 set(ZMQ_LIB ${INST}/lib/libzmq.a)
 
 
 include_directories( ${ZMQ_INC} )
+
 find_package(Threads REQUIRED)
 find_package(AWSSDK REQUIRED COMPONENTS lambda)
-add_executable(lambda_sample "coord.cpp")
+
+
+add_executable(lambda_sample "coordserver.cpp")
 target_link_libraries(lambda_sample PUBLIC ${ZMQ_LIB} ${AWSSDK_LINK_LIBRARIES} Threads::Threads)
 target_compile_options(lambda_sample PRIVATE "-Wall" "-Werror")

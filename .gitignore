@@ -12,6 +12,7 @@ manage-ec2
 .venv
 ec2_manager/res
 *.pyc
+vm
 
 **/build
 **/results
@@ -19,4 +20,3 @@ ec2_manager/res
 **/output-files
 **/.out
 **/test
-

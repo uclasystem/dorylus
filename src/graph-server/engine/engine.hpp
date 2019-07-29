@@ -92,12 +92,12 @@ private:
     static unsigned numFeatsTotal;
     static unsigned numLayers;
 
-    static FeatType *verticesDataAll;   // Global contiguous array for all local vertices' data. Stored in row-wise order:
+    static FeatType *verticesZData;     // Global contiguous array for all vertices' data. Stored in row-wise order:
                                         // The first bunch of values are data for the 0th vertex, ...
-    static FeatType *ghostVerticesDataAll;  // For ghost vertices similarly.
+    static FeatType *verticesActivationData;
+    static FeatType *ghostVerticesActivationData;
     static FeatType *verticesDataBuf;   // A smaller buffer storing current iter's data after aggregation. (Serves as the
                                         // serialization area naturally.)
-    static FeatType *ghostVerticesDataBuf;  // For ghost vertices similarly.
 
     static IdType currId;
     static Lock lockCurrId;
@@ -112,8 +112,9 @@ private:
     static std::string outFile;
     static std::string layerConfigFile;
 
+    static unsigned dataserverPort;
     static std::string coordserverIp;
-    static std::string coordserverPort;
+    static unsigned coordserverPort;
 
     static unsigned nodeId;
     static unsigned numNodes;
@@ -135,18 +136,21 @@ private:
     static void worker(unsigned tid, void *args);
     static void dataCommunicator(unsigned tid, void *args);
 
+    // About the global data arrays.
     static unsigned getNumFeats();
     static unsigned getNumFeats(unsigned iter);
+
     static unsigned getDataAllOffset();
     static unsigned getDataAllOffset(unsigned iter);
 
-    static FeatType *vertexDataAllPtr(IdType lvid, unsigned offset);
-    static FeatType *ghostVertexDataAllPtr(IdType lvid, unsigned offset);
-    static FeatType *vertexDataBufPtr(IdType lvid);
-    static FeatType *vertexDataBufPtr(IdType lvid, unsigned numFeats);
-    static FeatType *ghostVertexDataBufPtr(IdType lvid);
-    static FeatType *ghostVertexDataBufPtr(IdType lvid, unsigned numFeats);
+    static FeatType *vertexZDataPtr(IdType lvid, unsigned offset);
+    static FeatType *vertexActivationDataPtr(IdType lvid, unsigned offset);
 
+    static FeatType *ghostVertexActivationDataPtr(IdType lvid, unsigned offset);
+
+    static FeatType *vertexDataBufPtr(IdType lvid, unsigned numFeats);
+
+    // Aggregation operation (along with normalization).
     static void aggregateFromNeighbors(IdType lvid);
 
     // For initialization.
