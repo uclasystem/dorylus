@@ -18,6 +18,7 @@
 #include <unistd.h>
 #include <zmq.hpp>
 #include "../utils/utils.h"
+#include <boost/algorithm/string/trim.hpp>
 
 
 std::mutex m;
@@ -97,6 +98,27 @@ invokeFunction(Aws::String funcName, char *dataserver, char* dport, char *weight
 }
 
 
+std::size_t loadWeightServers(std::vector<char*>& addresses,std::vector<char*>& ports,const std::string& wServersFile){
+	std::ifstream infile(wServersFile);
+	if (!infile.good())
+        printf("Cannot open weight server file: %s [Reason: %s]\n", wServersFile.c_str(), std::strerror(errno));
+
+    assert(infile.good());
+
+    std::string line;
+    while (!infile.eof()) {
+        std::getline(infile, line);
+        if (line.length() == 0)
+        	continue;	
+        int space_index=line.find_first_of(' ');
+    	char* addr=strdup(line.substr(0,space_index).c_str());
+    	char* port=strdup(line.substr(space_index+1).c_str());
+    	addresses.push_back(addr);
+    	ports.push_back(port);
+    }
+    return ports.size();
+}
+
 /**
  *
  * Coordination server keeps listening on the dataserver's request of issuing lambda threads.
@@ -107,7 +129,12 @@ main(int argc, char *argv[]) {
 	Aws::SDKOptions options;
 	Aws::InitAPI(options);
 
-	assert(argc == 5);
+	assert(argc == 4);
+	printf("Num arg: %d\n",argc);
+	for (int i =0;i<argc;++i){
+		printf("Arg: %s\n",argv[i]);
+	}
+	
 
 	// Setup ZeroMQ.
 	zmq::context_t ctx(1);
@@ -122,6 +149,16 @@ main(int argc, char *argv[]) {
 	clientConfig.requestTimeoutMs = 900000;
 	clientConfig.region = "us-east-2";
 	m_client = Aws::MakeShared<Aws::Lambda::LambdaClient>(ALLOCATION_TAG, clientConfig);
+
+	//load IPs of servers
+	std::vector<char*> addresses;
+	std::vector<char*> ports;
+	std::size_t numWeightServers=loadWeightServers(addresses,ports,argv[2]);
+	// for(size_t i=0;i<numWeightServers;++i){
+	// 	std::cout<<"add " << addresses[i]<<std::endl;
+	// 	std::cout<<"port " << ports[i]<<std::endl;
+	// }
+	std::size_t count=0;
 
 	// Keeps listening on dataserver's requests.
 	std::cout << "[Coord] Starts listening on dataserver's requests..." << std::endl;
@@ -150,8 +187,15 @@ main(int argc, char *argv[]) {
 
 		// Get a request. Issue a bunch of lambda threads to serve the request.
 		{
-			for (int i = 0; i < nThreadsReq; i++)
-				invokeFunction("matmul-cpp", (char *) dataserverIp.data(), argv[4], argv[2], argv[3], layer, i);
+			for (int i = 0; i < nThreadsReq; i++){
+				printf("i: %d\n", i);
+				printf("count mod numWeightServers: %zu\n", count%numWeightServers);
+				char * waddr=addresses[count%numWeightServers];
+				char * wport=ports[count%numWeightServers];
+				invokeFunction("matmul-cpp", (char *) dataserverIp.data(), argv[3], waddr, wport, layer, i);
+				count++;
+				printf("c: %zu\n", count);
+			}
 		}
 	}
 
