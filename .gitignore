@@ -7,6 +7,9 @@ installs
 run/hostfile
 run/gvid
 run/nodeIp
+run/dshmachines
+run/cserverinfo
+run/zoo.basic
 config
 
 manage-ec2
