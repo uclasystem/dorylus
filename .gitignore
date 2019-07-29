@@ -11,6 +11,7 @@ config
 manage-ec2
 .venv
 ec2_manager/res
+*.pyc
 
 **/build
 **/results
