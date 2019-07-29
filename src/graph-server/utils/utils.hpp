@@ -36,6 +36,7 @@ double getTimer();
 
 
 void getIP(std::string *ip);
+void getPubIP(std::string& ip);
 
 
 #endif //__UTILS_HPP__

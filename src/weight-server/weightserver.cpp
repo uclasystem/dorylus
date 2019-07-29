@@ -119,7 +119,7 @@ public:
 		}
 
 		for (uint32_t u = 0; u < layers.size(); ++u) {
-			fprintf(stdout, "Layer %u Weights: %s\n", u, layers[u].str().c_str());
+			fprintf(stdout, "Layer %u Weights: %s\n", u, layers[u].shape().c_str());
 		}
 	}
 
@@ -128,6 +128,8 @@ public:
 	void run() {
 		char host_port[50];
 		sprintf(host_port, "tcp://*:%u", port);
+                std::cout << "Binding weight server to "
+                  << host_port << "..." << std::endl;
 		frontend.bind(host_port);
 		backend.bind("inproc://backend");
 

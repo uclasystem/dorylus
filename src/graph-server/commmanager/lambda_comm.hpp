@@ -117,8 +117,8 @@ private:
     Matrix& matrix;
 
     int32_t nextIterCols;
-    FeatType* zData;
-    FeatType* actData;
+    FeatType *zData;
+    FeatType *actData;
 
     zmq::context_t& ctx;
     zmq::socket_t worker;
@@ -170,8 +170,8 @@ public:
 
 
     // Buffers for received results.
-	FeatType* getZData() { return zData; }             // Z values.
-	FeatType* getActivationData() { return actData; }  // After activation.
+    FeatType* getZData() { return zData; }             // Z values.
+    FeatType* getActivationData() { return actData; }  // After activation.
 
 private:
 
