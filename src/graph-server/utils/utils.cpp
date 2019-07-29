@@ -7,6 +7,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <cstring>
+#include <cassert>
 #include "utils.hpp"
 
 
@@ -41,10 +42,9 @@ double getTimer() {
 }
 
 
-#ifndef STATICIP
 
 void
-getIP(std::string* ip) {
+getIP(std::string* ip) { 
     int fd;
     struct ifreq ifr;
 
@@ -64,14 +64,15 @@ getIP(std::string* ip) {
     return;
 }
 
-#else
+void getPubIP(std::string& ip) {
+    std::ifstream ipFile("../run/nodeIp");
+    assert(ipFile.good());
 
-void
-getIP(std::string* ip) {
-    std::ifstream inFile("/home/keval/Desktop/workspace/aspire/run/tmp/myip");
-    inFile >> *ip;
-    fprintf(stderr, "IP Address: %s\n", ip->c_str());
+    std::getline(ipFile, ip);
+
+    ipFile.close();
+
+    fprintf(stderr, "Public IP Address: %s\n", ip.c_str());
 }
 
-#endif
 

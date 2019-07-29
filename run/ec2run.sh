@@ -84,7 +84,7 @@ for i in $(seq 1 ${ZOONDS}); do
   scp -q ${ZOODIR}/conf/zoo.cfg ${dshnodes[$i]}:${ZOODIR}/conf/zoo.cfg;
   ${DSH} -M -m ${dshnodes[$i]} -c "mkdir -p ${TMPDIR}/zooDataDir";
   ${DSH} -M -m ${dshnodes[$i]} -c "echo $i > ${TMPDIR}/zooDataDir/myid";
-  ${DSH} -M -m ${dshnodes[$i]} -c "cd ${ZOODIR} && ./bin/zkServer.sh start > /dev/null 2>&1";
+  ${DSH} -M -m ${dshnodes[$i]} -c "cd ${ZOODIR} && ./bin/zkServer.sh start &> /dev/null";
 done;
 
 header "Checking for Quorum..."
@@ -131,7 +131,7 @@ case $1 in
 esac
 
 # Feature file
-FEATUREFILE=$( dirname ${INPUT_LOC} )/../features;
+FEATUREFILE=$( dirname ${INPUT_LOC} )/../features.bsnap;
 
 # Layer configuration file
 LAYERFILE=$( dirname ${INPUT_LOC} )/../layerconfig;
@@ -156,9 +156,11 @@ for i in $(seq 1 ${NDS}); do
   scp -q ${CONFIGDIR}/hostfile ${CONFIGDIR}/zkhostfile ${dshnodes[$i]}:${CONFIGDIR}/;
 done;
 
+# Server info
 COORDSERVER_CONF=${RUNDIR}/cserverinfo
-CSERVER_IP=$( cat ${COORDSERVER_CONF} | awk '{print $1}' )
-CSERVER_PORT=$( cat ${COORDSERVER_CONF} | awk '{print $2}' )
+DSERVER_PORT=$( cat ${COORDSERVER_CONF} | awk '{print $1}' )
+CSERVER_IP=$( cat ${COORDSERVER_CONF} | awk '{print $2}' )
+CSERVER_PORT=$( cat ${COORDSERVER_CONF} | awk '{print $3}' )
 
 # Loop over desired number of runs
 for dp in {1..1}; do
@@ -178,8 +180,8 @@ for dp in {1..1}; do
   LOGFILE=${LOGFILEDIR}/${GVID}.${IK}.out
   echo "This is the log for round: GVID = ${GVID}" >> ${LOGFILE};
 
-  echo "DSH command (from ${ASPIREDIR}/build): ./gnn-lambda.bin --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --layerfile ${LAYERFILE} --coordserverip ${CSERVER_IP} --coordserverport ${CSERVER_PORT} --undirected ${UNDIRECTED} --tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS}";
-  ${DSH} -M -f ${DSHFILE} -c "cd ${ASPIREDIR}/build && ./gnn-lambda.bin --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --layerfile ${LAYERFILE} --coordserverip ${CSERVER_IP} --coordserverport ${CSERVER_PORT} --undirected ${UNDIRECTED} --tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS}" 1> /dev/null 2>> ${LOGFILE};
+  echo "DSH command (from ${ASPIREDIR}/build): ./gnn-lambda.bin --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --layerfile ${LAYERFILE} --dataserverport ${DSERVER_PORT} --coordserverip ${CSERVER_IP} --coordserverport ${CSERVER_PORT} --undirected ${UNDIRECTED} --tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS}";
+  ${DSH} -M -f ${DSHFILE} -c "cd ${ASPIREDIR}/build && ./gnn-lambda.bin --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --layerfile ${LAYERFILE} --dataserverport ${DSERVER_PORT} --coordserverip ${CSERVER_IP} --coordserverport ${CSERVER_PORT} --undirected ${UNDIRECTED} --tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS}" 1> /dev/null 2>> ${LOGFILE};
 
   DOPDIR=${ASPIREDIR}/build/outputs/${GVID}.${IK};
   mkdir -p ${DOPDIR};

@@ -31,6 +31,7 @@ std::atomic<bool> NodeManager::inBarrier = ATOMIC_VAR_INIT(false);
 void
 NodeManager::init(const char *zooHostFile, const char *hostFile) {
     getIP(&me.ip);
+    getPubIP(me.pubip);
 
     // Parse the config files.
     parseZooConfig(zooHostFile);
@@ -342,7 +343,7 @@ NodeManager::parseNodeConfig(const char *hostFile) {
             me.master = (role == MASTER_ROLE);
         }
         masterId = (role == MASTER_ROLE) ? allNodes.size() : masterId;
-        allNodes.push_back(Node(allNodes.size(), &ip, &name, (role == MASTER_ROLE)));
+        allNodes.push_back(Node(allNodes.size(), &ip, &me.pubip, &name, (role == MASTER_ROLE)));
     }
 
     numLiveNodes = allNodes.size();

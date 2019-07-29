@@ -4,4 +4,6 @@ cd $( dirname $0 )
 
 configFile=$1
 
-./build/weightserver 65432 ${configFile:=weight.conf}
+
+# Args: <Weightserver-Port> <Layerconfig-File>
+./build/weightserver 55432 ${configFile:=layerconfig}

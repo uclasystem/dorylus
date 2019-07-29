@@ -1,5 +1,9 @@
 #! /bin/bash
 
+##
+## Try invoking the registered lambda functions.
+##
+
 EC2="../../../scripts/ec2"
 
 function invoke {
@@ -19,4 +23,3 @@ threads=${reqs:=1}
 for i in $( seq 0 ${threads} ); do
 	invoke $i &
 done
-
