@@ -140,18 +140,24 @@ main(int argc, char *argv[]) {
 			std::cerr << ex.what() << std::endl;
 			return 13;
 		}
+		char* datservIp = new char[dataserverIp.size()];
+		std::memcpy(datservIp, dataserverIp.data(), dataserverIp.size());
+		datservIp[dataserverIp.size()-1] = '\0';
 
 		int32_t layer = parse<int32_t>((char *) header.data(), 1);
 		int32_t nThreadsReq = parse<int32_t>((char *) header.data(), 2);
 
-		std::string accMsg = "[ACCEPTED] Req for " + std::to_string(nThreadsReq) + " lambdas for layer " + std::to_string(layer);
+		std::string accMsg = "[ACCEPTED] Req for " + std::to_string(nThreadsReq)
+		  + " lambdas for layer " + std::to_string(layer)
+		  + " from " + datservIp;
 		std::cout << accMsg << std::endl;
 		total = nThreadsReq;
 
 		// Get a request. Issue a bunch of lambda threads to serve the request.
 		{
-			for (int i = 0; i < nThreadsReq; i++)
-				invokeFunction("matmul-cpp", (char *) dataserverIp.data(), argv[4], argv[2], argv[3], layer, i);
+			for (int i = 0; i < nThreadsReq; i++) {
+				invokeFunction("forward-prop-cpp", (char*)dataserverIp.data(), argv[2], argv[3], argv[4], layer, i);
+			}
 		}
 	}
 
