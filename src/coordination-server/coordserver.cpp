@@ -130,10 +130,10 @@ main(int argc, char *argv[]) {
 	Aws::InitAPI(options);
 
 	assert(argc == 4);
-	printf("Num arg: %d\n",argc);
-	for (int i =0;i<argc;++i){
-		printf("Arg: %s\n",argv[i]);
-	}
+	// printf("Num arg: %d\n",argc);
+	// for (int i =0;i<argc;++i){
+	// 	printf("Arg: %s\n",argv[i]);
+	// }
 	
 
 	// Setup ZeroMQ.

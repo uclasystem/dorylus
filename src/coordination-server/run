@@ -10,5 +10,5 @@ if [ ! -d ./results ]; then
 fi
 
 
-# Args: <Coordserver-Port> <Weightserver-IP> <Weightserver-Port> <Dataserver-Port>
-./build/lambda_sample 55430 $(${EC2} pubip) 55432 55431
+# Args: <Coordserver-Port> <Weightserver fILE> <Dataserver-Port>
+./build/lambda_sample 12430 "weightservers" 12431
