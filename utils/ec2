@@ -2,7 +2,7 @@
 
 
 
-id=i-07d6b94599d9bfb26
+id=$( cat ~/.aws/id )
 
 case $1 in 
 	"id")

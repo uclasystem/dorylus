@@ -170,8 +170,8 @@ public:
 
 
     // Buffers for received results.
-	FeatType* getZData() { return zData; }             // Z values.
-	FeatType* getActivationData() { return actData; }  // After activation.
+    FeatType* getZData() { return zData; }             // Z values.
+    FeatType* getActivationData() { return actData; }  // After activation.
 
 private:
 
