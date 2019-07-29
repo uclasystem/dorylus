@@ -737,7 +737,7 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
 
     unsigned gvid = 0;
     
-    unsigned nFeats = fHeader.numFeautures;
+    unsigned nFeats = fHeader.numFeatures;
     std::vector<FeatType> feature_vec;
     feature_vec.reserve(nFeats);
     FeatType curr;
