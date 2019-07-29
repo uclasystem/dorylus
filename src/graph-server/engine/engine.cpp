@@ -292,7 +292,7 @@ Engine::worker(unsigned tid, void *args) {
                 // Send dataBuf to lambda HERE. //
                 //////////////////////////////////
 		Node me = NodeManager::getNode(nodeId);
-		LambdaComm lambdaComm(verticesDataBuf, me.ip, 65431, graph.getNumLocalVertices(),
+		LambdaComm lambdaComm(verticesDataBuf, me.ip, 12431, graph.getNumLocalVertices(),
 		  layerConfig[iteration], layerConfig[iteration+1], 2, 1);
 		
 		std::thread t([&] {
@@ -734,28 +734,24 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
         printLog(nodeId, "Cannot open feature file: %s [Reason: %s]\n", featuresFileName.c_str(), std::strerror(errno));
 
     assert(infile.good());
+    printLog(nodeId,"Reading Feature\n");
 
-    // Loop through each line.
+    FeaturesHeaderType fHeader;
+    infile.read((char *) &fHeader, sizeof(FeaturesHeaderType));
+    assert(fHeader.numFeautures == layerConfig[0]);
+
     unsigned gvid = 0;
-    std::string line;
-    while (!infile.eof()) {
-        std::getline(infile, line);
-        boost::algorithm::trim(line);
 
-        std::vector<std::string> splited_strings;
-        std::vector<FeatType> feature_vec;
+    unsigned nFeats=fHeader.numFeautures;
+    std::vector<FeatType> feature_vec;
+    feature_vec.reserve(nFeats);
+    FeatType curr;
+    // infile.read(reinterpret_cast<char*> (&curr) , sizeof(FeatType));
+    // printLog(nodeId,"Push back %f\n",curr);
 
-        // Split each line into numbers.
-        boost::split(splited_strings, line, boost::is_any_of(", "), boost::token_compress_on);
-
-        for (std::string& substr : splited_strings) {
-            if (substr[0] != '\0')      // In case of the null char at the end.
-                feature_vec.push_back(std::stof(substr));
-        }
-
-        if (feature_vec.size() > 0) {
-            assert(feature_vec.size() == layerConfig[0]);
-
+    while(infile.read(reinterpret_cast<char*> (&curr) , sizeof(FeatType))){
+        feature_vec.push_back(curr);
+        if (feature_vec.size() == nFeats) {
             // Set the vertex's initial values, if it is one of mine local vertices / ghost vertices.
             FeatType *dataPtr = NULL;
             if (graph.containsGhostVertex(gvid))   // Global vertex.
@@ -766,8 +762,13 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
                 memcpy(dataPtr, feature_vec.data(), feature_vec.size() * sizeof(FeatType));
 
             ++gvid;
+            for(int i=0;i<feature_vec.size();++i)
+                printLog(nodeId,"%f ",dataPtr[i]);
+            printLog(nodeId,"\n");
+            feature_vec.clear();
         }
     }
+    infile.close();
 }
 
 

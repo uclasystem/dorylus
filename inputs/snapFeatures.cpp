@@ -32,7 +32,11 @@ void readWriteFile(std::string featuresFileName) {
 
     while (!infile.eof()) {
         std::getline(infile, line);
-//        boost::algorithm::trim(line);
+        boost::algorithm::trim(line);
+        // cout<<"line: "<<line<<endl;
+        if(line[0]<'0' || line[0]>'9')
+            continue;
+
         std::vector<std::string> splited_strings;
         std::vector<float> feature_vec;
 
@@ -69,8 +73,8 @@ void test(std::string featuresFileName){
 }
 
 int main(int argc, char* argv[]) {
-    if(argc < 4) {
-        std::cout << "Usage: " << argv[0] << " --featurefile=<featurefile> --featurenumber=<number of features> --header=<0|1>" << std::endl;
+    if(argc < 3) {
+        std::cout << "Usage: " << argv[0] << " --featurefile=<featurefile> --featurenumber=<number of features>" << std::endl;
         return -1;
     }
 
@@ -79,15 +83,12 @@ int main(int argc, char* argv[]) {
     for(int i=0; i<argc; ++i) {
         if(strncmp("--featurefile=", argv[i], 14) == 0)
             featureFile = argv[i] + 14;
-        if(strncmp("--featuresize=", argv[i], 14) == 0) {
-            sscanf(argv[i] + 14, "%u", & head.numFeautures);
-        }
-        if(strncmp("--header=", argv[i], 9) == 0) {
-            int hdr = 0;
-            sscanf(argv[i] + 9, "%d", &hdr);
-            withheader = (hdr == 0 ? false : true);
+        if(strncmp("--featurenumber=", argv[i], 16) == 0) {
+            sscanf(argv[i] + 16, "%u", & head.numFeautures);
         }
     }
+    std::cout << "Feature file: " << featureFile << std::endl;
+    std::cout << "Feature size: " << head.numFeautures << std::endl;
     assert(head.numFeautures>0);
 
     if(featureFile.size() == 0) {
@@ -95,10 +96,8 @@ int main(int argc, char* argv[]) {
         return -1;
     }
     readWriteFile(featureFile);
-    test(featureFile);
-    std::cout << "Feature file: " << featureFile << std::endl;
-    std::cout << "Feature size: " << head.numFeautures << std::endl;
-    std::cout << "Feature header: " << withheader << std::endl;
+    // test(featureFile);
+    
 
     return 0;
 }
