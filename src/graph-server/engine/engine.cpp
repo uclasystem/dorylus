@@ -734,11 +734,11 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
 
     FeaturesHeaderType fHeader;
     infile.read((char *) &fHeader, sizeof(FeaturesHeaderType));
-    assert(fHeader.numFeautures == layerConfig[0]);
+    assert(fHeader.numFeatures == layerConfig[0]);
 
     unsigned gvid = 0;
 
-    unsigned nFeats=fHeader.numFeautures;
+    unsigned nFeats=fHeader.numFeatures;
     std::vector<FeatType> feature_vec;
     feature_vec.reserve(nFeats);
     FeatType curr;
