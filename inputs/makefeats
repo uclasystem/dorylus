@@ -1,6 +1,0 @@
-for i in {0..4038}; do
-    for j in {0..9}; do
-        echo -n 0.${i}${j}" "
-    done 
-    echo
-done
