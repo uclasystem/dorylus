@@ -730,22 +730,18 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
         printLog(nodeId, "Cannot open feature file: %s [Reason: %s]\n", featuresFileName.c_str(), std::strerror(errno));
 
     assert(infile.good());
-    printLog(nodeId,"Reading Feature\n");
 
     FeaturesHeaderType fHeader;
     infile.read((char *) &fHeader, sizeof(FeaturesHeaderType));
     assert(fHeader.numFeautures == layerConfig[0]);
 
     unsigned gvid = 0;
-
-    unsigned nFeats=fHeader.numFeautures;
+    unsigned nFeats = fHeader.numFeautures;
     std::vector<FeatType> feature_vec;
     feature_vec.reserve(nFeats);
     FeatType curr;
-    // infile.read(reinterpret_cast<char*> (&curr) , sizeof(FeatType));
-    // printLog(nodeId,"Push back %f\n",curr);
 
-    while(infile.read(reinterpret_cast<char*> (&curr) , sizeof(FeatType))){
+    while (infile.read(reinterpret_cast<char *> (&curr) , sizeof(FeatType))){
         feature_vec.push_back(curr);
         if (feature_vec.size() == nFeats) {
             // Set the vertex's initial values, if it is one of mine local vertices / ghost vertices.
