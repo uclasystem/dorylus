@@ -55,6 +55,10 @@ struct BSHeaderType {
     unsigned long long numEdges;
 };
 
+/** Binary features file header struct. */
+struct FeaturesHeaderType {
+    unsigned int numFeautures;
+};
 
 /**
  *

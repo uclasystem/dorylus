@@ -3,7 +3,7 @@ INCPATH=../installs/out/include
 LIBPATH=../installs/out/lib
 CFLAGS=-O3
 
-all: partitioner tobinary
+all: partitioner tobinary tobinaryfeature
 
 partitioner: partitioner.cpp
 	${CPP} -I${INCPATH} -L${LIBPATH} $< -o $@ -lmetis ${CFLAGS}
@@ -11,6 +11,9 @@ partitioner: partitioner.cpp
 tobinary: snapToBinarySnap.cpp
 	${CPP} $< -o $@ ${CFLAGS}
 
+tobinaryfeature: snapFeatures.cpp
+	${CPP} $< -o $@ ${CFLAGS} -lboost_system
+
 .PHONY: clean
 clean:
-	rm -f partitioner tobinary
+	rm -f partitioner tobinary tobinaryfeature
