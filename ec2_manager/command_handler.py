@@ -27,6 +27,7 @@ def handle_command(ec2_cli, ctx, instance, op, args):
 		print(instance.pr_ip)
 	elif op == "reset":
 		instance.pub_ip = '0'
+		print("Public IP reset")
 
 	## Requires pub_ip to run: do check_pub_ip
 	elif op == "pubip":
