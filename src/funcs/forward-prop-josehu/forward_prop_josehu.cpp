@@ -143,6 +143,7 @@ matmul(std::string dataserver, std::string weightserver, std::string dport, std:
     //
     // One should extract the partition id by reading the first 4 Bytes, which is simply parse<int32_t>(...).
     //
+    std::cout << sizeof(int32_t) << " Dataserver str: " << dataserver << " | length = " << dataserver.length() << " | strlen = " << strlen(dataserver.c_str()) << std::endl;
     char identity[sizeof(int32_t) + dataserver.length()];
     memcpy(&identity, (char *) &id, sizeof(int32_t));
     memcpy((&identity) + sizeof(int32_t), (char *) dataserver.c_str(), dataserver.length());
