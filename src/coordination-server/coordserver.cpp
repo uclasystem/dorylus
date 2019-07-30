@@ -58,7 +58,7 @@ callback(const Aws::Lambda::LambdaClient *client, const Aws::Lambda::Model::Invo
 			
 		// There is error in the results.
 		} else
-			std::cout << "\033[1;31m [ERROR] \033[0m\t" << functionResult << std::endl;
+			std::cout << "\033[1;31m[ ERROR ]\033[0m\t" << functionResult << std::endl;
 
 	// Lambda returns error.
 	} else {

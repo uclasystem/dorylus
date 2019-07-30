@@ -89,8 +89,8 @@ ServerWorker::sendMatrixChunk(zmq::socket_t& socket, zmq::message_t& client_id, 
 void
 ServerWorker::recvMatrixChunks(zmq::socket_t& socket, int32_t partId, int32_t rows, int32_t cols) {
 	uint32_t offset = partId * partRows * cols;
-	FeatType* thisPartitionZStart = zData + offset;
-	FeatType* thisPartitionActStart = actData + offset;
+	FeatType *thisPartitionZStart = zData + offset;
+	FeatType *thisPartitionActStart = actData + offset;
 
 	zmq::message_t data;
 	socket.recv(&data);

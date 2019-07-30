@@ -168,6 +168,7 @@ public:
     // number of lambda threads.
     void requestLambdas(std::string& coordserverIp, unsigned coordserverPort, int32_t layer);
 
+    // Set volatile fields before issuing
 
     // Buffers for received results.
     FeatType* getZData() { return zData; }             // Z values.
