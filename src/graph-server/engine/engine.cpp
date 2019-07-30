@@ -27,7 +27,7 @@ std::string Engine::layerConfigFile;
 unsigned Engine::dataserverPort;
 std::string Engine::coordserverIp;
 unsigned Engine::coordserverPort;
-LambdaComm Engine::lambdaComm;
+LambdaComm *Engine::lambdaComm = NULL;
 IdType Engine::currId = 0;
 Lock Engine::lockCurrId;
 Lock Engine::lockRecvWaiters;
@@ -131,7 +131,7 @@ Engine::init(int argc, char *argv[]) {
     graph.compactGraph();
 
     // Create the lambda communication manager.
-    lambdaComm = lambdaComm(NodeManager::getNode(nodeId).pubip, dataserverPort, coordserverIp, coordserverPort, 5, 1);
+    lambdaComm = new lambdaComm(NodeManager::getNode(nodeId).pubip, dataserverPort, coordserverIp, coordserverPort, 5, 1);
 
     timeInit += getTimer();
     printLog(nodeId, "Engine initialization complete.\n");
@@ -240,6 +240,8 @@ Engine::destroy() {
     lockRecvWaiters.destroy();
     condRecvWaitersEmpty.destroy();
     lockHalt.destroy();
+
+    delete lambdaComm;
 
     delete[] verticesZData;
     delete[] verticesActivationData;
