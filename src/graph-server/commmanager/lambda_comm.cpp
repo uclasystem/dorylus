@@ -124,14 +124,17 @@ LambdaComm::startContext(FeatType *dataBuf_, int32_t rows_, int32_t cols_, int32
 	zData = new FeatType[rows_ * nextIterCols_];
 	actData = new FeatType[rows_ * nextIterCols_];
 	ctx = new zmq::context_t(1);
-	frontend = new zmq::socket_t(ctx, ZMQ_ROUTER);
-	backend = new zmq::socket_t(ctx, ZMQ_DEALER);
+	frontend = new zmq::socket_t(*ctx, ZMQ_ROUTER);
+	backend = new zmq::socket_t(*ctx, ZMQ_DEALER);
 	printLog(nodeId, "New lambda communication context created on layer %u.\n", layer);
 }
 
 void
 LambdaComm::endContext() {
 	counter = 0;
+	delete ctx;
+	delete frontend;
+	delete backend;
     delete[] zData;
     delete[] matrix.data;   // Delete last iter's data buffer. The engine must reset its buf ptr to getActivationData().
     printLog(nodeId, "Lambda communication context on layer %u finished.\n", layer);
