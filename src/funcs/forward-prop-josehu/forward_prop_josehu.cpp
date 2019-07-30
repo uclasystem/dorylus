@@ -94,11 +94,11 @@ dot(Matrix& features, Matrix& weights) {
     int m = features.rows, k = features.cols, n = weights.cols;
     Matrix result(m, n);
 
-    auto resultData = std::unique_ptr<DTYPE[]>(new DTYPE[m * n]);
+    auto resultData = new DTYPE[m * n];
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, 1.0,
                 features.getData(), k, weights.getData(), n, 0.0, resultData.get(), n);
 
-    result.setData(std::move(resultData));
+    result.setData(resultData);
 
     return result;
 }
