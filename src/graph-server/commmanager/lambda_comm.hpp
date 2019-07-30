@@ -150,8 +150,7 @@ public:
                unsigned nodeId_, int32_t nParts_, int32_t numListeners_)
         : nodeIp(nodeIp_), dataserverPort(dataserverPort_),
           coordserverIp(coordserverIp_), coordserverPort(coordserverPort_),
-          nodeId(nodeId_), nParts(nParts_), numListeners(numListeners_),
-          ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER) { }
+          nodeId(nodeId_), nParts(nParts_), numListeners(numListeners_) { }
     
     void startContext(FeatType *dataBuf_, int32_t rows_, int32_t cols_, int32_t nextIterCols_, unsigned layer_);
     void endContext();
