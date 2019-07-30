@@ -18,8 +18,6 @@
 #include <unistd.h>
 #include <zmq.hpp>
 #include "../utils/utils.h"
-#include <boost/algorithm/string/trim.hpp>
-
 
 std::mutex m;
 std::condition_variable cv;
@@ -155,10 +153,10 @@ main(int argc, char *argv[]) {
 	std::vector<char*> addresses;
 	std::vector<char*> ports;
 	std::size_t numWeightServers=loadWeightServers(addresses,ports,argv[2]);
-	// for(size_t i=0;i<numWeightServers;++i){
-	// 	std::cout<<"add " << addresses[i]<<std::endl;
-	// 	std::cout<<"port " << ports[i]<<std::endl;
-	// }
+	for(size_t i=0;i<numWeightServers;++i){
+		std::cout<<"add " << addresses[i]<<std::endl;
+		std::cout<<"port " << ports[i]<<std::endl;
+	}
 	std::size_t count=0;
 
 	// Keeps listening on dataserver's requests.
@@ -182,10 +180,8 @@ main(int argc, char *argv[]) {
 		std::memcpy(datservIp, dataserverIp.data(), dataserverIp.size());
 		datservIp[dataserverIp.size()] = '\0';
 
-                std::string dataserverip = datservIp;
-                std::string dport = argv[2];
-                std::string wghtserverip = argv[3];
-                std::string wport = argv[4];
+        std::string dataserverip = datservIp;
+	    std::string dport = argv[2];
 
 		int32_t layer = parse<int32_t>((char *) header.data(), 1);
 		int32_t nThreadsReq = parse<int32_t>((char *) header.data(), 2);
@@ -203,8 +199,11 @@ main(int argc, char *argv[]) {
 				printf("count mod numWeightServers: %zu\n", count%numWeightServers);
 				char * waddr=addresses[count%numWeightServers];
 				char * wport=ports[count%numWeightServers];
-				invokeFunction("matmul-cpp", (char *) dataserverIp.data(), argv[3], waddr, wport, layer, i);
-				// invokeFunction("forward-prop-cpp", (char*)dataserverIp.data(), argv[4], argv[2], argv[3], layer, i);
+				std::cout << waddr << std::endl;
+				std::cout << wport << std::endl;
+				// invokeFunction("forward-prop-cpp", (char*)dataserverIp.data(), argv[3], waddr, wport, layer, i);
+				invokeFunction("matmul-cpp", (char*)dataserverIp.data(), argv[3], waddr, wport, layer, i);
+
 				count++;
 				printf("c: %zu\n", count);
 			}
