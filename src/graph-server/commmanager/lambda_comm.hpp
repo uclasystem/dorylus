@@ -91,9 +91,9 @@ class ServerWorker {
 public:
 
     ServerWorker(zmq::context_t& ctx_, int32_t sock_type, int32_t nParts_, int32_t nextIterCols_, int32_t& counter_,
-                 Matrix& matrix_, FeatType *zData_, FeatType *actData_, unsigned nodeId)
+                 Matrix& matrix_, FeatType *zData_, FeatType *actData_, unsigned nodeId_)
         : matrix(matrix_), ctx(ctx_), nextIterCols(nextIterCols_), worker(ctx, sock_type),
-          zData(zData_), actData(actData_), nParts(nParts_), count(counter_) {
+          zData(zData_), actData(actData_), nParts(nParts_), count(counter_), nodeId(nodeId_) {
         partCols = matrix.cols;
         partRows = std::ceil((float) matrix.rows / (float) nParts);
         offset = partRows * partCols;
