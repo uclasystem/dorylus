@@ -33,14 +33,21 @@ public:
 		std::cout << "[Weight] Starts listening for lambdas' requests..." << std::endl;
 		try {
 			while (true) {
+				
+				std::cout << " Waiting for pull request..." << std::endl;
+				
 				zmq::message_t identity;
 				zmq::message_t header;
-				worker.recv(&identity);
-				worker.recv(&header);
 
+				worker.recv(&identity);
 				int32_t cli_id = parse<int32_t>((char *) identity.data(), 0);
+				std::cout << "  Received identity = " << cli_id << std::endl;
+				
+				worker.recv(&header);
 				int32_t op = parse<int32_t>((char *) header.data(), 0);
 				int32_t layer = parse<int32_t>((char *) header.data(), 1);
+				std::cout << "  Received header: op = " << op << ", layer = " << layer << std::endl;
+
 
 				std::string opStr = op == 0 ? "Push" : "Pull";
 				std::string accMsg = "[ACCEPTED] " + opStr + " from thread "
