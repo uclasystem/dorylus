@@ -131,7 +131,7 @@ Engine::init(int argc, char *argv[]) {
     graph.compactGraph();
 
     // Create the lambda communication manager.
-    lambdaComm = new lambdaComm(NodeManager::getNode(nodeId).pubip, dataserverPort, coordserverIp, coordserverPort, 5, 1);
+    lambdaComm = new LambdaComm(NodeManager::getNode(nodeId).pubip, dataserverPort, coordserverIp, coordserverPort, 5, 1);
 
     timeInit += getTimer();
     printLog(nodeId, "Engine initialization complete.\n");
@@ -301,17 +301,17 @@ Engine::worker(unsigned tid, void *args) {
                 // Send dataBuf to lambda HERE. //
                 //////////////////////////////////
 
-                lambdaComm.startContext(verticesDataBuf, graph.getNumLocalVertices(), getNumFeats(), getNumFeats(iteration + 1), iteration);
+                lambdaComm->startContext(verticesDataBuf, graph.getNumLocalVertices(), getNumFeats(), getNumFeats(iteration + 1), iteration);
                 
                 // Create and launch the sender & receiver workers.
                 std::thread t([&] {
-                    lambdaComm.run();
+                    lambdaComm->run();
                 });
                 t.detach();
 
                 // Trigger a request towards the coordicate server. Wait until the request completes.
                 std::thread t2([&] {
-                    lambdaComm.requestLambdas();
+                    lambdaComm->requestLambdas();
                 });
                 t2.join();
 
@@ -323,11 +323,11 @@ Engine::worker(unsigned tid, void *args) {
 
                 // Reset buffer area to be the activation data array from LambdaComm. This reduces 1 realloc() for resizing the buffer.
                 // Previous buffer should be called on delete at lambdaComm destruction.
-                verticesDataBuf = lambdaComm.getActivationData();
+                verticesDataBuf = lambdaComm->getActivationData();
 
                 // Flush the returned values from lambda to dataAll region.
                 for (IdType id = 0; id < graph.getNumLocalVertices(); ++id) {
-                    memcpy(vertexZDataPtr(id, getDataAllOffset(iteration + 1)), lambdaComm.getZData() + id * getNumFeats(iteration + 1),
+                    memcpy(vertexZDataPtr(id, getDataAllOffset(iteration + 1)), lambdaComm->getZData() + id * getNumFeats(iteration + 1),
                            getNumFeats(iteration + 1) * sizeof(FeatType));
                     memcpy(vertexActivationDataPtr(id, getDataAllOffset(iteration + 1)), verticesDataBuf + id * getNumFeats(iteration + 1),
                            getNumFeats(iteration + 1) * sizeof(FeatType));
@@ -365,7 +365,7 @@ Engine::worker(unsigned tid, void *args) {
 
                 // End this lambda communciation context and step forward to a new iteration.
                 ++iteration;
-                lambdaComm.endContext();
+                lambdaComm->endContext();
 
                 // There is a new layer ahead, please start a new iteration.
                 if (iteration < numLayers) {
