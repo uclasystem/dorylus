@@ -311,10 +311,7 @@ Engine::worker(unsigned tid, void *args) {
                 t.detach();
 
                 // Trigger a request towards the coordicate server. Wait until the request completes.
-                std::thread t2([&] {
-                    lambdaComm->requestLambdas();
-                });
-                t2.join();
+                lambdaComm->requestLambdas();
 
                 //////////////////////////////
                 // Lambda threads finished. //

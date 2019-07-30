@@ -29,10 +29,9 @@ ServerWorker::work() {
 			int32_t cols = parse<int32_t>((char *) header.data(), 3);
 
 			std::string opStr = op == 0 ? "Push" : "Pull";
-			std::string accMsg = "[ACCEPTED] " + opStr + " from thread "
-								 + std::to_string(cli_id) + " for partition "
-								 + std::to_string(partId);
-			std::cerr << accMsg << "." << std::endl;
+			std::string accMsg = opStr + " from thread " + std::to_string(cli_id)
+			                   + " for partition " + std::to_string(partId);
+			printLog(nodeId, "AccMSG: %s.\n", accMsg.c_str());
 
 			switch (op) {
 				case (OP::PULL):
@@ -42,7 +41,7 @@ ServerWorker::work() {
 					recvMatrixChunks(worker, partId, rows, cols);
 					break;
 				default:
-					std::cerr << "SW: Unknown Op code." << std::endl;
+					printLog(nodeId, "ServerWorker: Unknown Op code received.\n");
 			}
 		}
 	} catch (std::exception& ex) {
@@ -127,12 +126,15 @@ LambdaComm::startContext(FeatType *dataBuf_, int32_t rows_, int32_t cols_, int32
 	ctx = zmq::context_t(1);
 	frontend = zmq::socket_t(ctx, ZMQ_ROUTER);
 	backend = zmq::socket_t(ctx, ZMQ_DEALER);
+	printLog(nodeId, "New lambda communication context created on layer %u.\n", layer);
 }
 
 void
 LambdaComm::endContext() {
+	counter = 0;
     delete[] zData;
     delete[] matrix.data;   // Delete last iter's data buffer. The engine must reset its buf ptr to getActivationData().
+    printLog(nodeId, "Lambda communication context on layer %u finished.\n", layer);
 }
 
 
@@ -148,22 +150,16 @@ LambdaComm::run() {
 	frontend.bind(host_port);
 	backend.bind("inproc://backend");
 
-	// Create workers (each for a partition) and detach them.
+	// Create numListeners workers and detach them.
 	std::vector<ServerWorker *> workers;
 	std::vector<std::thread *> worker_threads;
 	for (int i = 0; i < numListeners; ++i) {
-		workers.push_back(new ServerWorker(ctx, ZMQ_DEALER, nParts, nextIterCols, counter, matrix, zData, actData));
+		workers.push_back(new ServerWorker(ctx, ZMQ_DEALER, nParts, nextIterCols, counter, matrix, zData, actData, nodeId));
 
 		worker_threads.push_back(new std::thread(std::bind(&ServerWorker::work, workers[i])));
 		worker_threads[i]->detach();
 	}
 
-	// TODO:
-	//   Either find a termination condition for this listener or 
-	//   make the class a member of Engine so that it is not spawning
-	//   new listeners every iteration that do not die.
-	//   Probably best to integrate the listener into Engine and add 
-	//   "set" APIs to change its config every iteration.
 	try {
 		zmq::proxy(static_cast<void *>(frontend), static_cast<void *>(backend), nullptr);
 	} catch (std::exception& ex) {
@@ -182,6 +178,8 @@ LambdaComm::requestLambdas() {
 	sprintf(chost_port, "tcp://%s:%u", coordserverIp.c_str(), coordserverPort);
 	zmq::socket_t socket(ctx, ZMQ_REQ);
 	socket.connect(chost_port);
+
+	printLog(nodeId, "Sending lambda threads requests to coordserver...\n");
 
 	zmq::message_t header(HEADER_SIZE);
 	populateHeader((char *) header.data(), OP::REQ, layer, nParts);
