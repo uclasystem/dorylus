@@ -145,8 +145,8 @@ matmul(std::string dataserver, std::string weightserver, std::string dport, std:
     //
     std::cout << sizeof(int32_t) << " Dataserver str: " << dataserver << " | length = " << dataserver.length() << " | strlen = " << strlen(dataserver.c_str()) << std::endl;
     char identity[sizeof(int32_t) + dataserver.length()];
-    memcpy(&identity, (char *) &id, sizeof(int32_t));
-    memcpy((&identity) + sizeof(int32_t), (char *) dataserver.c_str(), dataserver.length());
+    memcpy(identity, (char *) &id, sizeof(int32_t));
+    memcpy(identity + sizeof(int32_t), (char *) dataserver.c_str(), dataserver.length());
 
     Timer getWeightsTimer;
     Timer getFeatsTimer;
