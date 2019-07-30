@@ -31,6 +31,8 @@ using namespace std::chrono;
  */
 Matrix
 requestMatrix(zmq::socket_t& socket, int32_t id) {
+
+    std::cout << "Requesting matrix" << std::endl;
     
     // Send pull request.
     zmq::message_t header(HEADER_SIZE);
@@ -149,6 +151,7 @@ matmul(std::string dataserver, std::string weightserver, std::string dport, std:
         // Request weights matrix.
         Matrix weights;
         std::thread t([&] {
+            std::cout << "Asking weightserver..." << std::endl;
             getWeightsTimer.start();
             zmq::socket_t weights_socket(ctx, ZMQ_DEALER);
             weights_socket.setsockopt(ZMQ_IDENTITY, identity, sizeof(int32_t));
@@ -161,6 +164,7 @@ matmul(std::string dataserver, std::string weightserver, std::string dport, std:
 
         // Request feature matrix.
         getFeatsTimer.start();
+        std::cout << "Asking dataserver..." << std::endl;
         zmq::socket_t data_socket(ctx, ZMQ_DEALER);
         data_socket.setsockopt(ZMQ_IDENTITY, identity, sizeof(int32_t));
         char dhost_port[50];
@@ -220,6 +224,9 @@ my_handler(invocation_request const& request) {
     std::string wport = pt.get<std::string>("wport");
     int32_t layer = pt.get<int32_t>("layer");
     int32_t chunkId = pt.get<int32_t>("id");
+
+    std::cout << "Thread " << chunkId << " requested from " << dataserver << ":" << dport
+              << ", layer " << layer << "." << std::endl;
 
     return matmul(dataserver, weightserver, dport, wport, chunkId, layer);
 }
