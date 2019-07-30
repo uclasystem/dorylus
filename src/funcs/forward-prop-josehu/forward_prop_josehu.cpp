@@ -143,8 +143,8 @@ matmul(std::string dataserver, std::string weightserver, std::string dport, std:
     //
     // One should extract the partition id by reading the first 4 Bytes, which is simply parse<int32_t>(...).
     //
-    std::cout << sizeof(int32_t) << " Dataserver str: " << dataserver << " | length = " << dataserver.length() << " | strlen = " << strlen(dataserver.c_str()) << std::endl;
-    char identity[sizeof(int32_t) + dataserver.length()];
+    size_t identity_len = sizeof(int32_t) + dataserver.length()
+    char identity[identity_len];
     memcpy(identity, (char *) &id, sizeof(int32_t));
     memcpy(identity + sizeof(int32_t), (char *) dataserver.c_str(), dataserver.length());
 
@@ -162,7 +162,7 @@ matmul(std::string dataserver, std::string weightserver, std::string dport, std:
             std::cout << "< matmul > Asking weightserver..." << std::endl;
             getWeightsTimer.start();
             zmq::socket_t weights_socket(ctx, ZMQ_DEALER);
-            weights_socket.setsockopt(ZMQ_IDENTITY, identity, sizeof(int32_t));
+            weights_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
             char whost_port[50];
             sprintf(whost_port, "tcp://%s:%s", weightserver.c_str(), wport.c_str());
             weights_socket.connect(whost_port);
@@ -175,7 +175,7 @@ matmul(std::string dataserver, std::string weightserver, std::string dport, std:
         getFeatsTimer.start();
         std::cout << "< matmul > Asking dataserver..." << std::endl;
         zmq::socket_t data_socket(ctx, ZMQ_DEALER);
-        data_socket.setsockopt(ZMQ_IDENTITY, identity, sizeof(int32_t));
+        data_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
         char dhost_port[50];
         sprintf(dhost_port, "tcp://%s:%s", dataserver.c_str(), dport.c_str());
         data_socket.connect(dhost_port);
