@@ -31,21 +31,15 @@ using namespace std::chrono;
  */
 Matrix
 requestMatrix(zmq::socket_t& socket, int32_t id) {
-
-    std::cout << "[ id = " << id << " ] Requesting matrix..." << std::endl;
     
     // Send pull request.
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char *) header.data(), OP::PULL, id);
     socket.send(header);
 
-    std::cout << "[ id = " << id << " ] Pull request sent." << std::endl;
-
     // Listen on respond.
     zmq::message_t respHeader;
     socket.recv(&respHeader);
-
-    std::cout << "[ id = " << id << " ] Pull responce received." << std::endl;
 
     // Parse the respond.
     int32_t layerResp = parse<int32_t>((char *) respHeader.data(), 1);
@@ -56,8 +50,6 @@ requestMatrix(zmq::socket_t& socket, int32_t id) {
         int32_t rows = parse<int32_t>((char *) respHeader.data(), 2);
         int32_t cols = parse<int32_t>((char *) respHeader.data(), 3);
         zmq::message_t matxData(rows * cols * sizeof(DTYPE));
-
-        std::cout << "[ id = " << id << " ] Waiting to receive matrix data..." << std::endl;
         socket.recv(&matxData);
 
         char *matxBuffer = new char[matxData.size()];
@@ -76,15 +68,10 @@ requestMatrix(zmq::socket_t& socket, int32_t id) {
  */
 void
 sendMatrix(Matrix& response, int32_t resType, zmq::socket_t& socket, bool duplicate, int32_t id) {
-    
-    std::cout << "[ id = " << id << " ] Sending matrix..." << std::endl;
-
     if (!duplicate) {
         zmq::message_t header(HEADER_SIZE);
         populateHeader((char *) header.data(), OP::PUSH, id, response.rows, response.cols);
         socket.send(header, ZMQ_SNDMORE);
-
-        std::cout << "[ id = " << id << " ] Push header sent. " << std::endl;
     }
 
     zmq::message_t matxData(response.getDataSize());
@@ -148,8 +135,17 @@ activate(Matrix& mat) {
 invocation_response
 matmul(std::string dataserver, std::string weightserver, std::string dport, std::string wport, int32_t id, int32_t layer) {
     zmq::context_t ctx(1);
-    char identity[sizeof(int32_t)];
+
+    //
+    // Lambda socket identity is set to:
+    //
+    //      [ 4 Bytes partId ] | [ n Bytes the string of dataserverIp ]
+    //
+    // One should extract the partition id by reading the first 4 Bytes, which is simply parse<int32_t>(...).
+    //
+    char identity[sizeof(int32_t) + dataserver.length()];
     memcpy(&identity, (char *) &id, sizeof(int32_t));
+    memcpy((&identity) + sizeof(int32_t), (char *) dataserver.c_str(), dataserver.length());
 
     Timer getWeightsTimer;
     Timer getFeatsTimer;
