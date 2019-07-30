@@ -2,6 +2,8 @@
 *.d
 out*
 *.bin
+**/.DS_Store
+
 inputs/data
 installs
 run/hostfile
@@ -24,3 +26,5 @@ vm
 **/output-files
 **/.out
 **/test
+
+utils/check
