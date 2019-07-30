@@ -22,14 +22,14 @@ ServerWorker::work() {
 			worker.recv(&identity);
 			worker.recv(&header);
 
-			int32_t cli_id = parse<int32_t>((char *) identity.data(), 0);
+			int32_t chunkId = parse<int32_t>((char *) identity.data(), 0);
 			int32_t op = parse<int32_t>((char *) header.data(), 0);
 			int32_t partId = parse<int32_t>((char *) header.data(), 1);
 			int32_t rows = parse<int32_t>((char *) header.data(), 2);
 			int32_t cols = parse<int32_t>((char *) header.data(), 3);
 
 			std::string opStr = op == 0 ? "Push" : "Pull";
-			std::string accMsg = opStr + " from thread " + std::to_string(cli_id)
+			std::string accMsg = opStr + " from thread " + std::to_string(chunkId)
 			                   + " for partition " + std::to_string(partId);
 			printLog(nodeId, "AccMSG: %s.\n", accMsg.c_str());
 
@@ -194,6 +194,8 @@ LambdaComm::requestLambdas() {
 	
 	zmq::message_t reply;
 	socket.recv(&reply);
+
+	printLog(nodeId, "Coordserver accepts the request. Waiting on results...\n");
 
 	// Block until all parts have been handled.
 	std::unique_lock<std::mutex> lk(m);
