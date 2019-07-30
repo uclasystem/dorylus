@@ -32,26 +32,32 @@ using namespace std::chrono;
 Matrix
 requestMatrix(zmq::socket_t& socket, int32_t id) {
 
-    std::cout << "Requesting matrix" << std::endl;
+    std::cout << "[ id = " << id << " ] Requesting matrix..." << std::endl;
     
     // Send pull request.
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char *) header.data(), OP::PULL, id);
     socket.send(header);
 
-    // Listen on dataserver's respond.
+    std::cout << "[ id = " << id << " ] Pull request sent." << std::endl;
+
+    // Listen on respond.
     zmq::message_t respHeader;
     socket.recv(&respHeader);
+
+    std::cout << "[ id = " << id << " ] Pull responce received." << std::endl;
 
     // Parse the respond.
     int32_t layerResp = parse<int32_t>((char *) respHeader.data(), 1);
     if (layerResp == -1) {      // Failed.
-        std::cout << "No corresponding feature chunk." << std::endl;
+        std::cerr << "[ ERROR ] No corresponding matrix chunk!" << std::endl;
         return Matrix();
     } else {                    // Get matrix data.
         int32_t rows = parse<int32_t>((char *) respHeader.data(), 2);
         int32_t cols = parse<int32_t>((char *) respHeader.data(), 3);
         zmq::message_t matxData(rows * cols * sizeof(DTYPE));
+
+        std::cout << "[ id = " << id << " ] Waiting to receive matrix data..." << std::endl;
         socket.recv(&matxData);
 
         char *matxBuffer = new char[matxData.size()];
@@ -69,11 +75,16 @@ requestMatrix(zmq::socket_t& socket, int32_t id) {
  * 
  */
 void
-sendMatrix(Matrix& response, int32_t resType, zmq::socket_t& socket, bool duplicate, int32_t i) {
+sendMatrix(Matrix& response, int32_t resType, zmq::socket_t& socket, bool duplicate, int32_t id) {
+    
+    std::cout << "[ id = " << id << " ] Sending matrix..." << std::endl;
+
     if (!duplicate) {
         zmq::message_t header(HEADER_SIZE);
-        populateHeader((char *) header.data(), OP::PUSH, i, response.rows, response.cols);
+        populateHeader((char *) header.data(), OP::PUSH, id, response.rows, response.cols);
         socket.send(header, ZMQ_SNDMORE);
+
+        std::cout << "[ id = " << id << " ] Push header sent. " << std::endl;
     }
 
     zmq::message_t matxData(response.getDataSize());
@@ -151,7 +162,7 @@ matmul(std::string dataserver, std::string weightserver, std::string dport, std:
         // Request weights matrix.
         Matrix weights;
         std::thread t([&] {
-            std::cout << "Asking weightserver..." << std::endl;
+            std::cout << "< matmul > Asking weightserver..." << std::endl;
             getWeightsTimer.start();
             zmq::socket_t weights_socket(ctx, ZMQ_DEALER);
             weights_socket.setsockopt(ZMQ_IDENTITY, identity, sizeof(int32_t));
@@ -159,19 +170,22 @@ matmul(std::string dataserver, std::string weightserver, std::string dport, std:
             sprintf(whost_port, "tcp://%s:%s", weightserver.c_str(), wport.c_str());
             weights_socket.connect(whost_port);
             weights = requestMatrix(weights_socket, layer);
+            std::cout << "< matmul > Got data from weightserver." << std::endl;
             getWeightsTimer.stop();
         });
 
         // Request feature matrix.
         getFeatsTimer.start();
-        std::cout << "Asking dataserver..." << std::endl;
+        std::cout << "< matmul > Asking dataserver..." << std::endl;
         zmq::socket_t data_socket(ctx, ZMQ_DEALER);
         data_socket.setsockopt(ZMQ_IDENTITY, identity, sizeof(int32_t));
         char dhost_port[50];
         sprintf(dhost_port, "tcp://%s:%s", dataserver.c_str(), dport.c_str());
         data_socket.connect(dhost_port);
         Matrix feats = requestMatrix(data_socket, id);
+        std::cout << "< matmul > Got data from dataserver." << std::endl;
         getFeatsTimer.stop();
+
         t.join();
 
         if (weights.empty())
@@ -181,18 +195,22 @@ matmul(std::string dataserver, std::string weightserver, std::string dport, std:
 
         // Multiplication.
         computationTimer.start();
+        std::cout << "< matmul > Doing the dot multiplication..." << std::endl;
         Matrix z = dot(feats, weights);
         computationTimer.stop();
 
         // Activation.
         activationTimer.start();
+        std::cout << "< matmul > Doing the activation..." << std::endl;
         Matrix activations = activate(z);
         activationTimer.stop();
 
         // Send back to dataserver.
         sendResTimer.start();
+        std::cout << "< matmul > Sending results back..." << std::endl;
         sendMatrix(z, 0, data_socket, false, id);
         sendMatrix(activations, 1, data_socket, true, id);
+        std::cout << "< matmul > Results sent." << std::endl;
         sendResTimer.stop();
 
     } catch(std::exception &ex) {
@@ -225,7 +243,7 @@ my_handler(invocation_request const& request) {
     int32_t layer = pt.get<int32_t>("layer");
     int32_t chunkId = pt.get<int32_t>("id");
 
-    std::cout << "Thread " << chunkId << " requested from " << dataserver << ":" << dport
+    std::cout << "Thread " << chunkId << " is requested from " << dataserver << ":" << dport
               << ", layer " << layer << "." << std::endl;
 
     return matmul(dataserver, weightserver, dport, wport, chunkId, layer);
