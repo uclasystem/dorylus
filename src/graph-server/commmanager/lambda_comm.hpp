@@ -185,9 +185,9 @@ private:
 
     unsigned layer;
 
-	zmq::context_t ctx;
-	zmq::socket_t frontend;
-	zmq::socket_t backend;
+	zmq::context_t *ctx;
+	zmq::socket_t *frontend;
+	zmq::socket_t *backend;
 
     unsigned nodeId;
 	std::string nodeIp;

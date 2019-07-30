@@ -123,9 +123,9 @@ LambdaComm::startContext(FeatType *dataBuf_, int32_t rows_, int32_t cols_, int32
 	matrix = Matrix(rows_, cols_, dataBuf_);
 	zData = new FeatType[rows_ * nextIterCols_];
 	actData = new FeatType[rows_ * nextIterCols_];
-	ctx = zmq::context_t(1);
-	frontend = zmq::socket_t(ctx, ZMQ_ROUTER);
-	backend = zmq::socket_t(ctx, ZMQ_DEALER);
+	ctx = new zmq::context_t(1);
+	frontend = new zmq::socket_t(ctx, ZMQ_ROUTER);
+	backend = new zmq::socket_t(ctx, ZMQ_DEALER);
 	printLog(nodeId, "New lambda communication context created on layer %u.\n", layer);
 }
 
@@ -154,14 +154,14 @@ LambdaComm::run() {
 	std::vector<ServerWorker *> workers;
 	std::vector<std::thread *> worker_threads;
 	for (int i = 0; i < numListeners; ++i) {
-		workers.push_back(new ServerWorker(ctx, ZMQ_DEALER, nParts, nextIterCols, counter, matrix, zData, actData, nodeId));
+		workers.push_back(new ServerWorker(*ctx, ZMQ_DEALER, nParts, nextIterCols, counter, matrix, zData, actData, nodeId));
 
 		worker_threads.push_back(new std::thread(std::bind(&ServerWorker::work, workers[i])));
 		worker_threads[i]->detach();
 	}
 
 	try {
-		zmq::proxy(static_cast<void *>(frontend), static_cast<void *>(backend), nullptr);
+		zmq::proxy(static_cast<void *>(*frontend), static_cast<void *>(*backend), nullptr);
 	} catch (std::exception& ex) {
 		std::cerr << ex.what() << std::endl;
 	}
@@ -176,7 +176,7 @@ void
 LambdaComm::requestLambdas() {
 	char chost_port[50];
 	sprintf(chost_port, "tcp://%s:%u", coordserverIp.c_str(), coordserverPort);
-	zmq::socket_t socket(ctx, ZMQ_REQ);
+	zmq::socket_t socket(*ctx, ZMQ_REQ);
 	socket.connect(chost_port);
 
 	printLog(nodeId, "Sending lambda threads requests to coordserver...\n");
