@@ -102,18 +102,10 @@ invokeFunction(Aws::String funcName, char *dataserver, char* dport, char *weight
  * Coordination server keeps listening on the dataserver's request of issuing lambda threads.
  * 
  */
-std::function<std::shared_ptr<Aws::Utils::Logging::LogSystemInterface>()>
-GetConsoleLoggerFactory() { 	// Logging auxiliary function.
-    return [] {
-        return Aws::MakeShared<Aws::Utils::Logging::ConsoleLogSystem>("console_logger", Aws::Utils::Logging::LogLevel::Trace);
-    };
-}
-
 int
 main(int argc, char *argv[]) {
 	Aws::SDKOptions options;
 	options.loggingOptions.logLevel = Aws::Utils::Logging::LogLevel::Trace;
-	options.loggingOptions.logger_create_fn = GetConsoleLoggerFactory();
 	Aws::InitAPI(options);
 
 	assert(argc == 5);
