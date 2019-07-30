@@ -131,7 +131,7 @@ Engine::init(int argc, char *argv[]) {
     graph.compactGraph();
 
     // Create the lambda communication manager.
-    lambdaComm(NodeManager::getNode(nodeId).pubip, dataserverPort, coordserverIp, coordserverPort, 5, 1);
+    lambdaComm = lambdaComm(NodeManager::getNode(nodeId).pubip, dataserverPort, coordserverIp, coordserverPort, 5, 1);
 
     timeInit += getTimer();
     printLog(nodeId, "Engine initialization complete.\n");
@@ -309,7 +309,7 @@ Engine::worker(unsigned tid, void *args) {
 
                 // Trigger a request towards the coordicate server. Wait until the request completes.
                 std::thread t2([&] {
-                    lambdaComm.requestLambdas(coordserverIp, coordserverPort, iteration);
+                    lambdaComm.requestLambdas();
                 });
                 t2.join();
 
