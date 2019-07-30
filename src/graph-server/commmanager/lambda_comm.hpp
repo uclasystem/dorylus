@@ -144,7 +144,7 @@ class LambdaComm {
 
 public:
 
-    LambdaComm(std::string& nodeIp_, unsigned dataserverPort_, std::string& coordserverIp_, unsigned coordserverPort_,
+    LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::string coordserverIp_, unsigned coordserverPort_,
                int32_t nParts_, int32_t numListeners_)
         : nodeIp(nodeIp_), dataserverPort(dataserverPort_),
           coordserverIp(coordserverIp_), coordserverPort(coordserverPort_),
