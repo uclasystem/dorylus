@@ -57,10 +57,8 @@ callback(const Aws::Lambda::LambdaClient *client, const Aws::Lambda::Model::Invo
 			std::cout << "\033[1;32m[SUCCESS]\033[0m\t" << functionResult << std::endl;
 			
 		// There is error in the results.
-		} else {
+		} else
 			std::cout << "\033[1;31m[ ERROR ]\033[0m\t" << functionResult << std::endl;
-			client->InvokeAsync(invReq, callback);
-		}
 
 	// Lambda returns error.
 	} else {
@@ -69,7 +67,7 @@ callback(const Aws::Lambda::LambdaClient *client, const Aws::Lambda::Model::Invo
 		Aws::IOStream& payload = result.GetPayload();
 		Aws::String functionResult;
 		std::getline(payload, functionResult);
-		std::cout << "\033[1;31m [ERROR] \033[0m\t" << functionResult << std::endl;
+		std::cout << "\033[1;31m[ ERROR ]\033[0m\t" << functionResult << std::endl;
 	}
 }
 
