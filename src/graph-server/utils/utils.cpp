@@ -44,7 +44,7 @@ double getTimer() {
 
 
 void
-getIP(std::string* ip) { 
+getIP(std::string *ip) { 
     int fd;
     struct ifreq ifr;
 
@@ -64,7 +64,8 @@ getIP(std::string* ip) {
     return;
 }
 
-void getPubIP(std::string& ip) {
+void
+getPubIP(std::string& ip) {
     std::ifstream ipFile("../run/nodeIp");
     assert(ipFile.good());
 

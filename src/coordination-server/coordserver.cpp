@@ -78,7 +78,7 @@ callback(const Aws::Lambda::LambdaClient *client, const Aws::Lambda::Model::Invo
  * 
  */
 void
-invokeFunction(Aws::String funcName, char *dataserver, char* dport, char *weightserver, char *wport, int32_t layer, int32_t id) {
+invokeFunction(Aws::String funcName, char *dataserver, char *dport, char *weightserver, char *wport, int32_t layer, int32_t id) {
 	Aws::Lambda::Model::InvokeRequest invReq;
 	invReq.SetFunctionName(funcName);
 	invReq.SetInvocationType(Aws::Lambda::Model::InvocationType::RequestResponse);
@@ -142,7 +142,7 @@ main(int argc, char *argv[]) {
 			std::cerr << ex.what() << std::endl;
 			return 13;
 		}
-		char* datservIp = new char[dataserverIp.size()+1];
+		char* datservIp = new char[dataserverIp.size() + 1];
 		std::memcpy(datservIp, dataserverIp.data(), dataserverIp.size());
 		datservIp[dataserverIp.size()] = '\0';
 

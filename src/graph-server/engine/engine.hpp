@@ -116,6 +116,8 @@ private:
     static std::string coordserverIp;
     static unsigned coordserverPort;
 
+    static LambdaComm lambdaComm;
+
     static unsigned nodeId;
     static unsigned numNodes;
 

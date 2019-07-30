@@ -112,6 +112,27 @@ ServerWorker::recvMatrixChunks(zmq::socket_t& socket, int32_t partId, int32_t ro
 
 /**
  *
+ * Call startContext() before the lambda invokation to refresh the parameters, and call endContext() after
+ * the global barrier to revoke unused memory space.
+ * 
+ */
+void
+LambdaComm::startContext(FeatType *dataBuf_, int32_t rows_, int32_t cols_, int32_t nextIterCols_, unsigned layer_)
+	: nextIterCols(nextIterCols_), counter(0), layer(layer_) {
+	matrix = Matrix(rows_, cols_, dataBuf_);
+	zData = new FeatType[rows_ * nextIterCols_];
+	actData = new FeatType[rows_ * nextIterCols_];
+}
+
+void
+LambdaComm::endContext() {
+    delete[] zData;
+    delete[] matrix.data;   // Delete last iter's data buffer. The engine must reset its buf ptr to getActivationData().
+}
+
+
+/**
+ *
  * LambdaComm instance is created when a lambda connection is desired.
  * 
  */
@@ -151,7 +172,7 @@ LambdaComm::run() {
 }
 
 void
-LambdaComm::requestLambdas(std::string& coordserverIp, unsigned coordserverPort, int32_t layer) {
+LambdaComm::requestLambdas() {
 	char chost_port[50];
 	sprintf(chost_port, "tcp://%s:%u", coordserverIp.c_str(), coordserverPort);
 	zmq::socket_t socket(ctx, ZMQ_REQ);

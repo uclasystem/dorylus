@@ -144,19 +144,15 @@ class LambdaComm {
 
 public:
 
-    LambdaComm(FeatType *dataBuf_, std::string& nodeIp_, unsigned dataserverPort_, int32_t rows_, int32_t cols_,
-               int32_t nextIterCols_, int32_t nParts_, int32_t numListeners_)
-        : nextIterCols(nextIterCols_), nParts(nParts_), numListeners(numListeners_), counter(0), ctx(1),
-          frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), nodeIp(nodeIp_), dataserverPort(dataserverPort_) {
-        matrix = Matrix(rows_, cols_, dataBuf_);
-        zData = new FeatType[rows_ * nextIterCols];
-        actData = new FeatType[rows_ * nextIterCols];
-    }
+    LambdaComm(std::string& nodeIp_, unsigned dataserverPort_, std::string& coordserverIp_, unsigned coordserverPort_,
+               int32_t nParts_, int32_t numListeners_)
+        : nodeIp(nodeIp_), dataserverPort(dataserverPort_),
+          coordserverIp(coordserverIp_), coordserverPort(coordserverPort_),
+          nParts(nParts_), numListeners(numListeners_),
+          ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER) { }
     
-    ~LambdaComm() {
-        delete[] zData;
-        delete[] matrix.data;   // Delete last iter's data buffer. The engine must reset its buf ptr to getActivationData().
-    }
+    void startContext(FeatType *dataBuf_, int32_t rows_, int32_t cols_, int32_t nextIterCols_, unsigned layer_);
+    void endContext();
 
     // Binds to a public port and a backend routing port for the 
     // worker threads to connect to. Spawns 'numListeners' number
@@ -166,13 +162,11 @@ public:
 
     // Sends a request to the coordination server for a given
     // number of lambda threads.
-    void requestLambdas(std::string& coordserverIp, unsigned coordserverPort, int32_t layer);
-
-    // Set volatile fields before issuing
+    void requestLambdas();
 
     // Buffers for received results.
-    FeatType* getZData() { return zData; }             // Z values.
-    FeatType* getActivationData() { return actData; }  // After activation.
+    FeatType *getZData() { return zData; }             // Z values.
+    FeatType *getActivationData() { return actData; }  // After activation.
 
 private:
 
@@ -184,13 +178,20 @@ private:
 		
 	int32_t nParts;
 	int32_t numListeners;
+
 	int32_t counter;
+
+    unsigned layer;
 
 	zmq::context_t ctx;
 	zmq::socket_t frontend;
 	zmq::socket_t backend;
+
 	std::string& nodeIp;
 	unsigned dataserverPort;
+
+    std::string& coordserverIp;
+    unsigned coordserverPort;
 };
 
 

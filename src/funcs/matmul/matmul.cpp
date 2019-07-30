@@ -69,7 +69,7 @@ void
 sendMatrix(Matrix& response, int32_t resType, zmq::socket_t& socket, bool duplicate, int32_t i) {
     if (!duplicate) {
         zmq::message_t header(HEADER_SIZE);
-        populateHeader((char *)header.data(), OP::PUSH, i, response.rows, response.cols);
+        populateHeader((char *) header.data(), OP::PUSH, i, response.rows, response.cols);
         socket.send(header, ZMQ_SNDMORE);
     }
 

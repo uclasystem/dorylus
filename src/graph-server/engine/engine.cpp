@@ -27,6 +27,7 @@ std::string Engine::layerConfigFile;
 unsigned Engine::dataserverPort;
 std::string Engine::coordserverIp;
 unsigned Engine::coordserverPort;
+LambdaComm Engine::lambdaComm;
 IdType Engine::currId = 0;
 Lock Engine::lockCurrId;
 Lock Engine::lockRecvWaiters;
@@ -128,6 +129,9 @@ Engine::init(int argc, char *argv[]) {
 
     // Compact the graph.
     graph.compactGraph();
+
+    // Create the lambda communication manager.
+    lambdaComm(NodeManager::getNode(nodeId).pubip, dataserverPort, coordserverIp, coordserverPort, 5, 1);
 
     timeInit += getTimer();
     printLog(nodeId, "Engine initialization complete.\n");
@@ -295,9 +299,7 @@ Engine::worker(unsigned tid, void *args) {
                 // Send dataBuf to lambda HERE. //
                 //////////////////////////////////
 
-                Node nodeMe = NodeManager::getNode(nodeId);
-                LambdaComm lambdaComm(verticesDataBuf, nodeMe.pubip, dataserverPort, graph.getNumLocalVertices(),
-                                      getNumFeats(), getNumFeats(iteration + 1), graph.getNumLocalVertices() < 5 ? graph.getNumLocalVertices() : 5, 1);
+                lambdaComm.startContext(verticesDataBuf, graph.getNumLocalVertices(), getNumFeats(), getNumFeats(iteration + 1), iteration);
                 
                 // Create and launch the sender & receiver workers.
                 std::thread t([&] {
@@ -359,8 +361,9 @@ Engine::worker(unsigned tid, void *args) {
                 //## Global Iteration barrier. ##//
                 NodeManager::barrier(LAYER_BARRIER);
 
-                // Step forward to a new iteration. 
+                // End this lambda communciation context and step forward to a new iteration.
                 ++iteration;
+                lambdaComm.endContext();
 
                 // There is a new layer ahead, please start a new iteration.
                 if (iteration < numLayers) {

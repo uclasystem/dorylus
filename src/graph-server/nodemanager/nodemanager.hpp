@@ -45,7 +45,7 @@ typedef struct node {
     node(unsigned i, std::string *ipx, std::string *pip, std::string *n, bool mtr) {
         id = i;
         ip = *ipx;
-	pubip = *pip;
+        pubip = *pip;
         name = *n;
         master = mtr;
         isAlive = false;
