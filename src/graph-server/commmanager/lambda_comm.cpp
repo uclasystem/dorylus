@@ -117,8 +117,10 @@ ServerWorker::recvMatrixChunks(zmq::socket_t& socket, int32_t partId, int32_t ro
  * 
  */
 void
-LambdaComm::startContext(FeatType *dataBuf_, int32_t rows_, int32_t cols_, int32_t nextIterCols_, unsigned layer_)
-	: nextIterCols(nextIterCols_), counter(0), layer(layer_) {
+LambdaComm::startContext(FeatType *dataBuf_, int32_t rows_, int32_t cols_, int32_t nextIterCols_, unsigned layer_) {
+	nextIterCols = nextIterCols_;
+	counter = 0;
+	layer = layer_;
 	matrix = Matrix(rows_, cols_, dataBuf_);
 	zData = new FeatType[rows_ * nextIterCols_];
 	actData = new FeatType[rows_ * nextIterCols_];
