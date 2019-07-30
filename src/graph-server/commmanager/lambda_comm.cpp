@@ -124,6 +124,9 @@ LambdaComm::startContext(FeatType *dataBuf_, int32_t rows_, int32_t cols_, int32
 	matrix = Matrix(rows_, cols_, dataBuf_);
 	zData = new FeatType[rows_ * nextIterCols_];
 	actData = new FeatType[rows_ * nextIterCols_];
+	ctx = zmq::context_t(1);
+	frontend = zmq::socket_t(ctx, ZMQ_ROUTER);
+	backend = zmq::socket_t(ctx, ZMQ_DEALER);
 }
 
 void
@@ -135,7 +138,7 @@ LambdaComm::endContext() {
 
 /**
  *
- * LambdaComm instance is created when a lambda connection is desired.
+ * When a lambda connection is desired.
  * 
  */
 void

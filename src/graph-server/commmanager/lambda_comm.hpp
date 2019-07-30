@@ -145,10 +145,10 @@ class LambdaComm {
 public:
 
     LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::string coordserverIp_, unsigned coordserverPort_,
-               int32_t nParts_, int32_t numListeners_)
+               unsigned nodeId_, int32_t nParts_, int32_t numListeners_)
         : nodeIp(nodeIp_), dataserverPort(dataserverPort_),
           coordserverIp(coordserverIp_), coordserverPort(coordserverPort_),
-          nParts(nParts_), numListeners(numListeners_),
+          nodeId(nodeId_), nParts(nParts_), numListeners(numListeners_),
           ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER) { }
     
     void startContext(FeatType *dataBuf_, int32_t rows_, int32_t cols_, int32_t nextIterCols_, unsigned layer_);
@@ -187,6 +187,7 @@ private:
 	zmq::socket_t frontend;
 	zmq::socket_t backend;
 
+    unsigned nodeId;
 	std::string nodeIp;
 	unsigned dataserverPort;
 
