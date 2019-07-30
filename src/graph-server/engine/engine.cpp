@@ -303,7 +303,7 @@ Engine::worker(unsigned tid, void *args) {
                 std::thread t([&] {
                     lambdaComm.run();
                 });
-                t.detach();
+                t.join();
 
                 // Trigger a request towards the coordicate server. Wait until the request completes.
                 std::thread t2([&] {
