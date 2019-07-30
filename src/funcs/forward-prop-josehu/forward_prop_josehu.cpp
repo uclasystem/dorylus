@@ -96,7 +96,7 @@ dot(Matrix& features, Matrix& weights) {
 
     auto resultData = new DTYPE[m * n];
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, 1.0,
-                features.getData(), k, weights.getData(), n, 0.0, resultData.get(), n);
+                features.getData(), k, weights.getData(), n, 0.0, resultData, n);
 
     result.setData(resultData);
 
