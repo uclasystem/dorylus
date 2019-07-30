@@ -150,8 +150,8 @@ void
 LambdaComm::run() {
 	char host_port[50];
 	sprintf(host_port, "tcp://*:%u", dataserverPort);
-	frontend.bind(host_port);
-	backend.bind("inproc://backend");
+	frontend->bind(host_port);
+	backend->bind("inproc://backend");
 
 	// Create numListeners workers and detach them.
 	std::vector<ServerWorker *> workers;
