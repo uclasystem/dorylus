@@ -144,7 +144,7 @@ class LambdaComm {
 
 public:
 
-    LambdaComm() { }
+    LambdaComm() : ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER) { }
     LambdaComm(std::string& nodeIp_, unsigned dataserverPort_, std::string& coordserverIp_, unsigned coordserverPort_,
                int32_t nParts_, int32_t numListeners_)
         : nodeIp(nodeIp_), dataserverPort(dataserverPort_),
