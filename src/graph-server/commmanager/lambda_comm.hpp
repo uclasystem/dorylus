@@ -188,10 +188,10 @@ private:
 	zmq::socket_t frontend;
 	zmq::socket_t backend;
 
-	std::string& nodeIp;
+	std::string nodeIp;
 	unsigned dataserverPort;
 
-    std::string& coordserverIp;
+    std::string coordserverIp;
     unsigned coordserverPort;
 };
 
