@@ -162,7 +162,7 @@ main(int argc, char *argv[]) {
 		// Get a request. Issue a bunch of lambda threads to serve the request.
 		{
 			for (int i = 0; i < nThreadsReq; i++) {
-				invokeFunction("forward-prop-josehu", (char*)dataserverIp.data(), argv[4], argv[2], argv[3], layer, i);
+				invokeFunction("forward-prop-cpp", (char*)dataserverIp.data(), argv[4], argv[2], argv[3], layer, i);
 			}
 		}
 	}
