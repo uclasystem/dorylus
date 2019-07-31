@@ -20,12 +20,6 @@
 #include "../utils/utils.h"
 
 
-std::mutex m;
-std::condition_variable cv;
-int cnt = 0;
-int total = 0;
-
-
 static const char *ALLOCATION_TAG = "matmulLambda";
 static std::shared_ptr<Aws::Lambda::LambdaClient> m_client;
 
@@ -126,46 +120,51 @@ main(int argc, char *argv[]) {
 
 	// Keeps listening on dataserver's requests.
 	std::cout << "[Coord] Starts listening for dataserver's requests..." << std::endl;
-	while (1) {
-		zmq::message_t header;
-		zmq::message_t dataserverIp;
+	
+	std::thread tcoord([&] {
+		while (true) {
+			zmq::message_t header;
+			zmq::message_t dataserverIp;
 
-		try {
-			frontend.recv(&header);
-			frontend.recv(&dataserverIp);
+			try {
+				frontend.recv(&header);
+				frontend.recv(&dataserverIp);
 
-			zmq::message_t reply(3);
-			std::memcpy(reply.data(), "ACK", 3);
-			frontend.send(reply);
-		} catch (std::exception& ex) {
-			std::cerr << ex.what() << std::endl;
-			return 13;
-		}
-		char* datservIp = new char[dataserverIp.size() + 1];
-		std::memcpy(datservIp, dataserverIp.data(), dataserverIp.size());
-		datservIp[dataserverIp.size()] = '\0';
+				zmq::message_t reply(3);
+				std::memcpy(reply.data(), "ACK", 3);
+				frontend.send(reply);
+			} catch (std::exception& ex) {
+				std::cerr << ex.what() << std::endl;
+				return 13;
+			}
+			char* datservIp = new char[dataserverIp.size() + 1];
+			std::memcpy(datservIp, dataserverIp.data(), dataserverIp.size());
+			datservIp[dataserverIp.size()] = '\0';
 
-                std::string dataserverip = datservIp;
-                std::string dport = argv[2];
-                std::string wghtserverip = argv[3];
-                std::string wport = argv[4];
+	                std::string dataserverip = datservIp;
+	                std::string dport = argv[2];
+	                std::string wghtserverip = argv[3];
+	                std::string wport = argv[4];
 
-		int32_t layer = parse<int32_t>((char *) header.data(), 1);
-		int32_t nThreadsReq = parse<int32_t>((char *) header.data(), 2);
+			int32_t layer = parse<int32_t>((char *) header.data(), 1);
+			int32_t nThreadsReq = parse<int32_t>((char *) header.data(), 2);
 
-		std::string accMsg = "[ACCEPTED] Req for " + std::to_string(nThreadsReq)
-		  + " lambdas for layer " + std::to_string(layer)
-		  + " from " + datservIp;
-		std::cout << accMsg << std::endl;
-		total = nThreadsReq;
+			std::string accMsg = "[ACCEPTED] Req for " + std::to_string(nThreadsReq)
+			  + " lambdas for layer " + std::to_string(layer)
+			  + " from " + datservIp;
+			std::cout << accMsg << std::endl;
 
-		// Get a request. Issue a bunch of lambda threads to serve the request.
-		{
-			for (int i = 0; i < nThreadsReq; i++) {
-				invokeFunction("forward-prop-josehu", (char*)dataserverIp.data(), argv[4], argv[2], argv[3], layer, i);
+			// Get a request. Issue a bunch of lambda threads to serve the request.
+			{
+				for (int i = 0; i < nThreadsReq; i++) {
+					invokeFunction("forward-prop-josehu", (char *) dataserverIp.data(), argv[4], argv[2], argv[3], layer, i);
+				}
 			}
 		}
-	}
+	});
+	tcoord.detach();
+
+	getchar();
 
 	m_client = nullptr;
 	Aws::ShutdownAPI(options);

@@ -177,8 +177,8 @@ public:
             }
 
             for (int i = 0; i < numListeners; ++i) {    // Delete when context terminates.
-                delete workers[i];
                 delete worker_threads[i];
+                delete workers[i];
             }
         });
         tproxy.detach();
