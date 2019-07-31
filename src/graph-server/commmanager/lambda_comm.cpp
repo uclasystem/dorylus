@@ -194,17 +194,19 @@ LambdaComm::requestLambdas() {
 }
 
 /**
- * Send message to the coordination server to shutdown
+ * 
+ * Send message to the coordination server to shutdown.
+ * 
  */
 void
 LambdaComm::sendShutdownMessage() {
-    // Send kill message
+
+    // Send kill message.
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char *) header.data(), OP::TERM);
     sendsocket.send(header, ZMQ_SNDMORE);
 
-    // Send dummy message since coordination server
-    // expects an IP as well
+    // Send dummy message since coordination server expects an IP as well.
     zmq::message_t dummyIP;
     sendsocket.send(dummyIP);
 }

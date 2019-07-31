@@ -19,6 +19,7 @@ std::mutex m, term_mutex;
 std::condition_variable cv;
 bool finished = false;
 
+
 /**
  *
  * Wrapper over a server worker thread.
@@ -95,8 +96,7 @@ private:
     }
 
     void terminateServer(zmq::socket_t& socket, zmq::message_t& client_id) {
-        std::cerr << "Terminating the servers" << std::endl;
-
+        std::cerr << "Terminating the servers..." << std::endl;
 
         std::lock_guard<std::mutex> lock(m);
         socket.send(client_id, ZMQ_SNDMORE);

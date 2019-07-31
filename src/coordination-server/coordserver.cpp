@@ -163,7 +163,9 @@ public:
 private:
 
     /**
-     * Sends a shutdown message to all the weightservers
+     * 
+     * Sends a shutdown message to all the weightservers.
+     * 
      */
     void sendShutdownMessage(char *weightserverPort, char *weightserverIp) {
         char identity[] = "coord";

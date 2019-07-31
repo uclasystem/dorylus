@@ -14,9 +14,11 @@ cd $( dirname $0 )
 if [[ ${1} == "coord" ]]; then
     cd ../src/coordination-server/
     ./bld
+
 elif [[ ${1} == "weights" ]]; then
     cd ../src/weight-server/
     ./bld
+    
 else
     cd ../build
 
@@ -24,11 +26,11 @@ else
     make -s mode=debug
 
     if [ $? -eq 0 ]; then 
-            cd ..
-            ./utils/send_file build/gnn-lambda.bin
+        cd ..
+        ./utils/send_file build/gnn-lambda.bin
         echo -e "\e[92;1mSuccessfully built the system, congrats ;)\e[0m"
     else
         echo -e "\e[91;1mBuild failed!\e[0m"
-            exit 1
+        exit 1
     fi
 fi
