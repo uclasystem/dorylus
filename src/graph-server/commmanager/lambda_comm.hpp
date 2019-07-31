@@ -90,20 +90,17 @@ class ServerWorker {
 
 public:
 
-    ServerWorker(zmq::context_t& ctx_, int32_t sock_type, int32_t nParts_, int32_t nextIterCols_, int32_t& counter_,
-                 Matrix& matrix_, FeatType *zData_, FeatType *actData_, unsigned nodeId_)
-        : matrix(matrix_), ctx(ctx_), nextIterCols(nextIterCols_), worker(ctx, sock_type),
-          zData(zData_), actData(actData_), nParts(nParts_), count(counter_), nodeId(nodeId_) {
-        partCols = matrix.cols;
-        partRows = std::ceil((float) matrix.rows / (float) nParts);
-        offset = partRows * partCols;
-        bufSize = offset * sizeof(FeatType);
-    }
+    ServerWorker(zmq::context_t& ctx_, int32_t sock_type, int32_t nParts_, int32_t& counter_,
+                 Matrix& matrix_, unsigned nodeId_)
+        : matrix(matrix_), ctx(ctx_), worker(ctx, sock_type),
+          nParts(nParts_), count(counter_), nodeId(nodeId_) { }
+
+    void refreshState(FeatType *zData_, FeatType *actData_, int32_t nextIterCols_);
 
     // Continuously listens for incoming lambda connections and either sends
     // a partitioned matrix or receives computed results.
     void work();
-    
+
 private:
 
     // Partitions the data matrix according to the partition id and
@@ -150,8 +147,8 @@ public:
                unsigned nodeId_, int32_t nParts_, int32_t numListeners_)
         : nodeIp(nodeIp_), dataserverPort(dataserverPort_),
           coordserverIp(coordserverIp_), coordserverPort(coordserverPort_),
-          nodeId(nodeId_), nParts(nParts_), numListeners(numListeners_),
-          ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), socket(ctx, ZMQ_REQ) {
+          nodeId(nodeId_), nParts(nParts_), numListeners(numListeners_), counter(0),
+          ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), sendsocket(ctx, ZMQ_REQ) {
         
         char dhost_port[50];
         sprintf(dhost_port, "tcp://*:%u", dataserverPort);
@@ -160,17 +157,24 @@ public:
 
         char chost_port[50];
         sprintf(chost_port, "tcp://%s:%u", coordserverIp.c_str(), coordserverPort);
-        socket.connect(chost_port);
+        sendsocket.connect(chost_port);
+
+        // Create numListeners workers and detach them.
+        for (int i = 0; i < numListeners; ++i) {
+            workers.push_back(new ServerWorker(ctx, ZMQ_DEALER, nParts, counter, matrix, nodeId));
+            std::thread(std::bind(&ServerWorker::work, workers[i]))->detach();
+        }
+
+        // Create a proxy pipe that connects frontend to backend.
+        try {
+            zmq::proxy(static_cast<void *>(frontend), static_cast<void *>(backend), nullptr);
+        } catch (std::exception& ex) {
+            std::cerr << ex.what() << std::endl;
+        }
     }
     
     void startContext(FeatType *dataBuf_, int32_t rows_, int32_t cols_, int32_t nextIterCols_, unsigned layer_);
     void endContext();
-
-    // Binds to a public port and a backend routing port for the 
-    // worker threads to connect to. Spawns 'numListeners' number
-    // of workers and connects the frontend socket to the backend
-    // by proxy.
-    void run();
 
     // Sends a request to the coordination server for a given
     // number of lambda threads.
@@ -190,6 +194,7 @@ private:
 		
 	int32_t nParts;
 	int32_t numListeners;
+    std::vector<ServerWorker *> workers;
 
 	int32_t counter;
 
@@ -198,6 +203,7 @@ private:
 	zmq::context_t ctx;
 	zmq::socket_t frontend;
 	zmq::socket_t backend;
+    zmq::socket_t sendsocket;
 
     unsigned nodeId;
 	std::string nodeIp;

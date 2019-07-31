@@ -111,6 +111,24 @@ ServerWorker::recvMatrixChunks(zmq::socket_t& socket, int32_t partId, int32_t ro
 
 /**
  *
+ * Refresh the member values.
+ * 
+ */
+void
+ServerWorker::refreshState(FeatType *zData_, FeatType *actData_, int32_t nextIterCols_) {
+	nextIterCols = nextIterCols_;
+	zData = zData_;
+	actData = actData_;
+
+	partCols = matrix.cols;
+	partRows = std::ceil((float) matrix.rows / (float) nParts);
+	offset = partRows * partCols;
+	bufSize = offset * sizeof(FeatType);
+}
+
+
+/**
+ *
  * Call startContext() before the lambda invokation to refresh the parameters, and call endContext() after
  * the global barrier to revoke unused memory space.
  * 
@@ -124,6 +142,9 @@ LambdaComm::startContext(FeatType *dataBuf_, int32_t rows_, int32_t cols_, int32
 	zData = new FeatType[rows_ * nextIterCols_];
 	actData = new FeatType[rows_ * nextIterCols_];
 	printLog(nodeId, "New lambda communication context created on layer %u.\n", layer);
+
+	for (auto&& worker : workers)
+		worker->refreshState(zData, actData, nextIterCols);
 }
 
 void
@@ -141,46 +162,20 @@ LambdaComm::endContext() {
  * 
  */
 void
-LambdaComm::run() {
-
-	// Create numListeners workers and detach them.
-	std::vector<ServerWorker *> workers;
-	std::vector<std::thread *> worker_threads;
-	for (int i = 0; i < numListeners; ++i) {
-		workers.push_back(new ServerWorker(ctx, ZMQ_DEALER, nParts, nextIterCols, counter, matrix, zData, actData, nodeId));
-
-		worker_threads.push_back(new std::thread(std::bind(&ServerWorker::work, workers[i])));
-		worker_threads[i]->detach();
-	}
-
-	// Create a proxy pipe that connects frontend to backend.
-	try {
-		zmq::proxy(static_cast<void *>(frontend), static_cast<void *>(backend), nullptr);
-	} catch (std::exception& ex) {
-		std::cerr << ex.what() << std::endl;
-	}
-
-	for (int i = 0; i < numListeners; ++i) {
-		delete workers[i];
-		delete worker_threads[i];
-	}
-}
-
-void
 LambdaComm::requestLambdas() {
-	
+
 	printLog(nodeId, "Sending lambda threads requests to coordserver...\n");
 
 	zmq::message_t header(HEADER_SIZE);
 	populateHeader((char *) header.data(), OP::REQ, layer, nParts);
-	socket.send(header, ZMQ_SNDMORE);
+	sendsocket.send(header, ZMQ_SNDMORE);
 
 	zmq::message_t ip_msg(nodeIp.size());
 	std::memcpy(ip_msg.data(), nodeIp.c_str(), nodeIp.size());
-	socket.send(ip_msg);
+	sendsocket.send(ip_msg);
 	
 	zmq::message_t reply;
-	socket.recv(&reply);
+	sendsocket.recv(&reply);
 
 	printLog(nodeId, "Coordserver accepts the request. Waiting on results...\n");
 
