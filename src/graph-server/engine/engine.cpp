@@ -303,12 +303,6 @@ Engine::worker(unsigned tid, void *args) {
                 //////////////////////////////////
 
                 lambdaComm->startContext(verticesDataBuf, graph.getNumLocalVertices(), getNumFeats(), getNumFeats(iteration + 1), iteration);
-                
-                // Create and launch the sender & receiver workers.
-                std::thread trun([&] {
-                    lambdaComm->run();
-                });
-                trun.detach();
 
                 // Trigger a request towards the coordicate server. Wait until the request completes.
                 std::thread treq([&] {
