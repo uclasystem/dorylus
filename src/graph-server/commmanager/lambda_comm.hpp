@@ -52,7 +52,7 @@ private:
     void recvMatrixChunks(zmq::socket_t& socket, zmq::message_t& client_id, int32_t partId,
                           int32_t rows, int32_t cols);
 
-    Matrix& matrix;
+    struct Matrix& matrix;
 
     int32_t nextIterCols;
     FeatType *zData;
@@ -136,7 +136,7 @@ public:
 
 private:
 
-	Matrix matrix;
+	struct Matrix matrix;
 
 	int32_t nextIterCols;
 	FeatType *zData;
