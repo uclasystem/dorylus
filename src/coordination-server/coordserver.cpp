@@ -18,6 +18,7 @@
 #include <unistd.h>
 #include <zmq.hpp>
 #include "../utils/utils.hpp"
+#include <boost/algorithm/string/trim.hpp>
 
 
 static const char *ALLOCATION_TAG = "matmulLambda";
@@ -100,7 +101,7 @@ class CoordServer {
 
 public:
 
-    CoordServer(char *coordserverPort_, char *weightserverIp_, char *weightserverFile_, char *dataserverPort_)
+    CoordServer(char *coordserverPort_, char *weightserverFile_, char *weightserverPort_, char *dataserverPort_)
         : coordserverPort(coordserverPort_), weightserverFile(weightserverFile_),
           weightserverPort(weightserverPort_), dataserverPort(dataserverPort_) {
           	loadWeightServers(weightserverAddrs,weightserverFile);
@@ -167,8 +168,8 @@ public:
 
                 // Issue a bunch of lambda threads to serve the request.
                 for (int i = 0; i < nThreadsReq; i++){
-                	char * weightserverIp=weightserverAddrs[req_count%numWeightServers];
-					std::cout <<"Send to:" << waddr << std::endl;
+                	char * weightserverIp=weightserverAddrs[req_count%weightserverAddrs.size()];
+					std::cout <<"Send to:" << weightserverIp << std::endl;
                     invokeFunction("forward-prop-josehu", (char *) dataserverIp.data(), dataserverPort, weightserverIp, weightserverPort,
                                    layer, i);
                     req_count++;
