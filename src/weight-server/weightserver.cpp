@@ -33,9 +33,6 @@ public:
 		std::cout << "[Weight] Starts listening for lambdas' requests..." << std::endl;
 		try {
 			while (true) {
-				
-				std::cout << " Waiting for pull request..." << std::endl;
-				
 				zmq::message_t identity;
 				zmq::message_t header;
 				worker.recv(&identity);
