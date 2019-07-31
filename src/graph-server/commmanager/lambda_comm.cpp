@@ -19,6 +19,7 @@ ServerWorker::work() {
 		while (true) {
 			zmq::message_t identity;
 			zmq::message_t header;
+
 			worker.recv(&identity);
 			worker.recv(&header);
 
