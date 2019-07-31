@@ -150,7 +150,18 @@ public:
                unsigned nodeId_, int32_t nParts_, int32_t numListeners_)
         : nodeIp(nodeIp_), dataserverPort(dataserverPort_),
           coordserverIp(coordserverIp_), coordserverPort(coordserverPort_),
-          nodeId(nodeId_), nParts(nParts_), numListeners(numListeners_) { }
+          nodeId(nodeId_), nParts(nParts_), numListeners(numListeners_),
+          ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), socket(ctx, ZMQ_REQ) {
+        
+        char dhost_port[50];
+        sprintf(dhost_port, "tcp://*:%u", dataserverPort);
+        frontend.bind(dhost_port);
+        backend.bind("inproc://backend");
+
+        char chost_port[50];
+        sprintf(chost_port, "tcp://%s:%u", coordserverIp.c_str(), coordserverPort);
+        socket.connect(chost_port);
+    }
     
     void startContext(FeatType *dataBuf_, int32_t rows_, int32_t cols_, int32_t nextIterCols_, unsigned layer_);
     void endContext();
@@ -184,9 +195,9 @@ private:
 
     unsigned layer;
 
-	zmq::context_t *ctx;
-	zmq::socket_t *frontend;
-	zmq::socket_t *backend;
+	zmq::context_t ctx;
+	zmq::socket_t frontend;
+	zmq::socket_t backend;
 
     unsigned nodeId;
 	std::string nodeIp;

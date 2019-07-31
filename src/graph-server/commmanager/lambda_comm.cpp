@@ -123,18 +123,12 @@ LambdaComm::startContext(FeatType *dataBuf_, int32_t rows_, int32_t cols_, int32
 	matrix = Matrix(rows_, cols_, dataBuf_);
 	zData = new FeatType[rows_ * nextIterCols_];
 	actData = new FeatType[rows_ * nextIterCols_];
-	ctx = new zmq::context_t(1);
-	frontend = new zmq::socket_t(*ctx, ZMQ_ROUTER);
-	backend = new zmq::socket_t(*ctx, ZMQ_DEALER);
 	printLog(nodeId, "New lambda communication context created on layer %u.\n", layer);
 }
 
 void
 LambdaComm::endContext() {
 	counter = 0;
-	delete ctx;
-	delete frontend;
-	delete backend;
     delete[] zData;
     delete[] matrix.data;   // Delete last iter's data buffer. The engine must reset its buf ptr to getActivationData().
     printLog(nodeId, "Lambda communication context on layer %u finished.\n", layer);
@@ -148,23 +142,20 @@ LambdaComm::endContext() {
  */
 void
 LambdaComm::run() {
-	char host_port[50];
-	sprintf(host_port, "tcp://*:%u", dataserverPort);
-	frontend->bind(host_port);
-	backend->bind("inproc://backend");
 
 	// Create numListeners workers and detach them.
 	std::vector<ServerWorker *> workers;
 	std::vector<std::thread *> worker_threads;
 	for (int i = 0; i < numListeners; ++i) {
-		workers.push_back(new ServerWorker(*ctx, ZMQ_DEALER, nParts, nextIterCols, counter, matrix, zData, actData, nodeId));
+		workers.push_back(new ServerWorker(ctx, ZMQ_DEALER, nParts, nextIterCols, counter, matrix, zData, actData, nodeId));
 
 		worker_threads.push_back(new std::thread(std::bind(&ServerWorker::work, workers[i])));
 		worker_threads[i]->detach();
 	}
 
+	// Create a proxy pipe that connects frontend to backend.
 	try {
-		zmq::proxy(static_cast<void *>(*frontend), static_cast<void *>(*backend), nullptr);
+		zmq::proxy(static_cast<void *>(frontend), static_cast<void *>(backend), nullptr);
 	} catch (std::exception& ex) {
 		std::cerr << ex.what() << std::endl;
 	}
@@ -177,11 +168,7 @@ LambdaComm::run() {
 
 void
 LambdaComm::requestLambdas() {
-	char chost_port[50];
-	sprintf(chost_port, "tcp://%s:%u", coordserverIp.c_str(), coordserverPort);
-	zmq::socket_t socket(*ctx, ZMQ_REQ);
-	socket.connect(chost_port);
-
+	
 	printLog(nodeId, "Sending lambda threads requests to coordserver...\n");
 
 	zmq::message_t header(HEADER_SIZE);
