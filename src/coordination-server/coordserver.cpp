@@ -154,6 +154,12 @@ public:
         }
     }
 
+private:
+
+    char *coordserverPort;
+    char *weightserverIp;
+    char *weightserverPort;
+    char *dataserverPort;
 }
 
 
