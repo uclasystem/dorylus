@@ -9,6 +9,7 @@ installs
 run/hostfile
 run/gvid
 run/nodeIp
+<<<<<<< HEAD
 run/dshmachines
 run/cserverinfo
 run/zoo.basic
