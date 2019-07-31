@@ -177,7 +177,7 @@ public:
             }
 
             for (int i = 0; i < numListeners; ++i) {    // Delete when context terminates.
-                delete worker[i];
+                delete workers[i];
                 delete worker_threads[i];
             }
         });
