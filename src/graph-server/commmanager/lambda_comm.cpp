@@ -19,10 +19,13 @@ ServerWorker::work() {
 		while (true) {
 			zmq::message_t identity;
 			zmq::message_t header;
+
 			worker.recv(&identity);
+			int32_t chunkId = parse<int32_t>((char *) identity.data(), 0);
+			printLog(nodeId, "<<<>>> identity %d ip %s\n", chunkId, ((char *) identity.data()) + sizeof(int32_t));
+
 			worker.recv(&header);
 
-			int32_t chunkId = parse<int32_t>((char *) identity.data(), 0);
 			int32_t op = parse<int32_t>((char *) header.data(), 0);
 			int32_t partId = parse<int32_t>((char *) header.data(), 1);
 			int32_t rows = parse<int32_t>((char *) header.data(), 2);
