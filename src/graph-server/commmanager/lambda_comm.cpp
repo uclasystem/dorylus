@@ -22,7 +22,7 @@ ServerWorker::work() {
 
 			worker.recv(&identity);
 			int32_t chunkId = parse<int32_t>((char *) identity.data(), 0);
-			printLog(nodeId, "<<<>>> identity %d ip %s\n", chunkId, ((char *) identity.data()) + sizeof(int32_t));
+			printLog(nodeId, "<<<>>> identity %d\n", chunkId);
 
 			worker.recv(&header);
 
