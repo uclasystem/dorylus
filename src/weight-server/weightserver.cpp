@@ -121,7 +121,7 @@ public:
         }
 
         for (uint32_t u = 0; u < layers.size(); ++u)
-            fprintf(stdout, "Layer %u Weights: %s\n", u, layers[u].str().c_str());
+            fprintf(stdout, "Layer %u Weights: %s\n", u, layers[u].shape().c_str());
     }
 
     // Defines how many concurrent weightserver threads to use.
