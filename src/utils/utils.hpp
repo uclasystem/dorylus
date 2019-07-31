@@ -77,6 +77,7 @@ struct Matrix {
         return output.str();
     }
 };
+typedef struct Matrix Matrix;
 
 
 /**
