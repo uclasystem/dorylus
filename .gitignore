@@ -12,6 +12,7 @@ run/nodeIp
 run/dshmachines
 run/cserverinfo
 run/zoo.basic
+run/cserverinfo
 config
 
 manage-ec2
