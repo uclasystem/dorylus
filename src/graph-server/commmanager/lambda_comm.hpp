@@ -162,7 +162,7 @@ public:
         // Create numListeners workers and detach them.
         for (int i = 0; i < numListeners; ++i) {
             workers.push_back(new ServerWorker(ctx, ZMQ_DEALER, nParts, counter, matrix, nodeId));
-            std::thread(std::bind(&ServerWorker::work, workers[i]))->detach();
+            std::thread(std::bind(&ServerWorker::work, workers[i])).detach();
         }
 
         // Create a proxy pipe that connects frontend to backend.
