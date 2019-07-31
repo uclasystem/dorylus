@@ -140,8 +140,7 @@ public:
                 int32_t nThreadsReq = parse<int32_t>((char *) header.data(), 2);
 
                 std::string accMsg = "[ACCEPTED] Req for " + std::to_string(nThreadsReq)
-                                   + " lambdas for layer " + std::to_string(layer)
-                                   + " from " + datservIp;
+                                   + " lambdas for layer " + std::to_string(layer);
                 std::cout << accMsg << std::endl;
 
                 // Issue a bunch of lambda threads to serve the request.
@@ -160,7 +159,7 @@ private:
     char *weightserverIp;
     char *weightserverPort;
     char *dataserverPort;
-}
+};
 
 
 /** Main entrance: Starts a coordserver instance and run. */
