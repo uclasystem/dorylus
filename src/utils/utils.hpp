@@ -16,13 +16,13 @@ enum OP { PUSH, PULL, REQ, RESP, TERM };
  * 
  */
 template<class T>
-void
+inline void
 serialize(char *buf, int32_t offset, T val) {
 	std::memcpy(buf + (offset * sizeof(T)), &val, sizeof(T));
 }
 
 template<class T>
-T
+inline T
 parse(const char *buf, int32_t offset) {
 	T val;
 	std::memcpy(&val, buf + (offset * sizeof(T)), sizeof(T));
@@ -30,7 +30,7 @@ parse(const char *buf, int32_t offset) {
 }
 
 // ID represents either layer or data partition, depending on server responding.
-void
+inline void
 populateHeader(char* header, int32_t op, int32_t id, int32_t rows = 0, int32_t cols = 0) {
 	serialize<int32_t>(header, 0, op);
 	serialize<int32_t>(header, 1, id);

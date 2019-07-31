@@ -192,24 +192,3 @@ LambdaComm::requestLambdas() {
 	std::unique_lock<std::mutex> lk(m);
 	cv.wait(lk, [&]{ return counter == nParts; });
 }
-
-
-/**
- *
- * Send termination signal to coordserver and weightserver.
- * 
- */
-void
-LambdaComm::signalTermination() {
-
-	// Delete workers.
-	for (int i = 0; i < numListeners; ++i) {
-	    delete worker_threads[i];
-	    delete workers[i];
-	}
-
-	// Signal termination message.
-	zmq::message_t term_signal(HEADER_SIZE);
-	populateHeader((char *) term_signal.data(), OP::TERM, nodeId);
-	sendsocket.send(term_signal);
-}

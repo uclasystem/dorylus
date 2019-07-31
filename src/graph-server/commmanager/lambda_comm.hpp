@@ -116,6 +116,11 @@ public:
             } catch (std::exception& ex) {
                 printLog(nodeId, "ERROR: %s\n", ex.what());
             }
+
+            for (int i = 0; i < numListeners; ++i) {    // Delete after context terminated.
+                delete worker_threads[i];
+                delete workers[i];
+            }
         });
         tproxy.detach();
     }
@@ -126,9 +131,6 @@ public:
 
     // Send a request to the coordination server for a given number of lambda threads.
     void requestLambdas();
-
-    // Send termination signal to coordserver and weightserver.
-    void signalTermination();
 
     // Buffers for received results.
     FeatType *getZData() { return zData; }             // Z values.
