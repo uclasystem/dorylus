@@ -2,10 +2,7 @@
 
 cd $( dirname $0 )
 
-## First argument is the idea of the node running the weight server
-#weightserverNode=${1}
-
 weightServerAddrFile=$1
 
 # Args: <Coordserver-Port> <WeightserverAddress-File> <Weightserver-Port> <Dataserver-Port>
-./build/coordination_server 65430 ${weightServerAddrFile:=./run/weightServers} 65432 65431
+../build/coordination_server 65430 ${weightServerAddrFile:=./run/weightServers} 65432 65431
