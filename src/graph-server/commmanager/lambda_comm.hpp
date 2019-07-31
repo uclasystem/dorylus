@@ -30,7 +30,7 @@ class ServerWorker {
 public:
 
     ServerWorker(zmq::context_t& ctx_, int32_t sock_type, int32_t nParts_, int32_t& counter_,
-                 struct Matrix& matrix_, unsigned nodeId_)
+                 Matrix& matrix_, unsigned nodeId_)
         : matrix(matrix_), ctx(ctx_), worker(ctx, sock_type),
           nParts(nParts_), count(counter_), nodeId(nodeId_) { }
 
@@ -52,7 +52,7 @@ private:
     void recvMatrixChunks(zmq::socket_t& socket, zmq::message_t& client_id, int32_t partId,
                           int32_t rows, int32_t cols);
 
-    struct Matrix& matrix;
+    Matrix& matrix;
 
     int32_t nextIterCols;
     FeatType *zData;
@@ -136,7 +136,7 @@ public:
 
 private:
 
-	struct Matrix matrix;
+	Matrix matrix;
 
 	int32_t nextIterCols;
 	FeatType *zData;
