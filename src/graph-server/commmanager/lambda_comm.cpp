@@ -19,20 +19,20 @@ ServerWorker::work() {
 		while (true) {
 			zmq::message_t identity;
 			zmq::message_t header;
+
 			worker.recv(&identity);
 			worker.recv(&header);
 
-			int32_t cli_id = parse<int32_t>((char *) identity.data(), 0);
+			int32_t chunkId = parse<int32_t>((char *) identity.data(), 0);
 			int32_t op = parse<int32_t>((char *) header.data(), 0);
 			int32_t partId = parse<int32_t>((char *) header.data(), 1);
 			int32_t rows = parse<int32_t>((char *) header.data(), 2);
 			int32_t cols = parse<int32_t>((char *) header.data(), 3);
 
 			std::string opStr = op == 0 ? "Push" : "Pull";
-			std::string accMsg = "[ACCEPTED] " + opStr + " from thread "
-								 + std::to_string(cli_id) + " for partition "
-								 + std::to_string(partId);
-			std::cerr << accMsg << "." << std::endl;
+			std::string accMsg = opStr + " from thread " + std::to_string(chunkId)
+			                   + " for partition " + std::to_string(partId);
+			printLog(nodeId, "AccMSG: %s.\n", accMsg.c_str());
 
 			switch (op) {
 				case (OP::PULL):
@@ -42,7 +42,7 @@ ServerWorker::work() {
 					recvMatrixChunks(worker, partId, rows, cols);
 					break;
 				default:
-					std::cerr << "SW: Unknown Op code." << std::endl;
+					printLog(nodeId, "ServerWorker: Unknown Op code received.\n");
 			}
 		}
 	} catch (std::exception& ex) {
@@ -89,8 +89,8 @@ ServerWorker::sendMatrixChunk(zmq::socket_t& socket, zmq::message_t& client_id, 
 void
 ServerWorker::recvMatrixChunks(zmq::socket_t& socket, int32_t partId, int32_t rows, int32_t cols) {
 	uint32_t offset = partId * partRows * cols;
-	FeatType* thisPartitionZStart = zData + offset;
-	FeatType* thisPartitionActStart = actData + offset;
+	FeatType *thisPartitionZStart = zData + offset;
+	FeatType *thisPartitionActStart = actData + offset;
 
 	zmq::message_t data;
 	socket.recv(&data);
@@ -112,61 +112,73 @@ ServerWorker::recvMatrixChunks(zmq::socket_t& socket, int32_t partId, int32_t ro
 
 /**
  *
- * LambdaComm instance is created when a lambda connection is desired.
+ * Refresh the member values.
  * 
  */
 void
-LambdaComm::run() {
-	char host_port[50];
-	sprintf(host_port, "tcp://*:%u", dataserverPort);
-	frontend.bind(host_port);
-	backend.bind("inproc://backend");
+ServerWorker::refreshState(FeatType *zData_, FeatType *actData_, int32_t nextIterCols_) {
+	nextIterCols = nextIterCols_;
+	zData = zData_;
+	actData = actData_;
 
-	// Create workers (each for a partition) and detach them.
-	std::vector<ServerWorker *> workers;
-	std::vector<std::thread *> worker_threads;
-	for (int i = 0; i < numListeners; ++i) {
-		workers.push_back(new ServerWorker(ctx, ZMQ_DEALER, nParts, nextIterCols, counter, matrix, zData, actData));
+	partCols = matrix.cols;
+	partRows = std::ceil((float) matrix.rows / (float) nParts);
+	offset = partRows * partCols;
+	bufSize = offset * sizeof(FeatType);
+}
 
-		worker_threads.push_back(new std::thread(std::bind(&ServerWorker::work, workers[i])));
-		worker_threads[i]->detach();
-	}
 
-	// TODO:
-	//   Either find a termination condition for this listener or 
-	//   make the class a member of Engine so that it is not spawning
-	//   new listeners every iteration that do not die.
-	//   Probably best to integrate the listener into Engine and add 
-	//   "set" APIs to change its config every iteration
-	try {
-		zmq::proxy(static_cast<void *>(frontend), static_cast<void *>(backend), nullptr);
-	} catch (std::exception& ex) {
-		std::cerr << ex.what() << std::endl;
-	}
+/**
+ *
+ * Call startContext() before the lambda invokation to refresh the parameters, and call endContext() after
+ * the global barrier to revoke unused memory space.
+ * 
+ */
+void
+LambdaComm::startContext(FeatType *dataBuf_, int32_t rows_, int32_t cols_, int32_t nextIterCols_, unsigned layer_) {
+	nextIterCols = nextIterCols_;
+	counter = 0;
+	layer = layer_;
+	matrix = Matrix(rows_, cols_, dataBuf_);
+	zData = new FeatType[rows_ * nextIterCols_];
+	actData = new FeatType[rows_ * nextIterCols_];
+	printLog(nodeId, "New lambda communication context created on layer %u.\n", layer);
 
-	for (int i = 0; i < numListeners; ++i) {
-		delete workers[i];
-		delete worker_threads[i];
-	}
+	for (auto&& worker : workers)
+		worker->refreshState(zData, actData, nextIterCols);
 }
 
 void
-LambdaComm::requestLambdas(std::string& coordserverIp, unsigned coordserverPort, int32_t layer) {
-	char chost_port[50];
-	sprintf(chost_port, "tcp://%s:%u", coordserverIp.c_str(), coordserverPort);
-	zmq::socket_t socket(ctx, ZMQ_REQ);
-	socket.connect(chost_port);
+LambdaComm::endContext() {
+	counter = 0;
+    delete[] zData;
+    delete[] matrix.data;   // Delete last iter's data buffer. The engine must reset its buf ptr to getActivationData().
+    printLog(nodeId, "Lambda communication context on layer %u finished.\n", layer);
+}
+
+
+/**
+ *
+ * When a lambda connection is desired.
+ * 
+ */
+void
+LambdaComm::requestLambdas() {
+
+	printLog(nodeId, "Sending lambda threads requests to coordserver...\n");
 
 	zmq::message_t header(HEADER_SIZE);
 	populateHeader((char *) header.data(), OP::REQ, layer, nParts);
-	socket.send(header, ZMQ_SNDMORE);
+	sendsocket.send(header, ZMQ_SNDMORE);
 
 	zmq::message_t ip_msg(nodeIp.size());
 	std::memcpy(ip_msg.data(), nodeIp.c_str(), nodeIp.size());
-	socket.send(ip_msg);
+	sendsocket.send(ip_msg);
 	
 	zmq::message_t reply;
-	socket.recv(&reply);
+	sendsocket.recv(&reply);
+
+	printLog(nodeId, "Coordserver accepts the request. Waiting on results...\n");
 
 	// Block until all parts have been handled.
 	std::unique_lock<std::mutex> lk(m);

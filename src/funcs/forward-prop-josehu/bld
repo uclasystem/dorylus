@@ -18,7 +18,7 @@ fi
 if [ $? -eq 0 ]; then 
 	case $1 in
 		"pkg")
-			make aws-lambda-package-forward-prop-shen
+			make aws-lambda-package-forward-prop-josehu
 			;;
 	esac
 fi

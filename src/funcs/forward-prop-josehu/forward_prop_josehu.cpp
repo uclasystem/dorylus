@@ -4,6 +4,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include <cmath>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/json_parser.hpp>
 #include <cblas.h>
@@ -36,14 +37,14 @@ requestMatrix(zmq::socket_t& socket, int32_t id) {
     populateHeader((char *) header.data(), OP::PULL, id);
     socket.send(header);
 
-    // Listen on dataserver's respond.
+    // Listen on respond.
     zmq::message_t respHeader;
     socket.recv(&respHeader);
 
     // Parse the respond.
     int32_t layerResp = parse<int32_t>((char *) respHeader.data(), 1);
     if (layerResp == -1) {      // Failed.
-        std::cout << "No corresponding feature chunk." << std::endl;
+        std::cerr << "[ ERROR ] No corresponding matrix chunk!" << std::endl;
         return Matrix();
     } else {                    // Get matrix data.
         int32_t rows = parse<int32_t>((char *) respHeader.data(), 2);
@@ -66,10 +67,10 @@ requestMatrix(zmq::socket_t& socket, int32_t id) {
  * 
  */
 void
-sendMatrix(Matrix& response, int32_t resType, zmq::socket_t& socket, bool duplicate, int32_t i) {
+sendMatrix(Matrix& response, int32_t resType, zmq::socket_t& socket, bool duplicate, int32_t id) {
     if (!duplicate) {
         zmq::message_t header(HEADER_SIZE);
-        populateHeader((char *) header.data(), OP::PUSH, i, response.rows, response.cols);
+        populateHeader((char *) header.data(), OP::PUSH, id, response.rows, response.cols);
         socket.send(header, ZMQ_SNDMORE);
     }
 
@@ -93,11 +94,11 @@ dot(Matrix& features, Matrix& weights) {
     int m = features.rows, k = features.cols, n = weights.cols;
     Matrix result(m, n);
 
-    auto resultData = std::unique_ptr<DTYPE[]>(new DTYPE[m * n]);
+    auto resultData = new DTYPE[m * n];
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, 1.0,
-                features.getData(), k, weights.getData(), n, 0.0, resultData.get(), n);
+                features.getData(), k, weights.getData(), n, 0.0, resultData, n);
 
-    result.setData(std::move(resultData));
+    result.setData(resultData);
 
     return result;
 }
@@ -134,8 +135,18 @@ activate(Matrix& mat) {
 invocation_response
 matmul(std::string dataserver, std::string weightserver, std::string dport, std::string wport, int32_t id, int32_t layer) {
     zmq::context_t ctx(1);
-    char identity[sizeof(int32_t)];
-    memcpy(&identity, (char *) &id, sizeof(int32_t));
+
+    //
+    // Lambda socket identity is set to:
+    //
+    //      [ 4 Bytes partId ] | [ n Bytes the string of dataserverIp ]
+    //
+    // One should extract the partition id by reading the first 4 Bytes, which is simply parse<int32_t>(...).
+    //
+    size_t identity_len = sizeof(int32_t) + dataserver.length();
+    char identity[identity_len];
+    memcpy(identity, (char *) &id, sizeof(int32_t));
+    memcpy(identity + sizeof(int32_t), (char *) dataserver.c_str(), dataserver.length());
 
     Timer getWeightsTimer;
     Timer getFeatsTimer;
@@ -148,25 +159,30 @@ matmul(std::string dataserver, std::string weightserver, std::string dport, std:
         // Request weights matrix.
         Matrix weights;
         std::thread t([&] {
+            std::cout << "< matmul > Asking weightserver..." << std::endl;
             getWeightsTimer.start();
             zmq::socket_t weights_socket(ctx, ZMQ_DEALER);
-            weights_socket.setsockopt(ZMQ_IDENTITY, identity, sizeof(int32_t));
+            weights_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
             char whost_port[50];
             sprintf(whost_port, "tcp://%s:%s", weightserver.c_str(), wport.c_str());
             weights_socket.connect(whost_port);
             weights = requestMatrix(weights_socket, layer);
+            std::cout << "< matmul > Got data from weightserver." << std::endl;
             getWeightsTimer.stop();
         });
 
         // Request feature matrix.
         getFeatsTimer.start();
+        std::cout << "< matmul > Asking dataserver..." << std::endl;
         zmq::socket_t data_socket(ctx, ZMQ_DEALER);
-        data_socket.setsockopt(ZMQ_IDENTITY, identity, sizeof(int32_t));
+        data_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
         char dhost_port[50];
         sprintf(dhost_port, "tcp://%s:%s", dataserver.c_str(), dport.c_str());
         data_socket.connect(dhost_port);
         Matrix feats = requestMatrix(data_socket, id);
+        std::cout << "< matmul > Got data from dataserver." << std::endl;
         getFeatsTimer.stop();
+
         t.join();
 
         if (weights.empty())
@@ -176,18 +192,22 @@ matmul(std::string dataserver, std::string weightserver, std::string dport, std:
 
         // Multiplication.
         computationTimer.start();
+        std::cout << "< matmul > Doing the dot multiplication..." << std::endl;
         Matrix z = dot(feats, weights);
         computationTimer.stop();
 
         // Activation.
         activationTimer.start();
+        std::cout << "< matmul > Doing the activation..." << std::endl;
         Matrix activations = activate(z);
         activationTimer.stop();
 
         // Send back to dataserver.
         sendResTimer.start();
+        std::cout << "< matmul > Sending results back..." << std::endl;
         sendMatrix(z, 0, data_socket, false, id);
         sendMatrix(activations, 1, data_socket, true, id);
+        std::cout << "< matmul > Results sent." << std::endl;
         sendResTimer.stop();
 
     } catch(std::exception &ex) {
@@ -219,6 +239,9 @@ my_handler(invocation_request const& request) {
     std::string wport = pt.get<std::string>("wport");
     int32_t layer = pt.get<int32_t>("layer");
     int32_t chunkId = pt.get<int32_t>("id");
+
+    std::cout << "Thread " << chunkId << " is requested from " << dataserver << ":" << dport
+              << ", layer " << layer << "." << std::endl;
 
     return matmul(dataserver, weightserver, dport, wport, chunkId, layer);
 }

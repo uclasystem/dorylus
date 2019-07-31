@@ -15,8 +15,8 @@ struct FeaturesHeader{
 };
 static FeaturesHeader head;
 
-//todo: verify written file
-//todo: add header
+// TODO: verify written file
+// TODO: add header
 
 void readWriteFile(std::string featuresFileName) {
     std::ifstream infile(featuresFileName.c_str());

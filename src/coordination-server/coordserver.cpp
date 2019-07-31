@@ -40,9 +40,9 @@ using namespace std::chrono;
 void
 callback(const Aws::Lambda::LambdaClient *client, const Aws::Lambda::Model::InvokeRequest &invReq, const Aws::Lambda::Model::InvokeOutcome &outcome,
 	     const std::shared_ptr<const Aws::Client::AsyncCallerContext> &context) {
-	
 	// Lambda returns success
 	if (outcome.IsSuccess()) {
+		// printf("SUCCESS CALLBACK\n" );
 		Aws::Lambda::Model::InvokeResult& result = const_cast<Aws::Lambda::Model::InvokeResult&>(outcome.GetResult());
 
 		// JSON Parsing not working from Boost to AWS.
@@ -57,16 +57,17 @@ callback(const Aws::Lambda::LambdaClient *client, const Aws::Lambda::Model::Invo
 			
 		// There is error in the results.
 		} else
-			std::cout << "\033[1;31m [ERROR] \033[0m\t" << functionResult << std::endl;
+			std::cout << "\033[1;31m[ ERROR ]\033[0m\t" << functionResult << std::endl;
 
 	// Lambda returns error.
 	} else {
+		// printf("FAIL CALLBACK\n" );
 		Aws::Lambda::Model::InvokeResult& result = const_cast<Aws::Lambda::Model::InvokeResult&>(outcome.GetResult());
 
 		Aws::IOStream& payload = result.GetPayload();
 		Aws::String functionResult;
 		std::getline(payload, functionResult);
-		std::cout << "\033[1;31m [ERROR] \033[0m\t" << functionResult << std::endl;
+		std::cout << "\033[1;31m[ ERROR ]\033[0m\t" << functionResult << std::endl;
 	}
 }
 
@@ -77,7 +78,7 @@ callback(const Aws::Lambda::LambdaClient *client, const Aws::Lambda::Model::Invo
  * 
  */
 void
-invokeFunction(Aws::String funcName, char *dataserver, char* dport, char *weightserver, char *wport, int32_t layer, int32_t id) {
+invokeFunction(Aws::String funcName, char *dataserver, char *dport, char *weightserver, char *wport, int32_t layer, int32_t id) {
 	Aws::Lambda::Model::InvokeRequest invReq;
 	invReq.SetFunctionName(funcName);
 	invReq.SetInvocationType(Aws::Lambda::Model::InvocationType::RequestResponse);
@@ -92,6 +93,8 @@ invokeFunction(Aws::String funcName, char *dataserver, char* dport, char *weight
 	jsonPayload.WithInteger("id", id);
 	*payload << jsonPayload.View().WriteReadable();
 	invReq.SetBody(payload);
+	// printf("INVOKE DONE\n");
+
 	m_client->InvokeAsync(invReq, callback);
 }
 
@@ -146,7 +149,7 @@ main(int argc, char *argv[]) {
 	// Setup lambda client.
 	Aws::Client::ClientConfiguration clientConfig;
 	clientConfig.requestTimeoutMs = 900000;
-	clientConfig.region = "us-east-2";
+	clientConfig.region = "us-east-1";
 	m_client = Aws::MakeShared<Aws::Lambda::LambdaClient>(ALLOCATION_TAG, clientConfig);
 
 	//load IPs of servers
@@ -168,7 +171,6 @@ main(int argc, char *argv[]) {
 		try {
 			frontend.recv(&header);
 			frontend.recv(&dataserverIp);
-
 			zmq::message_t reply(3);
 			std::memcpy(reply.data(), "ACK", 3);
 			frontend.send(reply);
@@ -176,7 +178,7 @@ main(int argc, char *argv[]) {
 			std::cerr << ex.what() << std::endl;
 			return 13;
 		}
-		char* datservIp = new char[dataserverIp.size()+1];
+		char* datservIp = new char[dataserverIp.size() + 1];
 		std::memcpy(datservIp, dataserverIp.data(), dataserverIp.size());
 		datservIp[dataserverIp.size()] = '\0';
 
@@ -202,7 +204,7 @@ main(int argc, char *argv[]) {
 				std::cout << waddr << std::endl;
 				std::cout << wport << std::endl;
 				// invokeFunction("forward-prop-cpp", (char*)dataserverIp.data(), argv[3], waddr, wport, layer, i);
-				invokeFunction("matmul-cpp", (char*)dataserverIp.data(), argv[3], waddr, wport, layer, i);
+				invokeFunction("forward-prop-josehu", (char*)dataserverIp.data(), argv[3], waddr, wport, layer, i);
 
 				count++;
 				printf("c: %zu\n", count);

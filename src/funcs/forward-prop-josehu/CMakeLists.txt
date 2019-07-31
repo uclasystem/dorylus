@@ -1,12 +1,12 @@
 cmake_minimum_required(VERSION 3.5)
 set(CMAKE_CXX_STANDARD 11)
-project(forward-prop-shen LANGUAGES CXX)
+project(forward-prop-josehu LANGUAGES CXX)
 
 
 execute_process(COMMAND whoami OUTPUT_VARIABLE USER)
 string(REGEX REPLACE "\n$" "" USER "${USER}")	# Remove new-line char
 
-set(INST /usr/local)
+set(INST /home/${USER}/gnn-lambda/installs/out)
 
 set(ZMQ_INC ${INST}/include)
 set(ZMQ_LIB ${INST}/lib/libzmq.a)
@@ -24,7 +24,7 @@ include_directories( ${Boost_INCLUDE_DIRS} ${CBINC} )
 find_package(Boost REQUIRED)
 find_package(Threads REQUIRED)
 find_package(aws-lambda-runtime REQUIRED)
-add_executable(${PROJECT_NAME} "forward_prop_shen.cpp")
+add_executable(${PROJECT_NAME} "forward_prop_josehu.cpp")
 target_link_libraries(${PROJECT_NAME} PUBLIC ${Boost_LIBRARIES}
 		Threads::Threads AWS::aws-lambda-runtime ${BLLIB}
 		${CBLIB} ${ZMQ_LIB})

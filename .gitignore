@@ -2,10 +2,16 @@
 *.d
 out*
 *.bin
+**/.DS_Store
+
 inputs/data
 installs
 run/hostfile
 run/gvid
+run/nodeIp
+run/dshmachines
+run/cserverinfo
+run/zoo.basic
 config
 
 manage-ec2
@@ -20,3 +26,5 @@ vm
 **/output-files
 **/.out
 **/test
+
+utils/check

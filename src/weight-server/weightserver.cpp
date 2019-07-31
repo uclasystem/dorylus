@@ -30,20 +30,21 @@ public:
 	void work() {
 		worker.connect("inproc://backend");
 
+		std::cout << "[Weight] Starts listening for lambdas' requests..." << std::endl;
 		try {
 			while (true) {
 				zmq::message_t identity;
 				zmq::message_t header;
 				worker.recv(&identity);
 				worker.recv(&header);
-
-				int32_t cli_id = parse<int32_t>((char *) identity.data(), 0);
+				
+				int32_t chunkId = parse<int32_t>((char *) identity.data(), 0);
 				int32_t op = parse<int32_t>((char *) header.data(), 0);
 				int32_t layer = parse<int32_t>((char *) header.data(), 1);
 
 				std::string opStr = op == 0 ? "Push" : "Pull";
 				std::string accMsg = "[ACCEPTED] " + opStr + " from thread "
-				  				   + std::to_string(cli_id) + " for layer "
+				  				   + std::to_string(chunkId) + " for layer "
 				  				   + std::to_string(layer);
 				std::cout << accMsg << std::endl;
 
@@ -55,7 +56,7 @@ public:
 						recvUpdates(identity, layer, header);
 						break;
 					default:
-						std::cerr << "Unknown op requested." << std::endl;
+						std::cerr << "ServerWorker: Unknown Op code received." << std::endl;
 				}
 			}
 		} catch (std::exception& ex) {
@@ -118,9 +119,8 @@ public:
 			layers.push_back(Matrix(dims[u], dims[u + 1], dptr));
 		}
 
-		for (uint32_t u = 0; u < layers.size(); ++u) {
-			fprintf(stdout, "Layer %u Weights: %s\n", u, layers[u].shape().c_str());
-		}
+		for (uint32_t u = 0; u < layers.size(); ++u)
+			fprintf(stdout, "Layer %u Weights: %s\n", u, layers[u].str().c_str());
 	}
 
 	enum { kMaxThreads = 2 };
@@ -128,8 +128,7 @@ public:
 	void run() {
 		char host_port[50];
 		sprintf(host_port, "tcp://*:%u", port);
-                std::cout << "Binding weight server to "
-                  << host_port << "..." << std::endl;
+		std::cout << "Binding weight server to " << host_port << "..." << std::endl;
 		frontend.bind(host_port);
 		backend.bind("inproc://backend");
 
@@ -137,12 +136,13 @@ public:
 		std::vector<std::thread *> worker_threads;
 		for (int i = 0; i < kMaxThreads; ++i) {
 			workers.push_back(new ServerWorker(ctx, ZMQ_DEALER, layers));
+
 			worker_threads.push_back(new std::thread(std::bind(&ServerWorker::work, workers[i])));
 			worker_threads[i]->detach();
 		}
 
 		try {
-			zmq::proxy(static_cast<void*>(frontend), static_cast<void*>(backend), nullptr);
+			zmq::proxy(static_cast<void *>(frontend), static_cast<void *>(backend), nullptr);
 		} catch (std::exception& ex) {
 			std::cerr << "[ERROR in proxy] " << ex.what() << std::endl;
 		}

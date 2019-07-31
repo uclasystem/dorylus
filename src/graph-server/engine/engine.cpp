@@ -27,6 +27,7 @@ std::string Engine::layerConfigFile;
 unsigned Engine::dataserverPort;
 std::string Engine::coordserverIp;
 unsigned Engine::coordserverPort;
+LambdaComm *Engine::lambdaComm = NULL;
 IdType Engine::currId = 0;
 Lock Engine::lockCurrId;
 Lock Engine::lockRecvWaiters;
@@ -129,6 +130,9 @@ Engine::init(int argc, char *argv[]) {
     // Compact the graph.
     graph.compactGraph();
 
+    // Create the lambda communication manager.
+    lambdaComm = new LambdaComm(NodeManager::getNode(nodeId).pubip, dataserverPort, coordserverIp, coordserverPort, nodeId, 5, 1);
+
     timeInit += getTimer();
     printLog(nodeId, "Engine initialization complete.\n");
 
@@ -227,6 +231,8 @@ Engine::output() {
  */
 void
 Engine::destroy() {
+    printLog(nodeId, "Destroy the engine...\n");
+
     NodeManager::destroy();
     CommManager::destroy();
     computePool->destroyPool();
@@ -236,6 +242,8 @@ Engine::destroy() {
     lockRecvWaiters.destroy();
     condRecvWaitersEmpty.destroy();
     lockHalt.destroy();
+
+    delete lambdaComm;
 
     delete[] verticesZData;
     delete[] verticesActivationData;
@@ -294,20 +302,14 @@ Engine::worker(unsigned tid, void *args) {
                 //////////////////////////////////
                 // Send dataBuf to lambda HERE. //
                 //////////////////////////////////
-                Node nodeMe = NodeManager::getNode(nodeId);
-                LambdaComm lambdaComm(verticesDataBuf, nodeMe.pubip, dataserverPort, graph.getNumLocalVertices(), getNumFeats(), getNumFeats(iteration + 1), 5, 1);
-                
-                // Create and launch the sender & receiver workers.
-                std::thread t([&] {
-                    lambdaComm.run();
-                });
-                t.detach();
+
+                lambdaComm->startContext(verticesDataBuf, graph.getNumLocalVertices(), getNumFeats(), getNumFeats(iteration + 1), iteration);
 
                 // Trigger a request towards the coordicate server. Wait until the request completes.
-                std::thread t2([&] {
-                    lambdaComm.requestLambdas(coordserverIp, coordserverPort, iteration);
+                std::thread treq([&] {
+                    lambdaComm->requestLambdas();
                 });
-                t2.join();
+                treq.join();
 
                 //////////////////////////////
                 // Lambda threads finished. //
@@ -317,11 +319,11 @@ Engine::worker(unsigned tid, void *args) {
 
                 // Reset buffer area to be the activation data array from LambdaComm. This reduces 1 realloc() for resizing the buffer.
                 // Previous buffer should be called on delete at lambdaComm destruction.
-                verticesDataBuf = lambdaComm.getActivationData();
+                verticesDataBuf = lambdaComm->getActivationData();
 
                 // Flush the returned values from lambda to dataAll region.
                 for (IdType id = 0; id < graph.getNumLocalVertices(); ++id) {
-                    memcpy(vertexZDataPtr(id, getDataAllOffset(iteration + 1)), lambdaComm.getZData() + id * getNumFeats(iteration + 1),
+                    memcpy(vertexZDataPtr(id, getDataAllOffset(iteration + 1)), lambdaComm->getZData() + id * getNumFeats(iteration + 1),
                            getNumFeats(iteration + 1) * sizeof(FeatType));
                     memcpy(vertexActivationDataPtr(id, getDataAllOffset(iteration + 1)), verticesDataBuf + id * getNumFeats(iteration + 1),
                            getNumFeats(iteration + 1) * sizeof(FeatType));
@@ -357,8 +359,9 @@ Engine::worker(unsigned tid, void *args) {
                 //## Global Iteration barrier. ##//
                 NodeManager::barrier(LAYER_BARRIER);
 
-                // Step forward to a new iteration. 
+                // End this lambda communciation context and step forward to a new iteration.
                 ++iteration;
+                lambdaComm->endContext();
 
                 // There is a new layer ahead, please start a new iteration.
                 if (iteration < numLayers) {
@@ -730,22 +733,19 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
         printLog(nodeId, "Cannot open feature file: %s [Reason: %s]\n", featuresFileName.c_str(), std::strerror(errno));
 
     assert(infile.good());
-    printLog(nodeId,"Reading Feature\n");
 
     FeaturesHeaderType fHeader;
     infile.read((char *) &fHeader, sizeof(FeaturesHeaderType));
     assert(fHeader.numFeatures == layerConfig[0]);
 
     unsigned gvid = 0;
-
-    unsigned nFeats=fHeader.numFeatures;
+    
+    unsigned nFeats = fHeader.numFeatures;
     std::vector<FeatType> feature_vec;
     feature_vec.reserve(nFeats);
     FeatType curr;
-    // infile.read(reinterpret_cast<char*> (&curr) , sizeof(FeatType));
-    // printLog(nodeId,"Push back %f\n",curr);
 
-    while(infile.read(reinterpret_cast<char*> (&curr) , sizeof(FeatType))){
+    while (infile.read(reinterpret_cast<char *> (&curr) , sizeof(FeatType))){
         feature_vec.push_back(curr);
         if (feature_vec.size() == nFeats) {
             // Set the vertex's initial values, if it is one of mine local vertices / ghost vertices.
