@@ -1,5 +1,5 @@
-#ifndef __UTILS_HPP__
-#define __UTILS_HPP__
+#ifndef __GRAPH_UTILS_HPP__
+#define __GRAPH_UTILS_HPP__
 
 
 #include <cstdio>
@@ -39,4 +39,4 @@ void getIP(std::string *ip);
 void getPubIP(std::string& ip);
 
 
-#endif //__UTILS_HPP__
+#endif //__GRAPH_UTILS_HPP__

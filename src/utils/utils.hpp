@@ -1,5 +1,5 @@
-#ifndef __UTILS_HPP__
-#define __UTILS_HPP__
+#ifndef __GLOBAL_UTILS_HPP__
+#define __GLOBAL_UTILS_HPP__
 
 
 /** Feature type is float, so be consistent. */
@@ -101,4 +101,4 @@ struct Timer {
 };
 
 
-#endif // UTILS_HPP
+#endif // GLOBAL_UTILS_HPP
