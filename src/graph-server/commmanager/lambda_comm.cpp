@@ -46,11 +46,16 @@ ServerWorker::work() {
 			}
 		}
 	} catch (std::exception& ex) {
-		std::cerr << ex.what() << std::endl;
+		printLog(nodeId, "ERROR: %s\n", ex.what());
 	}
 }
 
 
+/**
+ *
+ * Sending & receiving matrix chunk to / from lambda threads.
+ * 
+ */
 void
 ServerWorker::sendMatrixChunk(zmq::socket_t& socket, zmq::message_t& client_id, int32_t partId) {
 	zmq::message_t header(HEADER_SIZE);
@@ -105,7 +110,7 @@ ServerWorker::recvMatrixChunks(zmq::socket_t& socket, zmq::message_t& client_id,
 	socket.send(client_id, ZMQ_SNDMORE);
 	socket.send(confirm);
 
-	// Check for total number of partitions received.
+	// Check for total number of partitions received. If all partitions received, wake up lambdaComm.
 	std::lock_guard<std::mutex> lock(count_mutex);
 	++count;
 	if (count == nParts)
@@ -129,6 +134,11 @@ ServerWorker::refreshState(FeatType *zData_, FeatType *actData_, int32_t nextIte
 	offset = partRows * partCols;
 	bufSize = offset * sizeof(FeatType);
 }
+
+
+///////////////////////////////////
+// Below are LambdaComm methods. //
+///////////////////////////////////
 
 
 /**
@@ -162,14 +172,11 @@ LambdaComm::endContext() {
 
 /**
  *
- * When a lambda connection is desired.
+ * Send a request to the coordination server for a given number of lambda threads.
  * 
  */
 void
 LambdaComm::requestLambdas() {
-
-	printLog(nodeId, "Sending lambda threads requests to coordserver...\n");
-
 	zmq::message_t header(HEADER_SIZE);
 	populateHeader((char *) header.data(), OP::REQ, layer, nParts);
 	sendsocket.send(header, ZMQ_SNDMORE);
@@ -178,12 +185,31 @@ LambdaComm::requestLambdas() {
 	std::memcpy(ip_msg.data(), nodeIp.c_str(), nodeIp.size());
 	sendsocket.send(ip_msg);
 	
-	zmq::message_t reply;
-	sendsocket.recv(&reply);
-
-	printLog(nodeId, "Coordserver accepts the request. Waiting on results...\n");
+	zmq::message_t confirm;
+	sendsocket.recv(&confirm);
 
 	// Block until all parts have been handled.
 	std::unique_lock<std::mutex> lk(m);
 	cv.wait(lk, [&]{ return counter == nParts; });
+}
+
+
+/**
+ *
+ * Send termination signal to coordserver and weightserver.
+ * 
+ */
+void
+LambdaComm::signalTermination() {
+
+	// Delete workers.
+	for (int i = 0; i < numListeners; ++i) {
+	    delete worker_threads[i];
+	    delete workers[i];
+	}
+
+	// Signal termination message.
+	zmq::message_t term_signal(HEADER_SIZE);
+	populateHeader((char *) term_signal.data(), OP::TERM, nodeId);
+	sendsocket.send(term_signal);
 }

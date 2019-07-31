@@ -17,68 +17,7 @@
 #include <vector>
 #include <zmq.hpp>
 #include "../utils/utils.hpp"
-
-
-static const int32_t HEADER_SIZE = sizeof(int32_t) * 4;
-enum OP { PUSH, PULL, REQ, RESP };
-
-
-/**
- *
- * Serialization fuctions.
- * 
- */
-template<class T>
-static void
-serialize(char *buf, int32_t offset, T val) {
-    std::memcpy(buf + (offset * sizeof(T)), &val, sizeof(T));
-}
-
-template<class T>
-static T
-parse(const char *buf, int32_t offset) {
-    T val;
-    std::memcpy(&val, buf + (offset * sizeof(T)), sizeof(T));
-    return val;
-}
-
-// ID represents either layer or data partition, depending on server responding.
-static void
-populateHeader(char *header, int32_t op, int32_t id, int32_t rows = 0, int32_t cols = 0) {
-    serialize<int32_t>(header, 0, op);
-    serialize<int32_t>(header, 1, id);
-    serialize<int32_t>(header, 2, rows);
-    serialize<int32_t>(header, 3, cols);
-}
-
-
-/**
- *
- * Struct for a matrix.
- * 
- */
-struct Matrix {
-    int32_t rows;
-    int32_t cols;
-    FeatType *data;
-
-    Matrix() { rows = 0; cols = 0; }
-    Matrix(int _rows, int _cols) { rows = _rows; cols = _cols; }
-    Matrix(int _rows, int _cols, FeatType *_data) { rows = _rows; cols = _cols; data = _data; }
-    Matrix(int _rows, int _cols, char *_data) { rows = _rows; cols = _cols; data = (FeatType *) _data; }
-
-    FeatType *getData() const { return data; }
-    size_t getDataSize() const { return rows * cols * sizeof(FeatType); }
-
-    void setRows(int32_t _rows) { rows = _rows; }
-    void setCols(int32_t _cols) { cols = _cols; }
-    void setDims(int32_t _rows, int32_t _cols) { rows = _rows; cols = _cols; }
-    void setData(FeatType *_data) { data = _data; }
-
-    bool empty() { return rows == 0 || cols == 0; }
-
-    std::string shape() { return "(" + std::to_string(rows) + "," + std::to_string(cols) + ")"; }
-};
+#include "../../utils/utils.hpp"
 
 
 /**
@@ -95,6 +34,7 @@ public:
         : matrix(matrix_), ctx(ctx_), worker(ctx, sock_type),
           nParts(nParts_), count(counter_), nodeId(nodeId_) { }
 
+    // Called at the start of a lambda communication context.
     void refreshState(FeatType *zData_, FeatType *actData_, int32_t nextIterCols_);
 
     // Continuously listens for incoming lambda connections and either sends
@@ -168,29 +108,27 @@ public:
             worker_threads[i]->detach();
         }
 
-        // Create a proxy pipe that connects frontend to backend. This thread hangs throughout the life
+        // Create a proxy pipe that connects frontend to backend. This thread hangs throughout the lifetime
         // of the engine.
         std::thread tproxy([&] {
             try {
                 zmq::proxy(static_cast<void *>(frontend), static_cast<void *>(backend), nullptr);
             } catch (std::exception& ex) {
-                std::cerr << ex.what() << std::endl;
-            }
-
-            for (int i = 0; i < numListeners; ++i) {    // Delete when context terminates.
-                delete worker_threads[i];
-                delete workers[i];
+                printLog(nodeId, "ERROR: %s\n", ex.what());
             }
         });
         tproxy.detach();
     }
     
+    // Start / End a lambda communication context.
     void startContext(FeatType *dataBuf_, int32_t rows_, int32_t cols_, int32_t nextIterCols_, unsigned layer_);
     void endContext();
 
-    // Sends a request to the coordination server for a given
-    // number of lambda threads.
+    // Send a request to the coordination server for a given number of lambda threads.
     void requestLambdas();
+
+    // Send termination signal to coordserver and weightserver.
+    void signalTermination();
 
     // Buffers for received results.
     FeatType *getZData() { return zData; }             // Z values.
