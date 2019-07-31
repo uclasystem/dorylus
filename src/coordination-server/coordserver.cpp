@@ -105,26 +105,8 @@ public:
         : coordserverPort(coordserverPort_), weightserverFile(weightserverFile_),
           weightserverPort(weightserverPort_), dataserverPort(dataserverPort_) {
           	loadWeightServers(weightserverAddrs,weightserverFile);
+          	std::cout<<"Num Servers "<< weightserverAddrs.size()<<std::endl;
     }
-
-    void loadWeightServers(std::vector<char*>& addresses,const std::string& wServersFile){
-		std::ifstream infile(wServersFile);
-		if (!infile.good())
-	        printf("Cannot open weight server file: %s [Reason: %s]\n", wServersFile.c_str(), std::strerror(errno));
-
-	    assert(infile.good());
-
-	    std::string line;
-	    while (!infile.eof()) {
-	        std::getline(infile, line);
-	        if (line.length() == 0)
-	        	continue;	
-	        boost::algorithm::trim(line);
-	    	char* addr=strdup(line.c_str());
-	    	addresses.push_back(addr);
-	    }
-	}
-
 
     // Runs the coordserver, keeps listening on dataserver's requests for lambda threads invocation.
     void run () {
@@ -166,7 +148,8 @@ public:
 
                 if (op == OP::TERM) {
                     terminate = true;
-                    sendShutdownMessage(weightserverIp, weightserverPort);
+                    for(std::size_t i = 0;i < weightserverAddrs.size();++i)
+                    	sendShutdownMessage(weightserverAddrs[i], weightserverPort);
                 } else {
                     std::string accMsg = "[ACCEPTED] Req for " + std::to_string(nThreadsReq)
                                        + " lambdas for layer " + std::to_string(layer);
@@ -189,7 +172,24 @@ public:
     }
 
 private:
+	//load server addresses from file
+	void loadWeightServers(std::vector<char*>& addresses,const std::string& wServersFile){
+		std::ifstream infile(wServersFile);
+		if (!infile.good())
+	        printf("Cannot open weight server file: %s [Reason: %s]\n", wServersFile.c_str(), std::strerror(errno));
 
+	    assert(infile.good());
+
+	    std::string line;
+	    while (!infile.eof()) {
+	        std::getline(infile, line);
+	        if (line.length() == 0)
+	        	continue;	
+	        boost::algorithm::trim(line);
+	    	char* addr=strdup(line.c_str());
+	    	addresses.push_back(addr);
+	    }
+	}
     /**
      * Sends a shutdown message to all the weightservers
      */
