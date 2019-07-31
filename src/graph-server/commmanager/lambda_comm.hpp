@@ -165,12 +165,16 @@ public:
             std::thread(std::bind(&ServerWorker::work, workers[i])).detach();
         }
 
-        // Create a proxy pipe that connects frontend to backend.
-        try {
-            zmq::proxy(static_cast<void *>(frontend), static_cast<void *>(backend), nullptr);
-        } catch (std::exception& ex) {
-            std::cerr << ex.what() << std::endl;
-        }
+        // Create a proxy pipe that connects frontend to backend. This thread hangs throughout the life
+        // of the engine.
+        std::thread tproxy([&] {
+            try {
+                zmq::proxy(static_cast<void *>(frontend), static_cast<void *>(backend), nullptr);
+            } catch (std::exception& ex) {
+                std::cerr << ex.what() << std::endl;
+            }
+        });
+        tproxy.detach();
     }
     
     void startContext(FeatType *dataBuf_, int32_t rows_, int32_t cols_, int32_t nextIterCols_, unsigned layer_);
