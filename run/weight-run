@@ -6,4 +6,4 @@ configFile=$1
 
 
 # Args: <Weightserver-Port> <Layerconfig-File>
-./build/weightserver 65432 ${configFile:=layerconfig}
+../build/weightserver 65432 ${configFile:=layerconfig}

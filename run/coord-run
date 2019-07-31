@@ -11,4 +11,4 @@ fi
 
 
 # Args: <Coordserver-Port> <Weightserver-IP> <Weightserver-Port> <Dataserver-Port>
-./build/lambda_sample 65430 $(${EC2} pubip) 65432 65431
+../build/lambda_sample 65430 $( ${EC2} pubip ) 65432 65431
