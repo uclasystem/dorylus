@@ -13,4 +13,4 @@ fi
 
 
 # Args: <Coordserver-Port> <Weightserver-IP> <Weightserver-Port> <Dataserver-Port>
-./build/coordination_server 65430 ${weightServerIp} 65432 65431
+./build/coordination_server 55430 ${weightServerIp} 55432 55431
