@@ -11,4 +11,4 @@ fi
 
 
 # Args: <Coordserver-Port> <Weightserver-IP> <Weightserver-Port> <Dataserver-Port>
-./build/coordination_server 55430 $( ./../utils/ec2 pubip ) 55432 55431
+./build/coordination_server 55430 $( ./utils/ec2 pubip ) 55432 55431
