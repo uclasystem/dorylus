@@ -192,3 +192,19 @@ LambdaComm::requestLambdas() {
 	std::unique_lock<std::mutex> lk(m);
 	cv.wait(lk, [&]{ return counter == nParts; });
 }
+
+/**
+ * Send message to the coordination server to shutdown
+ */
+void
+LambdaComm::sendShutdownMessage() {
+    // Send kill message
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader((char *) header.data(), OP::TERM);
+    sendsocket.send(header, ZMQ_SNDMORE);
+
+    // Send dummy message since coordination server
+    // expects an IP as well
+    zmq::message_t dummyIP;
+    sendsocket.send(dummyIP);
+}

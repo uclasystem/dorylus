@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cassert>
 #include <chrono>
+#include <condition_variable>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -13,6 +14,10 @@
 #include <boost/algorithm/string/trim.hpp>
 #include "../utils/utils.hpp"
 
+
+std::mutex m, term_mutex;
+std::condition_variable cv;
+bool finished = false;
 
 /**
  *
@@ -42,11 +47,13 @@ public:
                 int32_t op = parse<int32_t>((char *) header.data(), 0);
                 int32_t layer = parse<int32_t>((char *) header.data(), 1);
 
-                std::string opStr = op == 0 ? "Push" : "Pull";
-                std::string accMsg = "[ACCEPTED] " + opStr + " from thread "
-                                   + std::to_string(chunkId) + " for layer "
-                                   + std::to_string(layer);
-                std::cout << accMsg << std::endl;
+                if (op != OP::TERM) {
+                    std::string opStr = op == 0 ? "Push" : "Pull";
+                    std::string accMsg = "[ACCEPTED] " + opStr + " from thread "
+                        + std::to_string(chunkId) + " for layer "
+                        + std::to_string(layer);
+                    std::cout << accMsg << std::endl;
+                }
 
                 switch (op) {
                     case (OP::PULL):
@@ -54,6 +61,9 @@ public:
                         break;
                     case (OP::PUSH):
                         recvUpdates(identity, layer, header);
+                        break;
+                    case (OP::TERM):
+                        terminateServer(worker, identity);
                         break;
                     default:
                         std::cerr << "ServerWorker: Unknown Op code received." << std::endl;
@@ -82,6 +92,20 @@ private:
 
     void recvUpdates(zmq::message_t& client_id, int32_t layer, zmq::message_t& header) {
         // TODO: Receive updates from threads.
+    }
+
+    void terminateServer(zmq::socket_t& socket, zmq::message_t& client_id) {
+        std::cerr << "Terminating the servers" << std::endl;
+
+
+        std::lock_guard<std::mutex> lock(m);
+        socket.send(client_id, ZMQ_SNDMORE);
+        zmq::message_t term_conf(3);
+        std::memcpy(term_conf.data(), "ACK", 3);
+        socket.send(term_conf);
+
+        finished = true;
+        cv.notify_one();
     }
 
     std::vector<Matrix>& weight_list;
@@ -199,7 +223,18 @@ main(int argc, char *argv[]) {
     std::string configFileName = argv[2];
 
     WeightServer ws(weightserverPort, configFileName);
-    ws.run();
+    
+    // Run in a detached thread because so that we can wait
+    // on a condition variable
+    std::thread t([&]{
+        ws.run();
+    });
+    t.detach();
+
+    // Wait for one of the threads to mark the finished bool true
+    // then end the main thread
+    std::unique_lock<std::mutex> lk(m);
+    cv.wait(lk, [&]{ return finished; });
     
     return 0;
 }
