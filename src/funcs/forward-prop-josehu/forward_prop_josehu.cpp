@@ -49,7 +49,7 @@ requestMatrix(zmq::socket_t& socket, int32_t id) {
     } else {                    // Get matrix data.
         int32_t rows = parse<int32_t>((char *) respHeader.data(), 2);
         int32_t cols = parse<int32_t>((char *) respHeader.data(), 3);
-        zmq::message_t matxData(rows * cols * sizeof(DTYPE));
+        zmq::message_t matxData(rows * cols * sizeof(FeatType));
         socket.recv(&matxData);
 
         char *matxBuffer = new char[matxData.size()];
@@ -67,20 +67,24 @@ requestMatrix(zmq::socket_t& socket, int32_t id) {
  * 
  */
 void
-sendMatrix(Matrix& response, int32_t resType, zmq::socket_t& socket, bool duplicate, int32_t id) {
-    if (!duplicate) {
-        zmq::message_t header(HEADER_SIZE);
-        populateHeader((char *) header.data(), OP::PUSH, id, response.rows, response.cols);
-        socket.send(header, ZMQ_SNDMORE);
-    }
+sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, int32_t id) {
+    
+    // Send push header.
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader((char *) header.data(), OP::PUSH, id, zResult.rows, zResult.cols);
+    socket.send(header, ZMQ_SNDMORE);
 
-    zmq::message_t matxData(response.getDataSize());
-    std::memcpy(matxData.data(), response.getData(), response.getDataSize());
+    // Send zData and actData.
+    zmq::message_t zData(zResult.getDataSize());
+    std::memcpy(zData.data(), zResult.getData(), zResult.getDataSize());
+    zmq::message_t actData(actResult.getDataSize());
+    std::memcpy(actData.data(), actResult.getData(), actResult.getDataSize());
+    socket.send(zData, ZMQ_SNDMORE);
+    socket.send(actData);
 
-    if (!duplicate)
-        socket.send(matxData, ZMQ_SNDMORE);
-    else
-        socket.send(matxData);
+    // Wait for data settled reply.
+    zmq::message_t confirm;
+    socket.recv(&confirm);
 }
 
 
@@ -94,7 +98,7 @@ dot(Matrix& features, Matrix& weights) {
     int m = features.rows, k = features.cols, n = weights.cols;
     Matrix result(m, n);
 
-    auto resultData = new DTYPE[m * n];
+    auto resultData = new FeatType[m * n];
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, 1.0,
                 features.getData(), k, weights.getData(), n, 0.0, resultData, n);
 
@@ -111,8 +115,8 @@ dot(Matrix& features, Matrix& weights) {
  */
 Matrix
 activate(Matrix& mat) {
-    DTYPE *activationData = new DTYPE[mat.rows * mat.cols];
-    DTYPE *zData = mat.getData();
+    FeatType *activationData = new FeatType[mat.rows * mat.cols];
+    FeatType *zData = mat.getData();
     
     for (int i = 0; i < mat.rows * mat.cols; ++i)
         activationData[i] = std::tanh(zData[i]);
@@ -205,8 +209,7 @@ matmul(std::string dataserver, std::string weightserver, std::string dport, std:
         // Send back to dataserver.
         sendResTimer.start();
         std::cout << "< matmul > Sending results back..." << std::endl;
-        sendMatrix(z, 0, data_socket, false, id);
-        sendMatrix(activations, 1, data_socket, true, id);
+        sendMatrices(z, activations, data_socket, id);
         std::cout << "< matmul > Results sent." << std::endl;
         sendResTimer.stop();
 

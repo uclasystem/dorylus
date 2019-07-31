@@ -39,18 +39,23 @@ ServerWorker::work() {
 					sendMatrixChunk(worker, identity, partId);
 					break;
 				case (OP::PUSH):
-					recvMatrixChunks(worker, partId, rows, cols);
+					recvMatrixChunks(worker, identity, partId, rows, cols);
 					break;
 				default:
 					printLog(nodeId, "ServerWorker: Unknown Op code received.\n");
 			}
 		}
 	} catch (std::exception& ex) {
-		std::cerr << ex.what() << std::endl;
+		printLog(nodeId, "ERROR: %s\n", ex.what());
 	}
 }
 
 
+/**
+ *
+ * Sending & receiving matrix chunk to / from lambda threads.
+ * 
+ */
 void
 ServerWorker::sendMatrixChunk(zmq::socket_t& socket, zmq::message_t& client_id, int32_t partId) {
 	zmq::message_t header(HEADER_SIZE);
@@ -58,7 +63,7 @@ ServerWorker::sendMatrixChunk(zmq::socket_t& socket, zmq::message_t& client_id, 
 	// Reject a send request if the partition id is invalid.
 	if (partId >= nParts) {
 		populateHeader((char *) header.data(), -1, -1, -1, -1);
-		socket.send(client_id);
+		socket.send(client_id, ZMQ_SNDMORE);
 		socket.send(header);
 
 	// Partition id is valid, so send the matrix segment.
@@ -87,24 +92,27 @@ ServerWorker::sendMatrixChunk(zmq::socket_t& socket, zmq::message_t& client_id, 
 }
 
 void
-ServerWorker::recvMatrixChunks(zmq::socket_t& socket, int32_t partId, int32_t rows, int32_t cols) {
+ServerWorker::recvMatrixChunks(zmq::socket_t& socket, zmq::message_t& client_id, int32_t partId,
+	                           int32_t rows, int32_t cols) {
 	uint32_t offset = partId * partRows * cols;
 	FeatType *thisPartitionZStart = zData + offset;
 	FeatType *thisPartitionActStart = actData + offset;
 
+	// Receive the pushing-back results.
 	zmq::message_t data;
 	socket.recv(&data);
 	std::memcpy(thisPartitionZStart, data.data(), data.size());
-
 	socket.recv(&data);
 	std::memcpy(thisPartitionActStart, data.data(), data.size());
 
-	Matrix z(rows, cols, thisPartitionZStart);
-	Matrix act(rows, cols, thisPartitionActStart);
+	// Send data settled reply.
+	zmq::message_t confirm;
+	socket.send(client_id, ZMQ_SNDMORE);
+	socket.send(confirm);
 
+	// Check for total number of partitions received. If all partitions received, wake up lambdaComm.
 	std::lock_guard<std::mutex> lock(count_mutex);
 	++count;
-
 	if (count == nParts)
 		cv.notify_one();
 }
@@ -126,6 +134,11 @@ ServerWorker::refreshState(FeatType *zData_, FeatType *actData_, int32_t nextIte
 	offset = partRows * partCols;
 	bufSize = offset * sizeof(FeatType);
 }
+
+
+///////////////////////////////////
+// Below are LambdaComm methods. //
+///////////////////////////////////
 
 
 /**
@@ -159,14 +172,11 @@ LambdaComm::endContext() {
 
 /**
  *
- * When a lambda connection is desired.
+ * Send a request to the coordination server for a given number of lambda threads.
  * 
  */
 void
 LambdaComm::requestLambdas() {
-
-	printLog(nodeId, "Sending lambda threads requests to coordserver...\n");
-
 	zmq::message_t header(HEADER_SIZE);
 	populateHeader((char *) header.data(), OP::REQ, layer, nParts);
 	sendsocket.send(header, ZMQ_SNDMORE);
@@ -175,10 +185,8 @@ LambdaComm::requestLambdas() {
 	std::memcpy(ip_msg.data(), nodeIp.c_str(), nodeIp.size());
 	sendsocket.send(ip_msg);
 	
-	zmq::message_t reply;
-	sendsocket.recv(&reply);
-
-	printLog(nodeId, "Coordserver accepts the request. Waiting on results...\n");
+	zmq::message_t confirm;
+	sendsocket.recv(&confirm);
 
 	// Block until all parts have been handled.
 	std::unique_lock<std::mutex> lk(m);
