@@ -175,15 +175,13 @@ public:
             } catch (std::exception& ex) {
                 std::cerr << ex.what() << std::endl;
             }
+
+            for (int i = 0; i < numListeners; ++i) {    // Delete when context terminates.
+                delete workers[i];
+                delete worker_threads[i];
+            }
         });
         tproxy.detach();
-    }
-
-    ~LambdaComm() {
-        for (int i = 0; i < numListeners; ++i) {    // Delete when context terminates.
-            delete workers[i];
-            delete worker_threads[i];
-        }
     }
     
     void startContext(FeatType *dataBuf_, int32_t rows_, int32_t cols_, int32_t nextIterCols_, unsigned layer_);
