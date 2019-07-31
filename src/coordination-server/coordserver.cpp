@@ -17,13 +17,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <zmq.hpp>
-#include "../utils/utils.h"
-
-
-std::mutex m;
-std::condition_variable cv;
-int cnt = 0;
-int total = 0;
+#include "../utils/utils.hpp"
 
 
 static const char *ALLOCATION_TAG = "matmulLambda";
@@ -38,37 +32,37 @@ using namespace std::chrono;
  * Callback function to be called after receiving the respond from lambda threads.
  * 
  */
-void
+static void
 callback(const Aws::Lambda::LambdaClient *client, const Aws::Lambda::Model::InvokeRequest &invReq, const Aws::Lambda::Model::InvokeOutcome &outcome,
-	     const std::shared_ptr<const Aws::Client::AsyncCallerContext> &context) {
-	
-	// Lambda returns success
-	if (outcome.IsSuccess()) {
-		Aws::Lambda::Model::InvokeResult& result = const_cast<Aws::Lambda::Model::InvokeResult&>(outcome.GetResult());
+         const std::shared_ptr<const Aws::Client::AsyncCallerContext> &context) {
+    
+    // Lambda returns success
+    if (outcome.IsSuccess()) {
+        Aws::Lambda::Model::InvokeResult& result = const_cast<Aws::Lambda::Model::InvokeResult&>(outcome.GetResult());
 
-		// JSON Parsing not working from Boost to AWS.
-		Aws::IOStream& payload = result.GetPayload();
-		Aws::String functionResult;
-		std::getline(payload, functionResult);
+        // JSON Parsing not working from Boost to AWS.
+        Aws::IOStream& payload = result.GetPayload();
+        Aws::String functionResult;
+        std::getline(payload, functionResult);
 
-		// No error found means a successful respond.
-		if (functionResult.find("error") == std::string::npos) {
-			std::string num = functionResult.substr(0, functionResult.find(":")).c_str();
-			std::cout << "\033[1;32m[SUCCESS]\033[0m\t" << functionResult << std::endl;
-			
-		// There is error in the results.
-		} else
-			std::cout << "\033[1;31m[ ERROR ]\033[0m\t" << functionResult << std::endl;
+        // No error found means a successful respond.
+        if (functionResult.find("error") == std::string::npos) {
+            std::string num = functionResult.substr(0, functionResult.find(":")).c_str();
+            std::cout << "\033[1;32m[SUCCESS]\033[0m\t" << functionResult << std::endl;
+            
+        // There is error in the results.
+        } else
+            std::cout << "\033[1;31m[ ERROR ]\033[0m\t" << functionResult << std::endl;
 
-	// Lambda returns error.
-	} else {
-		Aws::Lambda::Model::InvokeResult& result = const_cast<Aws::Lambda::Model::InvokeResult&>(outcome.GetResult());
+    // Lambda returns error.
+    } else {
+        Aws::Lambda::Model::InvokeResult& result = const_cast<Aws::Lambda::Model::InvokeResult&>(outcome.GetResult());
 
-		Aws::IOStream& payload = result.GetPayload();
-		Aws::String functionResult;
-		std::getline(payload, functionResult);
-		std::cout << "\033[1;31m[ ERROR ]\033[0m\t" << functionResult << std::endl;
-	}
+        Aws::IOStream& payload = result.GetPayload();
+        Aws::String functionResult;
+        std::getline(payload, functionResult);
+        std::cout << "\033[1;31m[ ERROR ]\033[0m\t" << functionResult << std::endl;
+    }
 }
 
 
@@ -77,98 +71,114 @@ callback(const Aws::Lambda::LambdaClient *client, const Aws::Lambda::Model::Invo
  * Invoke a lambda function of the given named (previously registered on lambda cloud).
  * 
  */
-void
+static void
 invokeFunction(Aws::String funcName, char *dataserver, char *dport, char *weightserver, char *wport, int32_t layer, int32_t id) {
-	Aws::Lambda::Model::InvokeRequest invReq;
-	invReq.SetFunctionName(funcName);
-	invReq.SetInvocationType(Aws::Lambda::Model::InvocationType::RequestResponse);
-	invReq.SetLogType(Aws::Lambda::Model::LogType::Tail);
-	std::shared_ptr<Aws::IOStream> payload = Aws::MakeShared<Aws::StringStream>("FunctionTest");
-	Aws::Utils::Json::JsonValue jsonPayload;
-	jsonPayload.WithString("dataserver", dataserver);
-	jsonPayload.WithString("weightserver", weightserver);
-	jsonPayload.WithString("wport", wport);
-	jsonPayload.WithString("dport", dport);
-	jsonPayload.WithInteger("layer", layer);
-	jsonPayload.WithInteger("id", id);
-	*payload << jsonPayload.View().WriteReadable();
-	invReq.SetBody(payload);
-	m_client->InvokeAsync(invReq, callback);
+    Aws::Lambda::Model::InvokeRequest invReq;
+    invReq.SetFunctionName(funcName);
+    invReq.SetInvocationType(Aws::Lambda::Model::InvocationType::RequestResponse);
+    invReq.SetLogType(Aws::Lambda::Model::LogType::Tail);
+    std::shared_ptr<Aws::IOStream> payload = Aws::MakeShared<Aws::StringStream>("FunctionTest");
+    Aws::Utils::Json::JsonValue jsonPayload;
+    jsonPayload.WithString("dataserver", dataserver);
+    jsonPayload.WithString("weightserver", weightserver);
+    jsonPayload.WithString("wport", wport);
+    jsonPayload.WithString("dport", dport);
+    jsonPayload.WithInteger("layer", layer);
+    jsonPayload.WithInteger("id", id);
+    *payload << jsonPayload.View().WriteReadable();
+    invReq.SetBody(payload);
+    m_client->InvokeAsync(invReq, callback);
 }
 
 
 /**
  *
- * Coordination server keeps listening on the dataserver's request of issuing lambda threads.
+ * Class of the coordserver. Coordination server keeps listening on the dataserver's request of issuing lambda threads.
  * 
  */
+class CoordServer {
+
+public:
+
+    CoordServer(char *coordserverPort_, char *weightserverIp_, char *weightserverPort_, char *dataserverPort_)
+        : coordserverPort(coordserverPort_), weightserverIp(weightserverIp_),
+          weightserverPort(weightserverPort_), dataserverPort(dataserverPort_) { }
+
+    // Runs the coordserver, keeps listening on dataserver's requests for lambda threads invocation.
+    void run () {
+        zmq::context_t ctx(1);
+        zmq::socket_t frontend(ctx, ZMQ_REP);
+        char host_port[50];
+        sprintf(host_port, "tcp://*:%s", coordserverPort);
+        std::cout << "Binding coordination server to " << host_port << "..." << std::endl;
+        frontend.bind(host_port);
+
+        // Setup lambda client.
+        Aws::Client::ClientConfiguration clientConfig;
+        clientConfig.requestTimeoutMs = 900000;
+        clientConfig.region = "us-east-2";
+        m_client = Aws::MakeShared<Aws::Lambda::LambdaClient>(ALLOCATION_TAG, clientConfig);
+
+        // Keeps listening on dataserver's requests.
+        std::cout << "[Coord] Starts listening for dataserver's requests..." << std::endl;
+        
+        try {
+            while (true) {
+
+                // Wait on requests.
+                zmq::message_t header;
+                zmq::message_t dataserverIp;
+                frontend.recv(&header);
+                frontend.recv(&dataserverIp);
+
+                // Send ACK confirm reply.
+                zmq::message_t confirm;
+                frontend.send(confirm);
+
+                // Parse the request.
+                int32_t layer = parse<int32_t>((char *) header.data(), 1);
+                int32_t nThreadsReq = parse<int32_t>((char *) header.data(), 2);
+
+                std::string accMsg = "[ACCEPTED] Req for " + std::to_string(nThreadsReq)
+                                   + " lambdas for layer " + std::to_string(layer);
+                std::cout << accMsg << std::endl;
+
+                // Issue a bunch of lambda threads to serve the request.
+                for (int i = 0; i < nThreadsReq; i++)
+                    invokeFunction("forward-prop-josehu", (char *) dataserverIp.data(), dataserverPort, weightserverIp, weightserverPort,
+                                   layer, i);
+            }
+        } catch (std::exception& ex) {
+            std::cerr << "[ERROR] " << ex.what() << std::endl;
+        }
+    }
+
+private:
+
+    char *coordserverPort;
+    char *weightserverIp;
+    char *weightserverPort;
+    char *dataserverPort;
+};
+
+
+/** Main entrance: Starts a coordserver instance and run. */
 int
 main(int argc, char *argv[]) {
-	Aws::SDKOptions options;
-	Aws::InitAPI(options);
+    assert(argc == 5);
+    char *coordserverPort = argv[1];
+    char *weightserverIp = argv[2];
+    char *weightserverPort = argv[3];
+    char *dataserverPort = argv[4];
 
-	assert(argc == 5);
+    Aws::SDKOptions options;
+    Aws::InitAPI(options);
 
-	// Setup ZeroMQ.
-	zmq::context_t ctx(1);
-	zmq::socket_t frontend(ctx, ZMQ_REP);
-	char host_port[50];
-	sprintf(host_port, "tcp://*:%s", argv[1]);
-	std::cout << "Binding coordination server to "
-           << host_port << "..." << std::endl;
-	frontend.bind(host_port);
+    CoordServer cs(coordserverPort, weightserverIp, weightserverPort, dataserverPort);
+    cs.run();
 
-	// Setup lambda client.
-	Aws::Client::ClientConfiguration clientConfig;
-	clientConfig.requestTimeoutMs = 900000;
-	clientConfig.region = "us-east-2";
-	m_client = Aws::MakeShared<Aws::Lambda::LambdaClient>(ALLOCATION_TAG, clientConfig);
+    m_client = nullptr;
+    Aws::ShutdownAPI(options);
 
-	// Keeps listening on dataserver's requests.
-	std::cout << "[Coord] Starts listening for dataserver's requests..." << std::endl;
-	while (1) {
-		zmq::message_t header;
-		zmq::message_t dataserverIp;
-
-		try {
-			frontend.recv(&header);
-			frontend.recv(&dataserverIp);
-
-			zmq::message_t reply(3);
-			std::memcpy(reply.data(), "ACK", 3);
-			frontend.send(reply);
-		} catch (std::exception& ex) {
-			std::cerr << ex.what() << std::endl;
-			return 13;
-		}
-		char* datservIp = new char[dataserverIp.size() + 1];
-		std::memcpy(datservIp, dataserverIp.data(), dataserverIp.size());
-		datservIp[dataserverIp.size()] = '\0';
-
-                std::string dataserverip = datservIp;
-                std::string dport = argv[2];
-                std::string wghtserverip = argv[3];
-                std::string wport = argv[4];
-
-		int32_t layer = parse<int32_t>((char *) header.data(), 1);
-		int32_t nThreadsReq = parse<int32_t>((char *) header.data(), 2);
-
-		std::string accMsg = "[ACCEPTED] Req for " + std::to_string(nThreadsReq)
-		  + " lambdas for layer " + std::to_string(layer)
-		  + " from " + datservIp;
-		std::cout << accMsg << std::endl;
-		total = nThreadsReq;
-
-		// Get a request. Issue a bunch of lambda threads to serve the request.
-		{
-			for (int i = 0; i < nThreadsReq; i++) {
-				invokeFunction("forward-prop-josehu", (char*)dataserverIp.data(), argv[4], argv[2], argv[3], layer, i);
-			}
-		}
-	}
-
-	m_client = nullptr;
-	Aws::ShutdownAPI(options);
-
-	return 0;
+    return 0;
 }

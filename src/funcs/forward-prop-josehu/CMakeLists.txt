@@ -6,7 +6,7 @@ project(forward-prop-josehu LANGUAGES CXX)
 execute_process(COMMAND whoami OUTPUT_VARIABLE USER)
 string(REGEX REPLACE "\n$" "" USER "${USER}")	# Remove new-line char
 
-set(INST /home/${USER}/gnn-lambda/installs/out)
+set(INST /usr/local)
 
 set(ZMQ_INC ${INST}/include)
 set(ZMQ_LIB ${INST}/lib/libzmq.a)
