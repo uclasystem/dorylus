@@ -6,8 +6,4 @@ configFile=$1
 
 
 # Args: <Weightserver-Port> <Layerconfig-File>
-<<<<<<< HEAD:run/weight-run
-../build/weight_server 65432 ${configFile:=layerconfig}
-=======
-./build/weightserver 65432 ${configFile:=layerconfig}
->>>>>>> ef0826a... updating to correct ports on my branch:src/weight-server/run
+../build/weightserver 65432 ${configFile:=layerconfig}
