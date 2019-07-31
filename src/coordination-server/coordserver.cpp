@@ -146,7 +146,8 @@ public:
         std::cout << "[Coord] Starts listening for dataserver's requests..." << std::endl;
        
         try {
-            while (true) {
+            bool terminate = false;
+            while (!terminate) {
 
                 // Wait on requests.
                 zmq::message_t header;
@@ -159,21 +160,27 @@ public:
                 frontend.send(confirm);
 
                 // Parse the request.
+                int32_t op = parse<int32_t>((char *) header.data(), 0);
                 int32_t layer = parse<int32_t>((char *) header.data(), 1);
                 int32_t nThreadsReq = parse<int32_t>((char *) header.data(), 2);
 
-                std::string accMsg = "[ACCEPTED] Req for " + std::to_string(nThreadsReq)
-                                   + " lambdas for layer " + std::to_string(layer);
-                std::cout << accMsg << std::endl;
+                if (op == OP::TERM) {
+                    terminate = true;
+                    sendShutdownMessage(weightserverIp, weightserverPort);
+                } else {
+                    std::string accMsg = "[ACCEPTED] Req for " + std::to_string(nThreadsReq)
+                                       + " lambdas for layer " + std::to_string(layer);
+                    std::cout << accMsg << std::endl;
 
-                // Issue a bunch of lambda threads to serve the request.
-                for (int i = 0; i < nThreadsReq; i++){
-                	char * weightserverIp=weightserverAddrs[req_count%weightserverAddrs.size()];
-					std::cout <<"Send to:" << weightserverIp << std::endl;
-                    invokeFunction("forward-prop-josehu", (char *) dataserverIp.data(), dataserverPort, weightserverIp, weightserverPort,
-                                   layer, i);
-                    req_count++;
-					printf("Req Cnt: %zu\n", req_count);
+                    // Issue a bunch of lambda threads to serve the request.
+                    for (int i = 0; i < nThreadsReq; i++){
+                    	char * weightserverIp=weightserverAddrs[req_count%weightserverAddrs.size()];
+						std::cout <<"Send to:" << weightserverIp << std::endl;
+                        invokeFunction("forward-prop-josehu", (char *) dataserverIp.data(), dataserverPort, weightserverIp, weightserverPort,
+                                       layer, i);
+                   		req_count++;
+						printf("Req Cnt: %zu\n", req_count);
+					}
                 }
             }
         } catch (std::exception& ex) {
@@ -182,6 +189,24 @@ public:
     }
 
 private:
+
+    /**
+     * Sends a shutdown message to all the weightservers
+     */
+    void sendShutdownMessage(char *weightserverPort, char *weightserverIp) {
+        char identity[] = "coord";
+        char wHostPort[50];
+        sprintf(wHostPort, "tcp://%s:%s", weightserverPort, weightserverIp);
+
+        zmq::context_t ctx(1);
+        zmq::socket_t weightsocket(ctx, ZMQ_DEALER);
+        weightsocket.setsockopt(ZMQ_IDENTITY, identity, sizeof(identity));
+
+        zmq::message_t header(HEADER_SIZE);
+        populateHeader((char *) header.data(), OP::TERM);
+        weightsocket.connect(wHostPort);
+        weightsocket.send(header);
+    }
 
     char *coordserverPort;
     char *weightserverFile;

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 
 set(CMAKE_CXX_STANDARD 11)
-project(lambda_sample LANGUAGES CXX)
+project(coordination_server LANGUAGES CXX)
 
 
 execute_process(COMMAND whoami OUTPUT_VARIABLE USER)
@@ -19,6 +19,6 @@ find_package(Threads REQUIRED)
 find_package(AWSSDK REQUIRED COMPONENTS lambda)
 
 
-add_executable(lambda_sample "coordserver.cpp")
-target_link_libraries(lambda_sample PUBLIC ${ZMQ_LIB} ${AWSSDK_LINK_LIBRARIES} Threads::Threads)
-target_compile_options(lambda_sample PRIVATE "-Wall" "-Werror")
+add_executable(${PROJECT_NAME} "coordserver.cpp")
+target_link_libraries(${PROJECT_NAME} PUBLIC ${ZMQ_LIB} ${AWSSDK_LINK_LIBRARIES} Threads::Threads)
+target_compile_options(${PROJECT_NAME} PRIVATE "-Wall" "-Werror")

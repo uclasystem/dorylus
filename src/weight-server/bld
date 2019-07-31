@@ -12,4 +12,5 @@ cmake ..
 
 if [ $? -eq 0 ]; then
 	make
+        mv weight_server ../../../build/
 fi	

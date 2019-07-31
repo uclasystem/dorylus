@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.5)
 
 
 set(CMAKE_CXX_STANDARD 11)
-project(weightserver LANGUAGES CXX)
+project(weight_server LANGUAGES CXX)
 
 
 execute_process(COMMAND whoami OUTPUT_VARIABLE USER)

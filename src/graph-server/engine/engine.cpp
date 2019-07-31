@@ -388,6 +388,8 @@ Engine::worker(unsigned tid, void *args) {
                     //## Worker barrier 2: Going to die. ##//
                     barComp.wait();
 
+                    lambdaComm->sendShutdownMessage();
+
                     return;
                 }
             }

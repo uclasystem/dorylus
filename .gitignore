@@ -9,9 +9,11 @@ installs
 run/hostfile
 run/gvid
 run/nodeIp
+<<<<<<< HEAD
 run/dshmachines
 run/cserverinfo
 run/zoo.basic
+run/cserverinfo
 config
 
 manage-ec2
