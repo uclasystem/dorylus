@@ -71,7 +71,6 @@ def process_options(ctx, args):
 			print(arn)
 		elif args[1] == 'info':
 			quoted_tag = "'" + ctx.tag + "'"
-			print("Getting instance info for " + quoted_tag)
 			response = ec2_cli.describe_instances(Filters=[{ 'Name': 'tag:Type', 'Values': [eval(quoted_tag)] }])
 
 			running = 0
