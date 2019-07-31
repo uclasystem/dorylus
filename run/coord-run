@@ -1,9 +1,11 @@
 #! /bin/bash
 
-cd $( dirname $0 )
+cd $( dirname $0 )/..
 
-EC2="../../utils/ec2"
+# First argument is the idea of the node running the weight server
+weightserverNode=${1}
 
+weightServerIp=$( . .venv/bin/activate; python3 -m ec2_manager ${weightserverNode:=0} pubip )
 
 if [ ! -d ./results ]; then
 	mkdir results
@@ -11,4 +13,4 @@ fi
 
 
 # Args: <Coordserver-Port> <Weightserver-IP> <Weightserver-Port> <Dataserver-Port>
-../build/lambda_sample 65430 $( ${EC2} pubip ) 65432 65431
+./build/coordination_server 65430 ${weightServerIp} 65432 65431

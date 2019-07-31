@@ -9,16 +9,26 @@
 ##	  b+r to build and run benchmark
 ##	Note: File could definitely be cleaned up...
 
-cd $( dirname $0 )/../build
+cd $( dirname $0 )
 
-make clean
-make -s mode=debug
-
-if [ $? -eq 0 ]; then 
-	cd ..
-	./utils/send_file build/gnn-lambda.bin
-    echo -e "\e[92;1mSuccessfully built the system, congrats ;)\e[0m"
+if [[ ${1} == "coord" ]]; then
+    cd ../src/coordination-server/
+    ./bld
+elif [[ ${1} == "weights" ]]; then
+    cd ../src/weight-server/
+    ./bld
 else
-    echo -e "\e[91;1mBuild failed!\e[0m"
-	exit 1
+    cd ../build
+
+    make clean
+    make -s mode=debug
+
+    if [ $? -eq 0 ]; then 
+            cd ..
+            ./utils/send_file build/gnn-lambda.bin
+        echo -e "\e[92;1mSuccessfully built the system, congrats ;)\e[0m"
+    else
+        echo -e "\e[91;1mBuild failed!\e[0m"
+            exit 1
+    fi
 fi
