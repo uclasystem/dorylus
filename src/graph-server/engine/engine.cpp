@@ -131,8 +131,7 @@ Engine::init(int argc, char *argv[]) {
     graph.compactGraph();
 
     // Create the lambda communication manager.
-    Node nodeMe = NodeManager::getNode(nodeId);
-    lambdaComm = new LambdaComm(nodeMe.pubip, dataserverPort, coordserverIp, coordserverPort, nodeId, 5, 1);
+    lambdaComm = new LambdaComm(NodeManager::getNode(nodeId).pubip, dataserverPort, coordserverIp, coordserverPort, nodeId, 5, 1);
 
     timeInit += getTimer();
     printLog(nodeId, "Engine initialization complete.\n");
@@ -232,6 +231,8 @@ Engine::output() {
  */
 void
 Engine::destroy() {
+    printLog(nodeId, "Destroy the engine...\n");
+
     NodeManager::destroy();
     CommManager::destroy();
     computePool->destroyPool();
@@ -303,12 +304,6 @@ Engine::worker(unsigned tid, void *args) {
                 //////////////////////////////////
 
                 lambdaComm->startContext(verticesDataBuf, graph.getNumLocalVertices(), getNumFeats(), getNumFeats(iteration + 1), iteration);
-                
-                // Create and launch the sender & receiver workers.
-                std::thread trun([&] {
-                    lambdaComm->run();
-                });
-                trun.detach();
 
                 // Trigger a request towards the coordicate server. Wait until the request completes.
                 std::thread treq([&] {
