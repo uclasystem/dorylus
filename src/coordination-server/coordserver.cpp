@@ -18,6 +18,7 @@
 #include <unistd.h>
 #include <zmq.hpp>
 #include "../utils/utils.h"
+#include <boost/algorithm/string/trim.hpp>
 
 std::mutex m;
 std::condition_variable cv;
@@ -42,7 +43,6 @@ callback(const Aws::Lambda::LambdaClient *client, const Aws::Lambda::Model::Invo
 	     const std::shared_ptr<const Aws::Client::AsyncCallerContext> &context) {
 	// Lambda returns success
 	if (outcome.IsSuccess()) {
-		// printf("SUCCESS CALLBACK\n" );
 		Aws::Lambda::Model::InvokeResult& result = const_cast<Aws::Lambda::Model::InvokeResult&>(outcome.GetResult());
 
 		// JSON Parsing not working from Boost to AWS.
@@ -61,9 +61,7 @@ callback(const Aws::Lambda::LambdaClient *client, const Aws::Lambda::Model::Invo
 
 	// Lambda returns error.
 	} else {
-		// printf("FAIL CALLBACK\n" );
 		Aws::Lambda::Model::InvokeResult& result = const_cast<Aws::Lambda::Model::InvokeResult&>(outcome.GetResult());
-
 		Aws::IOStream& payload = result.GetPayload();
 		Aws::String functionResult;
 		std::getline(payload, functionResult);
@@ -93,13 +91,13 @@ invokeFunction(Aws::String funcName, char *dataserver, char *dport, char *weight
 	jsonPayload.WithInteger("id", id);
 	*payload << jsonPayload.View().WriteReadable();
 	invReq.SetBody(payload);
-	// printf("INVOKE DONE\n");
+	printf("INVOKE DONE\n");
 
 	m_client->InvokeAsync(invReq, callback);
 }
 
 
-std::size_t loadWeightServers(std::vector<char*>& addresses,std::vector<char*>& ports,const std::string& wServersFile){
+std::size_t loadWeightServers(std::vector<char*>& addresses,const std::string& wServersFile){
 	std::ifstream infile(wServersFile);
 	if (!infile.good())
         printf("Cannot open weight server file: %s [Reason: %s]\n", wServersFile.c_str(), std::strerror(errno));
@@ -111,13 +109,11 @@ std::size_t loadWeightServers(std::vector<char*>& addresses,std::vector<char*>& 
         std::getline(infile, line);
         if (line.length() == 0)
         	continue;	
-        int space_index=line.find_first_of(' ');
-    	char* addr=strdup(line.substr(0,space_index).c_str());
-    	char* port=strdup(line.substr(space_index+1).c_str());
+        boost::algorithm::trim(line);
+    	char* addr=strdup(line.c_str());
     	addresses.push_back(addr);
-    	ports.push_back(port);
     }
-    return ports.size();
+    return addresses.size();
 }
 
 /**
@@ -130,12 +126,7 @@ main(int argc, char *argv[]) {
 	Aws::SDKOptions options;
 	Aws::InitAPI(options);
 
-	assert(argc == 4);
-	// printf("Num arg: %d\n",argc);
-	// for (int i =0;i<argc;++i){
-	// 	printf("Arg: %s\n",argv[i]);
-	// }
-	
+	assert(argc == 5);
 
 	// Setup ZeroMQ.
 	zmq::context_t ctx(1);
@@ -149,16 +140,14 @@ main(int argc, char *argv[]) {
 	// Setup lambda client.
 	Aws::Client::ClientConfiguration clientConfig;
 	clientConfig.requestTimeoutMs = 900000;
-	clientConfig.region = "us-east-1";
+	clientConfig.region = "us-east-2";
 	m_client = Aws::MakeShared<Aws::Lambda::LambdaClient>(ALLOCATION_TAG, clientConfig);
 
 	//load IPs of servers
 	std::vector<char*> addresses;
-	std::vector<char*> ports;
-	std::size_t numWeightServers=loadWeightServers(addresses,ports,argv[2]);
+	std::size_t numWeightServers=loadWeightServers(addresses,argv[2]);
 	for(size_t i=0;i<numWeightServers;++i){
-		std::cout<<"add " << addresses[i]<<std::endl;
-		std::cout<<"port " << ports[i]<<std::endl;
+		std::cout<<"addr " << addresses[i]<<std::endl;
 	}
 	std::size_t count=0;
 
@@ -183,7 +172,8 @@ main(int argc, char *argv[]) {
 		datservIp[dataserverIp.size()] = '\0';
 
         std::string dataserverip = datservIp;
-	    std::string dport = argv[2];
+	    char* dport = argv[4];
+	    char* wport = argv[3];
 
 		int32_t layer = parse<int32_t>((char *) header.data(), 1);
 		int32_t nThreadsReq = parse<int32_t>((char *) header.data(), 2);
@@ -197,15 +187,11 @@ main(int argc, char *argv[]) {
 		// Get a request. Issue a bunch of lambda threads to serve the request.
 		{
 			for (int i = 0; i < nThreadsReq; i++){
-				printf("i: %d\n", i);
-				printf("count mod numWeightServers: %zu\n", count%numWeightServers);
+				// printf("i: %d\n", i);
+				// printf("count mod numWeightServers: %zu\n", count%numWeightServers);
 				char * waddr=addresses[count%numWeightServers];
-				char * wport=ports[count%numWeightServers];
-				std::cout << waddr << std::endl;
-				std::cout << wport << std::endl;
-				// invokeFunction("forward-prop-cpp", (char*)dataserverIp.data(), argv[3], waddr, wport, layer, i);
-				invokeFunction("forward-prop-josehu", (char*)dataserverIp.data(), argv[3], waddr, wport, layer, i);
-
+				std::cout <<"Lambda Will Request to [Node "<< count%numWeightServers<<"]: "<< waddr << std::endl;
+				invokeFunction("forward-prop-josehu", (char*)dataserverIp.data(), dport,waddr, wport, layer, i);
 				count++;
 				printf("c: %zu\n", count);
 			}
