@@ -3,13 +3,13 @@
 out*
 *.bin
 **/.DS_Store
+*.swp
 
 inputs/data
 installs
 run/hostfile
 run/gvid
 run/nodeIp
-<<<<<<< HEAD
 run/dshmachines
 run/cserverinfo
 run/zoo.basic

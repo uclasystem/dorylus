@@ -51,8 +51,8 @@ public:
                 if (op != OP::TERM) {
                     std::string opStr = op == 0 ? "Push" : "Pull";
                     std::string accMsg = "[ACCEPTED] " + opStr + " from thread "
-                        + std::to_string(chunkId) + " for layer "
-                        + std::to_string(layer);
+                                       + std::to_string(chunkId) + " for layer "
+                                       + std::to_string(layer);
                     std::cout << accMsg << std::endl;
                 }
 

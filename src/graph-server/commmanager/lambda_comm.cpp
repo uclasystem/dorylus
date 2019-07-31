@@ -29,10 +29,10 @@ ServerWorker::work() {
 			int32_t rows = parse<int32_t>((char *) header.data(), 2);
 			int32_t cols = parse<int32_t>((char *) header.data(), 3);
 
-			std::string opStr = op == 0 ? "Push" : "Pull";
-			std::string accMsg = opStr + " from thread " + std::to_string(chunkId)
-			                   + " for partition " + std::to_string(partId);
-			printLog(nodeId, "AccMSG: %s.\n", accMsg.c_str());
+			// std::string opStr = op == 0 ? "Push" : "Pull";
+			// std::string accMsg = opStr + " from thread " + std::to_string(chunkId)
+			//                    + " for partition " + std::to_string(partId);
+			// printLog(nodeId, "AccMSG: %s.\n", accMsg.c_str());
 
 			switch (op) {
 				case (OP::PULL):

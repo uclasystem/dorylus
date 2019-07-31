@@ -142,6 +142,7 @@ public:
                 int32_t nThreadsReq = parse<int32_t>((char *) header.data(), 2);
 
                 if (op == OP::TERM) {
+                    std::cerr << "Terminating the servers..." << std::endl;
                     terminate = true;
                     sendShutdownMessage(weightserverIp, weightserverPort);
                 } else {
