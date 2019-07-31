@@ -109,7 +109,8 @@ private:
 
     // Accepts an incoming connection from a lambda thread and receives
     // two matrices, a 'Z' matrix and the 'activations' matrix.
-    void recvMatrixChunks(zmq::socket_t& socket, int32_t partId, int32_t rows, int32_t cols);
+    void recvMatrixChunks(zmq::socket_t& socket, zmq::message_t& client_id, int32_t partId,
+                          int32_t rows, int32_t cols);
 
     Matrix& matrix;
 

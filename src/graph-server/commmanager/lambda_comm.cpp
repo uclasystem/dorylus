@@ -39,7 +39,7 @@ ServerWorker::work() {
 					sendMatrixChunk(worker, identity, partId);
 					break;
 				case (OP::PUSH):
-					recvMatrixChunks(worker, partId, rows, cols);
+					recvMatrixChunks(worker, identity, partId, rows, cols);
 					break;
 				default:
 					printLog(nodeId, "ServerWorker: Unknown Op code received.\n");
@@ -87,24 +87,31 @@ ServerWorker::sendMatrixChunk(zmq::socket_t& socket, zmq::message_t& client_id, 
 }
 
 void
-ServerWorker::recvMatrixChunks(zmq::socket_t& socket, int32_t partId, int32_t rows, int32_t cols) {
+ServerWorker::recvMatrixChunks(zmq::socket_t& socket, zmq::message_t& client_id, int32_t partId,
+	                           int32_t rows, int32_t cols) {
 	uint32_t offset = partId * partRows * cols;
 	FeatType *thisPartitionZStart = zData + offset;
 	FeatType *thisPartitionActStart = actData + offset;
 
+	// Send push accept reply.
+	zmq::message_t confirm;
+	socket.send(client_id, ZMQ_SNDMORE);
+	socket.send(confirm);
+
+	// Receive the pushing-back results.
 	zmq::message_t data;
 	socket.recv(&data);
 	std::memcpy(thisPartitionZStart, data.data(), data.size());
-
 	socket.recv(&data);
 	std::memcpy(thisPartitionActStart, data.data(), data.size());
 
-	Matrix z(rows, cols, thisPartitionZStart);
-	Matrix act(rows, cols, thisPartitionActStart);
+	// Send data settled reply.
+	socket.send(client_id, ZMQ_SNDMORE);
+	socket.send(confirm);
 
+	// Check for total number of partitions received.
 	std::lock_guard<std::mutex> lock(count_mutex);
 	++count;
-
 	if (count == nParts)
 		cv.notify_one();
 }

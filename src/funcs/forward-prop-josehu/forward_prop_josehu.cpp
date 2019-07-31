@@ -69,18 +69,25 @@ requestMatrix(zmq::socket_t& socket, int32_t id) {
 void
 sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, int32_t id) {
     
+    // Send push header.
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char *) header.data(), OP::PUSH, id, zResult.rows, zResult.cols);
+    socket.send(header);
 
+    // Wait for push accept reply.
+    zmq::message_t confirm;
+    socket.recv(&confirm);
+
+    // Send zData and actData.
     zmq::message_t zData(zResult.getDataSize());
     std::memcpy(zData.data(), zResult.getData(), zResult.getDataSize());
-
     zmq::message_t actData(actResult.getDataSize());
     std::memcpy(actData.data(), actResult.getData(), actResult.getDataSize());
-
-    socket.send(header, ZMQ_SNDMORE);
     socket.send(zData, ZMQ_SNDMORE);
     socket.send(actData);
+
+    // Wait for data settled reply.
+    socket.recv(&confirm);
 }
 
 
