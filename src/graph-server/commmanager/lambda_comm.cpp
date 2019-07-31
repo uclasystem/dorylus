@@ -58,7 +58,7 @@ ServerWorker::sendMatrixChunk(zmq::socket_t& socket, zmq::message_t& client_id, 
 	// Reject a send request if the partition id is invalid.
 	if (partId >= nParts) {
 		populateHeader((char *) header.data(), -1, -1, -1, -1);
-		socket.send(client_id);
+		socket.send(client_id, ZMQ_SNDMORE);
 		socket.send(header);
 
 	// Partition id is valid, so send the matrix segment.
@@ -93,11 +93,6 @@ ServerWorker::recvMatrixChunks(zmq::socket_t& socket, zmq::message_t& client_id,
 	FeatType *thisPartitionZStart = zData + offset;
 	FeatType *thisPartitionActStart = actData + offset;
 
-	// Send push accept reply.
-	zmq::message_t confirm;
-	socket.send(client_id, ZMQ_SNDMORE);
-	socket.send(confirm);
-
 	// Receive the pushing-back results.
 	zmq::message_t data;
 	socket.recv(&data);
@@ -106,6 +101,7 @@ ServerWorker::recvMatrixChunks(zmq::socket_t& socket, zmq::message_t& client_id,
 	std::memcpy(thisPartitionActStart, data.data(), data.size());
 
 	// Send data settled reply.
+	zmq::message_t confirm;
 	socket.send(client_id, ZMQ_SNDMORE);
 	socket.send(confirm);
 

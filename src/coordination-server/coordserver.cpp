@@ -137,7 +137,7 @@ main(int argc, char *argv[]) {
 				std::cerr << ex.what() << std::endl;
 				return 13;
 			}
-			char* datservIp = new char[dataserverIp.size() + 1];
+			char *datservIp = new char[dataserverIp.size() + 1];
 			std::memcpy(datservIp, dataserverIp.data(), dataserverIp.size());
 			datservIp[dataserverIp.size()] = '\0';
 
