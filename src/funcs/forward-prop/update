@@ -1,7 +1,7 @@
 #! /bin/bash
 
-func_name=forward-prop-cpp
-file=forward-prop.zip
+func_name=forward-prop-cpp-shen
+file=forward-prop-shen.zip
 
 cd build
 

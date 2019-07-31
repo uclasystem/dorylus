@@ -18,6 +18,7 @@
 #include <unistd.h>
 #include <zmq.hpp>
 #include "../utils/utils.hpp"
+#include <boost/algorithm/string/trim.hpp>
 
 
 static const char *ALLOCATION_TAG = "matmulLambda";
@@ -100,9 +101,12 @@ class CoordServer {
 
 public:
 
-    CoordServer(char *coordserverPort_, char *weightserverIp_, char *weightserverPort_, char *dataserverPort_)
-        : coordserverPort(coordserverPort_), weightserverIp(weightserverIp_),
-          weightserverPort(weightserverPort_), dataserverPort(dataserverPort_) { }
+    CoordServer(char *coordserverPort_, char *weightserverFile_, char *weightserverPort_, char *dataserverPort_)
+        : coordserverPort(coordserverPort_), weightserverFile(weightserverFile_),
+          weightserverPort(weightserverPort_), dataserverPort(dataserverPort_) {
+          	loadWeightServers(weightserverAddrs,weightserverFile);
+          	std::cout<<"Num Servers "<< weightserverAddrs.size()<<std::endl;
+    }
 
     // Runs the coordserver, keeps listening on dataserver's requests for lambda threads invocation.
     void run () {
@@ -119,9 +123,10 @@ public:
         clientConfig.region = "us-east-2";
         m_client = Aws::MakeShared<Aws::Lambda::LambdaClient>(ALLOCATION_TAG, clientConfig);
 
+        std::size_t req_count=0;
         // Keeps listening on dataserver's requests.
         std::cout << "[Coord] Starts listening for dataserver's requests..." << std::endl;
-        
+       
         try {
             bool terminate = false;
             while (!terminate) {
@@ -143,16 +148,22 @@ public:
 
                 if (op == OP::TERM) {
                     terminate = true;
-                    sendShutdownMessage(weightserverIp, weightserverPort);
+                    for(std::size_t i = 0;i < weightserverAddrs.size();++i)
+                    	sendShutdownMessage(weightserverAddrs[i], weightserverPort);
                 } else {
                     std::string accMsg = "[ACCEPTED] Req for " + std::to_string(nThreadsReq)
                                        + " lambdas for layer " + std::to_string(layer);
                     std::cout << accMsg << std::endl;
 
                     // Issue a bunch of lambda threads to serve the request.
-                    for (int i = 0; i < nThreadsReq; i++)
+                    for (int i = 0; i < nThreadsReq; i++){
+                    	char * weightserverIp=weightserverAddrs[req_count%weightserverAddrs.size()];
+						std::cout <<"Send to:" << weightserverIp << std::endl;
                         invokeFunction("forward-prop-josehu", (char *) dataserverIp.data(), dataserverPort, weightserverIp, weightserverPort,
                                        layer, i);
+                   		req_count++;
+						printf("Req Cnt: %zu\n", req_count);
+					}
                 }
             }
         } catch (std::exception& ex) {
@@ -161,7 +172,24 @@ public:
     }
 
 private:
+	//load server addresses from file
+	void loadWeightServers(std::vector<char*>& addresses,const std::string& wServersFile){
+		std::ifstream infile(wServersFile);
+		if (!infile.good())
+	        printf("Cannot open weight server file: %s [Reason: %s]\n", wServersFile.c_str(), std::strerror(errno));
 
+	    assert(infile.good());
+
+	    std::string line;
+	    while (!infile.eof()) {
+	        std::getline(infile, line);
+	        if (line.length() == 0)
+	        	continue;	
+	        boost::algorithm::trim(line);
+	    	char* addr=strdup(line.c_str());
+	    	addresses.push_back(addr);
+	    }
+	}
     /**
      * Sends a shutdown message to all the weightservers
      */
@@ -181,9 +209,10 @@ private:
     }
 
     char *coordserverPort;
-    char *weightserverIp;
+    char *weightserverFile;
     char *weightserverPort;
     char *dataserverPort;
+    std::vector<char*> weightserverAddrs;
 };
 
 
@@ -192,14 +221,14 @@ int
 main(int argc, char *argv[]) {
     assert(argc == 5);
     char *coordserverPort = argv[1];
-    char *weightserverIp = argv[2];
+    char *weightserverFile = argv[2];
     char *weightserverPort = argv[3];
     char *dataserverPort = argv[4];
 
     Aws::SDKOptions options;
     Aws::InitAPI(options);
 
-    CoordServer cs(coordserverPort, weightserverIp, weightserverPort, dataserverPort);
+    CoordServer cs(coordserverPort, weightserverFile, weightserverPort, dataserverPort);
     cs.run();
 
     m_client = nullptr;
