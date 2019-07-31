@@ -67,20 +67,20 @@ requestMatrix(zmq::socket_t& socket, int32_t id) {
  * 
  */
 void
-sendMatrix(Matrix& response, int32_t resType, zmq::socket_t& socket, bool duplicate, int32_t id) {
-    if (!duplicate) {
-        zmq::message_t header(HEADER_SIZE);
-        populateHeader((char *) header.data(), OP::PUSH, id, response.rows, response.cols);
-        socket.send(header, ZMQ_SNDMORE);
-    }
+sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, int32_t id) {
+    
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader((char *) header.data(), OP::PUSH, id, zResult.rows, zResult.cols);
 
-    zmq::message_t matxData(response.getDataSize());
-    std::memcpy(matxData.data(), response.getData(), response.getDataSize());
+    zmq::message_t zData(zResult.getDataSize());
+    std::memcpy(zData.data(), zResult.getData(), zResult.getDataSize());
 
-    if (!duplicate)
-        socket.send(matxData, ZMQ_SNDMORE);
-    else
-        socket.send(matxData);
+    zmq::message_t actData(actResult.getDataSize());
+    std::memcpy(actData.data(), actResult.getData(), actResult.getDataSize());
+
+    socket.send(header, ZMQ_SNDMORE);
+    socket.send(zData, ZMQ_SNDMORE);
+    socket.send(actData);
 }
 
 
@@ -205,8 +205,7 @@ matmul(std::string dataserver, std::string weightserver, std::string dport, std:
         // Send back to dataserver.
         sendResTimer.start();
         std::cout << "< matmul > Sending results back..." << std::endl;
-        sendMatrix(z, 0, data_socket, false, id);
-        sendMatrix(activations, 1, data_socket, true, id);
+        sendMatrices(z, activations, data_socket, id);
         std::cout << "< matmul > Results sent." << std::endl;
         sendResTimer.stop();
 
