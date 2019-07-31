@@ -109,11 +109,11 @@ public:
         // Currently using randomly generated weights.
         auto seed = 8888;
         std::default_random_engine dre(seed);
-        std::uniform_real_distribution<DTYPE> dist(-1.5, 1.5);
+        std::uniform_real_distribution<FeatType> dist(-1.5, 1.5);
 
         for (uint32_t u = 0; u < dims.size() - 1; ++u) {
             uint32_t dataSize = dims[u] * dims[u + 1];
-            DTYPE *dptr = new DTYPE[dataSize];
+            FeatType *dptr = new FeatType[dataSize];
             for (uint32_t ui = 0; ui < dataSize; ++ui)
                 dptr[ui] = dist(dre);
 

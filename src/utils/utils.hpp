@@ -3,7 +3,7 @@
 
 
 /** Feature type is float, so be consistent. */
-typedef float DTYPE;
+typedef float FeatType;
 
 
 static const int32_t HEADER_SIZE = sizeof(int32_t) * 5;
@@ -43,10 +43,9 @@ void populateHeader(char* header, int32_t op, int32_t id, int32_t rows = 0, int3
  * Struct for a matrix.
  * 
  */
-struct Matrix {
-    int32_t rows;
-    int32_t cols;
-    FeatType *data;
+class Matrix {
+
+public:
 
     Matrix() { rows = 0; cols = 0; }
     Matrix(int _rows, int _cols) { rows = _rows; cols = _cols; }
@@ -76,8 +75,11 @@ struct Matrix {
         }
         return output.str();
     }
+
+    int32_t rows;
+    int32_t cols;
+    FeatType *data;
 };
-typedef struct Matrix Matrix;
 
 
 /**
