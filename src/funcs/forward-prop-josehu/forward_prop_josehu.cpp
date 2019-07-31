@@ -72,7 +72,7 @@ sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, int32_t 
     // Send push header.
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char *) header.data(), OP::PUSH, id, zResult.rows, zResult.cols);
-    socket.send(header);
+    socket.send(header, ZMQ_SNDMORE);
 
     // Send zData and actData.
     zmq::message_t zData(zResult.getDataSize());
