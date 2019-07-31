@@ -74,7 +74,7 @@ if [ ! -f ${ZOODIR}/conf/zoo.cfg ]; then
 	cat ${RUNDIR}/zoo.basic > ${ZOODIR}/conf/zoo.cfg;
 	echo "" >> ${ZOODIR}/conf/zoo.cfg;
 	for i in $(seq 1 ${ZOONDS}); do
-	  echo "server.${i}=${nodes[$i]}:2080:3080" >> ${ZOODIR}/conf/zoo.cfg;
+	  echo "server.${i}=${nodes[$i]}:2088:3088" >> ${ZOODIR}/conf/zoo.cfg;
 	done;
 fi
 
@@ -101,7 +101,7 @@ for i in $(seq 1 ${ZOONDS}); do
 	    echo -e "\e[31;1m[ERROR] Could not establish quorum\e[0m"
 	    exit
     fi
-    str=$(echo stat | nc ${nodes[$i]} 2180 | grep "Mode");
+    str=$(echo stat | nc ${nodes[$i]} 2188 | grep "Mode");
     IFS=' ' read -ra ARR <<< ${str};
     if [[ ${ARR[1]} == "leader" ]] || [[ ${ARR[1]} == "follower" ]]; then
       break;
@@ -149,7 +149,7 @@ for i in $(seq 2 ${NDS}); do
 done;
 
 for i in $(seq 1 ${ZOONDS}); do
-  echo -e "${nodes[$i]}\t2180" >> ${CONFIGDIR}/zkhostfile;
+  echo -e "${nodes[$i]}\t2188" >> ${CONFIGDIR}/zkhostfile;
 done;
 
 for i in $(seq 1 ${NDS}); do

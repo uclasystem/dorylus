@@ -1,5 +1,5 @@
 tickTime=1000
 dataDir=/home/guanzhou/zktmp/zooDataDir
-clientPort=2180
+clientPort=2188
 initLimit=5
 syncLimit=1

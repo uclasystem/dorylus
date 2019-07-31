@@ -127,8 +127,11 @@ private:
 
     static unsigned iteration;
 
+    // Timing stuff.
     static double timeInit;
-    static double timeProcess;   
+    static double timeProcess; 
+    static std::vector<double> vecTimeAggregate;
+    static std::vector<double> vecTimeLambda;
 
     static std::map<IdType, unsigned> recvWaiters;
 
