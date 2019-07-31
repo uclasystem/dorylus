@@ -231,6 +231,8 @@ Engine::output() {
  */
 void
 Engine::destroy() {
+    printLog(nodeId, "Destroy the engine...\n");
+
     NodeManager::destroy();
     CommManager::destroy();
     computePool->destroyPool();

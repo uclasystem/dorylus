@@ -162,7 +162,9 @@ public:
         // Create numListeners workers and detach them.
         for (int i = 0; i < numListeners; ++i) {
             workers.push_back(new ServerWorker(ctx, ZMQ_DEALER, nParts, counter, matrix, nodeId));
-            std::thread(std::bind(&ServerWorker::work, workers[i])).detach();
+            
+            worker_threads.push_back(new std::thread(std::bind(&ServerWorker::work, workers[i])));
+            worker_threads[i]->detach();
         }
 
         // Create a proxy pipe that connects frontend to backend. This thread hangs throughout the life
@@ -172,6 +174,11 @@ public:
                 zmq::proxy(static_cast<void *>(frontend), static_cast<void *>(backend), nullptr);
             } catch (std::exception& ex) {
                 std::cerr << ex.what() << std::endl;
+            }
+
+            for (int i = 0; i < numListeners; ++i) {    // Delete when context terminates.
+                delete worker[i];
+                delete worker_threads[i];
             }
         });
         tproxy.detach();
@@ -199,6 +206,7 @@ private:
 	int32_t nParts;
 	int32_t numListeners;
     std::vector<ServerWorker *> workers;
+    std::vector<std::thread *> worker_threads;
 
 	int32_t counter;
 
