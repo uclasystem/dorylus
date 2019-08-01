@@ -141,7 +141,7 @@ Make sure you have setup password-less `ssh` login among all your EC2 instances.
 
 #### D.4.1 Setup Config Files
 
-Under `run/` directory, **setup the content of `dshmachines` file**. Every line is in the form `username@ip` representing one of your nodes.
+Under `run/` directory, **setup the content of `dshmachines` file**. Every line is in the form `username@ip` representing one of your nodes. Copy that file and place the copy at `~/.dsh/machines.list`.
 
 Setup the content of `zoo.basic` file for configuring ZooKeeper. Basically you need:
 
