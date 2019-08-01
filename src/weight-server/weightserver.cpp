@@ -19,6 +19,8 @@ std::mutex m, term_mutex;
 std::condition_variable cv;
 bool finished = false;
 
+std::vector<Timer> timers;
+std::mutex timerMutex;
 
 /**
  *
@@ -43,6 +45,12 @@ public:
                 zmq::message_t header;
                 worker.recv(&identity);
                 worker.recv(&header);
+                    
+                timerMutex.lock();
+                timers.push_back(Timer());
+                uint32_t timerId = timers.size() - 1;
+                timerMutex.unlock();
+                timers[timerId].start();
                 
                 int32_t chunkId = parse<int32_t>((char *) identity.data(), 0);
                 int32_t op = parse<int32_t>((char *) header.data(), 0);
@@ -69,6 +77,7 @@ public:
                     default:
                         std::cerr << "ServerWorker: Unknown Op code received." << std::endl;
                 }
+                timers[timerId].stop();
             }
         } catch (std::exception& ex) {
             std::cerr << ex.what() << std::endl;
@@ -96,14 +105,17 @@ private:
     }
 
     void terminateServer(zmq::socket_t& socket, zmq::message_t& client_id) {
-        std::cerr << "Terminating the servers..." << std::endl;
+        std::cerr << "Server shutting down" << std::endl;
+
+        // Printing all the timers for each request minus the last one since that is the
+        // kill message
+        std::cout << "Send times: ";
+        for (uint32_t ui = 0; ui < timers.size()-1; ++ui) {
+            std::cout << timers[ui].getTime() << " ";
+        }
+        std::cout << std::endl;
 
         std::lock_guard<std::mutex> lock(m);
-        socket.send(client_id, ZMQ_SNDMORE);
-        zmq::message_t term_conf(3);
-        std::memcpy(term_conf.data(), "ACK", 3);
-        socket.send(term_conf);
-
         finished = true;
         cv.notify_one();
     }
