@@ -21,7 +21,7 @@ typedef float EdgeType;
                                 // From MAX_IDTYPE downto MAX_IDTYPE - numGlobalVertices are receive signals.
 
 
-#define INTERFACE "eth0" 
+#define INTERFACE "ens5" 
 
 
 extern std::map<size_t, std::string> typeToFormatSpecifier;
