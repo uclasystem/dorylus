@@ -146,6 +146,10 @@ public:
                 int32_t layer = parse<int32_t>((char *) header.data(), 1);
                 int32_t nThreadsReq = parse<int32_t>((char *) header.data(), 2);
 
+                char dataserverIpCopy[dataserverIp.size() + 1];
+                memcpy(dataserverIpCopy, (char *) dataserverIp.data(), dataserverIp.size());
+                dataserverIpCopy[dataserverIp.size()] = '\0';
+
                 // If it is a termination message, then shut all weightservers first and then shut myself down.
                 if (op == OP::TERM) {
                     std::cerr << "Terminating the servers..." << std::endl;
@@ -164,9 +168,7 @@ public:
 
                         // TODO: Maybe improve this naive round robin scheduling.
                     	char *weightserverIp = weightserverAddrs[req_count % weightserverAddrs.size()];
-						
-                        std::cout <<"Send to:" << weightserverIp << std::endl;
-                        invokeFunction("forward-prop-josehu", (char *) dataserverIp.data(), dataserverPort,
+                        invokeFunction("forward-prop-josehu", (char *) dataserverIpCopy.data(), dataserverPort,
                                        weightserverIp, weightserverPort, layer, i);
                    		req_count++;
 					}
