@@ -68,7 +68,7 @@ if [ ! -d ${CONFIGDIR} ]; then
 fi
 
 ${DSH} -M -f ${DSHFILE} -c "rm -rf ${TMPDIR} && mkdir ${TMPDIR} && chown ${user}:${user} ${TMPDIR}";
-${DSH} -M -f ${DSHFILE} -c "cd ${ZOODIR} && ./bin/zkServer.sh stop";
+${DSH} -M -f ${DSHFILE} -c "cd ${ZOODIR} && ./bin/zkServer.sh stop > /dev/null 2>&1";
 
 if [ ! -f ${ZOODIR}/conf/zoo.cfg ]; then
   cat ${RUNDIR}/zoo.basic > ${ZOODIR}/conf/zoo.cfg;
@@ -84,7 +84,7 @@ for i in $(seq 1 ${ZOONDS}); do
   scp -q ${ZOODIR}/conf/zoo.cfg ${dshnodes[$i]}:${ZOODIR}/conf/zoo.cfg;
   ${DSH} -M -m ${dshnodes[$i]} -c "mkdir -p ${TMPDIR}/zooDataDir";
   ${DSH} -M -m ${dshnodes[$i]} -c "echo $i > ${TMPDIR}/zooDataDir/myid";
-  ${DSH} -M -m ${dshnodes[$i]} -c "cd ${ZOODIR} && ./bin/zkServer.sh start";
+  ${DSH} -M -m ${dshnodes[$i]} -c "cd ${ZOODIR} && ./bin/zkServer.sh start &> /dev/null";
 done;
 
 header "Checking for Quorum..."
@@ -156,7 +156,7 @@ for i in $(seq 1 ${ZOONDS}); do
 done;
 
 for i in $(seq 1 ${NDS}); do
-  scp ${CONFIGDIR}/hostfile ${CONFIGDIR}/zkhostfile ${dshnodes[$i]}:${CONFIGDIR}/;
+  scp -q ${CONFIGDIR}/hostfile ${CONFIGDIR}/zkhostfile ${dshnodes[$i]}:${CONFIGDIR}/;
 done;
 
 # Server info
@@ -190,7 +190,7 @@ for dp in {1..1}; do
   mkdir -p ${DOPDIR};
   for i in $(seq 1 ${NDS}); do
     oid=`expr $i - 1`;
-    scp ${dshnodes[$i]}:${TMPDIR}/output_* ${DOPDIR}/;
+    scp -q ${dshnodes[$i]}:${TMPDIR}/output_* ${DOPDIR}/;
   done;
 
 done;
@@ -203,7 +203,7 @@ done;
 header "Finished. Destroying ZooKeeper..."
 
 for i in $(seq 1 $ZOONDS); do
-  ${DSH} -M -m ${nodes[$i]} -c "cd ${ZOODIR} && ./bin/zkServer.sh stop";
+  ${DSH} -M -m ${nodes[$i]} -c "cd ${ZOODIR} && ./bin/zkServer.sh stop > /dev/null 2>&1";
 done;
 
 echo "Check the output files in \"build/outputs/\" folder."
