@@ -39,11 +39,11 @@ ZOODIR=${WORKDIR}/gnn-lambda/installs/zookeeper-release-3.4.6
 DSH=dsh
 
 if [ ! -d ${LOGFILEDIR} ]; then
-	mkdir -p ${LOGFILEDIR}
+  mkdir -p ${LOGFILEDIR}
 fi
 
 if [ ! -f ${HOSTFILE} ]; then
-	cat ${DSHFILE} | sed "s/${user}@//" > ${HOSTFILE}
+  cat ${DSHFILE} | sed "s/${user}@//" > ${HOSTFILE}
 fi
 
 NDS=$(wc -l ${HOSTFILE} | cut -d" " -f1);   # NDS is number of distributed shells
@@ -71,11 +71,11 @@ ${DSH} -M -f ${DSHFILE} -c "rm -rf ${TMPDIR} && mkdir ${TMPDIR} && chown ${user}
 ${DSH} -M -f ${DSHFILE} -c "cd ${ZOODIR} && ./bin/zkServer.sh stop > /dev/null 2>&1";
 
 if [ ! -f ${ZOODIR}/conf/zoo.cfg ]; then
-	cat ${RUNDIR}/zoo.basic > ${ZOODIR}/conf/zoo.cfg;
-	echo "" >> ${ZOODIR}/conf/zoo.cfg;
-	for i in $(seq 1 ${ZOONDS}); do
-	  echo "server.${i}=${nodes[$i]}:2080:3080" >> ${ZOODIR}/conf/zoo.cfg;
-	done;
+  cat ${RUNDIR}/zoo.basic > ${ZOODIR}/conf/zoo.cfg;
+  echo "" >> ${ZOODIR}/conf/zoo.cfg;
+  for i in $(seq 1 ${ZOONDS}); do
+    echo "server.${i}=${nodes[$i]}:2080:3080" >> ${ZOODIR}/conf/zoo.cfg;
+  done;
 fi
 
 header "Starting ZooKeeper..."
@@ -98,8 +98,8 @@ for i in $(seq 1 ${ZOONDS}); do
   do
     ((count++))
     if [ ${count} -ge ${limit} ]; then
-	    echo -e "\e[31;1m[ERROR] Could not establish quorum\e[0m"
-	    exit
+      echo -e "\e[31;1m[ERROR] Could not establish quorum\e[0m"
+      exit
     fi
     str=$(echo stat | nc ${nodes[$i]} 2180 | grep "Mode");
     IFS=' ' read -ra ARR <<< ${str};
@@ -119,18 +119,18 @@ header "Starting the system..."
 
 # Dataset
 case $1 in
-	"small")
-		INPUT_LOC=../inputs/data/parts_${NDS}/small.graph.bsnap; IK=SM;
-		;;
-	"fb")
-		INPUT_LOC=/filepool/fb/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB;
-		;;
+  "small")
+    INPUT_LOC=../inputs/data/parts_${NDS}/small.graph.bsnap; IK=SM;
+    ;;
+  "fb")
+    INPUT_LOC=/filepool/fb/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB;
+    ;;
   "reddit")
     INPUT_LOC=/filepool/reddit/parts_${NDS}/reddit.graph.bsnap; IK=FB;
     ;;
-	*)
-		INPUT_LOC=../inputs/data/parts_${NDS}/small.graph.bsnap; IK=SM;
-		;;
+  *)
+    INPUT_LOC=../inputs/data/parts_${NDS}/small.graph.bsnap; IK=SM;
+    ;;
 esac
 
 # Feature file
