@@ -179,12 +179,8 @@ public:
 
 private:
 
-	/**
-     *
-     * Load the weightservers configuration file.
-     * 
-     */
-	void loadWeightServers(std::vector<char*>& addresses,const std::string& wServersFile){
+	// Load the weightservers configuration file.
+	void loadWeightServers(std::vector<char *>& addresses, const std::string& wServersFile){
 		std::ifstream infile(wServersFile);
 		if (!infile.good())
 	        printf("Cannot open weight server file: %s [Reason: %s]\n", wServersFile.c_str(), std::strerror(errno));
@@ -194,19 +190,19 @@ private:
 	    std::string line;
 	    while (!infile.eof()) {
 	        std::getline(infile, line);
+	        boost::algorithm::trim(line);
+
 	        if (line.length() == 0)
 	        	continue;	
-	        boost::algorithm::trim(line);
+            
 	    	char *addr = strdup(line.c_str());
 	    	addresses.push_back(addr);
 	    }
 	}
 
-    /**
-     * 
-     * Sends a shutdown message to all the weightservers.
-     * 
-     */
+
+    // Sends a shutdown message to all the weightservers.
+
     void sendShutdownMessage(char *weightserverPort, char *weightserverIp) {
         char identity[] = "coord";
         char wHostPort[50];

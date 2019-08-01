@@ -194,8 +194,6 @@ Engine::run() {
     dataPool->sync();
 
     printLog(nodeId, "Engine completes the processing at iteration %u.\n", iteration);
-    if (master())
-        printEngineMetrics();
 }
 
 
@@ -253,6 +251,9 @@ Engine::destroy() {
     delete[] verticesActivationData;
     delete[] ghostVerticesActivationData;
     delete[] verticesDataBuf;
+
+    if (master())
+        printEngineMetrics();
 }
 
 
