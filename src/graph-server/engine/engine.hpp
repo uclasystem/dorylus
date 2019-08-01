@@ -132,6 +132,7 @@ private:
     static double timeProcess; 
     static std::vector<double> vecTimeAggregate;
     static std::vector<double> vecTimeLambda;
+    static std::vector<double> vecTimeSendout;
 
     static std::map<IdType, unsigned> recvWaiters;
 

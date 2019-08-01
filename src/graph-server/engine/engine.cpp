@@ -48,8 +48,11 @@ FeatType *Engine::verticesDataBuf = NULL;
 unsigned Engine::iteration = 0;
 bool Engine::undirected = false;
 bool Engine::halt = false;
-double Engine::timeProcess = 0.0;
 double Engine::timeInit = 0.0;
+double Engine::timeProcess = 0.0;
+std::vector<double> vecTimeAggregate;
+std::vector<double> vecTimeLambda;
+std::vector<double> vecTimeSendout;
 
 
 /**
@@ -243,6 +246,7 @@ Engine::destroy() {
     condRecvWaitersEmpty.destroy();
     lockHalt.destroy();
 
+    lambdaComm->sendShutdownMessage();
     delete lambdaComm;
 
     delete[] verticesZData;
@@ -265,6 +269,9 @@ Engine::destroy() {
  */
 void
 Engine::worker(unsigned tid, void *args) {
+
+    // A Stopwatch for composing steps of run().
+    double timeWorker = getTimer();
 
     // Outer while loop. Looping infinitely, looking for a new task to handle.
     while (1) {
@@ -297,7 +304,10 @@ Engine::worker(unsigned tid, void *args) {
 
                 //## Worker barrier 1: Everyone reach to this point, then only master will work. ##//
                 barComp.wait();
-                printLog(nodeId, "Iteration %u finishes at %.3lf ms. Invoking lambda...\n", iteration, timeProcess + getTimer());
+
+                vecTimeAggregate.push_back(getTimer() - timeWorker);
+                timeWorker = getTimer();
+                printLog(nodeId, "Iteration %u finishes. Invoking lambda...\n", iteration);
 
                 //////////////////////////////////
                 // Send dataBuf to lambda HERE. //
@@ -315,8 +325,6 @@ Engine::worker(unsigned tid, void *args) {
                 // Lambda threads finished. //
                 //////////////////////////////
 
-                printLog(nodeId, "All lambdas finished. Waiting on new iteration...\n");
-
                 // Reset buffer area to be the activation data array from LambdaComm. This reduces 1 realloc() for resizing the buffer.
                 // Previous buffer should be called on delete at lambdaComm destruction.
                 verticesDataBuf = lambdaComm->getActivationData();
@@ -328,6 +336,10 @@ Engine::worker(unsigned tid, void *args) {
                     memcpy(vertexActivationDataPtr(id, getDataAllOffset(iteration + 1)), verticesDataBuf + id * getNumFeats(iteration + 1),
                            getNumFeats(iteration + 1) * sizeof(FeatType));
                 }
+
+                vecTimeLambda.push_back(getTimer() - timeWorker);
+                timeWorker = getTimer();
+                printLog(nodeId, "All lambda requests finished. Results received.\n");
 
                 // Loop through all local vertices and do the data send out work. If there are any remote edges for a vertex, should send this vid to
                 // other nodes for their ghost's update.
@@ -359,6 +371,10 @@ Engine::worker(unsigned tid, void *args) {
                 //## Global Iteration barrier. ##//
                 NodeManager::barrier(LAYER_BARRIER);
 
+                vecTimeSendout.push_back(getTimer() - timeWorker);
+                timeWorker = getTimer();
+                printLog(nodeId, "Global barrier after ghost data exchange crossed.\n");
+
                 // End this lambda communciation context and step forward to a new iteration.
                 ++iteration;
                 lambdaComm->endContext();
@@ -387,8 +403,6 @@ Engine::worker(unsigned tid, void *args) {
 
                     //## Worker barrier 2: Going to die. ##//
                     barComp.wait();
-
-                    lambdaComm->sendShutdownMessage();
 
                     return;
                 }
@@ -586,8 +600,14 @@ Engine::aggregateFromNeighbors(IdType lvid) {
  */
 void
 Engine::printEngineMetrics() {
-    printLog(nodeId, "Engine METRICS: Initialization time = %.3lf ms.\n", timeInit);
-    printLog(nodeId, "Engine METRICS: Processing time = %.3lf ms.\n", timeProcess);
+    printLog(nodeId, "Engine METRICS: Initialization takes %.3lf ms\n", timeInit);
+    printLog(nodeId, "Engine METRICS: Time per stage:\n");
+    for (size_t i = 0; i < numLayers; ++i) {
+        printLog(nodeId, "\t\t\tAggregation   %2d  %.3lf ms\n", i, vecTimeAggregate[i]);
+        printLog(nodeId, "\t\t\tLambda        %2d  %.3lf ms\n", i, vecTimeLambda[i]);
+        printLog(nodeId, "\t\t\tGhost update  %2d  %.3lf ms\n", i, vecTimeSendout[i]);
+    }
+    printLog(nodeId, "Engine METRICS: Total Processing time %.3lf ms\n", timeProcess);
 }
 
 
