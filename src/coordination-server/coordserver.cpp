@@ -168,8 +168,7 @@ public:
 
                         // TODO: Maybe improve this naive round robin scheduling.
                     	char *weightserverIp = weightserverAddrs[req_count % weightserverAddrs.size()];
-                        invokeFunction("forward-prop-josehu", (char *) dataserverIpCopy.data(), dataserverPort,
-                                       weightserverIp, weightserverPort, layer, i);
+                        invokeFunction("forward-prop-josehu", dataserverIpCopy, dataserverPort, weightserverIp, weightserverPort, layer, i);
                    		req_count++;
 					}
                 }
