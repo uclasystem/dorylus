@@ -135,7 +135,7 @@ Engine::init(int argc, char *argv[]) {
     graph.compactGraph();
 
     // Create the lambda communication manager.
-    lambdaComm = new LambdaComm(NodeManager::getNode(nodeId).pubip, dataserverPort, coordserverIp, coordserverPort, nodeId, 5, 1);
+    lambdaComm = new LambdaComm(NodeManager::getNode(nodeId).pubip, dataserverPort, coordserverIp, coordserverPort, nodeId, 20, 1);
 
     timeInit += getTimer();
     printLog(nodeId, "Engine initialization complete.\n");
