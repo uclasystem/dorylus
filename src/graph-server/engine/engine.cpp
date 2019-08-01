@@ -50,9 +50,9 @@ bool Engine::undirected = false;
 bool Engine::halt = false;
 double Engine::timeInit = 0.0;
 double Engine::timeProcess = 0.0;
-std::vector<double> vecTimeAggregate;
-std::vector<double> vecTimeLambda;
-std::vector<double> vecTimeSendout;
+std::vector<double> Engine::vecTimeAggregate;
+std::vector<double> Engine::vecTimeLambda;
+std::vector<double> Engine::vecTimeSendout;
 
 
 /**

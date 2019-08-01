@@ -104,8 +104,8 @@ public:
     CoordServer(char *coordserverPort_, char *weightserverFile_, char *weightserverPort_, char *dataserverPort_)
         : coordserverPort(coordserverPort_), weightserverFile(weightserverFile_),
           weightserverPort(weightserverPort_), dataserverPort(dataserverPort_) {
-          	loadWeightServers(weightserverAddrs,weightserverFile);
-          	std::cout<<"Num Servers "<< weightserverAddrs.size()<<std::endl;
+        loadWeightServers(weightserverAddrs,weightserverFile);
+        std::cout << "Detected " << weightserverAddrs.size() << " weight servers to use." << std::endl;
     }
 
     // Runs the coordserver, keeps listening on dataserver's requests for lambda threads invocation.
