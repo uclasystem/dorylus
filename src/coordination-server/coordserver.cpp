@@ -123,12 +123,12 @@ public:
         clientConfig.region = "us-east-2";
         m_client = Aws::MakeShared<Aws::Lambda::LambdaClient>(ALLOCATION_TAG, clientConfig);
 
-        std::size_t req_count=0;
         // Keeps listening on dataserver's requests.
         std::cout << "[Coord] Starts listening for dataserver's requests..." << std::endl;
        
         try {
             bool terminate = false;
+            size_t req_count = 0;
             while (!terminate) {
 
                 // Wait on requests.
@@ -146,11 +146,14 @@ public:
                 int32_t layer = parse<int32_t>((char *) header.data(), 1);
                 int32_t nThreadsReq = parse<int32_t>((char *) header.data(), 2);
 
+                // If it is a termination message, then shut all weightservers first and then shut myself down.
                 if (op == OP::TERM) {
                     std::cerr << "Terminating the servers..." << std::endl;
                     terminate = true;
-                    for(std::size_t i = 0;i < weightserverAddrs.size();++i)
+                    for (std::size_t i = 0; i < weightserverAddrs.size(); ++i)
                     	sendShutdownMessage(weightserverAddrs[i], weightserverPort);
+
+                // Else is a pull request for weight matrix. Handle that.
                 } else {
                     std::string accMsg = "[ACCEPTED] Req for " + std::to_string(nThreadsReq)
                                        + " lambdas for layer " + std::to_string(layer);
@@ -158,12 +161,14 @@ public:
 
                     // Issue a bunch of lambda threads to serve the request.
                     for (int i = 0; i < nThreadsReq; i++){
-                    	char * weightserverIp=weightserverAddrs[req_count%weightserverAddrs.size()];
-						std::cout <<"Send to:" << weightserverIp << std::endl;
-                        invokeFunction("forward-prop-josehu", (char *) dataserverIp.data(), dataserverPort, weightserverIp, weightserverPort,
-                                       layer, i);
+
+                        // TODO: Maybe improve this naive round robin scheduling.
+                    	char *weightserverIp = weightserverAddrs[req_count % weightserverAddrs.size()];
+						
+                        std::cout <<"Send to:" << weightserverIp << std::endl;
+                        invokeFunction("forward-prop-josehu", (char *) dataserverIp.data(), dataserverPort,
+                                       weightserverIp, weightserverPort, layer, i);
                    		req_count++;
-						printf("Req Cnt: %zu\n", req_count);
 					}
                 }
             }
@@ -173,7 +178,12 @@ public:
     }
 
 private:
-	//load server addresses from file
+
+	/**
+     *
+     * Load the weightservers configuration file.
+     * 
+     */
 	void loadWeightServers(std::vector<char*>& addresses,const std::string& wServersFile){
 		std::ifstream infile(wServersFile);
 		if (!infile.good())
@@ -187,10 +197,11 @@ private:
 	        if (line.length() == 0)
 	        	continue;	
 	        boost::algorithm::trim(line);
-	    	char* addr=strdup(line.c_str());
+	    	char *addr = strdup(line.c_str());
 	    	addresses.push_back(addr);
 	    }
 	}
+
     /**
      * 
      * Sends a shutdown message to all the weightservers.
