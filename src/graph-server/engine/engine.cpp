@@ -50,6 +50,7 @@ bool Engine::undirected = false;
 bool Engine::halt = false;
 double Engine::timeInit = 0.0;
 double Engine::timeProcess = 0.0;
+double Engine::timeOutput = 0.0;
 std::vector<double> Engine::vecTimeAggregate;
 std::vector<double> Engine::vecTimeLambda;
 std::vector<double> Engine::vecTimeSendout;
@@ -200,10 +201,15 @@ Engine::run() {
 /**
  *
  * Write output stuff to the tmp directory for every local vertex.
+ * Write engine timing metrics to the logfile.
  * 
  */
 void
 Engine::output() {
+
+    timeOutput = -getTimer();
+
+    // Output results.
     std::ofstream outStream(outFile.c_str());
 
     if (!outStream.good())
@@ -222,6 +228,12 @@ Engine::output() {
         }
         outStream << std::endl;
     }
+
+    timeOutput += getTimer();
+
+    // Benchmarking results.
+    if (master())
+        printEngineMetrics();
 }
 
 
@@ -251,9 +263,6 @@ Engine::destroy() {
     delete[] verticesActivationData;
     delete[] ghostVerticesActivationData;
     delete[] verticesDataBuf;
-
-    if (master())
-        printEngineMetrics();
 }
 
 
@@ -608,7 +617,8 @@ Engine::printEngineMetrics() {
         printLog(nodeId, "\t\t\tLambda        %2d  %.3lf ms\n", i, vecTimeLambda[i]);
         printLog(nodeId, "\t\t\tGhost update  %2d  %.3lf ms\n", i, vecTimeSendout[i]);
     }
-    printLog(nodeId, "Engine METRICS: Total Processing time %.3lf ms\n", timeProcess);
+    printLog(nodeId, "Engine METRICS: Total processing time %.3lf ms\n", timeProcess);
+    printLog(nodeId, "Engine METRICS: Output writing takes %.3lf ms\n", timeOutput);
 }
 
 

@@ -130,6 +130,7 @@ private:
     // Timing stuff.
     static double timeInit;
     static double timeProcess; 
+    static double timeOutput; 
     static std::vector<double> vecTimeAggregate;
     static std::vector<double> vecTimeLambda;
     static std::vector<double> vecTimeSendout;
