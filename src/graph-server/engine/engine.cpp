@@ -217,15 +217,29 @@ Engine::output() {
 
     assert(outStream.good());
 
+    //
+    // The following are full outputing. Commented out for now because we are testingn large-scale data.
+    //
+    // for (Vertex& v : graph.getVertices()) {
+    //     outStream << v.getGlobalId() << ": ";
+    //     FeatType *dataAllPtr = vertexActivationDataPtr(v.getLocalId(), 0);
+    //     unsigned offset = 0;
+    //     for (unsigned& numFeats : layerConfig) {
+    //         for (unsigned i = 0; i < numFeats; ++i)
+    //             outStream << dataAllPtr[offset++] << " ";
+    //         outStream << "| ";
+    //     }
+    //     outStream << std::endl;
+    // }
+
+    //
+    // The following are simplified outputing: only the output layer's features.
+    //
     for (Vertex& v : graph.getVertices()) {
         outStream << v.getGlobalId() << ": ";
-        FeatType *dataAllPtr = vertexActivationDataPtr(v.getLocalId(), 0);
-        unsigned offset = 0;
-        for (unsigned& numFeats : layerConfig) {
-            for (unsigned i = 0; i < numFeats; ++i)
-                outStream << dataAllPtr[offset++] << " ";
-            outStream << "| ";
-        }
+        FeatType *dataAllPtr = vertexActivationDataPtr(v.getLocalId(), getDataAllOffset(numLayers - 1));
+        for (unsigned i = 0; i < layerConfig[numLayers - 1]; ++i)
+            outStream << dataAllPtr[i] << " ";
         outStream << std::endl;
     }
 
