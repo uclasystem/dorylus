@@ -12,14 +12,15 @@ A cluster of EC2 instances form up the dataserver. Build the following dependenc
 Make sure you have installed the following packages by `apt`:
 
 - `build-essential`
-- `libboost-all-dev`
+- `cmake`
 - `dsh`
+- `libcppunit-dev`
+- `libboost-all-dev`
 - `libtool`
 - `pkg-config`
 - `autoconf`
 - `openjdk-8-jdk`
 - `ant`
-- `cmake`
 
 Assume the system directory is `~/gnn-lambda/`. Create a folder called `installs` in this directory where we put dependency source codes, and then make a `out` folder under `installs` to serve as ZeroMQ & Metis install location.
 

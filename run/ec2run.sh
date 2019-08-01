@@ -42,10 +42,6 @@ if [ ! -d ${LOGFILEDIR} ]; then
 	mkdir -p ${LOGFILEDIR}
 fi
 
-if [ ! -d ${CONFIGDIR} ]; then
-  mkdir -p ${CONFIGDIR}
-fi
-
 if [ ! -f ${HOSTFILE} ]; then
 	cat ${DSHFILE} | sed "s/${user}@//" > ${HOSTFILE}
 fi
@@ -66,6 +62,10 @@ header "Detected a cluster of ${NDS} nodes."
 #
 
 header "Setting up tmp dir & Stopping running ZooKeeper..."
+
+if [ ! -d ${CONFIGDIR} ]; then
+  ${DSH} -M -f ${DSHFILE} -c "mkdir -p ${CONFIGDIR}";
+fi
 
 ${DSH} -M -f ${DSHFILE} -c "rm -rf ${TMPDIR} && mkdir ${TMPDIR} && chown ${user}:${user} ${TMPDIR}";
 ${DSH} -M -f ${DSHFILE} -c "cd ${ZOODIR} && ./bin/zkServer.sh stop > /dev/null 2>&1";
@@ -123,8 +123,11 @@ case $1 in
 		INPUT_LOC=../inputs/data/parts_${NDS}/small.graph.bsnap; IK=SM;
 		;;
 	"fb")
-		INPUT_LOC=/filepool/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB;
+		INPUT_LOC=/filepool/fb/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB;
 		;;
+  "reddit")
+    INPUT_LOC=/filepool/reddit/parts_${NDS}/reddit.graph.bsnap; IK=FB;
+    ;;
 	*)
 		INPUT_LOC=../inputs/data/parts_${NDS}/small.graph.bsnap; IK=SM;
 		;;
