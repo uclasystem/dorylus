@@ -5,4 +5,4 @@ cd $( dirname $0 )
 weightServerAddrFile=$1
 
 # Args: <Coordserver-Port> <WeightserverAddress-File> <Weightserver-Port> <Dataserver-Port>
-../build/coordination_server 65430 ${weightServerAddrFile:=./run/weightServers} 65432 65431
+../build/coordination_server 65430 ${weightServerAddrFile:=weightServers} 65432 65431
