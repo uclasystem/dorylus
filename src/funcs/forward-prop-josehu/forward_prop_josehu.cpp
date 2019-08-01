@@ -163,7 +163,7 @@ matmul(std::string dataserver, std::string weightserver, std::string dport, std:
         // Request weights matrix.
         Matrix weights;
         std::thread t([&] {
-            // std::cout << "< matmul > Asking weightserver..." << std::endl;
+            std::cout << "< matmul > Asking weightserver..." << std::endl;
             getWeightsTimer.start();
             zmq::socket_t weights_socket(ctx, ZMQ_DEALER);
             weights_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
@@ -171,20 +171,20 @@ matmul(std::string dataserver, std::string weightserver, std::string dport, std:
             sprintf(whost_port, "tcp://%s:%s", weightserver.c_str(), wport.c_str());
             weights_socket.connect(whost_port);
             weights = requestMatrix(weights_socket, layer);
-            // std::cout << "< matmul > Got data from weightserver." << std::endl;
+            std::cout << "< matmul > Got data from weightserver." << std::endl;
             getWeightsTimer.stop();
         });
 
         // Request feature matrix.
         getFeatsTimer.start();
-        // std::cout << "< matmul > Asking dataserver..." << std::endl;
+        std::cout << "< matmul > Asking dataserver..." << std::endl;
         zmq::socket_t data_socket(ctx, ZMQ_DEALER);
         data_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
         char dhost_port[50];
         sprintf(dhost_port, "tcp://%s:%s", dataserver.c_str(), dport.c_str());
         data_socket.connect(dhost_port);
         Matrix feats = requestMatrix(data_socket, id);
-        // std::cout << "< matmul > Got data from dataserver." << std::endl;
+        std::cout << "< matmul > Got data from dataserver." << std::endl;
         getFeatsTimer.stop();
 
         t.join();
@@ -196,21 +196,21 @@ matmul(std::string dataserver, std::string weightserver, std::string dport, std:
 
         // Multiplication.
         computationTimer.start();
-        // std::cout << "< matmul > Doing the dot multiplication..." << std::endl;
+        std::cout << "< matmul > Doing the dot multiplication..." << std::endl;
         Matrix z = dot(feats, weights);
         computationTimer.stop();
 
         // Activation.
         activationTimer.start();
-        // std::cout << "< matmul > Doing the activation..." << std::endl;
+        std::cout << "< matmul > Doing the activation..." << std::endl;
         Matrix activations = activate(z);
         activationTimer.stop();
 
         // Send back to dataserver.
         sendResTimer.start();
-        // std::cout << "< matmul > Sending results back..." << std::endl;
+        std::cout << "< matmul > Sending results back..." << std::endl;
         sendMatrices(z, activations, data_socket, id);
-        // std::cout << "< matmul > Results sent." << std::endl;
+        std::cout << "< matmul > Results sent." << std::endl;
         sendResTimer.stop();
 
     } catch(std::exception &ex) {
