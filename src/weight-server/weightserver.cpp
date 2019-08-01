@@ -105,7 +105,7 @@ private:
     }
 
     void terminateServer(zmq::socket_t& socket, zmq::message_t& client_id) {
-        std::cerr << "Server shutting down" << std::endl;
+        std::cerr << "Server shutting down..." << std::endl;
 
         // Printing all the timers for each request minus the last one since that is the
         // kill message
@@ -197,7 +197,6 @@ private:
 
     // Read in layer configurations.
     void initializeWeightMatrices(std::string& configFileName) {
-
         std::ifstream infile(configFileName.c_str());
         if (!infile.good())
             fprintf(stderr, "[ERROR] Cannot open layer configuration file: %s [Reason: %s]\n", configFileName.c_str(), std::strerror(errno));
