@@ -23,7 +23,12 @@ else
     cd ../build
 
     make clean
-    make -s mode=debug
+
+    if [[ ${1} == "debug" ]]; then
+        make -s mode=debug
+    else
+        make -s mode=release
+    fi
 
     if [ $? -eq 0 ]; then 
         cd ..
