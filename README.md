@@ -17,8 +17,9 @@ Make sure you have installed the following packages by `apt`:
 - `libtool`
 - `pkg-config`
 - `autoconf`
-- `ant`
 - `openjdk-8-jdk`
+- `ant`
+- `cmake`
 
 Assume the system directory is `~/gnn-lambda/`. Create a folder called `installs` in this directory where we put dependency source codes, and then make a `out` folder under `installs` to serve as ZeroMQ & Metis install location.
 
