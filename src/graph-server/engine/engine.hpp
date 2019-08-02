@@ -134,6 +134,7 @@ private:
     static std::vector<double> vecTimeAggregate;
     static std::vector<double> vecTimeLambda;
     static std::vector<double> vecTimeSendout;
+    static std::vector<double> vecTimeWriteback;
 
     static std::map<IdType, unsigned> recvWaiters;
 

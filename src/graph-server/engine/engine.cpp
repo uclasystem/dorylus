@@ -54,6 +54,7 @@ double Engine::timeOutput = 0.0;
 std::vector<double> Engine::vecTimeAggregate;
 std::vector<double> Engine::vecTimeLambda;
 std::vector<double> Engine::vecTimeSendout;
+std::vector<double> Engine::vecTimeWriteback;
 
 
 /**
@@ -232,17 +233,6 @@ Engine::output() {
     //     outStream << std::endl;
     // }
 
-    //
-    // The following are simplified outputing: only the output layer's features.
-    //
-    for (Vertex& v : graph.getVertices()) {
-        outStream << v.getGlobalId() << ": ";
-        FeatType *dataAllPtr = vertexActivationDataPtr(v.getLocalId(), getDataAllOffset(numLayers - 1));
-        for (unsigned i = 0; i < layerConfig[numLayers - 1]; ++i)
-            outStream << dataAllPtr[i] << " ";
-        outStream << std::endl;
-    }
-
     timeOutput += getTimer();
 
     // Benchmarking results.
@@ -349,6 +339,9 @@ Engine::worker(unsigned tid, void *args) {
                 // Lambda threads finished. //
                 //////////////////////////////
 
+                vecTimeLambda.push_back(getTimer() - timeWorker);
+                timeWorker = getTimer();
+
                 // Reset buffer area to be the activation data array from LambdaComm. This reduces 1 realloc() for resizing the buffer.
                 // Previous buffer should be called on delete at lambdaComm destruction.
                 verticesDataBuf = lambdaComm->getActivationData();
@@ -361,7 +354,7 @@ Engine::worker(unsigned tid, void *args) {
                            getNumFeats(iteration + 1) * sizeof(FeatType));
                 }
 
-                vecTimeLambda.push_back(getTimer() - timeWorker);
+                vecTimeWriteback.push_back(getTimer() - timeWorker);
                 timeWorker = getTimer();
                 printLog(nodeId, "All lambda requests finished. Results received.\n");
 
@@ -588,14 +581,14 @@ Engine::aggregateFromNeighbors(IdType lvid) {
     unsigned offset = getDataAllOffset();
 
     // Read out data of the current iteration of given vertex.
-    FeatType currDataBuf[numFeats];
+    FeatType *currDataDst = vertexDataBufPtr(lvid, getNumFeats());
     FeatType *currDataPtr = vertexActivationDataPtr(lvid, offset);
-    memcpy(currDataBuf, currDataPtr, numFeats * sizeof(FeatType));
+    memcpy(currDataDst, currDataPtr, numFeats * sizeof(FeatType));
 
     // Apply normalization factor on the current data.
     Vertex& v = graph.getVertex(lvid);
     for (unsigned i = 0; i < numFeats; ++i)
-        currDataBuf[i] *= v.getNormFactor();
+        currDataDst[i] *= v.getNormFactor();
 
     // Aggregate from incoming neighbors.
     for (unsigned i = 0; i < v.getNumInEdges(); ++i) {
@@ -609,11 +602,8 @@ Engine::aggregateFromNeighbors(IdType lvid) {
 
         // TODO: Locks on the data array area is not properly set yet. But does not affect forward prop.
         for (unsigned j = 0; j < numFeats; ++j)
-            currDataBuf[j] += (otherDataPtr[j] * normFactor);
+            currDataDst[j] += (otherDataPtr[j] * normFactor);
     }
-
-    // Write the results to the correct position inside serialization dataBuf area.
-    memcpy(vertexDataBufPtr(lvid, getNumFeats()), currDataBuf, numFeats * sizeof(FeatType));
 }
 
 
@@ -629,6 +619,7 @@ Engine::printEngineMetrics() {
     for (size_t i = 0; i < numLayers; ++i) {
         printLog(nodeId, "\t\t\tAggregation   %2d  %.3lf ms\n", i, vecTimeAggregate[i]);
         printLog(nodeId, "\t\t\tLambda        %2d  %.3lf ms\n", i, vecTimeLambda[i]);
+        printLog(nodeId, "\t\t\tWrite back    %2d  %.3lf ms\n", i, vecTimeWriteback[i]);
         printLog(nodeId, "\t\t\tGhost update  %2d  %.3lf ms\n", i, vecTimeSendout[i]);
     }
     printLog(nodeId, "Engine METRICS: Total processing time %.3lf ms\n", timeProcess);

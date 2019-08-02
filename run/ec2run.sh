@@ -126,7 +126,7 @@ case $1 in
     INPUT_LOC=/filepool/fb/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB;
     ;;
   "reddit")
-    INPUT_LOC=/filepool/reddit/parts_${NDS}/reddit.graph.bsnap; IK=FB;
+    INPUT_LOC=/filepool/reddit/parts_${NDS}/reddit.graph.bsnap; IK=RD;
     ;;
   *)
     INPUT_LOC=../inputs/data/parts_${NDS}/small.graph.bsnap; IK=SM;
