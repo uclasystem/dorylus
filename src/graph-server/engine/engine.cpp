@@ -581,7 +581,7 @@ Engine::aggregateFromNeighbors(IdType lvid) {
     unsigned offset = getDataAllOffset();
 
     // Read out data of the current iteration of given vertex.
-    FeatType *currDataDst = vertexDataBufPtr(lvid, getNumFeats());
+    FeatType *currDataDst = vertexDataBufPtr(lvid, numFeats);
     FeatType *currDataPtr = vertexActivationDataPtr(lvid, offset);
     memcpy(currDataDst, currDataPtr, numFeats * sizeof(FeatType));
 
