@@ -1,9 +1,11 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <string>
 #include <set>
 #include <cassert>
 #include <cstdlib>
+#include <cstring>
 #include <sys/stat.h>
 #include <sys/types.h>
 
