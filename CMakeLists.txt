@@ -6,12 +6,12 @@ project(gnn-lambda LANGUAGES CXX)
 
 
 # # Graph server (Data server).
-# add_subdirectory(src/graph-server ${PROJECT_SOURCE_DIR}/build)
+# add_subdirectory(src/graph-server)
 
 
 # Coordination server.
-add_subdirectory(src/coord-server ${PROJECT_SOURCE_DIR}/build)
+add_subdirectory(src/coord-server)
 
 
 # Weight server.
-add_subdirectory(src/weight-server ${PROJECT_SOURCE_DIR}/build)
+add_subdirectory(src/weight-server)
