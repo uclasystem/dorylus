@@ -48,11 +48,11 @@ ln -s ../${BSNAP} data/parts_${PARTS}/${BSNAP}.edges
 #
 
 FEATURES=$5
-DIMFEAT=$6
+DIMFEATS=$6
 
 header "Converting the features file to binary..."
 
-./featurestobinary --featurefile=${FEATURES} --featuredimension=${DIMFEAT}
+./featurestobinary --featurefile=${FEATURES} --featuredimension=${DIMFEATS}
 
 
 chmod -R a+w data
