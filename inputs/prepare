@@ -29,18 +29,18 @@ header "Converting the graph to binary..."
 
 ./graphtobinary ${GRAPH} --snapfile=${GRAPH} --undirected=${UNDIRECTED} --header=1
 
-BSNAP=${GRAPH}.bsnap
-mv ${BSNAP} .
-BSNAP=$( basename ${BSNAP} )
+GRAPH_BSNAP=${GRAPH}.bsnap
+mv ${GRAPH_BSNAP} .
+GRAPH_BSNAP=$( basename ${GRAPH_BSNAP} )
 
 header "Conduct partitioning..."
 
-./partitioner ${BSNAP} ${VERTICES} ${PARTS}
+./partitioner ${GRAPH_BSNAP} ${VERTICES} ${PARTS}
 
 mv parts_${PARTS} data/
-mv ${BSNAP} data/
+mv ${GRAPH_BSNAP} data/
 
-ln -s ../${BSNAP} data/parts_${PARTS}/${BSNAP}.edges
+ln -s ../${GRAPH_BSNAP} data/parts_${PARTS}/${GRAPH_BSNAP}.edges
 
 
 #
@@ -53,6 +53,10 @@ DIMFEATS=$6
 header "Converting the features file to binary..."
 
 ./featurestobinary --featurefile=${FEATURES} --featuredimension=${DIMFEATS}
+
+FEATURES_BSNAP=${FEATURES}.bsnap
+
+mv ${FEATURES_BSNAP} data/
 
 
 chmod -R a+w data
