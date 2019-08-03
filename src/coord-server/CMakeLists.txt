@@ -17,8 +17,12 @@ include_directories(${ZMQ_INC})
 find_package(Threads REQUIRED)
 
 
+# Include AWS SDK (only the lambda threads component).
+find_package(AWSSDK REQUIRED COMPONENTS lambda)
+
+
 # Add the executable.
-aux_source_directory(. WEIGHT_SRCS)
-add_executable(weightserver ${WEIGHT_SRCS})
-target_link_libraries(weightserver PUBLIC ${ZMQ_LIB} Threads::Threads)
-target_compile_options(weightserver PRIVATE "-Wall" "-Werror")
+aux_source_directory(. COORD_SRCS)
+add_executable(coordserver ${COORD_SRCS})
+target_link_libraries(coordserver PUBLIC ${ZMQ_LIB} ${AWSSDK_LINK_LIBRARIES} Threads::Threads)
+target_compile_options(coordserver PRIVATE "-Wall" "-Werror")
