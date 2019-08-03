@@ -4,9 +4,9 @@
 # Convert a text graph into binary, and partite it into partitions.
 #
 
-if [ ! $# == 4 ]; then
-    echo "Usage: $0 <graph-file> <undirected? (0/1)> <num-vertices> <num-partitions>";
-    exit;
+if [ ! $# == 6 ]; then
+    echo "Usage: $0 <GraphFile> <Undirected? (0/1)> <NumVertices> <NumPartitions> <FeatureFile> <DimFeatures>"
+    exit
 fi
 
 rm -rf data && mkdir data
@@ -15,14 +15,19 @@ function header {
     echo -e "\e[33;1m######## ${1} ########\e[0m"
 }
 
-GRAPH=$1;
-UNDIRECTED=$2;
-VERTICES=$3;
-PARTS=$4;
 
-header "Converting to binary..."
+#
+# Convert the graph to binary snap.
+#
 
-./tobinary ${GRAPH} --snapfile=${GRAPH} --undirected=${UNDIRECTED} --header=1
+GRAPH=$1
+UNDIRECTED=$2
+VERTICES=$3
+PARTS=$4
+
+header "Converting the graph to binary..."
+
+./graphtobinary ${GRAPH} --snapfile=${GRAPH} --undirected=${UNDIRECTED} --header=1
 
 BSNAP=${GRAPH}.bsnap
 mv ${BSNAP} .
@@ -37,4 +42,19 @@ mv ${BSNAP} data/
 
 ln -s ../${BSNAP} data/parts_${PARTS}/${BSNAP}.edges
 
-chmod -R a+w data/parts_3
+
+#
+# Convert the features file to binary snap.
+#
+
+FEATURES=$5
+DIMFEAT=$6
+
+header "Converting the features file to binary..."
+
+./featurestobinary --featurefile=${FEATURES} --featuredimension=${DIMFEAT}
+
+
+chmod -R a+w data
+
+echo -e "\e[32;1mDataset under 'data/' folder is ready for battle.\e[0m"

@@ -5,6 +5,11 @@ out*
 **/.DS_Store
 *.swp
 
+manage-ec2
+ec2_manager/contexts
+**/__pycache__
+*.pyc
+
 inputs/data
 installs
 run/hostfile
@@ -16,14 +21,10 @@ run/zoo.basic
 run/cserverinfo
 config
 
-manage-ec2
 .venv
-ec2_manager/res
-*.pyc
 
 **/build
 **/results
-**/__pycache__
 **/output-files
 **/.out
 **/test

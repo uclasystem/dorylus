@@ -236,8 +236,13 @@ Engine::output() {
     timeOutput += getTimer();
 
     // Benchmarking results.
-    if (master())
+    if (master()) {
+        assert(vecTimeAggregate.size() == numLayers);
+        assert(vecTimeLambda.size() == numLayers);
+        assert(vecTimeWriteback.size() == numLayers);
+        assert(vecTimeSendout.size() == numLayers);
         printEngineMetrics();
+    }
 }
 
 
@@ -389,7 +394,6 @@ Engine::worker(unsigned tid, void *args) {
                 NodeManager::barrier(LAYER_BARRIER);
 
                 vecTimeSendout.push_back(getTimer() - timeWorker);
-                timeWorker = getTimer();
                 printLog(nodeId, "Global barrier after ghost data exchange crossed.\n");
 
                 // End this lambda communciation context and step forward to a new iteration.
@@ -406,6 +410,7 @@ Engine::worker(unsigned tid, void *args) {
                     //## Worker barrier 2: Starting a new iteration. ##//
                     barComp.wait();
 
+                    timeWorker = getTimer();
                     continue;
 
                 // No more, so deciding to halt. But still needs the communicator to check if there will be further scheduling invoked by ghost
