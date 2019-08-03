@@ -81,7 +81,7 @@ main(int argc, char *argv[]) {
         if (strncmp("--featurefile=", argv[i], 14) == 0)
             featureFile = argv[i] + 14;
         if (strncmp("--featuredimension=", argv[i], 19) == 0)
-            sscanf(argv[i] + 16, "%u", &head.numFeautures);
+            sscanf(argv[i] + 19, "%u", &head.numFeautures);
     }
     std::cout << "Feature file: " << featureFile << std::endl;
     std::cout << "Feature size: " << head.numFeautures << std::endl;
