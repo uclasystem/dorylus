@@ -25,7 +25,3 @@ aux_source_directory(. COORD_SRCS)
 add_executable(coordserver ${COORD_SRCS})
 target_link_libraries(coordserver PUBLIC ${ZMQ_LIB} ${AWSSDK_LINK_LIBRARIES} Threads::Threads)
 target_compile_options(coordserver PRIVATE "-Wall" "-Werror")
-
-
-# Move the binary to 'build/' dir.
-file(RENAME coordserver ${PROJECT_SOURCE_DIR}/build)

@@ -21,7 +21,3 @@ aux_source_directory(. WEIGHT_SRCS)
 add_executable(weightserver ${WEIGHT_SRCS})
 target_link_libraries(weightserver PUBLIC ${ZMQ_LIB} Threads::Threads)
 target_compile_options(weightserver PRIVATE "-Wall" "-Werror")
-
-
-# Move the binary to 'build/' dir.
-file(RENAME coordserver ${PROJECT_SOURCE_DIR}/build)
