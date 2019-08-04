@@ -1,32 +1,6 @@
 cmake_minimum_required(VERSION 3.5)
 
 
-# Options.
-set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_BUILD_TYPE Release)
-
-
-# Include ZeroMQ.
-set(ZMQ_INC /usr/local/include)
-set(ZMQ_LIB /usr/local/lib/libzmq.a)
-include_directories(${ZMQ_INC})
-
-
-# Include ZooKeeper
-set(ZK_INC /usr/local/include)
-set(ZK_LIB /usr/local/lib/libzookeeper_mt.a)
-include_directories(${ZK_INC})
-
-
-# Include Threads lib.
-find_package(Threads REQUIRED)
-
-
-# Include Boost lib.
-find_package(Boost COMPONENTS system filesystem program_options REQUIRED)
-include_directories(${Boost_INCLUDE_DIR})
-
-
 # Subdirectories, each needs a CMakeLists.txt.
 add_subdirectory(commmanager)
 add_subdirectory(nodemanager)
