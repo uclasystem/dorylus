@@ -7,4 +7,4 @@ target_link_libraries(commmanager PUBLIC ${ZMQ_LIB} ${ZK_LIB} Threads::Threads $
 target_compile_options(commmanager PRIVATE "-Wall" "-Werror" "-Wno-unused-but-set-variable" "-MMD")
 add_library(lambda_comm "lambda_comm.cpp")
 target_link_libraries(lambda_comm PUBLIC ${ZMQ_LIB} ${ZK_LIB} Threads::Threads ${BOOST_LIBRARIES})
-target_compile_options(lambda_comm PRIVATE "-Wall" "-Werror" "-MMD")
+target_compile_options(lambda_comm PRIVATE "-Wall" "-Werror" "-Wno-reorder" "-MMD")

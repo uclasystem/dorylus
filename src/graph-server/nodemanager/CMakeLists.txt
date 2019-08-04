@@ -7,4 +7,4 @@ target_link_libraries(nodemanager PUBLIC ${ZMQ_LIB} ${ZK_LIB} Threads::Threads $
 target_compile_options(nodemanager PRIVATE "-Wall" "-Werror" "-MMD")
 add_library(zkinterface "zkinterface.cpp")
 target_link_libraries(zkinterface PUBLIC ${ZMQ_LIB} ${ZK_LIB} Threads::Threads ${BOOST_LIBRARIES})
-target_compile_options(zkinterface PRIVATE "-Wall" "-Werror" "-MMD")
+target_compile_options(zkinterface PRIVATE "-Wall" "-Werror" "-Wno-unused-function" "-MMD")
