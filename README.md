@@ -22,19 +22,6 @@ Make sure you have installed the following packages by `apt`:
 - `openjdk-8-jdk`
 - `ant`
 
-Assume the system directory is `~/gnn-lambda/`. Create a folder called `installs` in this directory where we put dependency source codes, and then make a `out` folder under `installs` to serve as ZeroMQ & Metis install location.
-
-Folder tree should look like:
-
-    /home/<USER>/gnn-lambda/
-        |- installs/
-            |- zeromq-x.x.x/
-            |- ...
-            |- out/
-        |- ...
-
-> Keep all dependency source directories after installation.
-
 #### D.1.1 ZeroMQ
 
 Get ZeroMQ 4.1.4 from: [https://archive.org/download/zeromq_4.1.4/zeromq-4.1.4.tar.gz](https://archive.org/download/zeromq_4.1.4/zeromq-4.1.4.tar.gz)
@@ -44,8 +31,9 @@ Get ZeroMQ 4.1.4 from: [https://archive.org/download/zeromq_4.1.4/zeromq-4.1.4.t
 
 Go inside the `zeromq-4.1.4/` directory and compile it from source:
 
-    $ ./configure --prefix=/home/<USER>/gnn-lambda/installs/out --with-libsodium=no
-    $ make install
+    $ ./configure --with-libsodium=no
+    $ make
+    $ sudo make install
     $ sudo ldconfig
 
 **Then** move `build/zmq.hpp` into `installs/out/include/` to replace it.
@@ -171,6 +159,8 @@ Use `clear_out` script to clean all log files and output files, and reset GVID t
 
 Make sure the following packages have been installed:
 
+- `libssl-dev`
+- `libcurl4-openssl-dev`
 - `libboost-all-dev`
 - `libopenblas-dev`
 
@@ -182,8 +172,8 @@ Get AWS C++ SDK from:
 
 Go inside the `aws-sdk-cpp/` repo, make a build directory and conduct an out-of-source build:
 
-    $ mkdir build
-    $ cmake .. -DCMAKE_BUILD_TYPE=Release -BUILD_ONLY=lambda
+    $ mkdir build && cd build
+    $ cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_ONLY=lambda
     $ make
     $ sudo make install
 
@@ -195,7 +185,7 @@ Get AWS C++ Lambda runtime from:
 
 Go inside the `aws-lambda-cpp/` repo, make a build directory and conduct an out-of-source build:
 
-    $ mkdir build
+    $ mkdir build && cd build
     $ cmake .. -DCMAKE_BUILD_TYPE=Release
     $ make
     $ sudo make install

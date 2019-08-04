@@ -7,9 +7,8 @@ set(CMAKE_BUILD_TYPE Release)
 
 
 # Include ZeroMQ.
-set(INSTALL_OUT_PATH ${PROJECT_SOURCE_DIR}/installs/out)
-set(ZMQ_INC ${INSTALL_OUT_PATH}/include)
-set(ZMQ_LIB ${INSTALL_OUT_PATH}/lib/libzmq.a)
+set(ZMQ_INC /usr/local/include)
+set(ZMQ_LIB /usr/local/lib/libzmq.a)
 include_directories(${ZMQ_INC})
 
 
