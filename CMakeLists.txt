@@ -6,7 +6,7 @@ project(gnn-lambda LANGUAGES CXX)
 
 
 # # Graph server (Data server).
-# add_subdirectory(src/graph-server ${PROJECT_SOURCE_DIR}/build/graph-server)
+add_subdirectory(src/graph-server ${PROJECT_SOURCE_DIR}/build/graph-server)
 
 
 # Coordination server.

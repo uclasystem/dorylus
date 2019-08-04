@@ -36,7 +36,7 @@ Go inside the `zeromq-4.1.4/` directory and compile it from source:
     $ sudo make install
     $ sudo ldconfig
 
-**Then** move `build/zmq.hpp` into `installs/out/include/` to replace it.
+**Then** move `src/utils/zmq.hpp` into `installs/out/include/` to replace it.
 
 #### D.1.2 ZooKeeper
 
@@ -64,8 +64,8 @@ Get Metis 5.1.0 from: [http://glaros.dtc.umn.edu/gkhome/fetch/sw/metis/metis-5.1
 
 Go inside the `metis-5.1.0/` directory and compile it from source:
 
-    $ make config prefix=/home/<USER>/gnn-lambda/installs/out
-    $ make install
+    $ make config
+    $ sudo make install
 
 ### D.2 Building the Dataserver
 
