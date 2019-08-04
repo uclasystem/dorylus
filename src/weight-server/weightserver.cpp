@@ -120,9 +120,9 @@ private:
         cv.notify_one();
     }
 
-    std::vector<Matrix>& weight_list;
     zmq::context_t &ctx;
     zmq::socket_t worker;
+    std::vector<Matrix>& weight_list;
 };
 
 
