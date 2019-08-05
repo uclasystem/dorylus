@@ -8,11 +8,6 @@
 ##
 
 
-function header {
-    echo -e "\e[33;1m${1}\e[0m"
-}
-
-
 if [ ! $# == 6 ]; then
     echo "Usage: $0 <GraphFile> <Undirected? (0/1)> <NumVertices> <NumPartitions> <FeatureFile> <DimFeatures>"
     exit
@@ -30,22 +25,19 @@ UNDIRECTED=$2
 VERTICES=$3
 PARTS=$4
 
-header "Converting the graph to binary..."
+echo "Converting the graph to binary..."
 
 ./graphtobinary ${GRAPH} --snapfile=${GRAPH} --undirected=${UNDIRECTED} --header=1
+mv ${GRAPH}.bsnap ./graph.bsnap
 
-GRAPH_BSNAP=${GRAPH}.bsnap
-mv ${GRAPH_BSNAP} .
-GRAPH_BSNAP=$( basename ${GRAPH_BSNAP} )
+echo "Conduct partitioning..."
 
-header "Conduct partitioning..."
-
-./partitioner ${GRAPH_BSNAP} ${VERTICES} ${PARTS}
+./partitioner graph.bsnap ${VERTICES} ${PARTS}
 
 mv parts_${PARTS} data/
-mv ${GRAPH_BSNAP} data/
+mv graph.bsnap data/
 
-ln -s ../${GRAPH_BSNAP} data/parts_${PARTS}/${GRAPH_BSNAP}.edges
+ln -s ../graph.bsnap data/parts_${PARTS}/graph.bsnap.edges
 
 
 #
@@ -55,15 +47,13 @@ ln -s ../${GRAPH_BSNAP} data/parts_${PARTS}/${GRAPH_BSNAP}.edges
 FEATURES=$5
 DIMFEATS=$6
 
-header "Converting the features file to binary..."
+echo "Converting the features file to binary..."
 
 ./featurestobinary --featurefile=${FEATURES} --featuredimension=${DIMFEATS}
-
-FEATURES_BSNAP=${FEATURES}.bsnap
-
-mv ${FEATURES_BSNAP} data/
+mv ${FEATURES}.bsnap data/features.bsnap
 
 
+# Permissions stuff...
 chmod -R a+w data
 
-echo -e "\e[32;1mDataset under 'data/' folder is ready for battle.\e[0m"
+echo -e "Dataset under 'data/' folder is ready for battle."

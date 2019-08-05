@@ -5,14 +5,14 @@
 ## already created (on AWS Lambda console).
 ##
 
-cd $( dirname "$0" )
+cd $( dirname $0 )
 
 if [[ ! -d build ]]; then
 	mkdir build
 fi
 
 FUNC_NAME=forward-prop-josehu
-ZIP_FILE=forward-prop-josehu.zip
+ZIP_FILE=${FUNC_NAME}.zip
 
 
 # Build.

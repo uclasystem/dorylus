@@ -31,6 +31,7 @@ fi
 
 
 RAW_NAME=$( basename $1 )
+NEW_NAME=$2
 
 ${EC2MAN_CMD} graph all put -r $1
-${EC2MAN_CMD} graph all ssh -t "sudo mkdir -p /filepool && sudo mv ${RAW_NAME}/ /filepool/ && sudo chmod -R a+r /filepool"
+${EC2MAN_CMD} graph all ssh -t "sudo mkdir -p /filepool && sudo mv ${RAW_NAME}/ /filepool/${NEW_NAME} && sudo chmod -R a+r /filepool"
