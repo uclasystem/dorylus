@@ -1,0 +1,36 @@
+#!/bin/bash
+
+##
+## Send the dataset to all the graphservers listed in ec2 manager.
+##
+## Usage: $ ./gnnman/send-dataset <PathToDataFolder> <Name>
+##
+## Arguments:
+##      PathToDataFolder: Path to `data/` folder, relative to root dir `gnn-lambda/`.
+##      Name: Folder name under `/filepool/` for this dataset.
+##
+## You might be prompted to enter the sudo passwd on remote machines.
+##
+
+
+cd $( dirname $0 )/..
+
+EC2MAN_CMD="python3 -m ec2man"
+
+
+if [ -z $1 ]; then
+    echo "Please give the path to 'data/' folder."
+    echo "Usage: ./gnnman/send-dataset <PathToDataFolder> <Name>"
+    exit 1
+fi
+
+if [ -z $2 ]; then
+    echo "Please sepcify a dataset name."
+    exit 1
+fi
+
+
+RAW_NAME=$( basename $1 )
+
+${EC2MAN_CMD} graph all put -r $1
+${EC2MAN_CMD} graph all ssh -t "sudo mkdir -p /filepool && sudo mv ${RAW_NAME}/ /filepool/ && sudo chmod -R a+r /filepool"

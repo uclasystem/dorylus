@@ -1,0 +1,3 @@
+i-027d989d22c2bb05b     graph       ubuntu      /Users/jose/.ssh/JoseHu-Keypair.pem     #  id  role(context)  username  privatekey
+i-029b522451f84a340     coord       ubuntu      /Users/jose/.ssh/JoseHu-Keypair.pem
+i-0dba1739359b39def     weight      ubuntu      /Users/jose/.ssh/JoseHu-Keypair.pem

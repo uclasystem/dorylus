@@ -1,0 +1,65 @@
+#!/bin/bash
+
+##
+## Start all the machines listed in the manager. Generates proper dshmachine files and put them on to the machines.
+## Generates weightserver info file (send to coordserver) and coordserver info file (send to graphserver) as well.
+## Also, the `layerconfig` file is sent to all graphservers and weightservers.
+##
+## Usage: $ ./gnnman/setup-cluster
+##
+## Options:
+##      Default: Graph servers receive a graph servers' copy, and weight servers receive a weight servers' copy of
+##               'dshmachines'.
+##
+## All these config files are put in the home directory `~/` for convience.
+##
+
+
+cd $( dirname $0 )/..
+
+EC2MAN_CMD="python3 -m ec2man"
+
+
+# Start all machines...
+${EC2MAN_CMD} graph all start
+${EC2MAN_CMD} coord all start
+${EC2MAN_CMD} weight all start
+
+
+# For graph servers.
+echo "Processing context 'graph'..."
+
+${EC2MAN_CMD} graph dshfile > dshmachines           # Put 'dshmahines'.
+${EC2MAN_CMD} graph all put "dshmachines"
+rm -f dshmachines
+
+${EC2MAN_CMD} coord 0 pubip >> cserverip            # Put 'cserverip'.
+${EC2MAN_CMD} graph all put "cserverip"
+rm -f cserverip
+
+${EC2MAN_CMD} graph all put "run/layerconfig"       # Put other config files.
+${EC2MAN_CMD} graph all put "run/cserverport"
+${EC2MAN_CMD} graph all put "run/gserverport"
+
+
+# For weight servers.
+echo "Processing context 'weight'..."
+
+${EC2MAN_CMD} weight dshfile > dshmachines          # Put 'dshmahines'.
+${EC2MAN_CMD} weight all put "dshmachines"
+rm -f dshmachines
+
+${EC2MAN_CMD} weight all put "run/layerconfig"      # Put other config files.
+${EC2MAN_CMD} weight all put "run/wserverport"
+
+
+# For coordination servers.
+echo "Processing context 'coord'..."
+
+${EC2MAN_CMD} weight all pubip >> wserverip         # Put 'wserverip'.
+${EC2MAN_CMD} coord 0 put "wserverip"
+rm -f wserverip
+
+${EC2MAN_CMD} coord all put "run/cserverport"       # Put other config files.
+${EC2MAN_CMD} coord all put "run/gserverport"
+${EC2MAN_CMD} coord all put "run/wserverport"

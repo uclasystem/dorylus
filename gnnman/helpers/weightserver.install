@@ -1,0 +1,42 @@
+#!/bin/bash
+
+##
+## Install requried dependencies on a weight server. TO be invoked on the remote machine.
+##
+
+
+cd ${HOME}
+
+
+# Basic packages.
+APT_INSTALL_LIST="build-essential libtool pkg-config autoconf libboost-all-dev cmake git dsh"
+YUM_GROUPINSTALL="Development Tools"; YUM_INSTALL_LIST="boost-devel cmake git"
+
+OS_DISTRO=$( awk -F= '/^NAME/{print $2}' /etc/os-release | sed -e 's/^"//' -e 's/"$//' )
+if [[ ${OS_DISTRO} == "Ubuntu" ]]; then
+    sudo apt-get -y install ${APT_INSTALL_LIST}
+elif [[ ${OS_DISTRO} == "Red Hat Enterprise Linux" ]]; then
+    sudo yum -y install ${YUM_INSTALL_LIST}
+    sudo yum -y groupinstall ${YUM_GROUPINSTALL}
+else
+    echo "Unrecognized OS distro version. This script currently only supports 'Ubuntu' or 'Red Hat Enterprise Linux'."
+    echo "Basic packages not installed."
+fi
+
+# TODO: dsh not handled for RHEL...
+
+
+# Install ZeroMQ.
+if [[ ! $( ldconfig -p | grep zmq ) ]]; then    # Only install if have been installed.
+    wget https://archive.org/download/zeromq_4.1.4/zeromq-4.1.4.tar.gz
+    tar xf zeromq-4.1.4.tar.gz
+    rm zeromq-4.1.4.tar.gz
+    cd zeromq-4.1.4
+    ./configure --with-libsodium=no
+    make
+    sudo make install
+    sudo ldconfig
+    sudo mv ../gnn-lambda/src/utils/zmq.hpp /usr/local/include
+    cd ..
+    rm -rf zeromq-4.1.4
+fi

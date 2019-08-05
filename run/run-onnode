@@ -1,0 +1,117 @@
+#!/bin/bash
+
+##
+## Run the system on the given context. TO be invoked on only MASTER node.
+## Must be invoked after a proper `setuup-cluster` & `bld-system`!!!
+##
+## Usage: $ ./gnnman/run-onnode <Context> [Dataset]
+##
+## Arguments:
+##      Context: Run which part of the system.
+##      Dataset: Only needed for graphservers.
+##
+
+
+cd ${HOME}/gnn-lambda/
+
+
+case $1 in
+
+    #
+    # Run graphserver.
+    #
+    "graph")
+        CPORT=$( < ../cserverport )
+        GPORT=$( < ../gserverport )
+        CSERVERIP=$( < ../cserverip )
+
+        # Count the machines.
+        NDS=$( wc -l ../dshmachines | cut -d" " -f1 )
+        for i in $( seq 1 ${NDS} ); do
+          DSHNODES[$i]=$( head -n $i ../dshmachines | tail -n 1 )
+        done
+        
+        # Choosing the dataset.
+        case $2 in
+            "fb")
+                DATASET=/filepool/fb/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB
+                ;;
+            "reddit")
+                DATASET=/filepool/reddit/parts_${NDS}/reddit.graph.bsnap;      IK=RD
+                ;;
+            *)
+                DATASET=/filepool/fb/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB
+                ;;
+        esac
+
+        FEATUREFILE=$( dirname ${DATASET} )/../features.bsnap
+        LAYERFILE=${HOME}/layerconfig
+
+        # Minor options.
+        UNDIRECTED=0    # Currently are all directed graphs.
+                        # TODO: Integrate this into the `graphToBinary` tool.
+
+        COMP_THREADS=7  # TODO: Maybe tune their values?
+        COMM_THREADS=1
+
+        # Increment the running mark.
+        RUN_MARK=$(( $( cat run/run-mark ) + 1 ))
+        echo ${RUN_MARK} > run/run-mark
+        echo "Running MARK # ${RUN_MARK}..."
+
+        # Set logging file.
+        LOGFILEDIR=${HOME}/logfiles
+        if [ ! -d ${LOGFILEDIR} ]; then
+            mkdir ${LOGFILEDIR}
+        fi
+        LOGFILE=${LOGFILEDIR}/${RUN_MARK}.${IK}.log
+
+        # Set temporary directory.
+        TMPFILEDIR=${HOME}/tmpfiles
+        dsh -f ../dshmachines -c "mkdir ${TMPFILEDIR}"
+
+        # Run the command on all dsh machines.
+        echo "DSH command: ./build/graphserver --graphfile ${DATASET} --featuresfile ${FEATUREFILE} --layerfile ${LAYERFILE} --dataserverport ${GPORT} --coordserverip ${CSERVERIP} --coordserverport ${CPORT} --undirected ${UNDIRECTED} --tmpdir=${TMPFILEDIR} --cthreads ${COMP_THREADS} --dthreads ${COMM_THREADS}"
+        dsh -f ../dshmachine -c "cd ${HOME}/gnn-lambda && ./build/graphserver --graphfile ${DATASET} --featuresfile ${FEATUREFILE} --layerfile ${LAYERFILE} --dataserverport ${GPORT} --coordserverip ${CSERVERIP} --coordserverport ${CPORT} --undirected ${UNDIRECTED} --tmpdir=${TMPFILEDIR} --cthreads ${COMP_THREADS} --dthreads ${COMM_THREADS}" 1> /dev/null 2>> ${LOGFILE}
+        
+        # Gather the output files.
+        OUTFILEDIR=${HOME}/outfiles/${RUN_MARK}.${IK}
+        mkdir -p ${OUTFILEDIR}
+        for i in $( seq 1 ${NDS} ); do
+            scp -q ${DSHNODES[$i]}:${TMPFILEDIR}/output_* ${OUTFILEDIR}/
+        done
+
+        echo "Check the output results in \"~/outfiles/\" folder."
+        echo "Check the running log under \"~/logfiles/\" folder."
+
+        if [ -e ${OUTFILEDIR}/output_0 ]; then
+          echo -e "\e[92;1mThis round of execution seems successful, congrats ;)\e[0m"
+        else
+          echo -e "\e[91;1mExecution fails (at least on this node), check the log file!\e[0m"
+        fi
+        ;;
+
+    #
+    # Run weightserver.
+    #
+    "weight")
+        WPORT=$( < ../wserverport )
+        dsh -f ../dshmachines -c "cd ${HOME}/gnn-lambda && ./build/weightserver ${WPORT} ../layerconfig"
+        ;;
+
+    #
+    # Run coordserver.
+    #
+    "coord")
+        CPORT=$( < ../cserverport )
+        GPORT=$( < ../gserverport )
+        WPORT=$( < ../wserverport )
+        ./build/coordserver ${CPORT} ../wserverip ${WPORT} ${GPORT}
+        ;;
+
+    *)
+        echo "Must specify a valid context 'graph' / 'weight' / 'coord'"
+        echo "Usage: ./run/run-onnode <Context>"
+        exit 1
+        ;;
+esac

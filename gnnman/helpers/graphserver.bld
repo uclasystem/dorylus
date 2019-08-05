@@ -1,0 +1,19 @@
+#!/bin/bash
+
+##
+## Build the graph server executable.
+##
+
+
+cd ${HOME}/gnn-lambda/
+
+
+if [ ! -d build ]; then
+    mkdir build
+fi
+
+cd build
+cmake .. -DBUILD_GRAPH=yes
+make
+
+mv graph-server/graphserver .
