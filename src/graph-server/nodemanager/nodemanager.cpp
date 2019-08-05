@@ -3,7 +3,6 @@
 #include <cstring>
 #include <boost/algorithm/string/trim.hpp>
 #include "nodemanager.hpp"
-#include "zkinterface.hpp"
 #include "../utils/utils.hpp"
 
 
