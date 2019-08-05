@@ -1,9 +1,13 @@
 *.o
 *.d
-out*
-*.bin
 **/.DS_Store
 *.swp
+
+**/build
+**/results
+**/output-files
+**/.out
+**/test
 
 manage-ec2
 ec2man/contexts
@@ -11,20 +15,5 @@ ec2man/contexts
 *.pyc
 
 inputs/data
-installs
-run/hostfile
-run/gvid
-run/nodeIp
-run/dshmachines
-run/cserverinfo
-run/zoo.basic
-run/cserverinfo
-config
 
-.venv
-
-**/build
-**/results
-**/output-files
-**/.out
-**/test
+wiki
