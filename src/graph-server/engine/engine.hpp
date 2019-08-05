@@ -35,17 +35,8 @@
 
 
 /** For files cli options. */
-#define DEFAULT_CONFIG_FILE "../config/kconf.conf"
-#define HOST_FILE "../config/hostfile"
-#define ZKHOST_FILE "../config/zkhostfile"
 #define PARTS_EXT ".parts"
 #define EDGES_EXT ".edges"
-
-
-/** Global node barriers. */
-#define INIT_BARRIER "init"
-#define RUN_BARRIER "run"
-#define LAYER_BARRIER "layer"
 
 
 /** Binary snap file header struct. */
@@ -111,6 +102,7 @@ private:
     static std::string featuresFile;
     static std::string outFile;
     static std::string layerConfigFile;
+    static std::string dshMachinesFile;
 
     static unsigned dataserverPort;
     static std::string coordserverIp;

@@ -24,6 +24,7 @@ std::string Engine::graphFile;
 std::string Engine::featuresFile;
 std::string Engine::outFile;
 std::string Engine::layerConfigFile;
+std::string Engine::dshMachinesFile;
 unsigned Engine::dataserverPort;
 std::string Engine::coordserverIp;
 unsigned Engine::coordserverPort;
@@ -70,12 +71,12 @@ Engine::init(int argc, char *argv[]) {
     parseArgs(argc, argv);
     
     // Initialize the node manager and communication manager.
-    NodeManager::init(ZKHOST_FILE, HOST_FILE);
-    CommManager::init();
+    NodeManager::init(dshMachinesFile);     // NodeManger should go first.
     nodeId = NodeManager::getNodeId();
     numNodes = NodeManager::getNumNodes();
     assert(numNodes <= 256);    // Cluster size limitation.
     outFile += std::to_string(nodeId);
+    CommManager::init();
 
     // Set number of layers and number of features in each layer. Also store the prefix sum of config for offset querying use.
     readLayerConfigFile(layerConfigFile);
@@ -655,10 +656,10 @@ Engine::parseArgs(int argc, char *argv[]) {
     desc.add_options()
         ("help", "Produce help message")
 
-        ("config", boost::program_options::value<std::string>()->default_value(std::string(DEFAULT_CONFIG_FILE), DEFAULT_CONFIG_FILE), "Config file")
         ("graphfile", boost::program_options::value<std::string>(), "Path to the binary file contatining the edge list")
         ("featuresfile", boost::program_options::value<std::string>(), "Path to the file containing the vertex features")
         ("layerfile", boost::program_options::value<std::string>(), "Layer configuration file")
+        ("dshmachinesfile", boost::program_options::value<std::string>(), "DSH machines file")
 
         ("tmpdir", boost::program_options::value<std::string>(), "Temporary directory")
 
@@ -666,7 +667,7 @@ Engine::parseArgs(int argc, char *argv[]) {
         ("coordserverip", boost::program_options::value<std::string>(), "The private IP address of the coordination server")
         ("coordserverport", boost::program_options::value<unsigned>(), "The port of the listener on the coordination server")
 
-        ("undirected", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Graph type")
+        ("undirected", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Graph type is undirected or not")
 
         ("dthreads", boost::program_options::value<unsigned>()->default_value(unsigned(NUM_DATA_THREADS), NUM_DATA_THREADS_STR), "Number of data threads")
         ("cthreads", boost::program_options::value<unsigned>()->default_value(unsigned(NUM_COMP_THREADS), NUM_COMP_THREADS_STR), "Number of compute threads")
@@ -676,15 +677,6 @@ Engine::parseArgs(int argc, char *argv[]) {
 
     boost::program_options::variables_map vm;
     boost::program_options::store(boost::program_options::command_line_parser(argc, argv).options(desc).allow_unregistered().run(), vm);
-    boost::program_options::notify(vm);
-
-    assert(vm.count("config"));
-
-    std::string cFile = vm["config"].as<std::string>();
-    std::ifstream cStream;
-    cStream.open(cFile.c_str());
-
-    boost::program_options::store(boost::program_options::parse_config_file(cStream, desc, true), vm);
     boost::program_options::notify(vm);
 
     if (vm.count("help")) {
@@ -706,6 +698,9 @@ Engine::parseArgs(int argc, char *argv[]) {
 
     assert(vm.count("layerfile"));
     layerConfigFile = vm["layerfile"].as<std::string>();
+
+    assert(vm.count("dshmachinesfile"));
+    dshMachinesFile = vm["dshmachinesfile"].as<std::string>();
 
     assert(vm.count("tmpdir"));
     outFile = vm["tmpdir"].as<std::string>() + "/output_";  // Still needs to append the node id, after node manager set up.
