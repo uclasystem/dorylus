@@ -3,7 +3,10 @@ cmake_minimum_required(VERSION 3.5)
 
 # Options.
 set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_BUILD_TYPE Release)
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DVERBOSE_ERRORS -fno-omit-frame-pointer -fsanitize=address")
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
 
 
 # Project name.
@@ -32,12 +35,27 @@ find_package(Threads REQUIRED)
 
 
 # Graph server (Data server).
-add_subdirectory(src/graph-server ${PROJECT_SOURCE_DIR}/build/graph-server)
+if(BUILD_GRAPH)
+    message("Graph server:  YES")
+    add_subdirectory(src/graph-server ${PROJECT_SOURCE_DIR}/build/graph-server)
+else()
+    message("Graph server:  NO")
+endif()
 
 
 # Coordination server.
-add_subdirectory(src/coord-server ${PROJECT_SOURCE_DIR}/build/coord-server)
+if(BUILD_COORD)
+    message("Coord server:  YES")
+    add_subdirectory(src/coord-server ${PROJECT_SOURCE_DIR}/build/coord-server)
+else()
+    message("Coord server:  NO")
+endif()
 
 
 # Weight server.
-add_subdirectory(src/weight-server ${PROJECT_SOURCE_DIR}/build/weight-server)
+if(BUILD_WEIGHT)
+    message("Weight server: YES")
+    add_subdirectory(src/weight-server ${PROJECT_SOURCE_DIR}/build/weight-server)
+else()
+    message("Weight server: NO")
+endif()

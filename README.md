@@ -21,6 +21,8 @@ Make sure you have installed the following packages by `apt`:
 - `autoconf`
 - `openjdk-8-jdk`
 - `ant`
+- `git`
+- `"Development tools"`
 
 #### D.1.1 ZeroMQ
 
@@ -159,8 +161,9 @@ Use `clear_out` script to clean all log files and output files, and reset GVID t
 
 Make sure the following packages have been installed:
 
-- `libssl-dev`
-- `libcurl4-openssl-dev`
+- `libssl-dev` / `openssl-devel`
+- `libcurl4-openssl-dev` / `libcurl-devel`
+- `zlib1g-dev` / `zlib-devel`
 - `libboost-all-dev`
 - `libopenblas-dev`
 
@@ -241,7 +244,7 @@ Configure AWS variables:
     $ aws configure
     ...     # Enter the required fields
 
-### For [D]: Python `ec2_manager` Module Manual
+### For [D]: Python `ec2man` Module Manual
 
 #### Preparations
 
@@ -257,19 +260,19 @@ Install `boto3` module:
 
     $ pip3 install boto3
 
-Setup EC2 servers using `ec2_manager` module:
+Setup EC2 servers using `ec2man` module:
 
-    $ python3 -m ec2_manager setup --user=<AWS-Username> --key=<Path-to-SSH-Private-Key> --tag=<Tag-Name>   # `--tag=aspire-server`
+    $ python3 -m ec2man setup --user=<AWS-Username> --key=<Path-to-SSH-Private-Key> --tag=<Tag-Name>   # `--tag=aspire-server`
 
 Check your servers are ready by:
 
-    $ python3 -m ec2_manager all check
+    $ python3 -m ec2man all check
 
 #### Module Usage
 
 Basic syntax:
 
-    $ python3 -m ec2_manager <Node> <Option> [Arguments]
+    $ python3 -m ec2man <Node> <Option> [Arguments]
 
 For `Node`:
 
@@ -289,4 +292,4 @@ For `Option`:
 
 ### For [C]:
 
-Trying to integrate the script into `ec2_manager` module... PENDING
+Trying to integrate the script into `ec2man` module... PENDING

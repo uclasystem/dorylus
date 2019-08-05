@@ -1,8 +1,17 @@
 #!/bin/bash
 
-#
-# Convert a text graph into binary, and partite it into partitions.
-#
+##
+## Convert a text graph into binary snaps, and partite it into partitions.
+## Convert the features file into bsnap as well.
+##
+## Output is located in `inputs/data` folder. The dataset inside is ready to be used as our system's input.
+##
+
+
+function header {
+    echo -e "\e[33;1m${1}\e[0m"
+}
+
 
 if [ ! $# == 6 ]; then
     echo "Usage: $0 <GraphFile> <Undirected? (0/1)> <NumVertices> <NumPartitions> <FeatureFile> <DimFeatures>"
@@ -10,10 +19,6 @@ if [ ! $# == 6 ]; then
 fi
 
 rm -rf data && mkdir data
-
-function header {
-    echo -e "\e[33;1m######## ${1} ########\e[0m"
-}
 
 
 #

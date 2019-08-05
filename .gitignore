@@ -6,7 +6,7 @@ out*
 *.swp
 
 manage-ec2
-ec2_manager/contexts
+ec2man/contexts
 **/__pycache__
 *.pyc
 
@@ -28,5 +28,3 @@ config
 **/output-files
 **/.out
 **/test
-
-utils/check

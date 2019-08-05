@@ -1,8 +1,0 @@
-#! /bin/bash
-
-cd $( dirname $0 )
-
-weightServerAddrFile=$1
-
-# Args: <Coordserver-Port> <WeightserverAddress-File> <Weightserver-Port> <Dataserver-Port>
-../build/coordination_server 55430 ${weightServerAddrFile:=wserverinfo} 55432 55431
