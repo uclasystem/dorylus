@@ -10,6 +10,7 @@
 Node NodeManager::me;
 std::vector<Node> NodeManager::allNodes;
 bool NodeManager::inBarrier = false;
+unsigned NodeManager::nodePort;
 
 
 /**
@@ -36,7 +37,8 @@ NodeManager::init(const std::string dshMachinesFile) {
  * Public API for a node to hit a global barrier.
  * 
  */
-void NodeManager::barrier() {
+void
+NodeManager::barrier() {
     inBarrier = true;
 
     // TODO...

@@ -25,6 +25,10 @@ case $1 in
         GPORT=$( < ../gserverport )
         CSERVERIP=$( < ../cserverip )
 
+        DATAPORT=$( < ../dataport )
+        CTRLPORT=$( < ../ctrlport )
+        NODEPORT=$( < ../nodeport )
+
         # Count the machines.
         NDS=$( wc -l ../dshmachines | cut -d" " -f1 )
         for i in $( seq 1 ${NDS} ); do
@@ -46,7 +50,7 @@ case $1 in
         UNDIRECTED=0    # Currently are all directed graphs.
                         # TODO: Integrate this into the `graphToBinary` tool.
 
-        COMP_THREADS=7  # TODO: Maybe tune their values?
+        COMP_THREADS=7  # Default values.
         COMM_THREADS=1
 
         # Increment the running mark.

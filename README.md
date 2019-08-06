@@ -4,7 +4,7 @@ This is GNN-LAMBDA system, a *Scalable*, *Resource-efficient* & *Affordable* com
 
 > Dataserver is originally is a push-based ASPIRE implementation, a cleaned up version of gift (forked on July 06, 2016). Implemented streaming-like processing as in Tornado (SIGMOD'16) paper.
 
-Now the main logic of the engine has been completely simplified, and we integrate it with AWS Lambda threads. Ultimate goal is to achieve "*Affordable AI*" with the cheap scalability of serverless computing.
+Now the main logic of the engine has been completely simplified, and we integrate it with AWS Lambda threads. Ultimate goal is to achieve "*Affordable AI*" with the benefit of **cheap scalability** brought by serverless computing.
 
 
 ## Architecture

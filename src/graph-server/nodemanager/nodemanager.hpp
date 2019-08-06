@@ -38,11 +38,15 @@ public:
 
     static void init(const std::string dshMachinesFile);
     static void destroy();
+
     static void barrier();
+    
     static Node& getNode(unsigned i);
     static unsigned getNumNodes();
     static unsigned getMyNodeId();
     static bool amIMaster();
+
+    static void setNodePort(unsigned nPort) { nodePort = nPort; }
 
 private:
 
@@ -52,6 +56,8 @@ private:
     static std::vector<Node> allNodes;
 
     static bool inBarrier;
+
+    static unsigned nodePort;
 
     static void parseNodeConfig(const std::string dshMachinesFile);
 };

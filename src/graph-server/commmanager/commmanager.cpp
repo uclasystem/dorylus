@@ -6,10 +6,8 @@
 /** Extern class-wide fields. */
 unsigned CommManager::nodeId = 0;
 unsigned CommManager::numNodes = 0;
-std::vector<bool> CommManager::nodesAlive;
-unsigned CommManager::numLiveNodes;
-unsigned CommManager::dataPort = DATA_PORT;
-unsigned CommManager::controlPortStart = CONTROL_PORT_START;
+unsigned CommManager::dataPort;
+unsigned CommManager::controlPortStart;
 zmq::context_t CommManager::dataContext;                    // Data sockets & locks.
 zmq::socket_t *CommManager::dataPublisher = NULL;
 zmq::socket_t *CommManager::dataSubscriber = NULL;
@@ -51,9 +49,7 @@ CommManager::init() {
         char hostPort[50];
         sprintf(hostPort, "tcp://%s:%u", node.ip.c_str(), dataPort);
         dataSubscriber->connect(hostPort);
-        nodesAlive.push_back(true);
     }
-    numLiveNodes = numNodes;
     dataSubscriber->setsockopt(ZMQ_SUBSCRIBE, NULL, 0);
 
     lockDataPublisher.init();
@@ -235,6 +231,7 @@ void
 CommManager::dataPushOut(IdType topic, void *value, unsigned valSize) {
     zmq::message_t outMsg(sizeof(IdType) + valSize);
     *((IdType *) outMsg.data()) = topic;
+    
     if (valSize > 0)
         memcpy((void *)(((char *) outMsg.data()) + sizeof(IdType)), value, valSize);
 
@@ -279,6 +276,7 @@ CommManager::controlPushOut(unsigned to, void *value, unsigned valSize) {
     assert(to != nodeId); 
     zmq::message_t outMsg(sizeof(ControlMessage) + valSize);
     *((ControlMessage *) outMsg.data()) = ControlMessage(APPMSG);
+
     if (valSize > 0)
         memcpy((void *)(((char *) outMsg.data()) + sizeof(ControlMessage)), value, valSize);
 
@@ -331,7 +329,7 @@ CommManager::flushData() {
    
     dataPublisher->ksend(outMsg);
 
-    unsigned rem = numLiveNodes;
+    unsigned rem = numNodes;
 
     while (rem > 0) {
         zmq::message_t inMsg;
@@ -353,7 +351,8 @@ CommManager::flushData() {
  */
 void CommManager::flushControl() {
     for (unsigned i = 0; i < numNodes; ++i) {
-        if((i == nodeId) || (nodesAlive[i] == false))   // Skip myself and died nodes.
+
+        if (i == nodeId)    // Skip myself.
             continue;
 
         lockControlPublishers[i].lock();
@@ -363,7 +362,7 @@ void CommManager::flushControl() {
         *((ControlMessage *) outAckMsg.data()) = ControlMessage();
         controlPublishers[i]->ksend(outAckMsg);
 
-        while(1) {
+        while (1) {
             zmq::message_t inMsg;
             if (controlSubscribers[i]->krecv(&inMsg, ZMQ_DONTWAIT)) {
                 ControlMessage cMsg = *((ControlMessage *) inMsg.data());
@@ -375,16 +374,4 @@ void CommManager::flushControl() {
         lockControlSubscribers[i].unlock();
         lockControlPublishers[i].unlock();
     }
-}
-
-
-/**
- *
- * Sentence a living node to death.
- * 
- */
-void CommManager::nodeDie(unsigned nId) {
-    assert(nodesAlive[nId]);
-    nodesAlive[nId] = false;
-    --numLiveNodes;
 }

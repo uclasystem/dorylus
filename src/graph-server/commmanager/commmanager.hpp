@@ -10,12 +10,6 @@
 #include "../utils/utils.hpp"
 
 
-#define DATA_PORT 5000
-#define DATA_PORT_STR "5000"
-#define CONTROL_PORT_START 6000
-#define CONTROL_PORT_START_STR "6000"
-
-
 #define INF_WM 0
 #define CONTROL_MESSAGE_TOPIC 'C'
 #define NULL_CHAR MAX_IDTYPE
@@ -53,14 +47,8 @@ public:
     static void flushControl();
     static void flushData();
 
-    static void nodeDie(unsigned nId);
-
-    static void setDataPort(unsigned dPort) {
-        dataPort = dPort;
-    }
-    static void setControlPortStart(unsigned cPort) {
-        controlPortStart = cPort;
-    }
+    static void setDataPort(unsigned dPort) { dataPort = dPort; }
+    static void setControlPortStart(unsigned cPort) { controlPortStart = cPort; }
 
 private:
 
@@ -83,9 +71,6 @@ private:
 
     static Lock *lockControlPublishers;
     static Lock *lockControlSubscribers;
-
-    static std::vector<bool> nodesAlive;
-    static unsigned numLiveNodes;
 };
 
 

@@ -17,9 +17,9 @@
 /** Extern class-wide fields. */
 Graph Engine::graph;
 ThreadPool* Engine::dataPool = NULL;
-unsigned Engine::dThreads = NUM_DATA_THREADS;
+unsigned Engine::dThreads;
 ThreadPool* Engine::computePool = NULL;
-unsigned Engine::cThreads = NUM_COMP_THREADS;
+unsigned Engine::cThreads;
 std::string Engine::graphFile;
 std::string Engine::featuresFile;
 std::string Engine::outFile;
@@ -664,12 +664,15 @@ Engine::parseArgs(int argc, char *argv[]) {
         ("coordserverip", boost::program_options::value<std::string>(), "The private IP address of the coordination server")
         ("coordserverport", boost::program_options::value<unsigned>(), "The port of the listener on the coordination server")
 
-        ("undirected", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Graph type is undirected or not")
+        // Default is directed graph!
+        ("undirected", boost::program_options::value<unsigned>()->default_value(unsigned(0), "0"), "Graph type is undirected or not")
 
-        ("dthreads", boost::program_options::value<unsigned>()->default_value(unsigned(NUM_DATA_THREADS), NUM_DATA_THREADS_STR), "Number of data threads")
-        ("cthreads", boost::program_options::value<unsigned>()->default_value(unsigned(NUM_COMP_THREADS), NUM_COMP_THREADS_STR), "Number of compute threads")
-        ("dport", boost::program_options::value<unsigned>()->default_value(unsigned(DATA_PORT), DATA_PORT_STR), "Port for data communication")
-        ("cport", boost::program_options::value<unsigned>()->default_value(unsigned(CONTROL_PORT_START), CONTROL_PORT_START_STR), "Port start for control communication")
+        ("dthreads", boost::program_options::value<unsigned>(), "Number of data threads")
+        ("cthreads", boost::program_options::value<unsigned>(), "Number of compute threads")
+
+        ("dataport", boost::program_options::value<unsigned>(), "Port for data communication")
+        ("ctrlport", boost::program_options::value<unsigned>(), "Port start for control communication")
+        ("nodeport", boost::program_options::value<unsigned>(), "Port for node manager")
         ;
 
     boost::program_options::variables_map vm;
@@ -714,18 +717,22 @@ Engine::parseArgs(int argc, char *argv[]) {
     assert(vm.count("undirected"));
     undirected = (vm["undirected"].as<unsigned>() == 0) ? false : true;
 
-    assert(vm.count("dport"));
-    unsigned data_port = vm["dport"].as<unsigned>();
+    assert(vm.count("dataport"));
+    unsigned data_port = vm["dataport"].as<unsigned>();
     CommManager::setDataPort(data_port);
 
-    assert(vm.count("cport"));
-    unsigned control_port = vm["cport"].as<unsigned>();
-    CommManager::setControlPortStart(control_port);
+    assert(vm.count("ctrlport"));
+    unsigned ctrl_port = vm["ctrlport"].as<unsigned>();
+    CommManager::setControlPortStart(ctrl_port);
+
+    assert(vm.count("nodeport"));
+    unsigned node_port = vm["nodeport"].as<unsigned>();
+    NodeManager::setNodePort(node_port);
 
     printLog(nodeId, "Parsed configuration: dThreads = %u, cThreads = %u, graphFile = %s, featuresFile = %s, "
-                     "dshMachinesFile = %s, undirected = %s, data port set -> %u, control port set -> %u\n",
+                     "dshMachinesFile = %s, undirected = %s, data port set -> %u, control port set -> %u, node port set -> %u\n",
                      dThreads, cThreads, graphFile.c_str(), featuresFile.c_str(),
-                     dshMachinesFile.c_str(), undirected ? "true" : "false", data_port, control_port);
+                     dshMachinesFile.c_str(), undirected ? "true" : "false", data_port, ctrl_port, node_port);
 }
 
 
