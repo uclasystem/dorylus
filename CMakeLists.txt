@@ -19,12 +19,6 @@ set(ZMQ_LIB /usr/local/lib/libzmq.a)
 include_directories(${ZMQ_INC})
 
 
-# Include ZooKeeper
-set(ZK_INC /usr/local/include/zookeeper)
-set(ZK_LIB /usr/local/lib/libzookeeper_mt.a)
-include_directories(${ZK_INC})
-
-
 # Include Boost lib.
 find_package(Boost COMPONENTS system filesystem program_options REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})

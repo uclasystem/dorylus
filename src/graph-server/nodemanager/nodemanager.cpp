@@ -72,18 +72,13 @@ NodeManager::getNumNodes() {
 }
 
 unsigned
-NodeManager::getNodeId() {
-    return me.id; 
+NodeManager::getMyNodeId() {
+    return me.id;
 }
 
 bool
 NodeManager::amIMaster() {
     return me.master;
-}
-
-unsigned
-NodeManager::getMasterId() {
-    return masterId; 
 }
 
 

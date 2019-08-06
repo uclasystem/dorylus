@@ -72,7 +72,7 @@ Engine::init(int argc, char *argv[]) {
     
     // Initialize the node manager and communication manager.
     NodeManager::init(dshMachinesFile);     // NodeManger should go first.
-    nodeId = NodeManager::getNodeId();
+    nodeId = NodeManager::getMyNodeId();
     numNodes = NodeManager::getNumNodes();
     assert(numNodes <= 256);    // Cluster size limitation.
     outFile += std::to_string(nodeId);
@@ -143,7 +143,7 @@ Engine::init(int argc, char *argv[]) {
     printLog(nodeId, "Engine initialization complete.\n");
 
     // Make sure all nodes finish initailization.
-    NodeManager::barrier(INIT_BARRIER);
+    NodeManager::barrier();
 }
 
 
@@ -169,13 +169,10 @@ void
 Engine::run() {
     
     // Make sure engines on all machines start running.
-    NodeManager::barrier(RUN_BARRIER); 
+    NodeManager::barrier(); 
     printLog(nodeId, "Engine starts running...\n");
 
     timeProcess = -getTimer();
-
-    // Change phase to processing.
-    NodeManager::startProcessing();
 
     // Set initial conditions.
     currId = 0;
@@ -392,7 +389,7 @@ Engine::worker(unsigned tid, void *args) {
                 lockRecvWaiters.unlock();
 
                 //## Global Iteration barrier. ##//
-                NodeManager::barrier(LAYER_BARRIER);
+                NodeManager::barrier();
 
                 vecTimeSendout.push_back(getTimer() - timeWorker);
                 printLog(nodeId, "Global barrier after ghost data exchange crossed.\n");
@@ -725,10 +722,10 @@ Engine::parseArgs(int argc, char *argv[]) {
     unsigned control_port = vm["cport"].as<unsigned>();
     CommManager::setControlPortStart(control_port);
 
-    printLog(nodeId, "Parsed configuration: config = %s, dThreads = %u, cThreads = %u, graphFile = %s,"
-                     "featuresFile = %s, undirected = %s, data port set -> %u, control port set -> %u\n",
-                     cFile.c_str(), dThreads, cThreads, graphFile.c_str(), featuresFile.c_str(),
-                     undirected ? "true" : "false", data_port, control_port);
+    printLog(nodeId, "Parsed configuration: dThreads = %u, cThreads = %u, graphFile = %s, featuresFile = %s, "
+                     "dshMachinesFile = %s, undirected = %s, data port set -> %u, control port set -> %u\n",
+                     dThreads, cThreads, graphFile.c_str(), featuresFile.c_str(),
+                     dshMachinesFile.c_str(), undirected ? "true" : "false", data_port, control_port);
 }
 
 

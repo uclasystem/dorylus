@@ -15,6 +15,7 @@
 typedef struct node {
     unsigned id;
     std::string ip;
+    std::string pubip;
     bool master;
 
     node() { }
@@ -40,9 +41,8 @@ public:
     static void barrier();
     static Node& getNode(unsigned i);
     static unsigned getNumNodes();
-    static unsigned getNodeId();
+    static unsigned getMyNodeId();
     static bool amIMaster();
-    static unsigned getMasterId();
 
 private:
 
@@ -51,7 +51,9 @@ private:
     
     static std::vector<Node> allNodes;
 
-    static void parseNodeConfig(const char *hostFile);
+    static bool inBarrier;
+
+    static void parseNodeConfig(const std::string dshMachinesFile);
 };
 
 

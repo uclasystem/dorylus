@@ -31,8 +31,7 @@ void
 CommManager::init() {
     printLog(nodeId, "CommManager starts initialization...\n");
     numNodes = NodeManager::getNumNodes();
-    nodeId = NodeManager::getNodeId();
-
+    nodeId = NodeManager::getMyNodeId();
     Node me = NodeManager::getNode(nodeId);
 
     // Data publisher & subscribers.
