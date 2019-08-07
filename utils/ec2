@@ -2,7 +2,7 @@
 
 
 
-id=$( cat ~/.aws/id )
+id=$( cat /filepool/aws/id )
 
 case $1 in 
 	"id")

@@ -30,8 +30,7 @@ std::atomic<bool> NodeManager::inBarrier = ATOMIC_VAR_INIT(false);
  */
 void
 NodeManager::init(const char *zooHostFile, const char *hostFile) {
-    getIP(&me.ip);
-    getPubIP(me.pubip);
+    getIPs(me.ip, me.pubip);
 
     // Parse the config files.
     parseZooConfig(zooHostFile);
