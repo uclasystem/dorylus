@@ -109,7 +109,7 @@ public:
     }
 
     // Runs the coordserver, keeps listening on dataserver's requests for lambda threads invocation.
-    void run () {
+    void run() {
         zmq::context_t ctx(1);
         zmq::socket_t frontend(ctx, ZMQ_REP);
         char host_port[50];
@@ -120,7 +120,7 @@ public:
         // Setup lambda client.
         Aws::Client::ClientConfiguration clientConfig;
         clientConfig.requestTimeoutMs = 900000;
-        clientConfig.region = "us-east-2";
+        clientConfig.region = "us-east-1";
         m_client = Aws::MakeShared<Aws::Lambda::LambdaClient>(ALLOCATION_TAG, clientConfig);
 
         // Keeps listening on dataserver's requests.

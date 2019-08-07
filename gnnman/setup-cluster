@@ -29,32 +29,32 @@ ${EC2MAN_CMD} weight all start
 # For graph servers.
 echo "Processing context 'graph'..."
 
-${EC2MAN_CMD} graph dshfile > dshmachines           # Put 'dshmahines'.
-${EC2MAN_CMD} graph all put dshmachines
+${EC2MAN_CMD} graph dshfile > dshmachines
+${EC2MAN_CMD} coord 0 pubip > cserverip
+${EC2MAN_CMD} graph all put cserverip dshmachines run/layerconfig run/cserverport run/gserverport run/dataport run/ctrlport run/nodeport
 rm -f dshmachines
-
-${EC2MAN_CMD} coord 0 pubip >> cserverip            # Put 'cserverip'.
-${EC2MAN_CMD} graph all put cserverip
 rm -f cserverip
 
-${EC2MAN_CMD} graph all put run/layerconfig run/cserverport run/gserverport run/dataport run/ctrlport run/nodeport
+NUM_GRAPH_NODES=$(( $( ${EC2MAN_CMD} graph info | wc -l | awk '{print $1}' ) - 1 ))
+for i in $( seq 0 $(( ${NUM_GRAPH_NODES} - 1 )) ); do
+    ${EC2MAN_CMD} graph $i prip > myprip
+    ${EC2MAN_CMD} graph $i pubip > mypubip
+    ${EC2MAN_CMD} graph $i put myprip mypubip
+    rm -f myprip mypubip
+done
 
 
 # For weight servers.
 echo "Processing context 'weight'..."
 
-${EC2MAN_CMD} weight dshfile > dshmachines          # Put 'dshmahines'.
-${EC2MAN_CMD} weight all put dshmachines
+${EC2MAN_CMD} weight dshfile > dshmachines
+${EC2MAN_CMD} weight all put dshmachines run/layerconfig run/wserverport
 rm -f dshmachines
-
-${EC2MAN_CMD} weight all put run/layerconfig run/wserverport
 
 
 # For coordination servers.
 echo "Processing context 'coord'..."
 
-${EC2MAN_CMD} weight all pubip >> wserverip         # Put 'wserverip'.
-${EC2MAN_CMD} coord 0 put wserverip
+${EC2MAN_CMD} weight all pubip > wserverip
+${EC2MAN_CMD} coord all put wserverip run/cserverport run/gserverport run/wserverport
 rm -f wserverip
-
-${EC2MAN_CMD} coord all put run/cserverport run/gserverport run/wserverport

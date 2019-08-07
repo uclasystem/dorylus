@@ -20,6 +20,6 @@ with open("features.bsnap", mode="rb") as fbsnap, open("features", "w+") as ftex
         feat_values = struct.unpack(fmt_str, read_data[idx_start:idx_end])
 
         for val in feat_values:
-            ftext.write(str(val) + " ")
+            ftext.write(str(val) + ", ")
         ftext.write("\n")
 

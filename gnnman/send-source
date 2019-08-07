@@ -15,8 +15,6 @@ cd $( dirname $0 )/..
 
 EC2MAN_CMD="python3 -m ec2man"
 
-IGNORE_LIST=".git* wiki README.md"
-
 
 # Loop through all three contexts.
 for CTX in graph coord weight; do
@@ -31,6 +29,11 @@ for CTX in graph coord weight; do
 
     # Send repo updates using `rsync`.
     echo "Sending new updates..."
-    ${EC2MAN_CMD} ${CTX} all rsync --exclude "${IGNORE_LIST}" ../gnn-lambda
+    ${EC2MAN_CMD} ${CTX} all rsync --exclude ".git*" --exclude "wiki" --exclude "README.md" --exclude "data" ../gnn-lambda &
 
 done
+
+
+# Wait for background commands to finish.
+echo "Waiting on background sending to finish..."
+wait

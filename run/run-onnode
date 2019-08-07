@@ -29,15 +29,23 @@ case $1 in
         CTRLPORT=$( < ../ctrlport )
         NODEPORT=$( < ../nodeport )
 
+        MYPRIPFILE=${HOME}/myprip
+        MYPUBIPFILE=${HOME}/mypubip
+        DSHMACHINESFILE=${HOME}/dshmachines
+
+        # Kill running graphservers.
+        echo "Killing existing 'graphserver' processes..."
+        dsh -f ${DSHMACHINESFILE} -c "killall -u $( whoami ) graphserver"
+
         # Count the machines.
-        NDS=$( wc -l ../dshmachines | cut -d" " -f1 )
+        NDS=$( wc -l ${DSHMACHINESFILE} | cut -d" " -f1 )
         for i in $( seq 1 ${NDS} ); do
-          DSHNODES[$i]=$( head -n $i ../dshmachines | tail -n 1 )
+          DSHNODES[$i]=$( head -n $i ${DSHMACHINESFILE} | tail -n 1 )
         done
         
         # Choosing the dataset.
-        if [[ ! -d /filepool/$2 ]]; then
-            echo "Dataset $2 not found under '/filepool' (at least on master node)."
+        if [[ -z $2 ]] || [[ ! -d /filepool/$2 ]]; then
+            echo "Dataset '$2' is empty or not found under '/filepool' (at least on master node)."
             echo "Please prepare the dataset correctly."
             exit 1
         fi
@@ -48,8 +56,6 @@ case $1 in
 
         # Minor options.
         UNDIRECTED=0    # Currently are all directed graphs.
-                        # TODO: Integrate this into the `graphToBinary` tool.
-
         COMP_THREADS=7  # Default values.
         COMM_THREADS=1
 
@@ -60,21 +66,19 @@ case $1 in
 
         # Set logging file.
         LOGFILEDIR=${HOME}/logfiles
-        if [ ! -d ${LOGFILEDIR} ]; then
-            mkdir ${LOGFILEDIR}
-        fi
-        LOGFILE=${LOGFILEDIR}/${RUN_MARK}.${IK}.log
+        mkdir -p ${LOGFILEDIR}
+        LOGFILE=${LOGFILEDIR}/${RUN_MARK}.$2.log
 
         # Set temporary directory.
         TMPFILEDIR=${HOME}/tmpfiles
-        dsh -f ../dshmachines -c "mkdir ${TMPFILEDIR}"
+        dsh -f ${DSHMACHINESFILE} -c "mkdir -p ${TMPFILEDIR}"
 
         # Run the command on all dsh machines.
-        echo "DSH command: ./build/graphserver --graphfile ${DATASET}/parts_${NDS}/graph.bsnap --featuresfile ${DATASET}/features.bsnap --layerfile ${LAYERFILE} --dataserverport ${GPORT} --coordserverip ${CSERVERIP} --coordserverport ${CPORT} --undirected ${UNDIRECTED} --tmpdir=${TMPFILEDIR} --cthreads ${COMP_THREADS} --dthreads ${COMM_THREADS}"
-        dsh -f ../dshmachine -c "cd ${HOME}/gnn-lambda && ./build/graphserver --graphfile ${DATASET}/parts_${NDS}/graph.bsnap --featuresfile ${DATASET}/features.bsnap --layerfile ${LAYERFILE} --dataserverport ${GPORT} --coordserverip ${CSERVERIP} --coordserverport ${CPORT} --undirected ${UNDIRECTED} --tmpdir=${TMPFILEDIR} --cthreads ${COMP_THREADS} --dthreads ${COMM_THREADS}" 1> /dev/null 2>> ${LOGFILE}
+        echo "DSH command: ./build/graphserver --graphfile ${DATASET}/parts_${NDS}/graph.bsnap --featuresfile ${DATASET}/features.bsnap --dshmachinesfile ${DSHMACHINESFILE} --layerfile ${LAYERFILE} --pubipfile ${MYPUBIPFILE} --pripfile ${MYPRIPFILE} --dataserverport ${GPORT} --coordserverip ${CSERVERIP} --coordserverport ${CPORT} --undirected ${UNDIRECTED} --tmpdir=${TMPFILEDIR} --cthreads ${COMP_THREADS} --dthreads ${COMM_THREADS} --dataport ${DATAPORT} --ctrlport ${CTRLPORT} --nodeport ${NODEPORT}"
+        dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ./build/graphserver --graphfile ${DATASET}/parts_${NDS}/graph.bsnap --featuresfile ${DATASET}/features.bsnap --dshmachinesfile ${DSHMACHINESFILE} --layerfile ${LAYERFILE} --pubipfile ${MYPUBIPFILE} --pripfile ${MYPRIPFILE} --dataserverport ${GPORT} --coordserverip ${CSERVERIP} --coordserverport ${CPORT} --undirected ${UNDIRECTED} --tmpdir=${TMPFILEDIR} --cthreads ${COMP_THREADS} --dthreads ${COMM_THREADS} --dataport ${DATAPORT} --ctrlport ${CTRLPORT} --nodeport ${NODEPORT}" 1> /dev/null 2>> ${LOGFILE}
         
         # Gather the output files.
-        OUTFILEDIR=${HOME}/outfiles/${RUN_MARK}.${IK}
+        OUTFILEDIR=${HOME}/outfiles/${RUN_MARK}.$2
         mkdir -p ${OUTFILEDIR}
         for i in $( seq 1 ${NDS} ); do
             scp -q ${DSHNODES[$i]}:${TMPFILEDIR}/output_* ${OUTFILEDIR}/
@@ -95,7 +99,16 @@ case $1 in
     #
     "weight")
         WPORT=$( < ../wserverport )
-        dsh -f ../dshmachines -c "cd ${HOME}/gnn-lambda && ./build/weightserver ${WPORT} ../layerconfig"
+
+        DSHMACHINESFILE=${HOME}/dshmachines
+
+        # Kill running weightservers.
+        echo "Killing existing 'weightserver' processes..."
+        dsh -f ${DSHMACHINESFILE} -c "killall -u $( whoami ) weightserver"
+
+        # Run weightserver on all dsh nodes.
+        echo "Running WEIGHT on all dsh machines in 'weight' context..."
+        dsh -M -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ./build/weightserver ${WPORT} ../layerconfig"
         ;;
 
     #
@@ -105,11 +118,21 @@ case $1 in
         CPORT=$( < ../cserverport )
         GPORT=$( < ../gserverport )
         WPORT=$( < ../wserverport )
+
+        LAMBDA_REGION=
+        LAMBDA_TIMEOUT=
+
+        # Kill running coordserver.
+        echo "Killing existing 'coordserver' processes..."
+        killall -u $( whoami ) coordserver
+
+        # Run coordserver.
+        echo "Running COORD..."
         ./build/coordserver ${CPORT} ../wserverip ${WPORT} ${GPORT}
         ;;
 
     *)
-        echo "Must specify a valid context 'graph' / 'weight' / 'coord'"
+        echo "Must specify a valid context 'graph' / 'weight' / 'coord'."
         echo "Usage: ./run/run-onnode <Context>"
         exit 1
         ;;

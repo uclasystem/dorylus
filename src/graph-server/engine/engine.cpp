@@ -25,6 +25,8 @@ std::string Engine::featuresFile;
 std::string Engine::outFile;
 std::string Engine::layerConfigFile;
 std::string Engine::dshMachinesFile;
+std::string Engine::myPrIpFile;
+std::string Engine::myPubIpFile;
 unsigned Engine::dataserverPort;
 std::string Engine::coordserverIp;
 unsigned Engine::coordserverPort;
@@ -65,13 +67,13 @@ std::vector<double> Engine::vecTimeWriteback;
  */
 void
 Engine::init(int argc, char *argv[]) {
-    printLog(nodeId, "Engine starts initialization...\n");
+    printLog(404, "Engine starts initialization...\n");
     timeInit = -getTimer();
 
     parseArgs(argc, argv);
     
     // Initialize the node manager and communication manager.
-    NodeManager::init(dshMachinesFile);     // NodeManger should go first.
+    NodeManager::init(dshMachinesFile, myPrIpFile, myPubIpFile);    // NodeManger should go first.
     nodeId = NodeManager::getMyNodeId();
     numNodes = NodeManager::getNumNodes();
     assert(numNodes <= 256);    // Cluster size limitation.
@@ -125,9 +127,6 @@ Engine::init(int argc, char *argv[]) {
     computePool->createPool();
     printLog(nodeId, "Created %u computation threads.\n", cThreads);
 
-    CommManager::flushControl();
-    CommManager::flushData();
-
     // Create data communicators thread pool.
     dataPool = new ThreadPool(dThreads);
     dataPool->createPool();
@@ -142,7 +141,7 @@ Engine::init(int argc, char *argv[]) {
     timeInit += getTimer();
     printLog(nodeId, "Engine initialization complete.\n");
 
-    // Make sure all nodes finish initailization.
+    // Make sure all nodes finish initailization. No need to add a global barrier before running then.
     NodeManager::barrier();
 }
 
@@ -167,9 +166,6 @@ Engine::master() {
  */
 void
 Engine::run() {
-    
-    // Make sure engines on all machines start running.
-    NodeManager::barrier(); 
     printLog(nodeId, "Engine starts running...\n");
 
     timeProcess = -getTimer();
@@ -219,17 +215,17 @@ Engine::output() {
     //
     // The following are full outputing. Commented out for now because we are testingn large-scale data.
     //
-    // for (Vertex& v : graph.getVertices()) {
-    //     outStream << v.getGlobalId() << ": ";
-    //     FeatType *dataAllPtr = vertexActivationDataPtr(v.getLocalId(), 0);
-    //     unsigned offset = 0;
-    //     for (unsigned& numFeats : layerConfig) {
-    //         for (unsigned i = 0; i < numFeats; ++i)
-    //             outStream << dataAllPtr[offset++] << " ";
-    //         outStream << "| ";
-    //     }
-    //     outStream << std::endl;
-    // }
+    for (Vertex& v : graph.getVertices()) {
+        outStream << v.getGlobalId() << ": ";
+        FeatType *dataAllPtr = vertexActivationDataPtr(v.getLocalId(), 0);
+        unsigned offset = 0;
+        for (unsigned& numFeats : layerConfig) {
+            for (unsigned i = 0; i < numFeats; ++i)
+                outStream << dataAllPtr[offset++] << " ";
+            outStream << "| ";
+        }
+        outStream << std::endl;
+    }
 
     timeOutput += getTimer();
 
@@ -251,7 +247,7 @@ Engine::output() {
  */
 void
 Engine::destroy() {
-    printLog(nodeId, "Destroy the engine...\n");
+    printLog(nodeId, "Destroying the engine...\n");
 
     NodeManager::destroy();
     CommManager::destroy();
@@ -657,6 +653,8 @@ Engine::parseArgs(int argc, char *argv[]) {
         ("featuresfile", boost::program_options::value<std::string>(), "Path to the file containing the vertex features")
         ("layerfile", boost::program_options::value<std::string>(), "Layer configuration file")
         ("dshmachinesfile", boost::program_options::value<std::string>(), "DSH machines file")
+        ("pripfile", boost::program_options::value<std::string>(), "File containing my private ip")
+        ("pubipfile", boost::program_options::value<std::string>(), "File containing my public ip")
 
         ("tmpdir", boost::program_options::value<std::string>(), "Temporary directory")
 
@@ -702,6 +700,12 @@ Engine::parseArgs(int argc, char *argv[]) {
     assert(vm.count("dshmachinesfile"));
     dshMachinesFile = vm["dshmachinesfile"].as<std::string>();
 
+    assert(vm.count("pripfile"));
+    myPrIpFile = vm["pripfile"].as<std::string>();
+
+    assert(vm.count("pubipfile"));
+    myPubIpFile = vm["pubipfile"].as<std::string>();
+
     assert(vm.count("tmpdir"));
     outFile = vm["tmpdir"].as<std::string>() + "/output_";  // Still needs to append the node id, after node manager set up.
 
@@ -729,10 +733,10 @@ Engine::parseArgs(int argc, char *argv[]) {
     unsigned node_port = vm["nodeport"].as<unsigned>();
     NodeManager::setNodePort(node_port);
 
-    printLog(nodeId, "Parsed configuration: dThreads = %u, cThreads = %u, graphFile = %s, featuresFile = %s, "
-                     "dshMachinesFile = %s, undirected = %s, data port set -> %u, control port set -> %u, node port set -> %u\n",
-                     dThreads, cThreads, graphFile.c_str(), featuresFile.c_str(),
-                     dshMachinesFile.c_str(), undirected ? "true" : "false", data_port, ctrl_port, node_port);
+    printLog(404, "Parsed configuration: dThreads = %u, cThreads = %u, graphFile = %s, featuresFile = %s, dshMachinesFile = %s, "
+                  "myPrIpFile = %s, myPubIpFile = %s, undirected = %s, data port set -> %u, control port set -> %u, node port set -> %u\n",
+                  dThreads, cThreads, graphFile.c_str(), featuresFile.c_str(), dshMachinesFile.c_str(),
+                  myPrIpFile.c_str(), myPubIpFile.c_str(), undirected ? "true" : "false", data_port, ctrl_port, node_port);
 }
 
 

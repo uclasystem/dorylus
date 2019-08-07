@@ -80,7 +80,7 @@ def handle_command(ec2_cli, ctx, instance, args):
         if instance.pub_ip == '0':
             print("Public IP address not yet defined. Make sure the instance is 'running'.")
         else:
-            rsync_command = ["rsync", "-auzh", "--stats", "-e"] + ["\"" + ' '.join(["ssh"] + remote_access_opts) + "\""]
+            rsync_command = ["rsync", "-auzh", "-e"] + ["\"" + ' '.join(["ssh"] + remote_access_opts) + "\""]
             if len(args) != 0:
                 rsync_command += args
                 rsync_command += [instance.user + '@' + instance.pub_ip + ':.']

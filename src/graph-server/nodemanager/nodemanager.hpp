@@ -5,10 +5,24 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <zmq.hpp>
 
 
 // Master node is by default the first machien on dshMashinesFile list.
 #define MASTER_NODEID 0
+
+
+/** Node message topic & contents. */
+#define NODE_MESSAGE_TOPIC 'N'
+enum NodeMessageType { NODENONE = -1, MASTERUP = -2, WORKERUP = -3, INITDONE = -4, BARRIER = -5 };
+
+
+/** Structure of a node managing message. */
+typedef struct nodeMessage {
+    char topic;
+    NodeMessageType messageType;
+    nodeMessage(NodeMessageType mType = NODENONE) : topic(NODE_MESSAGE_TOPIC), messageType(mType) { }
+} NodeMessage;
 
 
 /** Structure of a node information block. */
@@ -36,7 +50,7 @@ class NodeManager {
 
 public:
 
-    static void init(const std::string dshMachinesFile);
+    static void init(std::string dshMachinesFile, std::string myPrIpFile, std::string myPubIpFile);
     static void destroy();
 
     static void barrier();
@@ -57,6 +71,9 @@ private:
 
     static bool inBarrier;
 
+    static zmq::context_t nodeContext;
+    static zmq::socket_t *nodePublisher;
+    static zmq::socket_t *nodeSubscriber;
     static unsigned nodePort;
 
     static void parseNodeConfig(const std::string dshMachinesFile);

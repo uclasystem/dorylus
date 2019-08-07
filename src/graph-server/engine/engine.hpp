@@ -91,6 +91,8 @@ private:
     static std::string outFile;
     static std::string layerConfigFile;
     static std::string dshMachinesFile;
+    static std::string myPrIpFile;
+    static std::string myPubIpFile;
 
     static unsigned dataserverPort;
     static std::string coordserverIp;

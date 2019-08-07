@@ -16,5 +16,6 @@ EC2MAN_CMD="python3 -m ec2man"
 FILE=$( pwd )/$1
 
 for MACH in $( cat ~/dshmachines ); do
+    ssh ${MACH} "mkdir -p $( dirname ${FILE} )"
     scp -q ${FILE} ${MACH}:${FILE}
 done
