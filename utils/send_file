@@ -24,12 +24,12 @@ fi
 if [[ $file == "base" ]]; then
 	for item in ${base_files[@]}; do
 		file=$( dirname $0 )/../$item
-		for mach in $( cat ~/.dsh/machines.list ); do
+		for mach in $( cat ~/gnn-lambda/run/dshmachines ); do
 			scp -q $file $mach:$file
 		done
 	done
 else
-	for mach in $( cat ~/.dsh/machines.list ); do
+	for mach in $( cat ~/gnn-lambda/run/dshmachines ); do
 		scp -q $file $mach:$file
 	done
 fi

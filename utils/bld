@@ -18,6 +18,9 @@ if [[ ${1} == "coord" ]]; then
 elif [[ ${1} == "weights" ]]; then
     cd ../src/weight-server/
     ./bld
+
+    cd ~/gnn-lambda/
+    ./utils/send_file build/weight_server
     
 else
     cd ../build
