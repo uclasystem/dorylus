@@ -92,6 +92,8 @@ private:
     static unsigned numFeatsTotal;
     static unsigned numLayers;
 
+    static unsigned numLambdas;
+
     static FeatType *verticesZData;     // Global contiguous array for all vertices' data. Stored in row-wise order:
                                         // The first bunch of values are data for the 0th vertex, ...
     static FeatType *verticesActivationData;

@@ -5,6 +5,7 @@
 ## 	--"base" option just sends some commonly updated files
 
 ASP_DIR=$( dirname $0 )/..
+DSH_FILE=~/gnn-lambda/run/dshmachines
 
 base_files=(src/engine/engine.h src/engine/engine.hpp src/engine/graph.h src/engine/graph.hpp src/engine/vertex.h src/engine/vertex.hpp)
 
@@ -24,12 +25,12 @@ fi
 if [[ $file == "base" ]]; then
 	for item in ${base_files[@]}; do
 		file=$( dirname $0 )/../$item
-		for mach in $( cat ~/gnn-lambda/run/dshmachines ); do
+		for mach in $( cat ${DSH_FILE} ); do
 			scp -q $file $mach:$file
 		done
 	done
 else
-	for mach in $( cat ~/gnn-lambda/run/dshmachines ); do
+	for mach in $( cat ${DSH_FILE} ); do
 		scp -q $file $mach:$file
 	done
 fi

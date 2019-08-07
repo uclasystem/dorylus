@@ -11,6 +11,7 @@
 #include <iostream>
 #include <fstream>
 #include <mutex>
+#include <memory>
 #include <sstream>
 #include <thread>
 #include <vector>
@@ -133,13 +134,18 @@ public:
 
                 // Wait on requests.
                 zmq::message_t header;
-                zmq::message_t dataserverIp;
+                zmq::message_t dataIp;
                 frontend.recv(&header);
-                frontend.recv(&dataserverIp);
+                frontend.recv(&dataIp);
 
                 // Send ACK confirm reply.
                 zmq::message_t confirm;
                 frontend.send(confirm);
+
+				// Copy the dataserverIp to make sure there is a terminating null character
+				auto dataserverIp = std::unique_ptr<char[]>(new char[dataIp.size() + 1]);
+				std::memcpy(dataserverIp.get(), dataIp.data(), dataIp.size());
+				dataserverIp.get()[dataIp.size()] = '\0';
 
                 // Parse the request.
                 int32_t op = parse<int32_t>((char *) header.data(), 0);
@@ -166,7 +172,7 @@ public:
                     	char *weightserverIp = weightserverAddrs[req_count % weightserverAddrs.size()];
 						
                         std::cout <<"Send to:" << weightserverIp << std::endl;
-                        invokeFunction("forward-prop-josehu", (char *) dataserverIp.data(), dataserverPort,
+                        invokeFunction("forward-prop-josehu", dataserverIp.get(), dataserverPort,
                                        weightserverIp, weightserverPort, layer, i);
                    		req_count++;
 					}

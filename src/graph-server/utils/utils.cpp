@@ -44,36 +44,15 @@ double getTimer() {
 
 
 void
-getIP(std::string *ip) { 
-    int fd;
-    struct ifreq ifr;
-
-    fd = socket(AF_INET, SOCK_DGRAM, 0);
-
-    ifr.ifr_addr.sa_family = AF_INET;   // Type of address to retrieve - IPv4 IP address.
-
-    strncpy(ifr.ifr_name, INTERFACE, IFNAMSIZ - 1);   // Copy the interface name in the ifreq structure.
-
-    ioctl(fd, SIOCGIFADDR, &ifr);
-
-    close(fd);
-
-    *ip = inet_ntoa(((struct sockaddr_in *) &ifr.ifr_addr)->sin_addr);
-    fprintf(stderr, "IP Address: %s\n", ip->c_str());
-
-    return;
-}
-
-void
-getPubIP(std::string& ip) {
+getIPs(std::string& private_ip, std::string& public_ip) {
     std::ifstream ipFile("../run/nodeIp");
     assert(ipFile.good());
 
-    std::getline(ipFile, ip);
+    std::getline(ipFile, private_ip);
+    std::getline(ipFile, public_ip);
 
     ipFile.close();
 
-    fprintf(stderr, "Public IP Address: %s\n", ip.c_str());
+    fprintf(stderr, "Private IP address: %s\n", private_ip.c_str());
+    fprintf(stderr, "Public IP address: %s\n", public_ip.c_str());
 }
-
-
