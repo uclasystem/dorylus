@@ -97,9 +97,9 @@ for i in $(seq 1 ${ZOONDS}); do
   while true
   do
     ((count++))
-    if [ ${count} -ge ${limit} ]; then
+    if [ ${count} -eq ${limit} ]; then
 	    echo -e "\e[31;1m[ERROR] Could not establish quorum\e[0m"
-	    exit
+#	    exit
     fi
     str=$(echo stat | nc ${nodes[$i]} 2180 | grep "Mode");
     IFS=' ' read -ra ARR <<< ${str};
@@ -123,12 +123,18 @@ case $1 in
 		INPUT_LOC=../inputs/data/parts_${NDS}/small.graph.bsnap; IK=SM;
 		;;
 	"fb")
-		INPUT_LOC=/filepool/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB;
+		INPUT_LOC=/filepool/fb1/parts_${NDS}/facebook_combined.txt.bsnap; IK=FB; 
 		;;
+        "red")
+                INPUT_LOC=/filepool/reddit/parts_${NDS}/reddit.graph.bsnap; IK=RD; 
+                ;;
 	*)
 		INPUT_LOC=../inputs/data/parts_${NDS}/small.graph.bsnap; IK=SM;
 		;;
 esac
+
+numLambdas=$2
+numLambdas=${numLambdas:=1}
 
 # Feature file
 FEATUREFILE=$( dirname ${INPUT_LOC} )/../features.bsnap;
@@ -180,7 +186,7 @@ for dp in {1..1}; do
   LOGFILE=${LOGFILEDIR}/${GVID}.${IK}.out
   echo "This is the log for round: GVID = ${GVID}" >> ${LOGFILE};
 
-  echo "DSH command (from ${ASPIREDIR}/build): ./gnn-lambda.bin --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --layerfile ${LAYERFILE} --dataserverport ${DSERVER_PORT} --coordserverip ${CSERVER_IP} --coordserverport ${CSERVER_PORT} --undirected ${UNDIRECTED} --tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS}";
+  echo "DSH command (from ${ASPIREDIR}/build): ./gnn-lambda.bin --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --layerfile ${LAYERFILE} --dataserverport ${DSERVER_PORT} --coordserverip ${CSERVER_IP} --coordserverport ${CSERVER_PORT} --undirected ${UNDIRECTED} --tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS} --numLambdas ${NUM_LAMBDAS}";
   ${DSH} -f ${DSHFILE} -c "cd ${ASPIREDIR}/build && ./gnn-lambda.bin --graphfile ${INPUT_LOC} --featuresfile ${FEATUREFILE} --layerfile ${LAYERFILE} --dataserverport ${DSERVER_PORT} --coordserverip ${CSERVER_IP} --coordserverport ${CSERVER_PORT} --undirected ${UNDIRECTED} --tmpdir=${TMPDIR} --cthreads ${COMPUTATION_THREADS} --dthreads ${DATACOMM_THREADS} --dport 5008 --cport 6008" 1> /dev/null 2>> ${LOGFILE};
 
   DOPDIR=${ASPIREDIR}/build/outputs/${GVID}.${IK};

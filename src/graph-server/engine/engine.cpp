@@ -28,6 +28,7 @@ unsigned Engine::dataserverPort;
 std::string Engine::coordserverIp;
 unsigned Engine::coordserverPort;
 LambdaComm *Engine::lambdaComm = NULL;
+unsigned Engine::numLambdas = 0;
 IdType Engine::currId = 0;
 Lock Engine::lockCurrId;
 Lock Engine::lockRecvWaiters;
@@ -134,7 +135,7 @@ Engine::init(int argc, char *argv[]) {
     graph.compactGraph();
 
     // Create the lambda communication manager.
-    lambdaComm = new LambdaComm(NodeManager::getNode(nodeId).pubip, dataserverPort, coordserverIp, coordserverPort, nodeId, 5, 1);
+    lambdaComm = new LambdaComm(NodeManager::getNode(nodeId).pubip, dataserverPort, coordserverIp, coordserverPort, nodeId, numLambdas, 1);
 
     timeInit += getTimer();
     printLog(nodeId, "Engine initialization complete.\n");
@@ -652,6 +653,8 @@ Engine::parseArgs(int argc, char *argv[]) {
         ("cthreads", boost::program_options::value<unsigned>()->default_value(unsigned(NUM_COMP_THREADS), NUM_COMP_THREADS_STR), "Number of compute threads")
         ("dport", boost::program_options::value<unsigned>()->default_value(unsigned(DATA_PORT), DATA_PORT_STR), "Port for data communication")
         ("cport", boost::program_options::value<unsigned>()->default_value(unsigned(CONTROL_PORT_START), CONTROL_PORT_START_STR), "Port start for control communication")
+
+        ("numLambdas", boost::program_options::value<unsigned>()->default_value(unsigned(1), "1"), "Number of lambdas to request")
         ;
 
     boost::program_options::variables_map vm;
@@ -709,6 +712,9 @@ Engine::parseArgs(int argc, char *argv[]) {
     assert(vm.count("cport"));
     unsigned control_port = vm["cport"].as<unsigned>();
     CommManager::setControlPortStart(control_port);
+
+    assert(vm.count("numLambdas"));
+    numLambdas = vm["numLambdas"].as<unsigned>();
 
     printLog(nodeId, "Parsed configuration: config = %s, dThreads = %u, cThreads = %u, graphFile = %s,"
                      "featuresFile = %s, undirected = %s, data port set -> %u, control port set -> %u\n",

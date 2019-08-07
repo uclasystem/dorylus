@@ -23,7 +23,6 @@ ServerWorker::work() {
 			worker.recv(&identity);
 			worker.recv(&header);
 
-			int32_t chunkId = parse<int32_t>((char *) identity.data(), 0);
 			int32_t op = parse<int32_t>((char *) header.data(), 0);
 			int32_t partId = parse<int32_t>((char *) header.data(), 1);
 			int32_t rows = parse<int32_t>((char *) header.data(), 2);
