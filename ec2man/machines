@@ -1,9 +1,5 @@
 i-00e226df5540e8a7d     graph       ubuntu      /Users/jose/.ssh/JoseHu-Keypair.pem     #  id  role(context)  username  privatekey
 i-01fe4e52d9e7e0fc0     graph       ubuntu      /Users/jose/.ssh/JoseHu-Keypair.pem
 i-027d989d22c2bb05b     graph       ubuntu      /Users/jose/.ssh/JoseHu-Keypair.pem
-i-0ddc0a295475a0420     graph       ubuntu      /Users/jose/.ssh/JoseHu-Keypair.pem
-i-07f22e8c10a045bdb     graph       ubuntu      /Users/jose/.ssh/JoseHu-Keypair.pem
 i-0b19a122072d0f7b8     weight      ubuntu      /Users/jose/.ssh/JoseHu-Keypair.pem
-i-0d264d70e61420dec     weight      ubuntu      /Users/jose/.ssh/JoseHu-Keypair.pem
-i-0dba1739359b39def     weight      ubuntu      /Users/jose/.ssh/JoseHu-Keypair.pem
 i-029b522451f84a340     coord       ubuntu      /Users/jose/.ssh/JoseHu-Keypair.pem

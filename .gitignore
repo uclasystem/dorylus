@@ -2,6 +2,7 @@
 *.d
 **/.DS_Store
 *.swp
+*.bak
 
 **/build
 **/results

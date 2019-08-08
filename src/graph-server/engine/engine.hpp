@@ -39,6 +39,12 @@ struct FeaturesHeaderType {
     unsigned int numFeatures;
 };
 
+/** Binary labels file header struct. */
+struct LabelsHeaderType {
+    unsigned long labelKinds;
+};
+
+
 /**
  *
  * Class of an ASPIRE engine executing on a node.
@@ -77,6 +83,7 @@ private:
     static FeatType *ghostVerticesActivationData;
     static FeatType *verticesDataBuf;   // A smaller buffer storing current iter's data after aggregation. (Serves as the
                                         // serialization area naturally.)
+    static FeatType *verticesLabels;
 
     static IdType currId;
     static Lock lockCurrId;
@@ -87,9 +94,10 @@ private:
     static Lock lockHalt;
 
     static std::string graphFile;
-    static std::string featuresFile;
     static std::string outFile;
+    static std::string featuresFile;
     static std::string layerConfigFile;
+    static std::string labelsFile;
     static std::string dshMachinesFile;
     static std::string myPrIpFile;
     static std::string myPubIpFile;
@@ -135,10 +143,9 @@ private:
 
     static FeatType *vertexZDataPtr(IdType lvid, unsigned offset);
     static FeatType *vertexActivationDataPtr(IdType lvid, unsigned offset);
-
     static FeatType *ghostVertexActivationDataPtr(IdType lvid, unsigned offset);
-
     static FeatType *vertexDataBufPtr(IdType lvid, unsigned numFeats);
+    static FeatType *vertexLabelsPtr(IdType lvid, unsigned numFeats);
 
     // Aggregation operation (along with normalization).
     static void aggregateFromNeighbors(IdType lvid);
@@ -147,6 +154,7 @@ private:
     static void parseArgs(int argc, char* argv[]);
     static void readLayerConfigFile(std::string& layerConfigFileName);
     static void readFeaturesFile(std::string& featuresFileName);
+    static void readLabelsFile(std::string& labelsFileName);
     static void readPartsFile(std::string& partsFileName, Graph& lGraph);
     static void processEdge(IdType& from, IdType& to, Graph& lGraph, std::set<IdType>* inTopics, std::set<IdType>* oTopics); 
     static void findGhostDegrees(std::string& fileName);

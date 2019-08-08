@@ -21,9 +21,10 @@ unsigned Engine::dThreads;
 ThreadPool* Engine::computePool = NULL;
 unsigned Engine::cThreads;
 std::string Engine::graphFile;
-std::string Engine::featuresFile;
 std::string Engine::outFile;
+std::string Engine::featuresFile;
 std::string Engine::layerConfigFile;
+std::string Engine::labelsFile;
 std::string Engine::dshMachinesFile;
 std::string Engine::myPrIpFile;
 std::string Engine::myPubIpFile;
@@ -48,6 +49,7 @@ FeatType *Engine::verticesZData = NULL;
 FeatType *Engine::verticesActivationData = NULL;
 FeatType *Engine::ghostVerticesActivationData = NULL;
 FeatType *Engine::verticesDataBuf = NULL;
+FeatType *Engine::verticesLabels = NULL;
 unsigned Engine::iteration = 0;
 bool Engine::undirected = false;
 bool Engine::halt = false;
@@ -104,6 +106,7 @@ Engine::init(int argc, char *argv[]) {
     verticesActivationData = new FeatType[configSum * graph.getNumLocalVertices() * sizeof(FeatType)];
     ghostVerticesActivationData = new FeatType[configSum * graph.getNumGhostVertices() * sizeof(FeatType)];
     verticesDataBuf = new FeatType[layerConfig[0] * graph.getNumLocalVertices() * sizeof(FeatType)];
+    verticesLabels = new FeatType[layerConfig[numLayers] * graph.getNumLocalVertices() * sizeof(FeatType)];
 
     // Set a local index for all ghost vertices along the way. This index is used for indexing within the ghost data arrays.
     IdType ghostCount = 0;
@@ -112,6 +115,9 @@ Engine::init(int argc, char *argv[]) {
 
     // Read in initial features (for the 0th layer) from the features file.
     readFeaturesFile(featuresFile);
+
+    // Read in initial features (for the 0th layer) from the features file.
+    readLabelsFile(labelsFile);
 
     // Initialize synchronization utilities.
     lockCurrId.init();
@@ -215,15 +221,23 @@ Engine::output() {
     //
     // The following are full outputing. Commented out for now because we are testingn large-scale data.
     //
+    // for (Vertex& v : graph.getVertices()) {
+    //     outStream << v.getGlobalId() << ": ";
+    //     FeatType *dataAllPtr = vertexActivationDataPtr(v.getLocalId(), 0);
+    //     unsigned offset = 0;
+    //     for (unsigned& numFeats : layerConfig) {
+    //         for (unsigned i = 0; i < numFeats; ++i)
+    //             outStream << dataAllPtr[offset++] << " ";
+    //         outStream << "| ";
+    //     }
+    //     outStream << std::endl;
+    // }
+
     for (Vertex& v : graph.getVertices()) {
         outStream << v.getGlobalId() << ": ";
-        FeatType *dataAllPtr = vertexActivationDataPtr(v.getLocalId(), 0);
-        unsigned offset = 0;
-        for (unsigned& numFeats : layerConfig) {
-            for (unsigned i = 0; i < numFeats; ++i)
-                outStream << dataAllPtr[offset++] << " ";
-            outStream << "| ";
-        }
+        FeatType *labelsPtr = vertexLabelsPtr(v.getLocalId(), layerConfig[numLayers]);
+        for (LabelType i = 0; i < layerConfig[numLayers]; ++i)
+            outStream << labelsPtr[i] << " ";
         outStream << std::endl;
     }
 
@@ -266,6 +280,7 @@ Engine::destroy() {
     delete[] verticesActivationData;
     delete[] ghostVerticesActivationData;
     delete[] verticesDataBuf;
+    delete[] verticesLabels;
 }
 
 
@@ -570,6 +585,17 @@ Engine::vertexDataBufPtr(IdType lvid, unsigned numFeats) {
 
 /**
  *
+ * Get the data pointer to a local vertex's labels area.
+ * 
+ */
+FeatType *
+Engine::vertexLabelsPtr(IdType lvid, unsigned numFeats) {
+    return verticesLabels + lvid * numFeats;
+}
+
+
+/**
+ *
  * Aggregate numFeats feature values starting from offset from all neighbors (including self). Then write the results to the
  * data buffer area for serialization. The results are to be used for being sent to lambda threads.
  * 
@@ -652,6 +678,7 @@ Engine::parseArgs(int argc, char *argv[]) {
         ("graphfile", boost::program_options::value<std::string>(), "Path to the binary file contatining the edge list")
         ("featuresfile", boost::program_options::value<std::string>(), "Path to the file containing the vertex features")
         ("layerfile", boost::program_options::value<std::string>(), "Layer configuration file")
+        ("labelsfile", boost::program_options::value<std::string>(), "Target labels file")
         ("dshmachinesfile", boost::program_options::value<std::string>(), "DSH machines file")
         ("pripfile", boost::program_options::value<std::string>(), "File containing my private ip")
         ("pubipfile", boost::program_options::value<std::string>(), "File containing my public ip")
@@ -696,6 +723,9 @@ Engine::parseArgs(int argc, char *argv[]) {
 
     assert(vm.count("layerfile"));
     layerConfigFile = vm["layerfile"].as<std::string>();
+
+    assert(vm.count("labelsfile"));
+    labelsFile = vm["labelsfile"].as<std::string>();
 
     assert(vm.count("dshmachinesfile"));
     dshMachinesFile = vm["dshmachinesfile"].as<std::string>();
@@ -776,7 +806,7 @@ void
 Engine::readFeaturesFile(std::string& featuresFileName) {
     std::ifstream infile(featuresFileName.c_str());
     if (!infile.good())
-        printLog(nodeId, "Cannot open feature file: %s [Reason: %s]\n", featuresFileName.c_str(), std::strerror(errno));
+        printLog(nodeId, "Cannot open features file: %s [Reason: %s]\n", featuresFileName.c_str(), std::strerror(errno));
 
     assert(infile.good());
 
@@ -784,9 +814,9 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
     infile.read((char *) &fHeader, sizeof(FeaturesHeaderType));
     assert(fHeader.numFeatures == layerConfig[0]);
 
-    unsigned gvid = 0;
+    IdType gvid = 0;
     
-    unsigned nFeats = fHeader.numFeatures;
+    LabelType nFeats = fHeader.numFeatures;
     std::vector<FeatType> feature_vec;
     feature_vec.reserve(nFeats);
     FeatType curr;
@@ -794,7 +824,8 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
     while (infile.read(reinterpret_cast<char *> (&curr) , sizeof(FeatType))){
         feature_vec.push_back(curr);
         if (feature_vec.size() == nFeats) {
-            // Set the vertex's initial values, if it is one of mine local vertices / ghost vertices.
+
+            // Set the vertex's initial values, if it is one of my local vertices / ghost vertices.
             FeatType *zDataPtr = NULL, *actDataPtr = NULL;
             if (graph.containsGhostVertex(gvid)) {      // Global vertex.
                 actDataPtr = ghostVertexActivationDataPtr(graph.getGhostVertex(gvid).getLocalId(), 0);
@@ -809,6 +840,50 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
             ++gvid;
             feature_vec.clear();
         }
+    }
+    infile.close();
+}
+
+
+/**
+ *
+ * Read in the labels file, store the labels in one-hot format.
+ * 
+ */
+void
+Engine::readLabelsFile(std::string& labelsFileName) {
+    std::ifstream infile(labelsFileName.c_str());
+    if (!infile.good())
+        printLog(nodeId, "Cannot open labels file: %s [Reason: %s]\n", labelsFileName.c_str(), std::strerror(errno));
+
+    assert(infile.good());
+
+    LabelsHeaderType fHeader;
+    infile.read((char *) &fHeader, sizeof(LabelsHeaderType));
+    assert(fHeader.labelKinds == layerConfig[numLayers]);
+
+    IdType gvid = 0;
+    
+    LabelType lKinds = fHeader.labelKinds;
+    LabelType curr;
+    FeatType one_hot_arr[lKinds] = {0};
+
+    while (infile.read(reinterpret_cast<char *> (&curr) , sizeof(LabelType))) {
+
+        // Set the vertex's label values, if it is one of my local vertices.
+        FeatType *labelPtr = NULL;
+        if (graph.containsVertex(gvid)) {
+
+            // Convert into a one-hot array.
+            assert(curr < lKinds);
+            memset(one_hot_arr, 0, lKinds * sizeof(FeatType));
+            one_hot_arr[curr] = 1.0;
+
+            labelPtr = vertexLabelsPtr(graph.getVertexByGlobal(gvid).getLocalId(), lKinds);
+            memcpy(labelPtr, one_hot_arr, lKinds * sizeof(FeatType));
+        }
+
+        ++gvid;
     }
     infile.close();
 }

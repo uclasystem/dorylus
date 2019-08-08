@@ -8,8 +8,8 @@
 ##
 
 
-if [ ! $# == 6 ]; then
-    echo "Usage: $0 <GraphFile> <Undirected? (0/1)> <NumVertices> <NumPartitions> <FeatureFile> <DimFeatures>"
+if [ ! $# == 8 ]; then
+    echo "Usage: $0 <GraphFile> <Undirected? (0/1)> <NumVertices> <NumPartitions> <FeaturesFile> <DimFeatures> <LabelsFile> <LabelKinds>"
     exit
 fi
 
@@ -33,6 +33,9 @@ mv ${GRAPH}.bsnap ./graph.bsnap
 echo "Conduct partitioning..."
 
 ./partitioner graph.bsnap ${VERTICES} ${PARTS}
+if [[ ! $? == 0 ]]; then
+    exit 1
+fi
 
 mv parts_${PARTS} data/
 mv graph.bsnap data/
@@ -49,8 +52,29 @@ DIMFEATS=$6
 
 echo "Converting the features file to binary..."
 
-./featurestobinary --featurefile=${FEATURES} --featuredimension=${DIMFEATS}
+./featurestobinary --featuresfile=${FEATURES} --featuredimension=${DIMFEATS}
+if [[ ! $? == 0 ]]; then
+    exit 1
+fi
+
 mv ${FEATURES}.bsnap data/features.bsnap
+
+
+#
+# Convert the labels file to binary snap.
+#
+
+LABELS=$7
+LABELKINDS=$8
+
+echo "Converting the labels file to binary.."
+
+./labelstobinary --labelsfile=${LABELS} --labelkinds=${LABELKINDS}
+if [[ ! $? == 0 ]]; then
+    exit 1
+fi
+
+mv ${LABELS}.bsnap data/labels.bsnap
 
 
 # Permissions stuff...

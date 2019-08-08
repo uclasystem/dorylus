@@ -29,15 +29,15 @@ fi
 
 # Install ZeroMQ.
 if [[ ! $( ldconfig -p | grep zmq ) ]]; then    # Only install if have been installed.
-    wget https://archive.org/download/zeromq_4.1.4/zeromq-4.1.4.tar.gz
-    tar xf zeromq-4.1.4.tar.gz
-    rm zeromq-4.1.4.tar.gz
-    cd zeromq-4.1.4
+    wget https://github.com/zeromq/libzmq/releases/download/v4.3.2/zeromq-4.3.2.tar.gz
+    tar xf zeromq-4.3.2.tar.gz
+    rm zeromq-4.3.2.tar.gz
+    cd zeromq-4.3.2
     ./configure --with-libsodium=no
     make
     sudo make install
     sudo ldconfig
     sudo mv ../gnn-lambda/src/utils/zmq.hpp /usr/local/include
     cd ..
-    rm -rf zeromq-4.1.4
+    rm -rf zeromq-4.3.2
 fi

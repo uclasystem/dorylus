@@ -2,7 +2,7 @@ CPP=g++
 CFLAGS=-std=c++11 -O3
 
 
-all: partitioner graphtobinary featurestobinary
+all: partitioner graphtobinary featurestobinary labelstobinary
 
 partitioner: partitioner.cpp
 	${CPP} $< -o $@ ${CFLAGS} -lmetis
@@ -13,7 +13,10 @@ graphtobinary: graphToBinary.cpp
 featurestobinary: featuresToBinary.cpp
 	${CPP} $< -o $@ ${CFLAGS} -lboost_system
 
+labelstobinary: labelsToBinary.cpp
+	${CPP} $< -o $@ ${CFLAGS} -lboost_system
+
 
 .PHONY: clean
 clean:
-	rm -f partitioner graphtobinary featurestobinary
+	rm -f partitioner graphtobinary featurestobinary labelstobinary
