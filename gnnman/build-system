@@ -1,0 +1,38 @@
+#!/bin/bash
+
+##
+## Build the system on 3 master nodes, and send the executable to all the other machines listed in ec2 manager.
+## Must be invoked after a proper `setup-cluster`!!!
+##
+## Usage: $ ./gnnman/build-system [Context]
+##
+## Options:
+##      Default: Build the corresponding server on master nodes (0), and send the executable to all other machiens.
+##      Context: If given, only build the specified context
+##
+
+
+cd $( dirname $0 )/..
+
+EC2MAN_CMD="python3 -m ec2man"
+
+
+# For graph servers.
+if [[ -z $1 ]] || [[ $1 == "graph" ]]; then
+    echo "Processing context 'graph'..."
+    ${EC2MAN_CMD} graph 0 ssh -t "cd gnn-lambda && ./gnnman/helpers/graphserver.bld && ./gnnman/helpers/send-file build/graphserver"
+fi
+
+
+# For graph servers.
+if [[ -z $1 ]] || [[ $1 == "weight" ]]; then
+    echo "Processing context 'weight'..."
+    ${EC2MAN_CMD} weight 0 ssh -t "cd gnn-lambda && ./gnnman/helpers/weightserver.bld && ./gnnman/helpers/send-file build/weightserver"
+fi
+
+
+# For coordination servers. Normally only one coordination server, so no need to send out.
+if [[ -z $1 ]] || [[ $1 == "coord" ]]; then
+    echo "Processing context 'coord'..."
+    ${EC2MAN_CMD} coord 0 ssh -t "cd gnn-lambda && ./gnnman/helpers/coordserver.bld"
+fi

@@ -1,0 +1,49 @@
+#!/bin/bash
+
+##
+## Kill the running zombie servers.
+##
+## Usage: $ ./gnnman/kill-zombies <Context>
+##
+## Arguments:
+##      Context: Kill which server.
+##
+
+
+cd ${HOME}
+
+
+case $1 in
+
+    #
+    # Kill graphserver.
+    #
+    "graph")
+        DSHMACHINESFILE=${HOME}/dshmachines
+        echo "Killing existing 'graphserver' processes..."
+        dsh -f ${DSHMACHINESFILE} -c "killall -u $( whoami ) graphserver"
+        ;;
+
+    #
+    # Kill weightserver.
+    #
+    "weight")
+        DSHMACHINESFILE=${HOME}/dshmachines
+        echo "Killing existing 'weightserver' processes..."
+        dsh -f ${DSHMACHINESFILE} -c "killall -u $( whoami ) weightserver"
+        ;;
+
+    #
+    # Kill coordserver.
+    #
+    "coord")
+        echo "Killing existing 'coordserver' processes..."
+        killall -u $( whoami ) coordserver
+        ;;
+
+    *)
+        echo "Must specify a valid context 'graph' / 'weight' / 'coord'."
+        echo "Usage: ./run/kill-zombies <Context>"
+        exit 1
+        ;;
+esac

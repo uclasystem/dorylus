@@ -17,13 +17,16 @@
 /** Extern class-wide fields. */
 Graph Engine::graph;
 ThreadPool* Engine::dataPool = NULL;
-unsigned Engine::dThreads = NUM_DATA_THREADS;
+unsigned Engine::dThreads;
 ThreadPool* Engine::computePool = NULL;
-unsigned Engine::cThreads = NUM_COMP_THREADS;
+unsigned Engine::cThreads;
 std::string Engine::graphFile;
 std::string Engine::featuresFile;
 std::string Engine::outFile;
 std::string Engine::layerConfigFile;
+std::string Engine::dshMachinesFile;
+std::string Engine::myPrIpFile;
+std::string Engine::myPubIpFile;
 unsigned Engine::dataserverPort;
 std::string Engine::coordserverIp;
 unsigned Engine::coordserverPort;
@@ -51,9 +54,11 @@ bool Engine::undirected = false;
 bool Engine::halt = false;
 double Engine::timeInit = 0.0;
 double Engine::timeProcess = 0.0;
+double Engine::timeOutput = 0.0;
 std::vector<double> Engine::vecTimeAggregate;
 std::vector<double> Engine::vecTimeLambda;
 std::vector<double> Engine::vecTimeSendout;
+std::vector<double> Engine::vecTimeWriteback;
 
 
 /**
@@ -63,18 +68,18 @@ std::vector<double> Engine::vecTimeSendout;
  */
 void
 Engine::init(int argc, char *argv[]) {
-    printLog(nodeId, "Engine starts initialization...\n");
+    printLog(404, "Engine starts initialization...\n");
     timeInit = -getTimer();
 
     parseArgs(argc, argv);
     
     // Initialize the node manager and communication manager.
-    NodeManager::init(ZKHOST_FILE, HOST_FILE);
-    CommManager::init();
-    nodeId = NodeManager::getNodeId();
+    NodeManager::init(dshMachinesFile, myPrIpFile, myPubIpFile);    // NodeManger should go first.
+    nodeId = NodeManager::getMyNodeId();
     numNodes = NodeManager::getNumNodes();
     assert(numNodes <= 256);    // Cluster size limitation.
     outFile += std::to_string(nodeId);
+    CommManager::init();
 
     // Set number of layers and number of features in each layer. Also store the prefix sum of config for offset querying use.
     readLayerConfigFile(layerConfigFile);
@@ -123,9 +128,6 @@ Engine::init(int argc, char *argv[]) {
     computePool->createPool();
     printLog(nodeId, "Created %u computation threads.\n", cThreads);
 
-    CommManager::flushControl();
-    CommManager::flushData();
-
     // Create data communicators thread pool.
     dataPool = new ThreadPool(dThreads);
     dataPool->createPool();
@@ -140,8 +142,8 @@ Engine::init(int argc, char *argv[]) {
     timeInit += getTimer();
     printLog(nodeId, "Engine initialization complete.\n");
 
-    // Make sure all nodes finish initailization.
-    NodeManager::barrier(INIT_BARRIER);
+    // Make sure all nodes finish initailization. No need to add a global barrier before running then.
+    NodeManager::barrier();
 }
 
 
@@ -165,15 +167,9 @@ Engine::master() {
  */
 void
 Engine::run() {
-    
-    // Make sure engines on all machines start running.
-    NodeManager::barrier(RUN_BARRIER); 
     printLog(nodeId, "Engine starts running...\n");
 
     timeProcess = -getTimer();
-
-    // Change phase to processing.
-    NodeManager::startProcessing();
 
     // Set initial conditions.
     currId = 0;
@@ -201,10 +197,15 @@ Engine::run() {
 /**
  *
  * Write output stuff to the tmp directory for every local vertex.
+ * Write engine timing metrics to the logfile.
  * 
  */
 void
 Engine::output() {
+
+    timeOutput = -getTimer();
+
+    // Output results.
     std::ofstream outStream(outFile.c_str());
 
     if (!outStream.good())
@@ -212,6 +213,9 @@ Engine::output() {
 
     assert(outStream.good());
 
+    //
+    // The following are full outputing. Commented out for now because we are testingn large-scale data.
+    //
     for (Vertex& v : graph.getVertices()) {
         outStream << v.getGlobalId() << ": ";
         FeatType *dataAllPtr = vertexActivationDataPtr(v.getLocalId(), 0);
@@ -223,6 +227,17 @@ Engine::output() {
         }
         outStream << std::endl;
     }
+
+    timeOutput += getTimer();
+
+    // Benchmarking results.
+    if (master()) {
+        assert(vecTimeAggregate.size() == numLayers);
+        assert(vecTimeLambda.size() == numLayers);
+        assert(vecTimeWriteback.size() == numLayers);
+        assert(vecTimeSendout.size() == numLayers);
+        printEngineMetrics();
+    }
 }
 
 
@@ -233,7 +248,7 @@ Engine::output() {
  */
 void
 Engine::destroy() {
-    printLog(nodeId, "Destroy the engine...\n");
+    printLog(nodeId, "Destroying the engine...\n");
 
     NodeManager::destroy();
     CommManager::destroy();
@@ -252,9 +267,6 @@ Engine::destroy() {
     delete[] verticesActivationData;
     delete[] ghostVerticesActivationData;
     delete[] verticesDataBuf;
-
-    if (master())
-        printEngineMetrics();
 }
 
 
@@ -327,6 +339,9 @@ Engine::worker(unsigned tid, void *args) {
                 // Lambda threads finished. //
                 //////////////////////////////
 
+                vecTimeLambda.push_back(getTimer() - timeWorker);
+                timeWorker = getTimer();
+
                 // Reset buffer area to be the activation data array from LambdaComm. This reduces 1 realloc() for resizing the buffer.
                 // Previous buffer should be called on delete at lambdaComm destruction.
                 verticesDataBuf = lambdaComm->getActivationData();
@@ -339,7 +354,7 @@ Engine::worker(unsigned tid, void *args) {
                            getNumFeats(iteration + 1) * sizeof(FeatType));
                 }
 
-                vecTimeLambda.push_back(getTimer() - timeWorker);
+                vecTimeWriteback.push_back(getTimer() - timeWorker);
                 timeWorker = getTimer();
                 printLog(nodeId, "All lambda requests finished. Results received.\n");
 
@@ -371,10 +386,9 @@ Engine::worker(unsigned tid, void *args) {
                 lockRecvWaiters.unlock();
 
                 //## Global Iteration barrier. ##//
-                NodeManager::barrier(LAYER_BARRIER);
+                NodeManager::barrier();
 
                 vecTimeSendout.push_back(getTimer() - timeWorker);
-                timeWorker = getTimer();
                 printLog(nodeId, "Global barrier after ghost data exchange crossed.\n");
 
                 // End this lambda communciation context and step forward to a new iteration.
@@ -391,6 +405,7 @@ Engine::worker(unsigned tid, void *args) {
                     //## Worker barrier 2: Starting a new iteration. ##//
                     barComp.wait();
 
+                    timeWorker = getTimer();
                     continue;
 
                 // No more, so deciding to halt. But still needs the communicator to check if there will be further scheduling invoked by ghost
@@ -566,14 +581,14 @@ Engine::aggregateFromNeighbors(IdType lvid) {
     unsigned offset = getDataAllOffset();
 
     // Read out data of the current iteration of given vertex.
-    FeatType currDataBuf[numFeats];
+    FeatType *currDataDst = vertexDataBufPtr(lvid, numFeats);
     FeatType *currDataPtr = vertexActivationDataPtr(lvid, offset);
-    memcpy(currDataBuf, currDataPtr, numFeats * sizeof(FeatType));
+    memcpy(currDataDst, currDataPtr, numFeats * sizeof(FeatType));
 
     // Apply normalization factor on the current data.
     Vertex& v = graph.getVertex(lvid);
     for (unsigned i = 0; i < numFeats; ++i)
-        currDataBuf[i] *= v.getNormFactor();
+        currDataDst[i] *= v.getNormFactor();
 
     // Aggregate from incoming neighbors.
     for (unsigned i = 0; i < v.getNumInEdges(); ++i) {
@@ -587,11 +602,8 @@ Engine::aggregateFromNeighbors(IdType lvid) {
 
         // TODO: Locks on the data array area is not properly set yet. But does not affect forward prop.
         for (unsigned j = 0; j < numFeats; ++j)
-            currDataBuf[j] += (otherDataPtr[j] * normFactor);
+            currDataDst[j] += (otherDataPtr[j] * normFactor);
     }
-
-    // Write the results to the correct position inside serialization dataBuf area.
-    memcpy(vertexDataBufPtr(lvid, getNumFeats()), currDataBuf, numFeats * sizeof(FeatType));
 }
 
 
@@ -607,9 +619,11 @@ Engine::printEngineMetrics() {
     for (size_t i = 0; i < numLayers; ++i) {
         printLog(nodeId, "\t\t\tAggregation   %2d  %.3lf ms\n", i, vecTimeAggregate[i]);
         printLog(nodeId, "\t\t\tLambda        %2d  %.3lf ms\n", i, vecTimeLambda[i]);
+        printLog(nodeId, "\t\t\tWrite back    %2d  %.3lf ms\n", i, vecTimeWriteback[i]);
         printLog(nodeId, "\t\t\tGhost update  %2d  %.3lf ms\n", i, vecTimeSendout[i]);
     }
-    printLog(nodeId, "Engine METRICS: Total Processing time %.3lf ms\n", timeProcess);
+    printLog(nodeId, "Engine METRICS: Total processing time %.3lf ms\n", timeProcess);
+    printLog(nodeId, "Engine METRICS: Output writing takes %.3lf ms\n", timeOutput);
 }
 
 
@@ -636,10 +650,12 @@ Engine::parseArgs(int argc, char *argv[]) {
     desc.add_options()
         ("help", "Produce help message")
 
-        ("config", boost::program_options::value<std::string>()->default_value(std::string(DEFAULT_CONFIG_FILE), DEFAULT_CONFIG_FILE), "Config file")
         ("graphfile", boost::program_options::value<std::string>(), "Path to the binary file contatining the edge list")
         ("featuresfile", boost::program_options::value<std::string>(), "Path to the file containing the vertex features")
         ("layerfile", boost::program_options::value<std::string>(), "Layer configuration file")
+        ("dshmachinesfile", boost::program_options::value<std::string>(), "DSH machines file")
+        ("pripfile", boost::program_options::value<std::string>(), "File containing my private ip")
+        ("pubipfile", boost::program_options::value<std::string>(), "File containing my public ip")
 
         ("tmpdir", boost::program_options::value<std::string>(), "Temporary directory")
 
@@ -647,27 +663,21 @@ Engine::parseArgs(int argc, char *argv[]) {
         ("coordserverip", boost::program_options::value<std::string>(), "The private IP address of the coordination server")
         ("coordserverport", boost::program_options::value<unsigned>(), "The port of the listener on the coordination server")
 
-        ("undirected", boost::program_options::value<unsigned>()->default_value(unsigned(ZERO), ZERO_STR), "Graph type")
+        // Default is directed graph!
+        ("undirected", boost::program_options::value<unsigned>()->default_value(unsigned(0), "0"), "Graph type is undirected or not")
 
-        ("dthreads", boost::program_options::value<unsigned>()->default_value(unsigned(NUM_DATA_THREADS), NUM_DATA_THREADS_STR), "Number of data threads")
-        ("cthreads", boost::program_options::value<unsigned>()->default_value(unsigned(NUM_COMP_THREADS), NUM_COMP_THREADS_STR), "Number of compute threads")
-        ("dport", boost::program_options::value<unsigned>()->default_value(unsigned(DATA_PORT), DATA_PORT_STR), "Port for data communication")
-        ("cport", boost::program_options::value<unsigned>()->default_value(unsigned(CONTROL_PORT_START), CONTROL_PORT_START_STR), "Port start for control communication")
+        ("dthreads", boost::program_options::value<unsigned>(), "Number of data threads")
+        ("cthreads", boost::program_options::value<unsigned>(), "Number of compute threads")
+
+        ("dataport", boost::program_options::value<unsigned>(), "Port for data communication")
+        ("ctrlport", boost::program_options::value<unsigned>(), "Port start for control communication")
+        ("nodeport", boost::program_options::value<unsigned>(), "Port for node manager")
 
         ("numLambdas", boost::program_options::value<unsigned>()->default_value(unsigned(1), "1"), "Number of lambdas to request")
         ;
 
     boost::program_options::variables_map vm;
     boost::program_options::store(boost::program_options::command_line_parser(argc, argv).options(desc).allow_unregistered().run(), vm);
-    boost::program_options::notify(vm);
-
-    assert(vm.count("config"));
-
-    std::string cFile = vm["config"].as<std::string>();
-    std::ifstream cStream;
-    cStream.open(cFile.c_str());
-
-    boost::program_options::store(boost::program_options::parse_config_file(cStream, desc, true), vm);
     boost::program_options::notify(vm);
 
     if (vm.count("help")) {
@@ -690,6 +700,15 @@ Engine::parseArgs(int argc, char *argv[]) {
     assert(vm.count("layerfile"));
     layerConfigFile = vm["layerfile"].as<std::string>();
 
+    assert(vm.count("dshmachinesfile"));
+    dshMachinesFile = vm["dshmachinesfile"].as<std::string>();
+
+    assert(vm.count("pripfile"));
+    myPrIpFile = vm["pripfile"].as<std::string>();
+
+    assert(vm.count("pubipfile"));
+    myPubIpFile = vm["pubipfile"].as<std::string>();
+
     assert(vm.count("tmpdir"));
     outFile = vm["tmpdir"].as<std::string>() + "/output_";  // Still needs to append the node id, after node manager set up.
 
@@ -705,21 +724,25 @@ Engine::parseArgs(int argc, char *argv[]) {
     assert(vm.count("undirected"));
     undirected = (vm["undirected"].as<unsigned>() == 0) ? false : true;
 
-    assert(vm.count("dport"));
-    unsigned data_port = vm["dport"].as<unsigned>();
+    assert(vm.count("dataport"));
+    unsigned data_port = vm["dataport"].as<unsigned>();
     CommManager::setDataPort(data_port);
 
-    assert(vm.count("cport"));
-    unsigned control_port = vm["cport"].as<unsigned>();
-    CommManager::setControlPortStart(control_port);
+    assert(vm.count("ctrlport"));
+    unsigned ctrl_port = vm["ctrlport"].as<unsigned>();
+    CommManager::setControlPortStart(ctrl_port);
+
+    assert(vm.count("nodeport"));
+    unsigned node_port = vm["nodeport"].as<unsigned>();
+    NodeManager::setNodePort(node_port);
 
     assert(vm.count("numLambdas"));
     numLambdas = vm["numLambdas"].as<unsigned>();
 
-    printLog(nodeId, "Parsed configuration: config = %s, dThreads = %u, cThreads = %u, graphFile = %s,"
-                     "featuresFile = %s, undirected = %s, data port set -> %u, control port set -> %u\n",
-                     cFile.c_str(), dThreads, cThreads, graphFile.c_str(), featuresFile.c_str(),
-                     undirected ? "true" : "false", data_port, control_port);
+    printLog(404, "Parsed configuration: dThreads = %u, cThreads = %u, graphFile = %s, featuresFile = %s, dshMachinesFile = %s, "
+                  "myPrIpFile = %s, myPubIpFile = %s, undirected = %s, data port set -> %u, control port set -> %u, node port set -> %u\n",
+                  dThreads, cThreads, graphFile.c_str(), featuresFile.c_str(), dshMachinesFile.c_str(),
+                  myPrIpFile.c_str(), myPubIpFile.c_str(), undirected ? "true" : "false", data_port, ctrl_port, node_port);
 }
 
 

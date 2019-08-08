@@ -1,0 +1,69 @@
+#!/bin/bash
+
+##
+## Install requried dependencies on a coordination server. TO be invoked on the remote machine.
+##
+
+
+cd ${HOME}
+
+
+# Basic packages.
+APT_INSTALL_LIST="build-essential libtool pkg-config autoconf libboost-all-dev cmake git libssl-dev libcurl4-openssl-dev zlib1g-dev"
+YUM_GROUPINSTALL="'Development Tools'"; YUM_INSTALL_LIST="boost-devel cmake git openssl-devel libcurl-devel zlib-devel"
+
+OS_DISTRO=$( awk -F= '/^NAME/{print $2}' /etc/os-release | sed -e 's/^"//' -e 's/"$//' )
+if [[ ${OS_DISTRO} == "Ubuntu" ]]; then
+    sudo apt-get update
+    sudo apt-get -y install ${APT_INSTALL_LIST}
+elif [[ ${OS_DISTRO} == "Red Hat Enterprise Linux" ]]; then
+    sudo yum -y install ${YUM_INSTALL_LIST}
+    sudo yum -y groupinstall ${YUM_GROUPINSTALL}
+else
+    echo "Unrecognized OS distro version. This script currently only supports 'Ubuntu' or 'Red Hat Enterprise Linux'."
+    echo "Basic packages not installed."
+fi
+
+
+# Install ZeroMQ.
+if [[ ! $( ldconfig -p | grep zmq ) ]]; then    # Only install if not installed yet.
+    wget https://archive.org/download/zeromq_4.1.4/zeromq-4.1.4.tar.gz
+    tar xf zeromq-4.1.4.tar.gz
+    rm zeromq-4.1.4.tar.gz
+    cd zeromq-4.1.4
+    ./configure --with-libsodium=no
+    make
+    sudo make install
+    sudo ldconfig
+    sudo mv ../gnn-lambda/src/utils/zmq.hpp /usr/local/include
+    cd ..
+    rm -rf zeromq-4.1.4
+fi
+
+
+# Install AWS-SDK.
+if [[ ! $( ldconfig -p | grep aws-cpp-sdk ) ]]; then    # Only install if not installed yet.
+    git clone https://github.com/aws/aws-sdk-cpp.git
+    cd aws-sdk-cpp
+    mkdir build
+    cd build
+    cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_ONLY=lambda
+    make
+    sudo make install
+    cd ../..
+    rm -rf aws-sdk-cpp
+fi
+
+
+# Install AWS-Lambda C++ runtime.
+if [[ ! -d /usr/local/include/aws/lambda-runtime ]]; then    # Only install if not installed yet.
+    git clone https://github.com/awslabs/aws-lambda-cpp.git
+    cd aws-lambda-cpp
+    mkdir build
+    cd build
+    cmake .. -DCMAKE_BUILD_TYPE=Release
+    make
+    sudo make install
+    cd ../..
+    rm -rf aws-lambda-cpp
+fi

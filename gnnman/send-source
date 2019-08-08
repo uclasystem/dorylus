@@ -1,0 +1,39 @@
+#!/bin/bash
+
+##
+## Send the source code folder to all the machines listed in ec2 manager.
+##
+## Usage: $ ./gnnman/send-source [--force]
+##
+## Options:
+##      Default: Use `rsync` to send the updates on local `gnn-lambda/` folder to all remote machines.
+##      --force: Force to delete the existing `~/gnn-lambda/` folder on remote machines, and send a completely new copy.
+##
+
+
+cd $( dirname $0 )/..
+
+EC2MAN_CMD="python3 -m ec2man"
+
+
+# Loop through all three contexts.
+for CTX in graph coord weight; do
+    
+    echo "Processing context '${CTX}'..."
+
+    # If in force mode, delete existing repo.
+    if [[ $1 == "--force" ]]; then
+        echo "Deleting existing repo..."
+        ${EC2MAN_CMD} ${CTX} all ssh "rm -rf gnn-lambda/"
+    fi
+
+    # Send repo updates using `rsync`.
+    echo "Sending new updates..."
+    ${EC2MAN_CMD} ${CTX} all rsync --exclude ".git*" --exclude "wiki" --exclude "README.md" --exclude "data" ../gnn-lambda &
+
+done
+
+
+# Wait for background commands to finish.
+echo "Waiting on background sending to finish..."
+wait

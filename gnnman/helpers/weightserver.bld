@@ -1,0 +1,19 @@
+#!/bin/bash
+
+##
+## Build the weight server executable.
+##
+
+
+cd ${HOME}/gnn-lambda/
+
+
+if [ ! -d build ]; then
+    mkdir build
+fi
+
+cd build
+cmake .. -DBUILD_WEIGHT=yes
+make
+
+mv weight-server/weightserver .

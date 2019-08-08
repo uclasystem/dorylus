@@ -1,0 +1,2 @@
+arn:aws:iam::754699445878:role/lambda-cpp-demo  # AWS ARN string
+josehu                                          # AWS-CLI profile name to use

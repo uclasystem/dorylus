@@ -35,6 +35,8 @@ void printLog(const unsigned nodeId, const char *format, ...);
 double getTimer();
 
 
-void getIPs(std::string& private_ip, std::string& public_ip);
+void getPrIP(std::string& myPrIpFile, std::string& ip);
+void getPubIP(std::string& myPubIpFile, std::string& ip);
+
 
 #endif //__GRAPH_UTILS_HPP__

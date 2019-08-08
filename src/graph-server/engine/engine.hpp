@@ -19,33 +19,12 @@
 #include "../utils/utils.hpp"
 
 
-#define NUM_DATA_THREADS 1          // These are default values (when cli argument is empty).
-#define NUM_COMP_THREADS 7
-#define NUM_DATA_THREADS_STR "1"
-#define NUM_COMP_THREADS_STR "5"
-
-
-#define ZERO 0
-#define ZERO_STR "0"
-#define INF 1000000000  // 1B
-#define MILLION 1000000 // 1M
-
-
 #define MAX_MSG_SIZE 8192   // Max size (bytes) for a message received by the data communicator.
 
 
 /** For files cli options. */
-#define DEFAULT_CONFIG_FILE "../config/kconf.conf"
-#define HOST_FILE "../config/hostfile"
-#define ZKHOST_FILE "../config/zkhostfile"
 #define PARTS_EXT ".parts"
 #define EDGES_EXT ".edges"
-
-
-/** Global node barriers. */
-#define INIT_BARRIER "init"
-#define RUN_BARRIER "run"
-#define LAYER_BARRIER "layer"
 
 
 /** Binary snap file header struct. */
@@ -113,6 +92,9 @@ private:
     static std::string featuresFile;
     static std::string outFile;
     static std::string layerConfigFile;
+    static std::string dshMachinesFile;
+    static std::string myPrIpFile;
+    static std::string myPubIpFile;
 
     static unsigned dataserverPort;
     static std::string coordserverIp;
@@ -132,9 +114,11 @@ private:
     // Timing stuff.
     static double timeInit;
     static double timeProcess; 
+    static double timeOutput; 
     static std::vector<double> vecTimeAggregate;
     static std::vector<double> vecTimeLambda;
     static std::vector<double> vecTimeSendout;
+    static std::vector<double> vecTimeWriteback;
 
     static std::map<IdType, unsigned> recvWaiters;
 

@@ -44,15 +44,22 @@ double getTimer() {
 
 
 void
-getIPs(std::string& private_ip, std::string& public_ip) {
-    std::ifstream ipFile("../run/nodeIp");
+getPrIP(std::string& myPrIpFile, std::string& ip) { 
+    std::ifstream ipFile(myPrIpFile);
+    assert(ipFile.good());
+
+    std::getline(ipFile, ip);
+
+    ipFile.close();
+}
+
+void
+getPubIP(std::string& myPubIpFile, std::string& ip) {
+    std::ifstream ipFile(myPubIpFile);
     assert(ipFile.good());
 
     std::getline(ipFile, private_ip);
     std::getline(ipFile, public_ip);
 
     ipFile.close();
-
-    fprintf(stderr, "Private IP address: %s\n", private_ip.c_str());
-    fprintf(stderr, "Public IP address: %s\n", public_ip.c_str());
 }
