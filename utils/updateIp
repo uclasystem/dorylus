@@ -1,5 +1,0 @@
-#! /bin/bash
-
-user=$( whoami )
-
-dsh -aM "cd /home/$user/gnn-lambda; ./utils/ec2 pubip > run/nodeIp"

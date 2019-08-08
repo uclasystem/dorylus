@@ -1,0 +1,19 @@
+#!/bin/bash
+
+##
+## Build the coordination server executable.
+##
+
+
+cd ${HOME}/gnn-lambda/
+
+
+if [ ! -d build ]; then
+    mkdir build
+fi
+
+cd build
+cmake .. -DBUILD_COORD=yes
+make
+
+mv coord-server/coordserver .

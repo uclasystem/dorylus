@@ -6,20 +6,18 @@
 /** Extern class-wide fields. */
 unsigned CommManager::nodeId = 0;
 unsigned CommManager::numNodes = 0;
-std::vector<bool> CommManager::nodesAlive;
-unsigned CommManager::numLiveNodes;
-unsigned CommManager::dataPort = DATA_PORT;
-unsigned CommManager::controlPortStart = CONTROL_PORT_START;
 zmq::context_t CommManager::dataContext;                    // Data sockets & locks.
 zmq::socket_t *CommManager::dataPublisher = NULL;
 zmq::socket_t *CommManager::dataSubscriber = NULL;
 Lock CommManager::lockDataPublisher;
 Lock CommManager::lockDataSubscriber;
-zmq::socket_t **CommManager::controlPublishers = NULL;      // Control sockets & locks.
+unsigned CommManager::dataPort;
+zmq::context_t CommManager::controlContext;                 // Control sockets & locks.
+zmq::socket_t **CommManager::controlPublishers = NULL;
 zmq::socket_t **CommManager::controlSubscribers = NULL;
-zmq::context_t CommManager::controlContext;
 Lock *CommManager::lockControlPublishers = NULL;
 Lock *CommManager::lockControlSubscribers = NULL;
+unsigned CommManager::controlPortStart;
 
 
 /**
@@ -31,59 +29,52 @@ void
 CommManager::init() {
     printLog(nodeId, "CommManager starts initialization...\n");
     numNodes = NodeManager::getNumNodes();
-    nodeId = NodeManager::getNodeId();
-
+    nodeId = NodeManager::getMyNodeId();
     Node me = NodeManager::getNode(nodeId);
 
-    // Data publisher & subscribers.
+    // Data publisher & subscriber.
     dataPublisher = new zmq::socket_t(dataContext, ZMQ_PUB);
-    assert(dataPublisher->ksetsockopt(ZMQ_SNDHWM, INF_WM));
-    assert(dataPublisher->ksetsockopt(ZMQ_RCVHWM, INF_WM));
+    dataPublisher->setsockopt(ZMQ_SNDHWM, 0);       // Set no limit on number of message queueing.
+    dataPublisher->setsockopt(ZMQ_RCVHWM, 0);
     char hostPort[50];
     sprintf(hostPort, "tcp://%s:%u", me.ip.c_str(), dataPort);
-    assert(dataPublisher->kbind(hostPort));
-    dataSubscriber = new zmq::socket_t(dataContext, ZMQ_SUB);
-    assert(dataSubscriber->ksetsockopt(ZMQ_SNDHWM, INF_WM));
-    assert(dataSubscriber->ksetsockopt(ZMQ_RCVHWM, INF_WM));
+    dataPublisher->bind(hostPort);
 
-    // Connect to all the nodes.
+    dataSubscriber = new zmq::socket_t(dataContext, ZMQ_SUB);
+    dataSubscriber->setsockopt(ZMQ_SNDHWM, 0);
+    dataSubscriber->setsockopt(ZMQ_RCVHWM, 0);
     for (unsigned i = 0; i < numNodes; ++i) {
         Node node = NodeManager::getNode(i);
         char hostPort[50];
         sprintf(hostPort, "tcp://%s:%u", node.ip.c_str(), dataPort);
         dataSubscriber->connect(hostPort);
-        nodesAlive.push_back(true);
     }
-    numLiveNodes = numNodes;
     dataSubscriber->setsockopt(ZMQ_SUBSCRIBE, NULL, 0);
 
     lockDataPublisher.init();
     lockDataSubscriber.init();
 
-    // Control publisher & subscribers.
+    // Control publishers & subscribers.
     controlPublishers = new zmq::socket_t*[numNodes];
-    controlSubscribers = new zmq::socket_t*[numNodes];
+    controlSubscribers = new zmq::socket_t*[numNodes];    
     lockControlPublishers = new Lock[numNodes];
     lockControlSubscribers = new Lock[numNodes];
 
-    // Connect to all the nodes.
     for (unsigned i = 0; i < numNodes; ++i) {
         if(i == nodeId)     // Skip myself.
             continue;
 
         controlPublishers[i] = new zmq::socket_t(controlContext, ZMQ_PUB);
-        assert(controlPublishers[i]->ksetsockopt(ZMQ_SNDHWM, INF_WM));
-        assert(controlPublishers[i]->ksetsockopt(ZMQ_RCVHWM, INF_WM));
-
+        controlPublishers[i]->setsockopt(ZMQ_SNDHWM, 0);
+        controlPublishers[i]->setsockopt(ZMQ_RCVHWM, 0);
         char hostPort[50];
         int prt = controlPortStart + i; 
         sprintf(hostPort, "tcp://%s:%d", me.ip.c_str(), prt);
-        assert(controlPublishers[i]->kbind(hostPort));
+        controlPublishers[i]->bind(hostPort);
 
         controlSubscribers[i] = new zmq::socket_t(controlContext, ZMQ_SUB);
-        assert(controlSubscribers[i]->ksetsockopt(ZMQ_SNDHWM, INF_WM));
-        assert(controlSubscribers[i]->ksetsockopt(ZMQ_RCVHWM, INF_WM));
-
+        controlSubscribers[i]->setsockopt(ZMQ_SNDHWM, 0);
+        controlSubscribers[i]->setsockopt(ZMQ_RCVHWM, 0);
         Node node = NodeManager::getNode(i);
         sprintf(hostPort, "tcp://%s:%d", node.ip.c_str(), controlPortStart + me.id);
         controlSubscribers[i]->connect(hostPort);
@@ -95,7 +86,8 @@ CommManager::init() {
     }
     
     // Subscribe mutually with everyone.
-    bool subscribed[numNodes];  // This arrays says which have been successfully subscribed.
+    // Send IAMUP, respond IAMUP, send ISEEYOU, and respond ISEEYOU.
+    bool subscribed[numNodes];
     for (unsigned i = 0; i < numNodes; ++i)
         subscribed[i] = false;
     subscribed[nodeId] = true;
@@ -103,17 +95,17 @@ CommManager::init() {
     
     double lastSents[numNodes];
     for (unsigned i = 0; i < numNodes; ++i)
-        lastSents[i] = -getTimer() - 1000.0;
+        lastSents[i] = -getTimer() - 500.0;         // Give 0.5 sec pause before doing polls.
 
     unsigned i = 0;
     while (1) {     // Loop until all have been subscribed.
-        if (i == nodeId || subscribed[i]) {     // Skip myself.
+        if (i == nodeId || subscribed[i]) {     // Skip myself & subsribed nodes.
             i = (i + 1) % numNodes;
             continue;
         }
 
         // Send IAMUP.
-        if (lastSents[i] + getTimer() > 500) {
+        if (lastSents[i] + getTimer() > 500.0) {    // Set 0.5 sec interval between polls to the same node.
             zmq::message_t outMsg(sizeof(ControlMessage));
             ControlMessage cMsg(IAMUP);
             *((ControlMessage *) outMsg.data()) = cMsg;
@@ -127,7 +119,7 @@ CommManager::init() {
 
             // Received IAMUP from that node.
             ControlMessage cMsg = *((ControlMessage *) inMsg.data());
-            if(cMsg.messageType == IAMUP) {
+            if (cMsg.messageType == IAMUP) {
 
                 // Send ISEEYOU.
                 {
@@ -177,6 +169,7 @@ CommManager::init() {
             i = (i + 1) % numNodes;
     }
 
+    flushData();
     flushControl();
     printLog(nodeId, "CommManager initialization complete.\n");
 }
@@ -205,7 +198,7 @@ CommManager::destroy() {
 
     // Control publishers & subscribers.
     for (unsigned i = 0; i < numNodes; ++i) {
-        if(i == nodeId)     // Skip myself.
+        if (i == nodeId)        // Skip myself.
             continue;
 
         controlPublishers[i]->close();
@@ -236,6 +229,7 @@ void
 CommManager::dataPushOut(IdType topic, void *value, unsigned valSize) {
     zmq::message_t outMsg(sizeof(IdType) + valSize);
     *((IdType *) outMsg.data()) = topic;
+    
     if (valSize > 0)
         memcpy((void *)(((char *) outMsg.data()) + sizeof(IdType)), value, valSize);
 
@@ -280,6 +274,7 @@ CommManager::controlPushOut(unsigned to, void *value, unsigned valSize) {
     assert(to != nodeId); 
     zmq::message_t outMsg(sizeof(ControlMessage) + valSize);
     *((ControlMessage *) outMsg.data()) = ControlMessage(APPMSG);
+
     if (valSize > 0)
         memcpy((void *)(((char *) outMsg.data()) + sizeof(ControlMessage)), value, valSize);
 
@@ -317,6 +312,11 @@ CommManager::controlPullIn(unsigned from, void *value, unsigned maxValSize) {
 }
 
 
+///////////////////////////////////////////////////////////////
+// Below are private function for the communication manager. //
+///////////////////////////////////////////////////////////////
+
+
 /**
  *
  * Flush the data communication pipe between myself and all living nodes.
@@ -332,11 +332,11 @@ CommManager::flushData() {
    
     dataPublisher->ksend(outMsg);
 
-    unsigned rem = numLiveNodes;
+    unsigned rem = numNodes;
 
     while (rem > 0) {
         zmq::message_t inMsg;
-        assert(dataSubscriber->krecv(&inMsg));
+        dataSubscriber->recv(&inMsg);
         IdType idx = *((IdType *) inMsg.data());
         if (idx == NULL_CHAR)
             --rem;
@@ -354,7 +354,8 @@ CommManager::flushData() {
  */
 void CommManager::flushControl() {
     for (unsigned i = 0; i < numNodes; ++i) {
-        if((i == nodeId) || (nodesAlive[i] == false))   // Skip myself and died nodes.
+
+        if (i == nodeId)    // Skip myself.
             continue;
 
         lockControlPublishers[i].lock();
@@ -364,11 +365,11 @@ void CommManager::flushControl() {
         *((ControlMessage *) outAckMsg.data()) = ControlMessage();
         controlPublishers[i]->ksend(outAckMsg);
 
-        while(1) {
+        while (1) {
             zmq::message_t inMsg;
             if (controlSubscribers[i]->krecv(&inMsg, ZMQ_DONTWAIT)) {
                 ControlMessage cMsg = *((ControlMessage *) inMsg.data());
-                if (cMsg.messageType == NONE)
+                if (cMsg.messageType == CTRLNONE)
                     break;
             }
         }
@@ -376,16 +377,4 @@ void CommManager::flushControl() {
         lockControlSubscribers[i].unlock();
         lockControlPublishers[i].unlock();
     }
-}
-
-
-/**
- *
- * Sentence a living node to death.
- * 
- */
-void CommManager::nodeDie(unsigned nId) {
-    assert(nodesAlive[nId]);
-    nodesAlive[nId] = false;
-    --numLiveNodes;
 }

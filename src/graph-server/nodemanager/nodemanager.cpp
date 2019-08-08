@@ -1,89 +1,112 @@
 #include <fstream>
 #include <cassert>
 #include <cstring>
+#include <chrono>
+#include <thread>
+#include <boost/algorithm/string/trim.hpp>
 #include "nodemanager.hpp"
-#include "zkinterface.hpp"
 #include "../utils/utils.hpp"
 
 
 /** Extern class-wide fields. */
 Node NodeManager::me;
-unsigned NodeManager::masterId = 0;
 std::vector<Node> NodeManager::allNodes;
-unsigned NodeManager::numLiveNodes;
-Lock NodeManager::lockWaiter;
-Cond NodeManager::condWaiter;
-Phase NodeManager::phase = REGISTERING;
-Lock NodeManager::lockPhase; 
-std::map<std::string, BarrierContext> NodeManager::appBarriers;
-Lock NodeManager::lockAppBarriers;
-void (*NodeManager::ndFunc)(unsigned) = NULL;
-std::string NodeManager::zooHostPort;
-std::atomic<bool> NodeManager::forceRelease = ATOMIC_VAR_INIT(false);
-std::atomic<bool> NodeManager::inBarrier = ATOMIC_VAR_INIT(false);
+bool NodeManager::inBarrier = false;
+zmq::context_t NodeManager::nodeContext;                // Node barriering sockets & locks.
+zmq::socket_t *NodeManager::nodePublisher = NULL;
+zmq::socket_t *NodeManager::nodeSubscriber = NULL;
+unsigned NodeManager::nodePort;
 
 
 /**
  *
  * Initialize the communication manager. Should be done before initializing the CommManager.
+ * Node manager is NOT thread safe - it can only be invoked by a single computation thread (typically the master thread).
  * 
  */
 void
-NodeManager::init(const char *zooHostFile, const char *hostFile) {
-    getIP(&me.ip);
-    getPubIP(me.pubip);
+NodeManager::init(std::string dshMachinesFile, std::string myPrIpFile, std::string myPubIpFile) {
+    printLog(404, "NodeManager starts initialization...\n");
 
-    // Parse the config files.
-    parseZooConfig(zooHostFile);
-    parseNodeConfig(hostFile);
+    getPrIP(myPrIpFile, me.ip);
+    getPubIP(myPubIpFile, me.pubip);
+    parseNodeConfig(dshMachinesFile);
+    allNodes[me.id].pubip = me.pubip;       // Set my node struct's pubip, in case CommManager uses it.
+    printLog(me.id, "Private IP: %s, Public IP: %s\n", me.ip.c_str(), me.pubip.c_str());
 
-    printLog(me.id, "NodeManager starts initialization... (ZK host port = %s)\n", zooHostPort.c_str());
-    assert(ZKInterface::init(zooHostPort.c_str()));
+    // Initialize node barriering sockets.
+    nodePublisher = new zmq::socket_t(nodeContext, ZMQ_PUB);
+    nodePublisher->setsockopt(ZMQ_SNDHWM, 0);       // Set no limit on number of message queueing.
+    nodePublisher->setsockopt(ZMQ_RCVHWM, 0);
+    char hostPort[50];
+    sprintf(hostPort, "tcp://%s:%u", me.ip.c_str(), nodePort);
+    nodePublisher->bind(hostPort);
 
-    // Initialize synchronization utilities.
-    lockWaiter.init();
-    condWaiter.init(lockWaiter);
-    lockPhase.init();
-    lockAppBarriers.init();
+    nodeSubscriber = new zmq::socket_t(nodeContext, ZMQ_SUB);
+    nodeSubscriber->setsockopt(ZMQ_SNDHWM, 0);
+    nodeSubscriber->setsockopt(ZMQ_RCVHWM, 0);
+    for (Node& node : allNodes) {
+        char hostPort[50];
+        sprintf(hostPort, "tcp://%s:%u", node.ip.c_str(), nodePort);
+        nodeSubscriber->connect(hostPort);
+    }
+    nodeSubscriber->setsockopt(ZMQ_SUBSCRIBE, NULL, 0);
 
-    // Master node registers the barriers for others.
+    // The master node keeps polling on incoming respond WORKERUP messages until everyone else
+    // has finished initialization.
     if (me.master) {
-        ZKInterface::recursiveDeleteZKNode(ZK_ROOT_NODE);
-        createNode(ZK_ROOT_NODE, false, true, &createCB);
-        createNode(ZK_MASTER_NODE, false, true, &createCB);
-        createNode(ZK_APPBARRIER_NODE, false, false, &createCB);
+        unsigned remaining = getNumNodes() - 1;
 
-        // Master creates a barrier so that everyone must hit here before registration.
-        createNode(ZK_BARRIER_NODE, false, false, &createCB);
+        // Keeps polling until all workers' respond processed.
+        while (remaining > 0) {
 
-        std::string subNode = ZK_MASTER_NODE;
-        subNode += "/";
-        subNode += me.name;
-        createNode(subNode.c_str(), true, false, &createCB);
+            // Send MASTERUP.
+            zmq::message_t outMsg(sizeof(NodeMessage));
+            NodeMessage nMsg(MASTERUP);
+            *((NodeMessage *) outMsg.data()) = nMsg;
+            nodePublisher->ksend(outMsg);
 
-        // Block till everyone gets registered.
-        waitForAllNodes();
+            // Sleep for 0.5 sec before checking the responds, to avoid clobbing the sockets.
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-        // Master deletes this barrier, allowing others to proceed.
-        ZKInterface::deleteZKNode(ZK_BARRIER_NODE);
+            // Receive all WORKERUP responds in queue (don't do block recv here).
+            zmq::message_t inMsg;
+            while (nodeSubscriber->krecv(&inMsg, ZMQ_DONTWAIT)) {
+                NodeMessage nMsg = *((NodeMessage *) inMsg.data());
+                if (nMsg.messageType == WORKERUP)
+                    --remaining;
+            }
+        }
 
-    // Worker nodes wait until the barriers have been registered.
+        // Signal workers to move on.
+        zmq::message_t outMsg(sizeof(NodeMessage));
+        NodeMessage nMsg(INITDONE);
+        *((NodeMessage *) outMsg.data()) = nMsg;
+        nodePublisher->send(outMsg);
+
+    // Worker nodes, when received master's MASTERUP message, respond a WORKERUP message.
     } else {
 
-        // Everyone hits here before registration.
-        hitBarrier();
+        // Wait for master's polling request.
+        zmq::message_t inMsg;
+        while (nodeSubscriber->recv(&inMsg)) {
+            NodeMessage nMsg = *((NodeMessage *) inMsg.data());
+            if (nMsg.messageType == MASTERUP)
+                break;
+        }
 
-        std::string subNode = ZK_MASTER_NODE;
-        subNode += "/";
-        subNode += me.name;
-        ZKInterface::createZKNode(subNode.c_str(), true, false, &createCB);
+        // Send back respond message to master.
+        zmq::message_t outMsg(sizeof(NodeMessage));
+        NodeMessage nMsg(WORKERUP);
+        *((NodeMessage *) outMsg.data()) = nMsg;
+        nodePublisher->send(outMsg);
 
-        // Block until master deletes the barrier.
-        leaveBarrier();
-
-        watchAllNodes();
-
-        phase = REGISTERED;
+        // Wait for master's signal to move forward.
+        while (nodeSubscriber->recv(&inMsg)) {
+            NodeMessage nMsg = *((NodeMessage *) inMsg.data());
+            if (nMsg.messageType == INITDONE)
+                break;
+        }
     }
 
     printLog(me.id, "NodeManager initialization complete.\n");
@@ -95,88 +118,32 @@ NodeManager::init(const char *zooHostFile, const char *hostFile) {
  * Public API for a node to hit a global barrier.
  * 
  */
-void NodeManager::barrier(const char* bar) {
+void
+NodeManager::barrier() {
     inBarrier = true;
+    printLog(me.id, "Hits on a global barrier |xxx|...\n");
 
-    BarrierContext bContext(bar);
-    std::string barName = bContext.path;
+    // Send BARRIER message.
+    zmq::message_t outMsg(sizeof(NodeMessage));
+    NodeMessage nMsg(BARRIER);
+    *((NodeMessage *) outMsg.data()) = nMsg;
+    nodePublisher->send(outMsg);
 
-    lockAppBarriers.lock();
-    appBarriers[barName] = bContext;    // Overwrite barrier.
-    lockAppBarriers.unlock();
-
-    // Master node is responsible for creating the barrier, and other nodes wait until master has created it. Then
-    // the nodes block until all the nodes are trying to leave the barrier.
-    //
-    // Master's job:
-    //      1. Create ZK_MASTER_NODE
-    //      2. Create ZK_BARRIER_NODE
-    //      3. Create ZK_MASTER_NODE/<name>
-    //      4. Wait for all nodes to be created
-    //      5. Delete ZK_BARRIER_NODE
-    //
-    if (me.master) {
-        createNode(barName.c_str(), false, true, &createCB);
-
-        lockWaiter.lock();
-        
-        struct String_vector children;
-        ZKInterface::getZKNodeChildren(barName.c_str(), barrierCB, &children);
-
-        if ((unsigned) children.count != numLiveNodes - 1) {
-            condWaiter.wait();
-            lockWaiter.unlock();
-        } else {
-            lockWaiter.unlock();
-            printLog(me.id, "Everyone reached the barrier (head start).\n", children.count);
-            lockAppBarriers.lock();
-            appBarriers[barName].ignoreCB = true; 
-            lockAppBarriers.unlock();
-        }
-
-        ZKInterface::freeZKStringVector(&children);
-        ZKInterface::recursiveDeleteZKNode(barName.c_str());
-
-    // Non-master node, so first wait on hitting the barrier then wait on leaving it.
-    //
-    // Non-master's job:
-    //      1. Wait for ZK_BARRIER_NODE to be created
-    //      2. Create ZK_MASTER_NODE/<name>
-    //      3. Wait for ZK_BARRIER_NODE to be destroyed
-    //
-    } else {
-        printLog(me.id, "Barrier %s: Hitting on it...\n", barName.c_str());
-        
-        lockWaiter.lock();
-        if (!ZKInterface::checkZKExists(barName.c_str(), checkBarrier))
-            condWaiter.wait();
-        lockWaiter.unlock();
-
-        printLog(me.id, "Barrier %s: Entered.\n", barName.c_str());
-
-        if (!forceRelease) {
-            std::string subNode = barName;
-            subNode += "/";
-            subNode += me.name;
-            createNode(subNode.c_str(), true, false, &createCB);
-        }
-
-        printLog(me.id, "Barrier %s: Waiting to leave...\n", barName.c_str());
-
-        if (!forceRelease) {
-            lockWaiter.lock();
-            if (ZKInterface::checkZKExists(barName.c_str(), checkBarrier))
-                condWaiter.wait();
-            lockWaiter.unlock();
-        }
-        printLog(me.id, "Barrier %s: Passed through!\n", barName.c_str());
-
-        if (me.master)  // This is possible because master itself died and I got re-elected as new master. 
-            ZKInterface::recursiveDeleteZKNode(barName.c_str());
+    // Keeps receiving BARRIER messages until heard from all (including self).
+    unsigned remaining = allNodes.size();
+    zmq::message_t inMsg;
+    while (remaining > 0) {
+        nodeSubscriber->recv(&inMsg);
+        NodeMessage nMsg = *((NodeMessage *) inMsg.data());
+        if (nMsg.messageType == BARRIER)
+            --remaining;
     }
 
+    // No redundant messages sent, so there should be no remaining messages in flight or in someone's
+    // message queue after leaving the global barrier. Thus, we do not need to flush.
+
     inBarrier = false;
-    forceRelease = false;
+    printLog(me.id, "Left that global barrier |xxx|.\n");
 }
 
 
@@ -187,10 +154,13 @@ void NodeManager::barrier(const char* bar) {
  */
 void
 NodeManager::destroy() {
-    phase = UNREGISTERING;
-    barrier(DESTROY_BARRIER); 
-    if (me.master)
-        ZKInterface::recursiveDeleteZKNode(ZK_ROOT_NODE);
+    barrier();
+
+    nodePublisher->close();
+    nodeSubscriber->close();
+
+    delete nodePublisher;
+    delete nodeSubscriber;
 }
 
 
@@ -199,12 +169,7 @@ NodeManager::destroy() {
  * General public utilities.
  * 
  */
-std::vector<Node> *
-NodeManager::getAllNodes() {
-    return &allNodes;
-}
-
-Node
+Node&
 NodeManager::getNode(unsigned i) {
     return allNodes[i];
 }
@@ -215,8 +180,8 @@ NodeManager::getNumNodes() {
 }
 
 unsigned
-NodeManager::getNodeId() {
-    return me.id; 
+NodeManager::getMyNodeId() {
+    return me.id;
 }
 
 bool
@@ -224,107 +189,10 @@ NodeManager::amIMaster() {
     return me.master;
 }
 
-unsigned
-NodeManager::getMasterId() {
-    return masterId; 
-}
 
-
-/**
- *
- * Get node id from its name string.
- * 
- */
-unsigned
-NodeManager::getNodeId(std::string& nodeName) {
-    for (unsigned i = 0; i < allNodes.size(); ++i) {
-        if (allNodes[i].name == nodeName)
-            return i;
-    }
-    return allNodes.size();
-}
-
-
-/**
- *
- * Get node name string from id number.
- * 
- */
-std::string
-NodeManager::getNodeName(const char *path) {
-    char *cptr = const_cast<char *>(path) + strlen(path) - 1;
-    assert(*cptr != '/');
-    while (cptr != path) {
-        --cptr;
-        if (*cptr == '/') {
-            ++cptr;
-            break;
-        }
-    }
-    return std::string(cptr);
-}
-
-
-/**
- *
- * Release all nodes in given barrier.
- * 
- */
-void
-NodeManager::releaseAll(const char *bar) {
-    assert(phase == PROCESSING);
-
-    BarrierContext bContext(bar);
-    std::string barName = bContext.path;
-
-    lockAppBarriers.lock();
-    if (appBarriers.find(barName.c_str()) != appBarriers.end())
-        appBarriers[barName.c_str()].ignoreCB = true;
-    lockAppBarriers.unlock();
-
-    lockWaiter.lock();
-    forceRelease = true;
-    condWaiter.signal();
-    lockWaiter.unlock();
-
-    forceRelease = inBarrier ? true : false;
-}
-
-
-/**
- *
- * Register a new function to be executed when a node goes down.
- * 
- */
-void
-NodeManager::registerNodeDownFunc(void (*func)(unsigned)) {
-    ndFunc = func;
-}
-
-
-/////////////////////////////////////////////////
-// Below are private functions for the engine. //
-/////////////////////////////////////////////////
-
-
-/**
- *
- * Parse the ZooKeeper config file.
- * 
- */
-void
-NodeManager::parseZooConfig(const char *zooHostFile) {
-    zooHostPort = "";
-    bool first = true;
-    std::ifstream inFile(zooHostFile);
-    std::string host, port;
-    while (inFile >> host >> port) {
-        if (!first)
-            zooHostPort += ",";
-        zooHostPort += host + ":" + port;
-        first = false;
-    }
-}
+///////////////////////////////////////////////////////
+// Below are private functions for the node manager. //
+///////////////////////////////////////////////////////
 
 
 /**
@@ -333,277 +201,24 @@ NodeManager::parseZooConfig(const char *zooHostFile) {
  * 
  */
 void
-NodeManager::parseNodeConfig(const char *hostFile) {
-    std::ifstream inFile(hostFile); 
-    std::string ip, name, role;
-    while (inFile >> ip >> name >> role) {
-        if (ip == me.ip) {
-            me.id = allNodes.size();
-            me.name = name;
-            me.master = (role == MASTER_ROLE);
-        }
-        masterId = (role == MASTER_ROLE) ? allNodes.size() : masterId;
-        allNodes.push_back(Node(allNodes.size(), &ip, &me.pubip, &name, (role == MASTER_ROLE)));
-    }
+NodeManager::parseNodeConfig(const std::string dshMachinesFile) {
+    std::ifstream inFile(dshMachinesFile);
+    std::string line;
+    while (std::getline(inFile, line)) {
+        boost::algorithm::trim(line);
+        if (line.length() > 0) {
 
-    numLiveNodes = allNodes.size();
-}
+            // Get id and private ip of the machine in the line. Machine at line i (starting from 0) will have nodeId = i.
+            unsigned id = allNodes.size();
+            std::string ip = line.substr(line.find('@') + 1);
 
-
-/**
- *
- * Handler when something happens to a node specified by given path.
- *
- */
-void
-NodeManager::nodeManagerCB(const char *path) {
-    lockPhase.lock();
-    switch (phase) {
-        case REGISTERING:
-            countChildren(path);
-            break;
-        case REGISTERED:
-            printLog(me.id, "Something happened on node %s. Current phase is REGISTERED, hence do nothing...\n", getNodeName(path).c_str());
-            break;
-        case PROCESSING:
-            nodeUpDown(path);
-            break;
-        case UNREGISTERING:
-            printLog(me.id, "Something happened on node %s. Current phase in UNREGISTERING, anyways death is upon us now, hence do nothing...\n", getNodeName(path).c_str());
-            break;
-        default:
-            assert(false);
-    }
-    lockPhase.unlock();
-}
-
-
-/**
- *
- * Sentence the node specified by given path to death.
- * 
- */
-void
-NodeManager::nodeUpDown(const char *path) {
-    std::string nodeName = getNodeName(path);
-    unsigned nId = getNodeId(nodeName);
-
-    assert(nId < allNodes.size());
-
-    std::string subNode = ZK_MASTER_NODE;
-    subNode += "/";
-    subNode += allNodes[nId].name;
-
-    assert(!ZKInterface::checkZKExists(subNode.c_str(), nodeManagerCB));    // Ensure it is not a false alarm.
-    assert(allNodes[nId].isAlive);
-
-    // Send it to death, and if it was the master node, assign another living node as new master.
-    printLog(me.id, "Node %u is sentenced to death...\n", nId);
-    allNodes[nId].isAlive = false;
-    if (allNodes[nId].master) {
-        while (1) {
-            unsigned nextId = (nId + 1) % allNodes.size();
-            if (allNodes[nextId].isAlive) {
-                allNodes[nextId].master = true;
-                allNodes[nId].master = false;
-                if (me.id == nextId) {
-                    me.master = true;
-                    printLog(me.id, "New master node is now me (%u).\n", me.id);
-                }
-                break;
+            // It's me!
+            if (ip == me.ip) {
+                me.id = id;
+                me.master = (me.id == MASTER_NODEID);
             }
+
+            allNodes.push_back(Node(id, &ip, (id == MASTER_NODEID)));
         }
     }
-    --numLiveNodes;
-    ndFunc(getNodeId(nodeName));
-}
-
-
-/**
- *
- * Watch all nodes and ensure they are alive in the ZooKeeprer.
- * 
- */
-void
-NodeManager::watchAllNodes() {
-    for (unsigned i = 0; i < allNodes.size(); ++i) {
-        std::string subNode = ZK_MASTER_NODE;
-        subNode += "/";
-        subNode += allNodes[i].name;
-
-        assert(ZKInterface::checkZKExists(subNode.c_str(), nodeManagerCB));
-
-        allNodes[i].isAlive = true;
-    }
-}
-
-
-/**
- *
- * Count the registered children and wake them up if all have been settled.
- * 
- */
-void
-NodeManager::countChildren(const char *path) {
-    struct String_vector children;
-    ZKInterface::getZKNodeChildren(ZK_MASTER_NODE, nodeManagerCB, &children);
-
-    // Watch all my children and see how many of them are registered. If all have been registered then
-    // wake the waiting nodes up.
-    if ((unsigned) children.count == allNodes.size()) {
-        watchAllNodes();
-
-        printLog(me.id, "Everyone (%d nodes) have been registered.\n", children.count);
-
-        phase = REGISTERED;
-
-        // Hack: Remove child watch on ZK_MASTER_NODE by creating and destroying a child.
-        std::string subNode = ZK_MASTER_NODE "/" ZK_JUNK_NODE_NAME;
-        createNode(subNode.c_str(), false, true, &createCB);
-        ZKInterface::deleteZKNode(subNode.c_str());
-
-        lockWaiter.lock();
-        condWaiter.signal();
-        lockWaiter.unlock();
-    } else {
-        assert((unsigned) children.count < allNodes.size());
-        printLog(me.id, "A subset (%d nodes) have been registered.\n", children.count);
-    }
-
-    ZKInterface::freeZKStringVector(&children);
-}
-
-
-/**
- *
- * Wait for all nodes to get registered.
- * 
- */
-void
-NodeManager::waitForAllNodes() {
-    struct String_vector children;
-    ZKInterface::getZKNodeChildren(ZK_MASTER_NODE, nodeManagerCB, &children);
-
-    // If not all nodes have been registered, block until then.
-    if ((unsigned) children.count != allNodes.size()) {
-        lockWaiter.lock();
-        condWaiter.wait();
-        lockWaiter.unlock();
-    } else {
-        watchAllNodes();
-
-        printLog(me.id, "Everyone (%d nodes) have been registered (head start).\n", children.count);
-        
-        phase = REGISTERED;
-
-        // Hack: Remove child watch on ZK_MASTER_NODE by creating and destroying a child.
-        std::string subNode = ZK_MASTER_NODE "/" ZK_JUNK_NODE_NAME;
-        createNode(subNode.c_str(), false, true, &createCB);
-        ZKInterface::deleteZKNode(subNode.c_str());
-    }
-
-    ZKInterface::freeZKStringVector(&children);
-}
-
-
-/**
- *
- * Hit / leave a global barrier (for private use).
- * 
- */
-void
-NodeManager::checkNode(const char *path) {      // Checker function for ZooKeeper checkZKExists().
-    lockWaiter.lock();
-    condWaiter.signal();
-    lockWaiter.unlock();
-}
-
-void
-NodeManager::hitBarrier() {
-    printLog(me.id, "Barrier %s: Hitting on it...\n", ZK_BARRIER_NODE);
-    lockWaiter.lock();
-    if (!ZKInterface::checkZKExists(ZK_BARRIER_NODE, checkNode))
-        condWaiter.wait();
-    lockWaiter.unlock();
-    printLog(me.id, "Barrier %s: Entered.\n", ZK_BARRIER_NODE);
-}
-
-void
-NodeManager::leaveBarrier() {
-    printLog(me.id, "Barrier %s: Waiting to leave...\n", ZK_BARRIER_NODE);
-    lockWaiter.lock();
-    if (ZKInterface::checkZKExists(ZK_BARRIER_NODE, checkNode))
-        condWaiter.wait();
-    lockWaiter.unlock();
-    printLog(me.id, "Barrier %s: Passed through!\n", ZK_BARRIER_NODE);
-}
-
-
-/**
- *
- * Create a new ZK node on the given path.
- * 
- */
-void
-NodeManager::createCB(int rc, const char *createdPath, const void *data) {  // Checker function for ZooKeeper createNode().
-    assert(rc == 0);
-}
-
-void
-NodeManager::createNode(const char *path, bool ephemeral, bool sync, void (*func)(int, const char *, const void *)) {
-    ZKInterface::createZKNode(path, ephemeral, sync, func);
-} 
-
-
-/**
- *
- * Change a node's phase to processing.
- * 
- */
-void
-NodeManager::startProcessing() {
-    lockPhase.lock();
-    phase = PROCESSING;
-    printLog(me.id, "Start processing. (Current phase -> PROCESSING)\n");
-    lockPhase.unlock();
-}
-
-
-/**
- *
- * Handler when a barrier appears in the way.
- * 
- */
-void
-NodeManager::checkBarrier(const char *path) {   // Checker function for ZooKeeper checkZKExists().
-    lockWaiter.lock();
-    condWaiter.signal();
-    lockWaiter.unlock();
-}
-
-void
-NodeManager::barrierCB(const char *path) {
-    lockAppBarriers.lock();   // Serializing the whole CB because anyways its a barrier, do not care about performance.
-    
-    assert(appBarriers.find(path) != appBarriers.end());
-    
-    if (appBarriers[path].ignoreCB) {   // I am set to ignore this handler.
-        lockAppBarriers.unlock(); 
-        return;
-    }
-
-    struct String_vector children;
-    ZKInterface::getZKNodeChildren(path, barrierCB, &children);
-
-    // If all have reached the barrier, remove it, and ignore it in the future.
-    if ((unsigned) children.count == numLiveNodes - 1) {
-        printLog(me.id, "Everyone reached the barrier, thus removing it...\n", children.count);
-        appBarriers[path].ignoreCB = true;
-        lockWaiter.lock();
-        condWaiter.signal();
-        lockWaiter.unlock();
-    }
-
-    ZKInterface::freeZKStringVector(&children);
-    lockAppBarriers.unlock();
 }

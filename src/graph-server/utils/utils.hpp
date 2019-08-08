@@ -21,7 +21,7 @@ typedef float EdgeType;
                                 // From MAX_IDTYPE downto MAX_IDTYPE - numGlobalVertices are receive signals.
 
 
-#define INTERFACE "eth0" 
+#define INTERFACE "ens5" 
 
 
 extern std::map<size_t, std::string> typeToFormatSpecifier;
@@ -35,8 +35,8 @@ void printLog(const unsigned nodeId, const char *format, ...);
 double getTimer();
 
 
-void getIP(std::string *ip);
-void getPubIP(std::string& ip);
+void getPrIP(std::string& myPrIpFile, std::string& ip);
+void getPubIP(std::string& myPubIpFile, std::string& ip);
 
 
 #endif //__GRAPH_UTILS_HPP__

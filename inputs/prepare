@@ -1,40 +1,59 @@
 #!/bin/bash
 
-#
-# Convert a text graph into binary, and partite it into partitions.
-#
+##
+## Convert a text graph into binary snaps, and partite it into partitions.
+## Convert the features file into bsnap as well.
+##
+## Output is located in `inputs/data` folder. The dataset inside is ready to be used as our system's input.
+##
 
-if [ ! $# == 4 ]; then
-    echo "Usage: $0 <graph-file> <undirected? (0/1)> <num-vertices> <num-partitions>";
-    exit;
+
+if [ ! $# == 6 ]; then
+    echo "Usage: $0 <GraphFile> <Undirected? (0/1)> <NumVertices> <NumPartitions> <FeatureFile> <DimFeatures>"
+    exit
 fi
 
 rm -rf data && mkdir data
 
-function header {
-    echo -e "\e[33;1m######## ${1} ########\e[0m"
-}
 
-GRAPH=$1;
-UNDIRECTED=$2;
-VERTICES=$3;
-PARTS=$4;
+#
+# Convert the graph to binary snap.
+#
 
-header "Converting to binary..."
+GRAPH=$1
+UNDIRECTED=$2
+VERTICES=$3
+PARTS=$4
 
-./tobinary ${GRAPH} --snapfile=${GRAPH} --undirected=${UNDIRECTED} --header=1
+echo "Converting the graph to binary..."
 
-BSNAP=${GRAPH}.bsnap
-mv ${BSNAP} .
-BSNAP=$( basename ${BSNAP} )
+./graphtobinary ${GRAPH} --snapfile=${GRAPH} --undirected=${UNDIRECTED} --header=1
+mv ${GRAPH}.bsnap ./graph.bsnap
 
-header "Conduct partitioning..."
+echo "Conduct partitioning..."
 
-./partitioner ${BSNAP} ${VERTICES} ${PARTS}
+./partitioner graph.bsnap ${VERTICES} ${PARTS}
 
 mv parts_${PARTS} data/
-mv ${BSNAP} data/
+mv graph.bsnap data/
 
-ln -s ../${BSNAP} data/parts_${PARTS}/${BSNAP}.edges
+ln -s ../graph.bsnap data/parts_${PARTS}/graph.bsnap.edges
 
-chmod -R a+w data/parts_3
+
+#
+# Convert the features file to binary snap.
+#
+
+FEATURES=$5
+DIMFEATS=$6
+
+echo "Converting the features file to binary..."
+
+./featurestobinary --featurefile=${FEATURES} --featuredimension=${DIMFEATS}
+mv ${FEATURES}.bsnap data/features.bsnap
+
+
+# Permissions stuff...
+chmod -R a+w data
+
+echo -e "Dataset under 'data/' folder is ready for battle."

@@ -1,32 +1,19 @@
 *.o
 *.d
-out*
-*.bin
 **/.DS_Store
-
-inputs/data
-installs
-run/hostfile
-run/gvid
-run/nodeIp
-<<<<<<< HEAD
-run/dshmachines
-run/cserverinfo
-run/zoo.basic
-run/cserverinfo
-config
-
-manage-ec2
-.venv
-ec2_manager/res
-*.pyc
-vm
+*.swp
 
 **/build
 **/results
-**/__pycache__
 **/output-files
 **/.out
 **/test
 
-utils/check
+manage-ec2
+ec2man/contexts
+**/__pycache__
+*.pyc
+
+inputs/data
+
+wiki

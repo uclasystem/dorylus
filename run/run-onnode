@@ -1,0 +1,139 @@
+#!/bin/bash
+
+##
+## Run the system on the given context. TO be invoked on only MASTER node.
+## Must be invoked after a proper `setuup-cluster` & `bld-system`!!!
+##
+## Usage: $ ./gnnman/run-onnode <Context> [Dataset]
+##
+## Arguments:
+##      Context: Run which part of the system.
+##      Dataset: Only needed for graphservers.
+##
+
+
+cd ${HOME}/gnn-lambda/
+
+
+case $1 in
+
+    #
+    # Run graphserver.
+    #
+    "graph")
+        CPORT=$( < ../cserverport )
+        GPORT=$( < ../gserverport )
+        CSERVERIP=$( < ../cserverip )
+
+        DATAPORT=$( < ../dataport )
+        CTRLPORT=$( < ../ctrlport )
+        NODEPORT=$( < ../nodeport )
+
+        MYPRIPFILE=${HOME}/myprip
+        MYPUBIPFILE=${HOME}/mypubip
+        DSHMACHINESFILE=${HOME}/dshmachines
+
+        # Kill running graphservers.
+        echo "Killing existing 'graphserver' processes..."
+        dsh -f ${DSHMACHINESFILE} -c "killall -u $( whoami ) graphserver"
+
+        # Count the machines.
+        NDS=$( wc -l ${DSHMACHINESFILE} | cut -d" " -f1 )
+        for i in $( seq 1 ${NDS} ); do
+          DSHNODES[$i]=$( head -n $i ${DSHMACHINESFILE} | tail -n 1 )
+        done
+        
+        # Choosing the dataset.
+        if [[ -z $2 ]] || [[ ! -d /filepool/$2 ]]; then
+            echo "Dataset '$2' is empty or not found under '/filepool' (at least on master node)."
+            echo "Please prepare the dataset correctly."
+            exit 1
+        fi
+
+        DATASET=/filepool/$2
+
+        LAYERFILE=${HOME}/layerconfig
+
+        # Minor options.
+        UNDIRECTED=0    # Currently are all directed graphs.
+        COMP_THREADS=7  # Default values.
+        COMM_THREADS=1
+
+        # Increment the running mark.
+        RUN_MARK=$(( $( cat run/run-mark ) + 1 ))
+        echo ${RUN_MARK} > run/run-mark
+        echo "Running MARK # ${RUN_MARK}..."
+
+        # Set logging file.
+        LOGFILEDIR=${HOME}/logfiles
+        mkdir -p ${LOGFILEDIR}
+        LOGFILE=${LOGFILEDIR}/${RUN_MARK}.$2.log
+
+        # Set temporary directory.
+        TMPFILEDIR=${HOME}/tmpfiles
+        dsh -f ${DSHMACHINESFILE} -c "mkdir -p ${TMPFILEDIR}"
+
+        # Run the command on all dsh machines.
+        echo "DSH command: ./build/graphserver --graphfile ${DATASET}/parts_${NDS}/graph.bsnap --featuresfile ${DATASET}/features.bsnap --dshmachinesfile ${DSHMACHINESFILE} --layerfile ${LAYERFILE} --pubipfile ${MYPUBIPFILE} --pripfile ${MYPRIPFILE} --dataserverport ${GPORT} --coordserverip ${CSERVERIP} --coordserverport ${CPORT} --undirected ${UNDIRECTED} --tmpdir=${TMPFILEDIR} --cthreads ${COMP_THREADS} --dthreads ${COMM_THREADS} --dataport ${DATAPORT} --ctrlport ${CTRLPORT} --nodeport ${NODEPORT}"
+        dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ./build/graphserver --graphfile ${DATASET}/parts_${NDS}/graph.bsnap --featuresfile ${DATASET}/features.bsnap --dshmachinesfile ${DSHMACHINESFILE} --layerfile ${LAYERFILE} --pubipfile ${MYPUBIPFILE} --pripfile ${MYPRIPFILE} --dataserverport ${GPORT} --coordserverip ${CSERVERIP} --coordserverport ${CPORT} --undirected ${UNDIRECTED} --tmpdir=${TMPFILEDIR} --cthreads ${COMP_THREADS} --dthreads ${COMM_THREADS} --dataport ${DATAPORT} --ctrlport ${CTRLPORT} --nodeport ${NODEPORT}" 1> /dev/null 2>> ${LOGFILE}
+        
+        # Gather the output files.
+        OUTFILEDIR=${HOME}/outfiles/${RUN_MARK}.$2
+        mkdir -p ${OUTFILEDIR}
+        for i in $( seq 1 ${NDS} ); do
+            scp -q ${DSHNODES[$i]}:${TMPFILEDIR}/output_* ${OUTFILEDIR}/
+        done
+
+        echo "Check the output results in \"~/outfiles/\" folder."
+        echo "Check the running log under \"~/logfiles/\" folder."
+
+        if [ -e ${OUTFILEDIR}/output_0 ]; then
+          echo -e "\e[92;1mThis round of execution seems successful, congrats ;)\e[0m"
+        else
+          echo -e "\e[91;1mExecution fails (at least on this node), check the log file!\e[0m"
+        fi
+        ;;
+
+    #
+    # Run weightserver.
+    #
+    "weight")
+        WPORT=$( < ../wserverport )
+
+        DSHMACHINESFILE=${HOME}/dshmachines
+
+        # Kill running weightservers.
+        echo "Killing existing 'weightserver' processes..."
+        dsh -f ${DSHMACHINESFILE} -c "killall -u $( whoami ) weightserver"
+
+        # Run weightserver on all dsh nodes.
+        echo "Running WEIGHT on all dsh machines in 'weight' context..."
+        dsh -M -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ./build/weightserver ${WPORT} ../layerconfig"
+        ;;
+
+    #
+    # Run coordserver.
+    #
+    "coord")
+        CPORT=$( < ../cserverport )
+        GPORT=$( < ../gserverport )
+        WPORT=$( < ../wserverport )
+
+        LAMBDA_REGION=
+        LAMBDA_TIMEOUT=
+
+        # Kill running coordserver.
+        echo "Killing existing 'coordserver' processes..."
+        killall -u $( whoami ) coordserver
+
+        # Run coordserver.
+        echo "Running COORD..."
+        ./build/coordserver ${CPORT} ../wserverip ${WPORT} ${GPORT}
+        ;;
+
+    *)
+        echo "Must specify a valid context 'graph' / 'weight' / 'coord'."
+        echo "Usage: ./run/run-onnode <Context>"
+        exit 1
+        ;;
+esac

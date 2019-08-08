@@ -23,16 +23,14 @@ ServerWorker::work() {
 			worker.recv(&identity);
 			worker.recv(&header);
 
-			int32_t chunkId = parse<int32_t>((char *) identity.data(), 0);
 			int32_t op = parse<int32_t>((char *) header.data(), 0);
 			int32_t partId = parse<int32_t>((char *) header.data(), 1);
 			int32_t rows = parse<int32_t>((char *) header.data(), 2);
 			int32_t cols = parse<int32_t>((char *) header.data(), 3);
 
-			std::string opStr = op == 0 ? "Push" : "Pull";
-			std::string accMsg = opStr + " from thread " + std::to_string(chunkId)
-			                   + " for partition " + std::to_string(partId);
-			printLog(nodeId, "AccMSG: %s.\n", accMsg.c_str());
+			// std::string opStr = op == 0 ? "Push" : "Pull";
+			// std::string accMsg = opStr + " for partition " + std::to_string(partId);
+			// printLog(nodeId, "AccMSG: %s.\n", accMsg.c_str());
 
 			switch (op) {
 				case (OP::PULL):
@@ -194,17 +192,19 @@ LambdaComm::requestLambdas() {
 }
 
 /**
- * Send message to the coordination server to shutdown
+ * 
+ * Send message to the coordination server to shutdown.
+ * 
  */
 void
 LambdaComm::sendShutdownMessage() {
-    // Send kill message
+
+    // Send kill message.
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char *) header.data(), OP::TERM);
     sendsocket.send(header, ZMQ_SNDMORE);
 
-    // Send dummy message since coordination server
-    // expects an IP as well
+    // Send dummy message since coordination server expects an IP as well.
     zmq::message_t dummyIP;
     sendsocket.send(dummyIP);
 }

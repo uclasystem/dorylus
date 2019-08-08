@@ -1,0 +1,38 @@
+#!/bin/bash
+
+##
+## Install requried dependencies to all the machines listed in ec2 manager, depending on their roles.
+##
+## Usage: $ ./gnnman/install-dep
+##
+## Options:
+##      Default: Install the following dependencies:
+##          Graphserver  - Basics like `build-essnetial`, Boost, ZeroMQ
+##          Coordserver  - Basics like `build-essnetial`, Boost, ZeroMQ, AWS-SDK, AWS-Lambda-Runtime
+##          Weightserver - Basics like `build-essnetial`, Boost, ZeroMQ
+##
+## You might be prompted to enter the sudo passwd on remote machines.
+##
+
+
+cd $( dirname $0 )/..
+
+EC2MAN_CMD="python3 -m ec2man"
+
+
+# TODO: Maybe make the installation procedure multi-threaded?
+
+
+# For graph servers.
+echo "Processing context 'graph'..."
+${EC2MAN_CMD} graph all ssh -t "./gnn-lambda/gnnman/helpers/graphserver.install"
+
+
+# For weight servers.
+echo "Processing context 'weight'..."
+${EC2MAN_CMD} weight all ssh -t "./gnn-lambda/gnnman/helpers/weightserver.install"
+
+
+# For coordination servers.
+echo "Processing context 'coord'..."
+${EC2MAN_CMD} coord all ssh -t "./gnn-lambda/gnnman/helpers/coordserver.install"

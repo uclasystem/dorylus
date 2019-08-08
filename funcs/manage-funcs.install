@@ -1,0 +1,12 @@
+#!/bin/bash
+
+##
+## Install requried dependencies for managing inputs dataset preparation.
+##
+
+
+cd ${HOME}
+
+
+# Install OpenBLAS & CBLAS.
+# TODO...

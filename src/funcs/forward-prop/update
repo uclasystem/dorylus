@@ -1,8 +1,0 @@
-#! /bin/bash
-
-func_name=forward-prop-cpp-shen
-file=forward-prop-shen.zip
-
-cd build
-
-aws lambda update-function-code --function-name $func_name --zip-file fileb://$file

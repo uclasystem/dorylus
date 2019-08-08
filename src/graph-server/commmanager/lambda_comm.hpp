@@ -132,7 +132,7 @@ public:
     // Send a request to the coordination server for a given number of lambda threads.
     void requestLambdas();
 
-    // Send a message to the coordination server to shutdown
+    // Send a message to the coordination server to shutdown.
     void sendShutdownMessage();
 
     // Buffers for received results.

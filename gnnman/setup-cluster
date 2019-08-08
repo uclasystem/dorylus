@@ -1,0 +1,60 @@
+#!/bin/bash
+
+##
+## Start all the machines listed in the manager. Generates proper dshmachine files and put them on to the machines.
+## Generates weightserver info file (send to coordserver) and coordserver info file (send to graphserver) as well.
+## Also, the `layerconfig` file is sent to all graphservers and weightservers.
+##
+## Usage: $ ./gnnman/setup-cluster
+##
+## Options:
+##      Default: Graph servers receive a graph servers' copy, and weight servers receive a weight servers' copy of
+##               'dshmachines'.
+##
+## All these config files are put in the home directory `~/` for convience.
+##
+
+
+cd $( dirname $0 )/..
+
+EC2MAN_CMD="python3 -m ec2man"
+
+
+# Start all machines...
+${EC2MAN_CMD} graph all start
+${EC2MAN_CMD} coord all start
+${EC2MAN_CMD} weight all start
+
+
+# For graph servers.
+echo "Processing context 'graph'..."
+
+${EC2MAN_CMD} graph dshfile > dshmachines
+${EC2MAN_CMD} coord 0 pubip > cserverip
+${EC2MAN_CMD} graph all put cserverip dshmachines run/layerconfig run/cserverport run/gserverport run/dataport run/ctrlport run/nodeport
+rm -f dshmachines
+rm -f cserverip
+
+NUM_GRAPH_NODES=$(( $( ${EC2MAN_CMD} graph info | wc -l | awk '{print $1}' ) - 1 ))
+for i in $( seq 0 $(( ${NUM_GRAPH_NODES} - 1 )) ); do
+    ${EC2MAN_CMD} graph $i prip > myprip
+    ${EC2MAN_CMD} graph $i pubip > mypubip
+    ${EC2MAN_CMD} graph $i put myprip mypubip
+    rm -f myprip mypubip
+done
+
+
+# For weight servers.
+echo "Processing context 'weight'..."
+
+${EC2MAN_CMD} weight dshfile > dshmachines
+${EC2MAN_CMD} weight all put dshmachines run/layerconfig run/wserverport
+rm -f dshmachines
+
+
+# For coordination servers.
+echo "Processing context 'coord'..."
+
+${EC2MAN_CMD} weight all pubip > wserverip
+${EC2MAN_CMD} coord all put wserverip run/cserverport run/gserverport run/wserverport
+rm -f wserverip

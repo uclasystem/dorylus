@@ -1,9 +1,0 @@
-#! /bin/bash
-
-cd $( dirname $0 )
-
-configFile=$1
-
-
-# Args: <Weightserver-Port> <Layerconfig-File>
-../build/weight_server 65432 ${configFile:=layerconfig}

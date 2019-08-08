@@ -1,19 +1,19 @@
 CPP=g++
-INCPATH=../installs/out/include
-LIBPATH=../installs/out/lib
-CFLAGS=-O3
+CFLAGS=-std=c++11 -O3
 
-all: partitioner tobinary tobinaryfeature
+
+all: partitioner graphtobinary featurestobinary
 
 partitioner: partitioner.cpp
-	${CPP} -I${INCPATH} -L${LIBPATH} $< -o $@ -lmetis ${CFLAGS}
+	${CPP} $< -o $@ ${CFLAGS} -lmetis
 
-tobinary: snapToBinarySnap.cpp
+graphtobinary: graphToBinary.cpp
 	${CPP} $< -o $@ ${CFLAGS}
 
-tobinaryfeature: snapFeatures.cpp
+featurestobinary: featuresToBinary.cpp
 	${CPP} $< -o $@ ${CFLAGS} -lboost_system
+
 
 .PHONY: clean
 clean:
-	rm -f partitioner tobinary tobinaryfeature
+	rm -f partitioner graphtobinary featurestobinary
