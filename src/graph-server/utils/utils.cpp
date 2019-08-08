@@ -58,8 +58,7 @@ getPubIP(std::string& myPubIpFile, std::string& ip) {
     std::ifstream ipFile(myPubIpFile);
     assert(ipFile.good());
 
-    std::getline(ipFile, private_ip);
-    std::getline(ipFile, public_ip);
+    std::getline(ipFile, ip);
 
     ipFile.close();
 }
