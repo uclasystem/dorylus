@@ -31,7 +31,7 @@ echo "Processing context 'graph'..."
 
 ${EC2MAN_CMD} graph dshfile > dshmachines
 ${EC2MAN_CMD} coord 0 pubip > cserverip
-${EC2MAN_CMD} graph all put cserverip dshmachines run/layerconfig run/cserverport run/gserverport run/dataport run/ctrlport run/nodeport
+${EC2MAN_CMD} graph all put cserverip dshmachines run/layerconfig run/cserverport run/gserverport run/dataport run/ctrlport run/nodeport run/lambdas
 rm -f dshmachines
 rm -f cserverip
 
