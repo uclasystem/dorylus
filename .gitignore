@@ -11,6 +11,8 @@
 
 manage-ec2
 ec2man/contexts
+ec2man/machines
+ec2man/profile
 **/__pycache__
 *.pyc
 
