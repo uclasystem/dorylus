@@ -1,5 +1,0 @@
-#! /bin/bash
-
-user=$( whoami )
-
-dsh -f ~/gnn-lambda/run/dshmachines -M "rm ~/gnn-lambda/run/hostfile ~/gnn-lambda/installs/zookeeper-release-3.4.6/conf/zoo.cfg ~/gnn-lambda/installs/zookeeper-release-3.4.6/zookeeper.out"
