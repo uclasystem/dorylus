@@ -134,18 +134,13 @@ public:
 
                 // Wait on requests.
                 zmq::message_t header;
-                zmq::message_t dataIp;
+                zmq::message_t dataserverIp;
                 frontend.recv(&header);
-                frontend.recv(&dataIp);
+                frontend.recv(&dataserverIp);
 
                 // Send ACK confirm reply.
                 zmq::message_t confirm;
                 frontend.send(confirm);
-
-				// Copy the dataserverIp to make sure there is a terminating null character
-				auto dataserverIp = std::unique_ptr<char[]>(new char[dataIp.size() + 1]);
-				std::memcpy(dataserverIp.get(), dataIp.data(), dataIp.size());
-				dataserverIp.get()[dataIp.size()] = '\0';
 
                 // Parse the request.
                 int32_t op = parse<int32_t>((char *) header.data(), 0);
