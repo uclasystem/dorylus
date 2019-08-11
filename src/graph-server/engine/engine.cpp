@@ -780,6 +780,9 @@ Engine::readLayerConfigFile(std::string& layerConfigFileName) {
  */
 void
 Engine::readFeaturesFile(std::string& featuresFileName) {
+    printLog(nodeId, "Reading Feature file %s", featuresFileName.c_str());
+    
+   
     std::ifstream infile(featuresFileName.c_str());
     if (!infile.good())
         printLog(nodeId, "Cannot open feature file: %s [Reason: %s]\n", featuresFileName.c_str(), std::strerror(errno));
@@ -794,31 +797,24 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
     
     unsigned nFeats = fHeader.numFeatures;
     std::vector<FeatType> feature_vec;
-    feature_vec.reserve(nFeats);
-    FeatType curr;
+    feature_vec.resize(nFeats);
 
-    while (infile.read(reinterpret_cast<char *> (&curr) , sizeof(FeatType))){
-        feature_vec.push_back(curr);
-        if (feature_vec.size() == nFeats) {
-            // Set the vertex's initial values, if it is one of mine local vertices / ghost vertices.
-            FeatType *zDataPtr = NULL, *actDataPtr = NULL;
-            if (graph.containsGhostVertex(gvid)) {      // Global vertex.
-                actDataPtr = ghostVertexActivationDataPtr(graph.getGhostVertex(gvid).getLocalId(), 0);
-                memcpy(actDataPtr, feature_vec.data(), feature_vec.size() * sizeof(FeatType));
-            } else if (graph.containsVertex(gvid)) {    // Local vertex.
-                zDataPtr = vertexZDataPtr(graph.getVertexByGlobal(gvid).getLocalId(), 0);
-                actDataPtr = vertexActivationDataPtr(graph.getVertexByGlobal(gvid).getLocalId(), 0);
-                memcpy(zDataPtr, feature_vec.data(), feature_vec.size() * sizeof(FeatType));
-                memcpy(actDataPtr, feature_vec.data(), feature_vec.size() * sizeof(FeatType));
-            }
-
-            ++gvid;
-            feature_vec.clear();
+    while (infile.read(reinterpret_cast<char *> (&feature_vec[0]) , sizeof(FeatType) * nFeats)){
+        // Set the vertex's initial values, if it is one of mine local vertices / ghost vertices.
+        FeatType *zDataPtr = NULL, *actDataPtr = NULL;
+        if (graph.containsGhostVertex(gvid)) {      // Global vertex.
+            actDataPtr = ghostVertexActivationDataPtr(graph.getGhostVertex(gvid).getLocalId(), 0);
+            memcpy(actDataPtr, feature_vec.data(), nFeats * sizeof(FeatType));
+        } else if (graph.containsVertex(gvid)) {    // Local vertex.
+            zDataPtr = vertexZDataPtr(graph.getVertexByGlobal(gvid).getLocalId(), 0);
+            actDataPtr = vertexActivationDataPtr(graph.getVertexByGlobal(gvid).getLocalId(), 0);
+            memcpy(zDataPtr, feature_vec.data(), nFeats * sizeof(FeatType));
+            memcpy(actDataPtr, feature_vec.data(), nFeats * sizeof(FeatType));
         }
+        ++gvid;
     }
     infile.close();
 }
-
 
 /**
  *
