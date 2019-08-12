@@ -139,7 +139,7 @@ private:
     static FeatType *ghostVertexActivationDataPtr(IdType lvid, unsigned layer);
 
     static FeatType *localVertexDataBufPtr(IdType lvid, unsigned layer);
-    static FeatType *localVertexLabelsPtr(IdType lvid, unsigned layer);
+    static FeatType *localVertexLabelsPtr(IdType lvid);
 
     // Aggregation operation (along with normalization).
     static void aggregateFromNeighbors(IdType lvid);

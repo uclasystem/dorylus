@@ -546,8 +546,8 @@ Engine::localVertexDataBufPtr(IdType lvid, unsigned layer) {
  * 
  */
 FeatType *
-Engine::localVertexLabelsPtr(IdType lvid, unsigned layer) {
-    return (FeatType *) localVerticesLabels + lvid * getNumFeats(layer);
+Engine::localVertexLabelsPtr(IdType lvid) {
+    return (FeatType *) localVerticesLabels + lvid * getNumFeats(numLayers);
 }
 
 
@@ -585,6 +585,9 @@ Engine::aggregateFromNeighbors(IdType lvid) {
         for (unsigned j = 0; j < numFeats; ++j)
             currDataDst[j] += (otherDataPtr[j] * normFactor);
     }
+
+    if (lvid == 0)
+        printLog(nodeId, "!!! Check lvid = 0: %f\n", currDataDst[0]);
 }
 
 
@@ -834,7 +837,7 @@ Engine::readLabelsFile(std::string& labelsFileName) {
             memset(one_hot_arr, 0, lKinds * sizeof(FeatType));
             one_hot_arr[curr] = 1.0;
 
-            labelPtr = localVertexLabelsPtr(graph.getVertexByGlobal(gvid).getLocalId(), numLayers);
+            labelPtr = localVertexLabelsPtr(graph.getVertexByGlobal(gvid).getLocalId());
             memcpy(labelPtr, one_hot_arr, lKinds * sizeof(FeatType));
         }
 
