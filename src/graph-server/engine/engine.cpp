@@ -91,9 +91,9 @@ Engine::init(int argc, char *argv[]) {
 
     // Create the global contiguous memory for vertices' data, according to the given layer config and number of local vertices.
     // Create the global contiguous memory for ghost vertices' data similarly. Then read in initial features.
-    localVerticesZData = new FeatType *[layerConfig.size()];
-    localVerticesActivationData = new FeatType *[layerConfig.size()];
-    ghostVerticesActivationData = new FeatType *[layerConfig.size()];
+    localVerticesZData = new FeatType *[numLayers + 1];
+    localVerticesActivationData = new FeatType *[numLayers + 1];
+    ghostVerticesActivationData = new FeatType *[numLayers + 1];
 
     // Create data storage area for each layer, and read in the initial features.
     for (size_t i = 0; i <= numLayers; ++i) {
@@ -515,17 +515,17 @@ Engine::getNumFeats(unsigned layer) {
  */
 FeatType *
 Engine::localVertexZDataPtr(IdType lvid, unsigned layer) {
-    return localVerticesZData[layer] + lvid * layerConfig[layer];
+    return (FeatType *) (localVerticesZData[layer]) + lvid * getNumFeats(layer);
 }
 
 FeatType *
 Engine::localVertexActivationDataPtr(IdType lvid, unsigned layer) {
-    return localVerticesActivationData[layer] + lvid * layerConfig[layer];
+    return (FeatType *) (localVerticesActivationData[layer]) + lvid * getNumFeats(layer);
 }
 
 FeatType *
 Engine::ghostVertexActivationDataPtr(IdType lvid, unsigned layer) {
-    return ghostVerticesActivationData[layer] + lvid * layerConfig[layer];
+    return (FeatType *) (ghostVerticesActivationData[layer]) + lvid * getNumFeats(layer);
 }
 
 
@@ -536,7 +536,7 @@ Engine::ghostVertexActivationDataPtr(IdType lvid, unsigned layer) {
  */
 FeatType *
 Engine::localVertexDataBufPtr(IdType lvid, unsigned layer) {
-    return localVerticesDataBuf + lvid * layerConfig[layer];
+    return (FeatType *) localVerticesDataBuf + lvid * getNumFeats(layer);
 }
 
 
@@ -547,7 +547,7 @@ Engine::localVertexDataBufPtr(IdType lvid, unsigned layer) {
  */
 FeatType *
 Engine::localVertexLabelsPtr(IdType lvid, unsigned layer) {
-    return localVerticesLabels + lvid * layerConfig[layer];
+    return (FeatType *) localVerticesLabels + lvid * getNumFeats(layer);
 }
 
 
