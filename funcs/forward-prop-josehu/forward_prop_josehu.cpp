@@ -10,7 +10,7 @@
 #include <cblas.h>
 #include <zmq.hpp>
 #include <aws/lambda-runtime/runtime.h>
-#include "../../utils/utils.hpp"
+#include "../../src/utils/utils.hpp"
 
 
 #define SND_MORE true

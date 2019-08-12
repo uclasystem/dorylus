@@ -63,11 +63,9 @@ private:
     zmq::context_t& ctx;
     zmq::socket_t worker;
 
-    int32_t bufSize;
     int32_t partRows;
     int32_t partCols;
     int32_t nParts;
-    int32_t offset;
 
     // Counting down until all lambdas have returned.
     static std::mutex count_mutex;
@@ -126,7 +124,8 @@ public:
     }
     
     // Start / End a lambda communication context.
-    void startContext(FeatType *dataBuf_, int32_t rows_, int32_t cols_, int32_t nextIterCols_, unsigned layer_);
+    void startContext(FeatType *dataBuf_, FeatType *zData_, FeatType *actData_, int32_t rows_, int32_t cols_,
+                      int32_t nextIterCols_, unsigned layer_);
     void endContext();
 
     // Send a request to the coordination server for a given number of lambda threads.
@@ -134,10 +133,6 @@ public:
 
     // Send a message to the coordination server to shutdown.
     void sendShutdownMessage();
-
-    // Buffers for received results.
-    FeatType *getZData() { return zData; }             // Z values.
-    FeatType *getActivationData() { return actData; }  // After activation.
 
 private:
 
