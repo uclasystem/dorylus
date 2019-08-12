@@ -780,9 +780,6 @@ Engine::readLayerConfigFile(std::string& layerConfigFileName) {
  */
 void
 Engine::readFeaturesFile(std::string& featuresFileName) {
-    printLog(nodeId, "Reading Feature file %s", featuresFileName.c_str());
-    
-   
     std::ifstream infile(featuresFileName.c_str());
     if (!infile.good())
         printLog(nodeId, "Cannot open feature file: %s [Reason: %s]\n", featuresFileName.c_str(), std::strerror(errno));
@@ -798,8 +795,10 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
     unsigned nFeats = fHeader.numFeatures;
     std::vector<FeatType> feature_vec;
     feature_vec.resize(nFeats);
+    // FeatType curr;
 
     while (infile.read(reinterpret_cast<char *> (&feature_vec[0]) , sizeof(FeatType) * nFeats)){
+        
         // Set the vertex's initial values, if it is one of mine local vertices / ghost vertices.
         FeatType *zDataPtr = NULL, *actDataPtr = NULL;
         if (graph.containsGhostVertex(gvid)) {      // Global vertex.
@@ -813,8 +812,10 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
         }
         ++gvid;
     }
+  
     infile.close();
 }
+
 
 /**
  *
