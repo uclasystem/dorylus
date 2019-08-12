@@ -131,7 +131,6 @@ private:
     static void dataCommunicator(unsigned tid, void *args);
 
     // About the global data arrays.
-    static unsigned getNumFeats();
     static unsigned getNumFeats(unsigned layer);
 
     static FeatType *localVertexZDataPtr(IdType lvid, unsigned layer);

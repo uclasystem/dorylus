@@ -95,22 +95,24 @@ Engine::init(int argc, char *argv[]) {
     localVerticesActivationData = new FeatType *[numLayers + 1];
     ghostVerticesActivationData = new FeatType *[numLayers + 1];
 
-    // Create data storage area for each layer, and read in the initial features.
+    // Create data storage area for each layer.
     for (size_t i = 0; i <= numLayers; ++i) {
         localVerticesZData[i] = new FeatType[layerConfig[i] * graph.getNumLocalVertices()];
         localVerticesActivationData[i] = new FeatType[layerConfig[i] * graph.getNumLocalVertices()];
         ghostVerticesActivationData[i] = new FeatType[layerConfig[i] * graph.getNumGhostVertices()];
     }
-    readFeaturesFile(featuresFile);
 
     // Create labels storage area. Read in labels and store as one-hot format.
     localVerticesLabels = new FeatType[layerConfig[numLayers] * graph.getNumLocalVertices()];
-    readLabelsFile(labelsFile);
 
     // Set a local index for all ghost vertices along the way. This index is used for indexing within the ghost data arrays.
     IdType ghostCount = 0;
     for (auto it = graph.getGhostVertices().begin(); it != graph.getGhostVertices().end(); ++it)
         it->second.setLocalId(ghostCount++);
+
+    // Read in initial feature values (input features) & labels.
+    readFeaturesFile(featuresFile);
+    readLabelsFile(labelsFile);
 
     // Initialize synchronization utilities.
     lockCurrId.init();
@@ -342,7 +344,7 @@ Engine::worker(unsigned tid, void *args) {
 
                 // Start a new lambda communication context.
                 lambdaComm->startContext(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
-                                         graph.getNumLocalVertices(), getNumFeats(), getNumFeats(iteration + 1), iteration);
+                                         graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1), iteration);
 
                 // Trigger a request towards the coordicate server. Wait until the request completes.
                 std::thread treq([&] {
@@ -498,11 +500,6 @@ Engine::dataCommunicator(unsigned tid, void *args) {
  * 
  */
 unsigned
-Engine::getNumFeats() {
-    return layerConfig[iteration];
-}
-
-unsigned
 Engine::getNumFeats(unsigned layer) {
     return layerConfig[layer];
 }
@@ -559,7 +556,7 @@ Engine::localVertexLabelsPtr(IdType lvid) {
  */
 void
 Engine::aggregateFromNeighbors(IdType lvid) {
-    unsigned numFeats = getNumFeats();
+    unsigned numFeats = getNumFeats(iteration);
 
     // Read out data of the current iteration of given vertex.
     FeatType *currDataDst = localVertexDataBufPtr(lvid, iteration);
@@ -585,9 +582,6 @@ Engine::aggregateFromNeighbors(IdType lvid) {
         for (unsigned j = 0; j < numFeats; ++j)
             currDataDst[j] += (otherDataPtr[j] * normFactor);
     }
-
-    if (lvid == 0)
-        printLog(nodeId, "!!! Check lvid = 0: %f\n", currDataDst[0]);
 }
 
 
@@ -784,13 +778,12 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
         if (feature_vec.size() == nFeats) {
 
             // Set the vertex's initial values, if it is one of my local vertices / ghost vertices.
-            FeatType *zDataPtr = NULL, *actDataPtr = NULL;
             if (graph.containsGhostVertex(gvid)) {      // Global vertex.
-                actDataPtr = ghostVertexActivationDataPtr(graph.getGhostVertex(gvid).getLocalId(), 0);
+                FeatType *actDataPtr = ghostVertexActivationDataPtr(graph.getGhostVertex(gvid).getLocalId(), 0);
                 memcpy(actDataPtr, feature_vec.data(), feature_vec.size() * sizeof(FeatType));
             } else if (graph.containsVertex(gvid)) {    // Local vertex.
-                zDataPtr = localVertexZDataPtr(graph.getVertexByGlobal(gvid).getLocalId(), 0);
-                actDataPtr = localVertexActivationDataPtr(graph.getVertexByGlobal(gvid).getLocalId(), 0);
+                FeatType *zDataPtr = localVertexZDataPtr(graph.getVertexByGlobal(gvid).getLocalId(), 0);
+                FeatType *actDataPtr = localVertexActivationDataPtr(graph.getVertexByGlobal(gvid).getLocalId(), 0);
                 memcpy(zDataPtr, feature_vec.data(), feature_vec.size() * sizeof(FeatType));
                 memcpy(actDataPtr, feature_vec.data(), feature_vec.size() * sizeof(FeatType));
             }
