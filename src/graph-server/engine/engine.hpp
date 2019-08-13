@@ -36,12 +36,12 @@ struct BSHeaderType {
 
 /** Binary features file header struct. */
 struct FeaturesHeaderType {
-    unsigned int numFeatures;
+    unsigned numFeatures;
 };
 
 /** Binary labels file header struct. */
 struct LabelsHeaderType {
-    unsigned long labelKinds;
+    LabelType labelKinds;
 };
 
 

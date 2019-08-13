@@ -47,7 +47,7 @@ readFile(std::string snapFile) {
 		if (dst == src)
 			continue;
 
-		header.numVertices = std::max(header.numVertices, std::max(src, dst)); 
+		header.numVertices = std::max(header.numVertices, std::max(src, dst));
 		++header.numEdges;
 	}
 

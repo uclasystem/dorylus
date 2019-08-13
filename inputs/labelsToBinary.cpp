@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstring>
 #include <vector>
+#include <typeinfo>
 #include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string/trim.hpp>
 
@@ -16,7 +17,7 @@ using namespace std;
 typedef unsigned LabelType;
 
 
-struct LabelsHeader{
+struct LabelsHeader {
     LabelType labelKinds;
 };
 static LabelsHeader head;
@@ -48,11 +49,13 @@ readWriteFile(std::string labelsFileName) {
         std::getline(infile, line);
         boost::algorithm::trim(line);
 
-        if (line[0] < '0' || line[0] > '9')
-            continue;
+        if (line.length() > 0) {
+            if (line[0] < '0' || line[0] > '9')
+                continue;
 
-        LabelType label = std::stoul(line);
-        bSStream.write(reinterpret_cast<char *>(&label), sizeof(LabelType));
+            LabelType label = std::stoul(line);
+            bSStream.write(reinterpret_cast<char *>(&label), sizeof(LabelType));
+        }
     }
 }
 

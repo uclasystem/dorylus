@@ -219,23 +219,23 @@ Engine::output() {
     //
     // The following are full feature values outputing.
     //
-    for (Vertex& v : graph.getVertices()) {
-        outStream << v.getGlobalId() << ": ";
-        for (size_t i = 0; i <= numLayers; ++i) {
-            FeatType *dataPtr = localVertexActivationDataPtr(v.getLocalId(), i);
-            for (size_t j = 0; j < layerConfig[i]; ++j)
-                outStream << dataPtr[j] << " ";
-            outStream << "| ";
-        }
-        outStream << std::endl;
-    }
+    // for (Vertex& v : graph.getVertices()) {
+    //     outStream << v.getGlobalId() << ": ";
+    //     for (size_t i = 0; i <= numLayers; ++i) {
+    //         FeatType *dataPtr = localVertexActivationDataPtr(v.getLocalId(), i);
+    //         for (size_t j = 0; j < layerConfig[i]; ++j)
+    //             outStream << dataPtr[j] << " ";
+    //         outStream << "| ";
+    //     }
+    //     outStream << std::endl;
+    // }
 
     //
     // The following are labels outputing.
     //
     // for (Vertex& v : graph.getVertices()) {
     //     outStream << v.getGlobalId() << ": ";
-    //     FeatType *labelsPtr = vertexLabelsPtr(v.getLocalId(), layerConfig[numLayers]);
+    //     FeatType *labelsPtr = localVertexLabelsPtr(v.getLocalId());
     //     for (LabelType i = 0; i < layerConfig[numLayers]; ++i)
     //         outStream << labelsPtr[i] << " ";
     //     outStream << std::endl;
@@ -793,6 +793,8 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
         }
     }
     infile.close();
+
+    assert(gvid == graph.getNumGlobalVertices());
 }
 
 
@@ -821,8 +823,7 @@ Engine::readLabelsFile(std::string& labelsFileName) {
 
     while (infile.read(reinterpret_cast<char *> (&curr) , sizeof(LabelType))) {
 
-        // Set the vertex's label values, if it is one of my local vertices.
-        FeatType *labelPtr = NULL;
+        // Set the vertex's label values, if it is one of my local vertices & is labeled.
         if (graph.containsVertex(gvid)) {
 
             // Convert into a one-hot array.
@@ -830,13 +831,15 @@ Engine::readLabelsFile(std::string& labelsFileName) {
             memset(one_hot_arr, 0, lKinds * sizeof(FeatType));
             one_hot_arr[curr] = 1.0;
 
-            labelPtr = localVertexLabelsPtr(graph.getVertexByGlobal(gvid).getLocalId());
+            FeatType *labelPtr = localVertexLabelsPtr(graph.getVertexByGlobal(gvid).getLocalId());
             memcpy(labelPtr, one_hot_arr, lKinds * sizeof(FeatType));
         }
 
         ++gvid;
     }
     infile.close();
+
+    assert(gvid == graph.getNumGlobalVertices());
 }
 
 
