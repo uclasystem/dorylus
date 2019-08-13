@@ -32,6 +32,7 @@ unsigned Engine::dataserverPort;
 std::string Engine::coordserverIp;
 unsigned Engine::coordserverPort;
 LambdaComm *Engine::lambdaComm = NULL;
+unsigned Engine::numLambdas = 0;
 IdType Engine::currId = 0;
 Lock Engine::lockCurrId;
 Lock Engine::lockRecvWaiters;
@@ -137,7 +138,7 @@ Engine::init(int argc, char *argv[]) {
     graph.compactGraph();
 
     // Create the lambda communication manager.
-    lambdaComm = new LambdaComm(NodeManager::getNode(nodeId).pubip, dataserverPort, coordserverIp, coordserverPort, nodeId, 10, 1);
+    lambdaComm = new LambdaComm(NodeManager::getNode(nodeId).pubip, dataserverPort, coordserverIp, coordserverPort, nodeId, numLambdas, 1);
 
     timeInit += getTimer();
     printLog(nodeId, "Engine initialization complete.\n");
@@ -650,6 +651,8 @@ Engine::parseArgs(int argc, char *argv[]) {
         ("dataport", boost::program_options::value<unsigned>(), "Port for data communication")
         ("ctrlport", boost::program_options::value<unsigned>(), "Port start for control communication")
         ("nodeport", boost::program_options::value<unsigned>(), "Port for node manager")
+
+        ("numLambdas", boost::program_options::value<unsigned>()->default_value(unsigned(1), "1"), "Number of lambdas to request")
         ;
 
     boost::program_options::variables_map vm;
@@ -715,6 +718,9 @@ Engine::parseArgs(int argc, char *argv[]) {
     unsigned node_port = vm["nodeport"].as<unsigned>();
     NodeManager::setNodePort(node_port);
 
+    assert(vm.count("numLambdas"));
+    numLambdas = vm["numLambdas"].as<unsigned>();
+
     printLog(404, "Parsed configuration: dThreads = %u, cThreads = %u, graphFile = %s, featuresFile = %s, dshMachinesFile = %s, "
                   "myPrIpFile = %s, myPubIpFile = %s, undirected = %s, data port set -> %u, control port set -> %u, node port set -> %u\n",
                   dThreads, cThreads, graphFile.c_str(), featuresFile.c_str(), dshMachinesFile.c_str(),
@@ -770,27 +776,22 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
     
     LabelType nFeats = fHeader.numFeatures;
     std::vector<FeatType> feature_vec;
-    feature_vec.reserve(nFeats);
-    FeatType curr;
 
-    while (infile.read(reinterpret_cast<char *> (&curr) , sizeof(FeatType))){
-        feature_vec.push_back(curr);
-        if (feature_vec.size() == nFeats) {
+    feature_vec.resize(nFeats);
+    while (infile.read(reinterpret_cast<char *> (&feature_vec[0]) , sizeof(FeatType) * nFeats)) {
 
-            // Set the vertex's initial values, if it is one of my local vertices / ghost vertices.
-            if (graph.containsGhostVertex(gvid)) {      // Global vertex.
-                FeatType *actDataPtr = ghostVertexActivationDataPtr(graph.getGhostVertex(gvid).getLocalId(), 0);
-                memcpy(actDataPtr, feature_vec.data(), feature_vec.size() * sizeof(FeatType));
-            } else if (graph.containsVertex(gvid)) {    // Local vertex.
-                FeatType *zDataPtr = localVertexZDataPtr(graph.getVertexByGlobal(gvid).getLocalId(), 0);
-                FeatType *actDataPtr = localVertexActivationDataPtr(graph.getVertexByGlobal(gvid).getLocalId(), 0);
-                memcpy(zDataPtr, feature_vec.data(), feature_vec.size() * sizeof(FeatType));
-                memcpy(actDataPtr, feature_vec.data(), feature_vec.size() * sizeof(FeatType));
-            }
-
-            ++gvid;
-            feature_vec.clear();
+        // Set the vertex's initial values, if it is one of my local vertices / ghost vertices.
+        if (graph.containsGhostVertex(gvid)) {      // Global vertex.
+            FeatType *actDataPtr = ghostVertexActivationDataPtr(graph.getGhostVertex(gvid).getLocalId(), 0);
+            memcpy(actDataPtr, feature_vec.data(), feature_vec.size() * sizeof(FeatType));
+        } else if (graph.containsVertex(gvid)) {    // Local vertex.
+            FeatType *zDataPtr = localVertexZDataPtr(graph.getVertexByGlobal(gvid).getLocalId(), 0);
+            FeatType *actDataPtr = localVertexActivationDataPtr(graph.getVertexByGlobal(gvid).getLocalId(), 0);
+            memcpy(zDataPtr, feature_vec.data(), feature_vec.size() * sizeof(FeatType));
+            memcpy(actDataPtr, feature_vec.data(), feature_vec.size() * sizeof(FeatType));
         }
+
+        ++gvid;
     }
     infile.close();
 
