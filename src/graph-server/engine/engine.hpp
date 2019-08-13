@@ -36,8 +36,14 @@ struct BSHeaderType {
 
 /** Binary features file header struct. */
 struct FeaturesHeaderType {
-    unsigned int numFeatures;
+    unsigned numFeatures;
 };
+
+/** Binary labels file header struct. */
+struct LabelsHeaderType {
+    LabelType labelKinds;
+};
+
 
 /**
  *
@@ -66,19 +72,15 @@ private:
     static ThreadPool *computePool;
 
     static std::vector<unsigned> layerConfig;   // Config of number of features in each layer.
-    static std::vector<unsigned> layerConfigPrefixSum;   // Prefix sum of layerConfig.
-
-    static unsigned numFeatsTotal;
     static unsigned numLayers;
 
-    static unsigned numLambdas;
+    static FeatType **localVerticesZData;       // Global contiguous array for all vertices' data (row-wise order).
+    static FeatType **localVerticesActivationData;
+    static FeatType **ghostVerticesActivationData;
 
-    static FeatType *verticesZData;     // Global contiguous array for all vertices' data. Stored in row-wise order:
-                                        // The first bunch of values are data for the 0th vertex, ...
-    static FeatType *verticesActivationData;
-    static FeatType *ghostVerticesActivationData;
-    static FeatType *verticesDataBuf;   // A smaller buffer storing current iter's data after aggregation. (Serves as the
-                                        // serialization area naturally.)
+    static FeatType *localVerticesDataBuf;      // A smaller buffer storing current iter's data after aggregation.
+
+    static FeatType *localVerticesLabels;       // Labels one-hot storage array.
 
     static IdType currId;
     static Lock lockCurrId;
@@ -89,9 +91,10 @@ private:
     static Lock lockHalt;
 
     static std::string graphFile;
-    static std::string featuresFile;
     static std::string outFile;
+    static std::string featuresFile;
     static std::string layerConfigFile;
+    static std::string labelsFile;
     static std::string dshMachinesFile;
     static std::string myPrIpFile;
     static std::string myPubIpFile;
@@ -118,7 +121,6 @@ private:
     static std::vector<double> vecTimeAggregate;
     static std::vector<double> vecTimeLambda;
     static std::vector<double> vecTimeSendout;
-    static std::vector<double> vecTimeWriteback;
 
     static std::map<IdType, unsigned> recvWaiters;
 
@@ -129,18 +131,14 @@ private:
     static void dataCommunicator(unsigned tid, void *args);
 
     // About the global data arrays.
-    static unsigned getNumFeats();
-    static unsigned getNumFeats(unsigned iter);
+    static unsigned getNumFeats(unsigned layer);
 
-    static unsigned getDataAllOffset();
-    static unsigned getDataAllOffset(unsigned iter);
+    static FeatType *localVertexZDataPtr(IdType lvid, unsigned layer);
+    static FeatType *localVertexActivationDataPtr(IdType lvid, unsigned layer);
+    static FeatType *ghostVertexActivationDataPtr(IdType lvid, unsigned layer);
 
-    static FeatType *vertexZDataPtr(IdType lvid, unsigned offset);
-    static FeatType *vertexActivationDataPtr(IdType lvid, unsigned offset);
-
-    static FeatType *ghostVertexActivationDataPtr(IdType lvid, unsigned offset);
-
-    static FeatType *vertexDataBufPtr(IdType lvid, unsigned numFeats);
+    static FeatType *localVertexDataBufPtr(IdType lvid, unsigned layer);
+    static FeatType *localVertexLabelsPtr(IdType lvid);
 
     // Aggregation operation (along with normalization).
     static void aggregateFromNeighbors(IdType lvid);
@@ -149,6 +147,7 @@ private:
     static void parseArgs(int argc, char* argv[]);
     static void readLayerConfigFile(std::string& layerConfigFileName);
     static void readFeaturesFile(std::string& featuresFileName);
+    static void readLabelsFile(std::string& labelsFileName);
     static void readPartsFile(std::string& partsFileName, Graph& lGraph);
     static void processEdge(IdType& from, IdType& to, Graph& lGraph, std::set<IdType>* inTopics, std::set<IdType>* oTopics); 
     static void findGhostDegrees(std::string& fileName);

@@ -3,9 +3,6 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <sys/time.h>
-#include <net/if.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 #include <cstring>
 #include <cassert>
 #include "utils.hpp"

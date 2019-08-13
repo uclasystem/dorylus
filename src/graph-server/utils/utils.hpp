@@ -14,14 +14,12 @@
 
 /** Default vertex ID type and features type. */
 typedef unsigned IdType;
+typedef unsigned LabelType;
 typedef float FeatType;
 typedef float EdgeType;
 #define MAX_IDTYPE UINT_MAX     // Limit: MAX_IDTYPE must be at least two times the number of global vertices.
                                 // From 0 to numGlobalVertices are normal ghost vertices update message,
                                 // From MAX_IDTYPE downto MAX_IDTYPE - numGlobalVertices are receive signals.
-
-
-#define INTERFACE "ens5" 
 
 
 extern std::map<size_t, std::string> typeToFormatSpecifier;

@@ -35,7 +35,7 @@ readFile(std::string snapFile) {
 
 	std::string line;
 	while (std::getline(snapStream, line)) {
-		if(line[0] == '#' || line[0] == '%')
+		if (line[0] == '#' || line[0] == '%')
 			continue;
 
 		std::istringstream iss(line);
@@ -47,7 +47,7 @@ readFile(std::string snapFile) {
 		if (dst == src)
 			continue;
 
-		header.numVertices = std::max(header.numVertices, std::max(src, dst)); 
+		header.numVertices = std::max(header.numVertices, std::max(src, dst));
 		++header.numEdges;
 	}
 

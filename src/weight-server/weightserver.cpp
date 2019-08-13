@@ -187,10 +187,13 @@ public:
             std::cerr << "[ERROR] " << ex.what() << std::endl;
         }
 
+        // Clean up work happens after proxy brokes.
         for (int i = 0; i < kMaxThreads; ++i) {
             delete worker_threads[i];
             delete workers[i];
         }
+        for (Matrix& mat : layers)
+            delete mat.getData();
     }
 
 private:

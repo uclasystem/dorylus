@@ -69,17 +69,16 @@ ServerWorker::sendMatrixChunk(zmq::socket_t& socket, zmq::message_t& client_id, 
 
 		// Check to make sure that the bounds of this partition do not exceed the bounds of the data array.
 		// If they do, set partition end to the end of the array.
-		int32_t diff = 0;
 		int32_t thisPartRows = partRows;
-		int32_t thisBufSize = bufSize;
+		int32_t thisBufSize = partRows * partCols * sizeof(FeatType);
 		if ((partId * partRows + partRows) > matrix.rows) {
-			diff = (partId * partRows + partRows) - matrix.rows;
+			int32_t diff = (partId * partRows + partRows) - matrix.rows;
 			thisPartRows = partRows - diff;
 			thisBufSize = thisPartRows * partCols * sizeof(FeatType);
 		}
 
 		populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, partCols);
-		FeatType *partition_start = (matrix.getData()) + (partId * offset);
+		FeatType *partition_start = (matrix.getData()) + (partId * partRows * partCols);
 		zmq::message_t partitionData(thisBufSize);
 		std::memcpy(partitionData.data(), partition_start, thisBufSize);
 
@@ -92,9 +91,10 @@ ServerWorker::sendMatrixChunk(zmq::socket_t& socket, zmq::message_t& client_id, 
 void
 ServerWorker::recvMatrixChunks(zmq::socket_t& socket, zmq::message_t& client_id, int32_t partId,
 	                           int32_t rows, int32_t cols) {
-	uint32_t offset = partId * partRows * cols;
-	FeatType *thisPartitionZStart = zData + offset;
-	FeatType *thisPartitionActStart = actData + offset;
+	assert(rows <= partRows);
+	assert(cols == nextIterCols);
+	FeatType *thisPartitionZStart = zData + partId * partRows * cols;
+	FeatType *thisPartitionActStart = actData + partId * partRows * cols;
 
 	// Receive the pushing-back results.
 	zmq::message_t data;
@@ -129,8 +129,6 @@ ServerWorker::refreshState(FeatType *zData_, FeatType *actData_, int32_t nextIte
 
 	partCols = matrix.cols;
 	partRows = std::ceil((float) matrix.rows / (float) nParts);
-	offset = partRows * partCols;
-	bufSize = offset * sizeof(FeatType);
 }
 
 
@@ -146,13 +144,14 @@ ServerWorker::refreshState(FeatType *zData_, FeatType *actData_, int32_t nextIte
  * 
  */
 void
-LambdaComm::startContext(FeatType *dataBuf_, int32_t rows_, int32_t cols_, int32_t nextIterCols_, unsigned layer_) {
+LambdaComm::startContext(FeatType *dataBuf_, FeatType *zData_, FeatType *actData_, int32_t rows_, int32_t cols_,
+	                     int32_t nextIterCols_, unsigned layer_) {
 	nextIterCols = nextIterCols_;
 	counter = 0;
 	layer = layer_;
 	matrix = Matrix(rows_, cols_, dataBuf_);
-	zData = new FeatType[rows_ * nextIterCols_];
-	actData = new FeatType[rows_ * nextIterCols_];
+	zData = zData_;
+	actData = actData_;
 	printLog(nodeId, "New lambda communication context created on layer %u.\n", layer);
 
 	for (auto&& worker : workers)
@@ -162,8 +161,6 @@ LambdaComm::startContext(FeatType *dataBuf_, int32_t rows_, int32_t cols_, int32
 void
 LambdaComm::endContext() {
 	counter = 0;
-    delete[] zData;
-    delete[] matrix.data;   // Delete last iter's data buffer. The engine must reset its buf ptr to getActivationData().
     printLog(nodeId, "Lambda communication context on layer %u finished.\n", layer);
 }
 
