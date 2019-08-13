@@ -122,7 +122,7 @@ public:
         // Setup lambda client.
         Aws::Client::ClientConfiguration clientConfig;
         clientConfig.requestTimeoutMs = 900000;
-        clientConfig.region = "us-east-1";
+        clientConfig.region = "us-east-2";
         m_client = Aws::MakeShared<Aws::Lambda::LambdaClient>(ALLOCATION_TAG, clientConfig);
 
         // Keeps listening on dataserver's requests.
@@ -170,7 +170,7 @@ public:
 
                         // TODO: Maybe improve this naive round robin scheduling.
                     	char *weightserverIp = weightserverAddrs[req_count % weightserverAddrs.size()];
-                        invokeFunction("forward-prop-josehu", dataserverIpCopy, dataserverPort, weightserverIp, weightserverPort, layer, i);
+                        invokeFunction("forward-prop-cpp", dataserverIpCopy, dataserverPort, weightserverIp, weightserverPort, layer, i);
                    		req_count++;
 					}
                 }
@@ -233,6 +233,7 @@ private:
 int
 main(int argc, char *argv[]) {
     assert(argc == 5);
+    printf("hello\n");
     char *coordserverPort = argv[1];
     char *weightserverFile = argv[2];
     char *weightserverPort = argv[3];
