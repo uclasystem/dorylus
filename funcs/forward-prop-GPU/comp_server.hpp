@@ -4,12 +4,15 @@
 #include <fstream>
 #include "../../src/utils/utils.hpp"
 #include "comp_unit.hpp"
+#include "cstring"
 
 class ComputingServer {
 public:
 
     ComputingServer(char *compserverPort_)
-        : compserverPort(compserverPort_) {}
+        : compserverPort(compserverPort_) {
+            frontend=zmq::socket_t(ctx, ZMQ_REP);
+        }
 
     // Keep listening to computing requests
     void run();
@@ -22,11 +25,14 @@ public:
 private:
     char *compserverPort;
     ComputingUnit cu;
+    zmq::socket_t frontend;
+    zmq::context_t ctx;
 };
 
 void ComputingServer::run(){
-    zmq::context_t ctx();
-    zmq::socket_t frontend(ctx, ZMQ_REP);
+    zmq::context_t ctx;
+    zmq::socket_t frontend;
+    
     char host_port[50];
     sprintf(host_port, "tcp://*:%s", compserverPort);
     std::cout << "Binding computing server to " << host_port << "..." << std::endl;
@@ -54,9 +60,33 @@ void ComputingServer::run(){
             frontend.recv(&layer);
             frontend.recv(&id);
 
-            requestMatrix();
-            cu.compute();
-            sendMatrices();
+
+            //should make this a thread in future
+            Matrix weights;
+            std::thread t([&] {
+                std::cout << "< matmul > Asking weightserver..." << std::endl;
+                zmq::socket_t wSocket(ctx, ZMQ_DEALER);
+                wSocket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
+                char whost_port[50];
+                sprintf(whost_port, "tcp://%s:%s", weightserver, wport);
+                wSocket.connect(whost_port);
+                weights = requestMatrix(wSocket, layer);
+                std::cout << "< matmul > Got data from weightserver." << std::endl;
+            });
+
+            std::cout << "< matmul > Asking dataserver..." << std::endl;
+            zmq::socket_t dSocket(ctx, ZMQ_DEALER);
+            dSocket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
+            char dhost_port[50];
+            sprintf(dhost_port, "tcp://%s:%s", dataserver, dport);
+            dSocket.connect(dhost_port);
+            Matrix feats = requestMatrix(dSocket, id);
+            std::cout << "< matmul > Got data from dataserver." << std::endl;
+            t.join();
+
+            Matrix z = cu.dot(feats, weights);
+            Matrix act = cu.activate(z);
+            sendMatrices(z,act,dSocket,id);
         }
     } catch (std::exception& ex) {
         std::cerr << "[ERROR] " << ex.what() << std::endl;
