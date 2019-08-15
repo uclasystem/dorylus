@@ -104,6 +104,7 @@ private:
     static unsigned coordserverPort;
 
     static LambdaComm *lambdaComm;
+    static unsigned numLambdas;
 
     static unsigned nodeId;
     static unsigned numNodes;
