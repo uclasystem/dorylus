@@ -106,6 +106,7 @@ private:
 
     static unsigned numLambdas;
     static LambdaComm *lambdaComm;
+    static unsigned numLambdas;
 
     static unsigned nodeId;
     static unsigned numNodes;
