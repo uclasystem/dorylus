@@ -24,6 +24,7 @@
 
 class WeightServer;
 
+
 /**
  *
  * Wrapper over a server worker thread.

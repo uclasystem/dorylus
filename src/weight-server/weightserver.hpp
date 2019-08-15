@@ -22,7 +22,6 @@
 #include "serverworker.hpp"
 
 
-
 /**
  *
  * Class of the weightserver. Weightservers are only responsible for replying weight requests from lambdas,
