@@ -74,7 +74,8 @@ callback(const Aws::Lambda::LambdaClient *client, const Aws::Lambda::Model::Invo
  * 
  */
 static void
-invokeFunction(Aws::String funcName, char *dataserver, char *dport, char *weightserver, char *wport, int32_t layer, int32_t id) {
+invokeFunction(Aws::String funcName, char *dataserver, char *dport, char *weightserver, char *wport,
+               unsigned layer, unsigned id) {
     Aws::Lambda::Model::InvokeRequest invReq;
     invReq.SetFunctionName(funcName);
     invReq.SetInvocationType(Aws::Lambda::Model::InvocationType::RequestResponse);
@@ -143,9 +144,9 @@ public:
                 frontend.send(confirm);
 
                 // Parse the request.
-                int32_t op = parse<int32_t>((char *) header.data(), 0);
-                int32_t layer = parse<int32_t>((char *) header.data(), 1);
-                int32_t nThreadsReq = parse<int32_t>((char *) header.data(), 2);
+                unsigned op = parse<unsigned>((char *) header.data(), 0);
+                unsigned layer = parse<unsigned>((char *) header.data(), 1);
+                unsigned nThreadsReq = parse<unsigned>((char *) header.data(), 2);
 
                 char dataserverIpCopy[dataserverIp.size() + 1];
                 memcpy(dataserverIpCopy, (char *) dataserverIp.data(), dataserverIp.size());

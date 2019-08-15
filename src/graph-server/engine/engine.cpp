@@ -33,14 +33,14 @@ std::string Engine::coordserverIp;
 unsigned Engine::coordserverPort;
 LambdaComm *Engine::lambdaComm = NULL;
 unsigned Engine::numLambdas = 0;
-IdType Engine::currId = 0;
+unsigned Engine::currId = 0;
 Lock Engine::lockCurrId;
 Lock Engine::lockRecvWaiters;
 Cond Engine::condRecvWaitersEmpty;
 Lock Engine::lockHalt;
 unsigned Engine::nodeId;
 unsigned Engine::numNodes;
-std::map<IdType, unsigned> Engine::recvWaiters;
+std::map<unsigned, unsigned> Engine::recvWaiters;
 Barrier Engine::barComp;
 std::vector<unsigned> Engine::layerConfig;
 unsigned Engine::numLayers = 0;
@@ -54,7 +54,6 @@ bool Engine::undirected = false;
 bool Engine::halt = false;
 double Engine::timeInit = 0.0;
 double Engine::timeProcess = 0.0;
-double Engine::timeOutput = 0.0;
 std::vector<double> Engine::vecTimeAggregate;
 std::vector<double> Engine::vecTimeLambda;
 std::vector<double> Engine::vecTimeSendout;
@@ -85,8 +84,8 @@ Engine::init(int argc, char *argv[]) {
     numLayers = layerConfig.size() - 1;
 
     // Read in the graph and subscribe vertex global ID topics.
-    std::set<IdType> inTopics;
-    std::vector<IdType> outTopics;
+    std::set<unsigned> inTopics;
+    std::vector<unsigned> outTopics;
     readGraphBS(graphFile, inTopics, outTopics);
     printGraphMetrics();
 
@@ -107,7 +106,7 @@ Engine::init(int argc, char *argv[]) {
     localVerticesLabels = new FeatType[layerConfig[numLayers] * graph.getNumLocalVertices()];
 
     // Set a local index for all ghost vertices along the way. This index is used for indexing within the ghost data arrays.
-    IdType ghostCount = 0;
+    unsigned ghostCount = 0;
     for (auto it = graph.getGhostVertices().begin(); it != graph.getGhostVertices().end(); ++it)
         it->second.setLocalId(ghostCount++);
 
@@ -138,13 +137,11 @@ Engine::init(int argc, char *argv[]) {
     graph.compactGraph();
 
     // Create the lambda communication manager.
-    lambdaComm = new LambdaComm(NodeManager::getNode(nodeId).pubip, dataserverPort, coordserverIp, coordserverPort, nodeId, numLambdas, 1);
+    lambdaComm = new LambdaComm(NodeManager::getNode(nodeId).pubip, dataserverPort, coordserverIp, coordserverPort, nodeId,
+                                numLambdas, numLambdas);
 
     timeInit += getTimer();
     printLog(nodeId, "Engine initialization complete.\n");
-
-    // Make sure all nodes finish initailization. No need to add a global barrier before running then.
-    NodeManager::barrier();
 }
 
 
@@ -162,13 +159,16 @@ Engine::master() {
 
 /**
  *
- * Run the engine with the given vertex program (whose `update()` member function is customized).
+ * Runs a forward propagation phase: (Aggregate -> Lambda Computing -> Ghost Update) -> ( ... ) -> ...
  * Will start a bunch of worker threads and a bunch of data communicator threads.
  * 
  */
 void
-Engine::run() {
-    printLog(nodeId, "Engine starts running...\n");
+Engine::runForward() {
+
+    // Make sure all nodes start running the forward-prop phase.
+    NodeManager::barrier();
+    printLog(nodeId, "Engine starts running FORWARD...\n");
 
     timeProcess = -getTimer();
 
@@ -181,10 +181,10 @@ Engine::run() {
     localVerticesDataBuf = new FeatType[layerConfig[0] * graph.getNumLocalVertices()];
 
     // Start data communicators.
-    dataPool->perform(dataCommunicator);
+    dataPool->perform(ghostCommunicator);
 
     // Start workers.
-    computePool->perform(worker);
+    computePool->perform(forwardWorker);
 
     // Join all workers.
     computePool->sync();
@@ -194,7 +194,26 @@ Engine::run() {
     // Join all data communicators.
     dataPool->sync();
 
-    printLog(nodeId, "Engine completes the processing at iteration %u.\n", iteration);
+    printLog(nodeId, "Engine completes FORWARD at iteration %u.\n", iteration);
+}
+
+
+/**
+ *
+ * Runs a backward propagation phase: (Lambda Computing) -> ( ... ) -> ...
+ * Will start a bunch of worker threads and a bunch of data communicator threads.
+ * 
+ */
+void
+Engine::runBackward() {
+
+    // Make sure all nodes start running the forward-prop phase.
+    NodeManager::barrier();
+    printLog(nodeId, "Engine starts running BACKWARD...\n");
+
+
+
+    printLog(nodeId, "Engine completes BACKWARD at iteration %u.\n", iteration);
 }
 
 
@@ -206,12 +225,7 @@ Engine::run() {
  */
 void
 Engine::output() {
-
-    timeOutput = -getTimer();
-
-    // Output results.
     std::ofstream outStream(outFile.c_str());
-
     if (!outStream.good())
         printLog(nodeId, "Cannot open output file: %s [Reason: %s]\n", outFile.c_str(), std::strerror(errno));
 
@@ -237,12 +251,10 @@ Engine::output() {
     // for (Vertex& v : graph.getVertices()) {
     //     outStream << v.getGlobalId() << ": ";
     //     FeatType *labelsPtr = localVertexLabelsPtr(v.getLocalId());
-    //     for (LabelType i = 0; i < layerConfig[numLayers]; ++i)
+    //     for (unsigned i = 0; i < layerConfig[numLayers]; ++i)
     //         outStream << labelsPtr[i] << " ";
     //     outStream << std::endl;
     // }
-
-    timeOutput += getTimer();
 
     // Benchmarking results.
     if (master()) {
@@ -297,12 +309,12 @@ Engine::destroy() {
 
 /**
  *
- * Major part of the engine's computation logic is done by workers. When the engine runs it wakes threads up from the thread pool
+ * Major part of the engine's forward-prop logic. When the engine runs it wakes threads up from the thread pool
  * and assign a worker function for each.
  * 
  */
 void
-Engine::worker(unsigned tid, void *args) {
+Engine::forwardWorker(unsigned tid, void *args) {
 
     // A Stopwatch for composing steps of run().
     double timeWorker = getTimer();
@@ -312,7 +324,7 @@ Engine::worker(unsigned tid, void *args) {
 
         // Get current vertex that need to be handled.
         lockCurrId.lock();
-        IdType lvid = currId++;
+        unsigned lvid = currId++;
         lockCurrId.unlock();
 
         // All local vertices have been processed. Hit the barrier and wait for next iteration / decide to halt.
@@ -344,12 +356,12 @@ Engine::worker(unsigned tid, void *args) {
                 printLog(nodeId, "Iteration %u finishes. Invoking lambda...\n", iteration);
 
                 // Start a new lambda communication context.
-                lambdaComm->startContext(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
-                                         graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1), iteration);
+                lambdaComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
+                                              graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1));
 
                 // Trigger a request towards the coordicate server. Wait until the request completes.
                 std::thread treq([&] {
-                    lambdaComm->requestLambdas();
+                    lambdaComm->requestLambdasForward(iteration);
                 });
                 treq.join();
 
@@ -358,15 +370,15 @@ Engine::worker(unsigned tid, void *args) {
                 printLog(nodeId, "All lambda requests finished. Results received.\n");
 
                 // End this lambda communciation context.
-                lambdaComm->endContext();
+                lambdaComm->endContextForward();
 
                 // Loop through all local vertices and do the data send out work. If there are any remote edges for a vertex, should send this vid to
                 // other nodes for their ghost's update.
-                for (IdType id = 0; id < graph.getNumLocalVertices(); ++id) {
+                for (unsigned id = 0; id < graph.getNumLocalVertices(); ++id) {
                     Vertex& v = graph.getVertex(id);
                     for (unsigned i = 0; i < v.getNumOutEdges(); ++i) {
                         if (v.getOutEdge(i).getEdgeLocation() == REMOTE_EDGE_TYPE) {
-                            IdType gvid = graph.localToGlobalId[id];
+                            unsigned gvid = graph.localToGlobalId[id];
 
                             // Record that this vid gets broadcast in this iteration. Should wait for its corresponding respond.
                             lockRecvWaiters.lock();
@@ -440,8 +452,8 @@ Engine::worker(unsigned tid, void *args) {
  * 
  */
 void
-Engine::dataCommunicator(unsigned tid, void *args) {
-    IdType topic;
+Engine::ghostCommunicator(unsigned tid, void *args) {
+    unsigned topic;
     FeatType *msgbuf = (FeatType *) new char[MAX_MSG_SIZE];
 
     // While loop, looping infinitely to get the next message.
@@ -461,7 +473,7 @@ Engine::dataCommunicator(unsigned tid, void *args) {
 
             // A normal ghost value broadcast.
             if (0 <= topic && topic < graph.getNumGlobalVertices()) {
-                IdType gvid = topic;
+                unsigned gvid = topic;
 
                 // Update the ghost vertex if it is one of mine.
                 if (graph.containsGhostVertex(gvid)) {
@@ -476,7 +488,7 @@ Engine::dataCommunicator(unsigned tid, void *args) {
             // corresponding recvWaiter's value. If waiters become empty, send a signal in case the workers are
             // waiting on it to be empty at the iteration barrier.
             } else if (MAX_IDTYPE >= topic && topic > MAX_IDTYPE - graph.getNumGlobalVertices()) {
-                IdType gvid = MAX_IDTYPE - topic;
+                unsigned gvid = MAX_IDTYPE - topic;
 
                 if (graph.globalToLocalId.find(gvid) != graph.globalToLocalId.end()) {
                     lockRecvWaiters.lock();
@@ -497,6 +509,18 @@ Engine::dataCommunicator(unsigned tid, void *args) {
 
 /**
  *
+ * Major part of the engine's backward-prop logic. When the engine runs it wakes threads up from the thread pool
+ * and assign a worker function for each.
+ * 
+ */
+void
+Engine::backwardWorker(unsigned tid, void *args) {
+
+}
+
+
+/**
+ *
  * Get number of features in the current layer.
  * 
  */
@@ -512,17 +536,17 @@ Engine::getNumFeats(unsigned layer) {
  * 
  */
 FeatType *
-Engine::localVertexZDataPtr(IdType lvid, unsigned layer) {
+Engine::localVertexZDataPtr(unsigned lvid, unsigned layer) {
     return (FeatType *) (localVerticesZData[layer]) + lvid * getNumFeats(layer);
 }
 
 FeatType *
-Engine::localVertexActivationDataPtr(IdType lvid, unsigned layer) {
+Engine::localVertexActivationDataPtr(unsigned lvid, unsigned layer) {
     return (FeatType *) (localVerticesActivationData[layer]) + lvid * getNumFeats(layer);
 }
 
 FeatType *
-Engine::ghostVertexActivationDataPtr(IdType lvid, unsigned layer) {
+Engine::ghostVertexActivationDataPtr(unsigned lvid, unsigned layer) {
     return (FeatType *) (ghostVerticesActivationData[layer]) + lvid * getNumFeats(layer);
 }
 
@@ -533,7 +557,7 @@ Engine::ghostVertexActivationDataPtr(IdType lvid, unsigned layer) {
  * 
  */
 FeatType *
-Engine::localVertexDataBufPtr(IdType lvid, unsigned layer) {
+Engine::localVertexDataBufPtr(unsigned lvid, unsigned layer) {
     return (FeatType *) localVerticesDataBuf + lvid * getNumFeats(layer);
 }
 
@@ -544,7 +568,7 @@ Engine::localVertexDataBufPtr(IdType lvid, unsigned layer) {
  * 
  */
 FeatType *
-Engine::localVertexLabelsPtr(IdType lvid) {
+Engine::localVertexLabelsPtr(unsigned lvid) {
     return (FeatType *) localVerticesLabels + lvid * getNumFeats(numLayers);
 }
 
@@ -556,7 +580,7 @@ Engine::localVertexLabelsPtr(IdType lvid) {
  * 
  */
 void
-Engine::aggregateFromNeighbors(IdType lvid) {
+Engine::aggregateFromNeighbors(unsigned lvid) {
     unsigned numFeats = getNumFeats(iteration);
 
     // Read out data of the current iteration of given vertex.
@@ -601,7 +625,6 @@ Engine::printEngineMetrics() {
         printLog(nodeId, "\t\t\tGhost update  %2d  %.3lf ms\n", i, vecTimeSendout[i]);
     }
     printLog(nodeId, "Engine METRICS: Total processing time %.3lf ms\n", timeProcess);
-    printLog(nodeId, "Engine METRICS: Output writing takes %.3lf ms\n", timeOutput);
 }
 
 
@@ -772,9 +795,9 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
     infile.read((char *) &fHeader, sizeof(FeaturesHeaderType));
     assert(fHeader.numFeatures == layerConfig[0]);
 
-    IdType gvid = 0;
+    unsigned gvid = 0;
     
-    LabelType nFeats = fHeader.numFeatures;
+    unsigned nFeats = fHeader.numFeatures;
     std::vector<FeatType> feature_vec;
 
     feature_vec.resize(nFeats);
@@ -816,13 +839,13 @@ Engine::readLabelsFile(std::string& labelsFileName) {
     infile.read((char *) &fHeader, sizeof(LabelsHeaderType));
     assert(fHeader.labelKinds == layerConfig[numLayers]);
 
-    IdType gvid = 0;
+    unsigned gvid = 0;
     
-    LabelType lKinds = fHeader.labelKinds;
-    LabelType curr;
+    unsigned lKinds = fHeader.labelKinds;
+    unsigned curr;
     FeatType one_hot_arr[lKinds] = {0};
 
-    while (infile.read(reinterpret_cast<char *> (&curr) , sizeof(LabelType))) {
+    while (infile.read(reinterpret_cast<char *> (&curr) , sizeof(unsigned))) {
 
         // Set the vertex's label values, if it is one of my local vertices & is labeled.
         if (graph.containsVertex(gvid)) {
@@ -858,8 +881,8 @@ Engine::readPartsFile(std::string& partsFileName, Graph& lGraph) {
     assert(infile.good());
 
     short partId;
-    IdType lvid = 0;
-    IdType gvid = 0;
+    unsigned lvid = 0;
+    unsigned gvid = 0;
 
     std::string line;
     while (std::getline(infile, line)) {
@@ -892,10 +915,10 @@ Engine::readPartsFile(std::string& partsFileName, Graph& lGraph) {
  * 
  */
 void
-Engine::processEdge(IdType& from, IdType& to, Graph& lGraph, std::set<IdType> *inTopics, std::set<IdType> *oTopics) {
+Engine::processEdge(unsigned& from, unsigned& to, Graph& lGraph, std::set<unsigned> *inTopics, std::set<unsigned> *oTopics) {
     if (lGraph.getVertexPartitionId(from) == nodeId) {
-        IdType lFromId = lGraph.globalToLocalId[from];
-        IdType toId;
+        unsigned lFromId = lGraph.globalToLocalId[from];
+        unsigned toId;
         EdgeLocationType eLocation;
 
         if (lGraph.getVertexPartitionId(to) == nodeId) {
@@ -914,8 +937,8 @@ Engine::processEdge(IdType& from, IdType& to, Graph& lGraph, std::set<IdType> *i
     }
 
     if (lGraph.getVertexPartitionId(to) == nodeId) {
-        IdType lToId = lGraph.globalToLocalId[to];
-        IdType fromId;
+        unsigned lToId = lGraph.globalToLocalId[to];
+        unsigned fromId;
         EdgeLocationType eLocation;
 
         if (lGraph.getVertexPartitionId(from) == nodeId) {
@@ -951,7 +974,7 @@ Engine::setEdgeNormalizations() {
         vertex.setNormFactor(dstNorm * dstNorm);
         for (unsigned i = 0; i < vertex.getNumInEdges(); ++i) {
             InEdge& e = vertex.getInEdge(i);
-            IdType vid = e.getSourceId();
+            unsigned vid = e.getSourceId();
             if (e.getEdgeLocation() == LOCAL_EDGE_TYPE) {
                 unsigned srcDeg = graph.getVertex(vid).getNumInEdges() + 1;
                 float srcNorm = std::pow(srcDeg, -.5);
@@ -982,7 +1005,7 @@ Engine::findGhostDegrees(std::string& fileName) {
     BSHeaderType bsHeader;
     infile.read((char *) &bsHeader, sizeof(bsHeader));
 
-    IdType srcdst[2];
+    unsigned srcdst[2];
     while (infile.read((char *) srcdst, bsHeader.sizeOfVertexType * 2)) {
         if (srcdst[0] == srcdst[1])
             continue;
@@ -1001,7 +1024,7 @@ Engine::findGhostDegrees(std::string& fileName) {
  * 
  */
 void
-Engine::readGraphBS(std::string& fileName, std::set<IdType>& inTopics, std::vector<IdType>& outTopics) {
+Engine::readGraphBS(std::string& fileName, std::set<unsigned>& inTopics, std::vector<unsigned>& outTopics) {
     
     // Read in the partition file.
     std::string partsFileName = fileName + PARTS_EXT;
@@ -1009,7 +1032,7 @@ Engine::readGraphBS(std::string& fileName, std::set<IdType>& inTopics, std::vect
 
     // Initialize the graph based on the partition info.
     graph.getVertices().resize(graph.getNumLocalVertices());
-    for (IdType i = 0; i < graph.getNumLocalVertices(); ++i) {
+    for (unsigned i = 0; i < graph.getNumLocalVertices(); ++i) {
         graph.getVertex(i).setLocalId(i);
         graph.getVertex(i).setGlobalId(graph.localToGlobalId[i]);
         graph.getVertex(i).setVertexLocation(INTERNAL_VERTEX);
@@ -1026,11 +1049,11 @@ Engine::readGraphBS(std::string& fileName, std::set<IdType>& inTopics, std::vect
 
     BSHeaderType bSHeader;
     infile.read((char *) &bSHeader, sizeof(bSHeader));
-    assert(bSHeader.sizeOfVertexType == sizeof(IdType));
+    assert(bSHeader.sizeOfVertexType == sizeof(unsigned));
 
     // Loop through all edges and process them.
-    std::set<IdType> oTopics;
-    IdType srcdst[2];
+    std::set<unsigned> oTopics;
+    unsigned srcdst[2];
     while (infile.read((char *) srcdst, bSHeader.sizeOfVertexType * 2)) {
         if (srcdst[0] == srcdst[1])
             continue;
@@ -1048,7 +1071,7 @@ Engine::readGraphBS(std::string& fileName, std::set<IdType>& inTopics, std::vect
     findGhostDegrees(edgeFileName);
     setEdgeNormalizations();
 
-    typename std::set<IdType>::iterator it;
+    typename std::set<unsigned>::iterator it;
     for (it = oTopics.begin(); it != oTopics.end(); ++it)
         outTopics.push_back(*it);
 }

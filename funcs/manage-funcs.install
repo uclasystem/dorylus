@@ -1,12 +1,100 @@
 #!/bin/bash
 
 ##
-## Install requried dependencies for managing inputs dataset preparation.
+## Install requried dependencies on a machine that can compile and manage lambda functions.
 ##
 
 
 cd ${HOME}
 
 
-# Install OpenBLAS & CBLAS.
-# TODO...
+# Basic packages.
+APT_INSTALL_LIST="build-essential zip unzip gfortran libtool pkg-config autoconf libboost-all-dev cmake git libssl-dev libcurl4-openssl-dev zlib1g-dev"
+YUM_GROUPINSTALL="'Development Tools'"; YUM_INSTALL_LIST="boost-devel cmake git openssl-devel libcurl-devel zlib-devel"
+
+OS_DISTRO=$( awk -F= '/^NAME/{print $2}' /etc/os-release | sed -e 's/^"//' -e 's/"$//' )
+if [[ ${OS_DISTRO} == "Ubuntu" ]]; then
+    sudo apt-get update
+    sudo apt-get -y install ${APT_INSTALL_LIST}
+elif [[ ${OS_DISTRO} == "Red Hat Enterprise Linux" ]]; then
+    sudo yum -y install ${YUM_INSTALL_LIST}
+    sudo yum -y groupinstall ${YUM_GROUPINSTALL}
+else
+    echo "Unrecognized OS distro version. This script currently only supports 'Ubuntu' or 'Red Hat Enterprise Linux'."
+    echo "Basic packages not installed."
+fi
+
+
+# Install ZeroMQ.
+if [[ ! $( ldconfig -p | grep zmq ) ]]; then    # Only install if not installed yet.
+    wget https://github.com/zeromq/libzmq/releases/download/v4.3.2/zeromq-4.3.2.tar.gz
+    tar xf zeromq-4.3.2.tar.gz
+    rm zeromq-4.3.2.tar.gz
+    cd zeromq-4.3.2
+    ./configure --with-libsodium=no
+    make
+    sudo make install
+    sudo ldconfig
+    sudo mv ../gnn-lambda/src/utils/zmq.hpp /usr/local/include
+    cd ..
+    rm -rf zeromq-4.3.2
+fi
+
+
+# Install AWS-SDK.
+if [[ ! $( ldconfig -p | grep aws-cpp-sdk ) ]]; then    # Only install if not installed yet.
+    git clone https://github.com/aws/aws-sdk-cpp.git
+    cd aws-sdk-cpp
+    mkdir build
+    cd build
+    cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_ONLY=lambda
+    make
+    sudo make install
+    cd ../..
+    rm -rf aws-sdk-cpp
+fi
+
+
+# Install AWS-Lambda C++ runtime.
+if [[ ! -d /usr/local/include/aws/lambda-runtime ]]; then    # Only install if not installed yet.
+    git clone https://github.com/awslabs/aws-lambda-cpp.git
+    cd aws-lambda-cpp
+    mkdir build
+    cd build
+    cmake .. -DCMAKE_BUILD_TYPE=Release
+    make
+    sudo make install
+    cd ../..
+    rm -rf aws-lambda-cpp
+fi
+
+
+# CBLAS.
+if [[ ! -d /usr/local/blas/CBLAS ]]; then     # Only install if not installed yet.
+    wget http://www.netlib.org/blas/blas-3.8.0.tgz  # BLAS.
+    tar xf blas-3.8.0.tgz
+    rm blas-3.8.0.tgz
+    cd BLAS-3.8.0
+    make
+    cd ..
+    wget http://www.netlib.org/blas/blast-forum/cblas.tgz
+    tar xf cblas.tgz
+    mv BLAS-3.8.0/blas_LINUX.a CBLAS/
+    rm -rf BLAS-3.8.0
+    cd CBLAS
+    sed -i "" 's/BLLIB\ =\ \/Users\/julie\/Documents\/Boulot\/lapack-dev\/lapack\/trunk\/blas_LINUX.a/BLLIB\ =\ ..\/blas_LINUX.a/g' Makefile.in
+    make
+    cd ..
+    sudo mkdir -p /usr/local/blas
+    sudo mv CBLAS /usr/local/blas/
+fi
+
+
+# OpenBLAS.
+if [[ ! -d /usr/local/blas/OpenBLAS ]]; then
+    git clone https://github.com/xianyi/OpenBLAS.git
+    cd OpenBLAS
+    make
+    sudo mkdir -p /usr/local/blas/OpenBLAS
+    sudo make PREFIX=/usr/local/blas/OpenBLAS install
+fi

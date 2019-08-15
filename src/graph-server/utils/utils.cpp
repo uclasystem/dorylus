@@ -39,7 +39,11 @@ double getTimer() {
 }
 
 
-
+/**
+ *
+ * Read in ip address from file.
+ * 
+ */
 void
 getPrIP(std::string& myPrIpFile, std::string& ip) { 
     std::ifstream ipFile(myPrIpFile);

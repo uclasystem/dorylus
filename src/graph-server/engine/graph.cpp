@@ -3,30 +3,30 @@
 
 
 Vertex&
-Graph::getVertex(IdType lvid) {
+Graph::getVertex(unsigned lvid) {
     assert(lvid < vertices.size());
     return vertices[lvid];
 }
 
 Vertex&
-Graph::getVertexByGlobal(IdType gvid) {
+Graph::getVertexByGlobal(unsigned gvid) {
     assert(globalToLocalId.find(gvid) != globalToLocalId.end());
     return vertices[globalToLocalId[gvid]];
 }
 
 bool
-Graph::containsVertex(IdType gvid) {
+Graph::containsVertex(unsigned gvid) {
     return globalToLocalId.find(gvid) != globalToLocalId.end();
 }
 
 GhostVertex&
-Graph::getGhostVertex(IdType gvid) {
+Graph::getGhostVertex(unsigned gvid) {
     assert(ghostVertices.find(gvid) != ghostVertices.end());
     return ghostVertices[gvid];
 }
 
 bool
-Graph::containsGhostVertex(IdType gvid) {
+Graph::containsGhostVertex(unsigned gvid) {
     return ghostVertices.find(gvid) != ghostVertices.end();
 }
 
@@ -44,10 +44,10 @@ Graph::compactGraph() {
     vertexPartitionIds.shrink_to_fit();
     vertices.shrink_to_fit();
 
-    for (IdType i = 0; i < vertices.size(); ++i)
+    for (unsigned i = 0; i < vertices.size(); ++i)
         vertices[i].compactVertex();
 
-    typename std::map<IdType, GhostVertex>::iterator it;
+    typename std::map<unsigned, GhostVertex>::iterator it;
     for (it = ghostVertices.begin(); it != ghostVertices.end(); ++it)
         it->second.compactVertex(); 
 }

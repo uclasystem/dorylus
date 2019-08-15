@@ -30,7 +30,7 @@
 /** Binary snap file header struct. */
 struct BSHeaderType {
     int sizeOfVertexType;
-    IdType numVertices;
+    unsigned numVertices;
     unsigned long long numEdges;
 };
 
@@ -41,7 +41,7 @@ struct FeaturesHeaderType {
 
 /** Binary labels file header struct. */
 struct LabelsHeaderType {
-    LabelType labelKinds;
+    unsigned labelKinds;
 };
 
 
@@ -56,7 +56,8 @@ public:
 
     // Public APIs for benchmarks.
     static void init(int argc, char *argv[]);
-    static void run();
+    static void runForward();
+    static void runBackward();
     static void output();
     static void destroy();
     static bool master();
@@ -82,7 +83,7 @@ private:
 
     static FeatType *localVerticesLabels;       // Labels one-hot storage array.
 
-    static IdType currId;
+    static unsigned currId;
     static Lock lockCurrId;
 
     static Lock lockRecvWaiters;
@@ -103,6 +104,7 @@ private:
     static std::string coordserverIp;
     static unsigned coordserverPort;
 
+    static unsigned numLambdas;
     static LambdaComm *lambdaComm;
 
     static unsigned nodeId;
@@ -117,31 +119,31 @@ private:
     // Timing stuff.
     static double timeInit;
     static double timeProcess; 
-    static double timeOutput; 
     static std::vector<double> vecTimeAggregate;
     static std::vector<double> vecTimeLambda;
     static std::vector<double> vecTimeSendout;
 
-    static std::map<IdType, unsigned> recvWaiters;
+    static std::map<unsigned, unsigned> recvWaiters;
 
     static Barrier barComp;
 
     // Worker and communicator thread function.
-    static void worker(unsigned tid, void *args);
-    static void dataCommunicator(unsigned tid, void *args);
+    static void forwardWorker(unsigned tid, void *args);
+    static void backwardWorker(unsigned tid, void *args);
+    static void ghostCommunicator(unsigned tid, void *args);
 
     // About the global data arrays.
     static unsigned getNumFeats(unsigned layer);
 
-    static FeatType *localVertexZDataPtr(IdType lvid, unsigned layer);
-    static FeatType *localVertexActivationDataPtr(IdType lvid, unsigned layer);
-    static FeatType *ghostVertexActivationDataPtr(IdType lvid, unsigned layer);
+    static FeatType *localVertexZDataPtr(unsigned lvid, unsigned layer);
+    static FeatType *localVertexActivationDataPtr(unsigned lvid, unsigned layer);
+    static FeatType *ghostVertexActivationDataPtr(unsigned lvid, unsigned layer);
 
-    static FeatType *localVertexDataBufPtr(IdType lvid, unsigned layer);
-    static FeatType *localVertexLabelsPtr(IdType lvid);
+    static FeatType *localVertexDataBufPtr(unsigned lvid, unsigned layer);
+    static FeatType *localVertexLabelsPtr(unsigned lvid);
 
     // Aggregation operation (along with normalization).
-    static void aggregateFromNeighbors(IdType lvid);
+    static void aggregateFromNeighbors(unsigned lvid);
 
     // For initialization.
     static void parseArgs(int argc, char* argv[]);
@@ -149,10 +151,10 @@ private:
     static void readFeaturesFile(std::string& featuresFileName);
     static void readLabelsFile(std::string& labelsFileName);
     static void readPartsFile(std::string& partsFileName, Graph& lGraph);
-    static void processEdge(IdType& from, IdType& to, Graph& lGraph, std::set<IdType>* inTopics, std::set<IdType>* oTopics); 
+    static void processEdge(unsigned& from, unsigned& to, Graph& lGraph, std::set<unsigned>* inTopics, std::set<unsigned>* oTopics); 
     static void findGhostDegrees(std::string& fileName);
     static void setEdgeNormalizations();
-    static void readGraphBS(std::string& fileName, std::set<IdType>& inTopics, std::vector<IdType>& outTopics);
+    static void readGraphBS(std::string& fileName, std::set<unsigned>& inTopics, std::vector<unsigned>& outTopics);
 
     // Metric printing.
     static void printGraphMetrics();

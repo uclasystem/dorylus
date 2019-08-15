@@ -16,7 +16,7 @@ include_directories(${ZMQ_INC})
 
 
 # Include BLAS.
-set(BLLIB /usr/lib64/libopenblas.so.0)
+set(OBLIB /usr/local/blas/OpenBLAS/lib/libopenblas.a)
 set(CBLIB /usr/local/blas/CBLAS/lib/cblas_LINUX.a)
 set(CBINC /usr/local/blas/CBLAS/include)
 include_directories(${CBINC})
@@ -38,7 +38,7 @@ find_package(aws-lambda-runtime REQUIRED)
 # Create the executable target.
 aux_source_directory(. FUNC_SRC)
 add_executable(${PROJECT_NAME} ${FUNC_SRC})
-target_link_libraries(${PROJECT_NAME} PUBLIC ${Boost_LIBRARIES} Threads::Threads AWS::aws-lambda-runtime ${BLLIB} ${CBLIB} ${ZMQ_LIB})
+target_link_libraries(${PROJECT_NAME} PUBLIC ${Boost_LIBRARIES} Threads::Threads AWS::aws-lambda-runtime ${OBLIB} ${CBLIB} ${ZMQ_LIB})
 
 
 # Create the packaging target.

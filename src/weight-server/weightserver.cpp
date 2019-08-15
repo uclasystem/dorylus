@@ -52,9 +52,9 @@ public:
                 timerMutex.unlock();
                 timers[timerId].start();
                 
-                int32_t chunkId = parse<int32_t>((char *) identity.data(), 0);
-                int32_t op = parse<int32_t>((char *) header.data(), 0);
-                int32_t layer = parse<int32_t>((char *) header.data(), 1);
+                unsigned chunkId = parse<unsigned>((char *) identity.data(), 0);
+                unsigned op = parse<unsigned>((char *) header.data(), 0);
+                unsigned layer = parse<unsigned>((char *) header.data(), 1);
 
                 if (op != OP::TERM) {
                     std::string opStr = op == 0 ? "Push" : "Pull";
@@ -86,7 +86,7 @@ public:
 
 private:
 
-    void sendWeights(zmq::socket_t& socket, zmq::message_t& client_id, int32_t layer) {
+    void sendWeights(zmq::socket_t& socket, zmq::message_t& client_id, unsigned layer) {
         Matrix& weights = weight_list[layer];
         zmq::message_t header(HEADER_SIZE);
         populateHeader((char *) header.data(), OP::RESP, 0, weights.rows, weights.cols);
@@ -100,7 +100,7 @@ private:
         socket.send(weightData);
     }
 
-    void recvUpdates(zmq::message_t& client_id, int32_t layer, zmq::message_t& header) {
+    void recvUpdates(zmq::message_t& client_id, unsigned layer, zmq::message_t& header) {
         // TODO: Receive updates from threads.
     }
 
@@ -233,7 +233,7 @@ private:
 int
 main(int argc, char *argv[]) {
     assert(argc == 3);
-    int32_t weightserverPort = std::atoi(argv[1]);
+    unsigned weightserverPort = std::atoi(argv[1]);
     std::string configFileName = argv[2];
 
     WeightServer ws(weightserverPort, configFileName);
