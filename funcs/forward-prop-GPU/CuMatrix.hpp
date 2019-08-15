@@ -19,7 +19,7 @@ public:
 
 	// friend class ComputingUnit; 
 
-private:
+// private:
 	void deviceMalloc();
 	void deviceSetMatrix();
 
