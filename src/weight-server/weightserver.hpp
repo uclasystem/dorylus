@@ -22,6 +22,10 @@
 #include "serverworker.hpp"
 
 
+std::mutex m, term_mutex, update_mutex;
+std::condition_variable cv;
+bool finished = false;
+
 /**
  *
  * Class of the weightserver. Weightservers are only responsible for replying weight requests from lambdas,
