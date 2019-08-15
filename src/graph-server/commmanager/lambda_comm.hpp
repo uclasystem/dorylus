@@ -22,20 +22,43 @@
 
 /**
  *
- * Class of a data server worker.
+ * Base class for a lambda communication worker.
  * 
  */
-class ServerWorker {
+class LambdaWorker {
 
 public:
 
-    ServerWorker(zmq::context_t& ctx_, int32_t sock_type, int32_t nParts_, int32_t& counter_,
-                 Matrix& matrix_, unsigned nodeId_)
-        : matrix(matrix_), ctx(ctx_), worker(ctx, sock_type),
-          nParts(nParts_), count(counter_), nodeId(nodeId_) { }
+    LambdaWorker(unsigned nodeId_, zmq::context_t& ctx_, unsigned numLambdas_, unsigned& count_)
+        : nodeId(nodeId_), ctx(ctx_), worker(ctx, ZMQ_DEALER), numLambdas(numLambdas_), count(count_) { }
 
-    // Called at the start of a lambda communication context.
-    void refreshState(FeatType *zData_, FeatType *actData_, int32_t nextIterCols_);
+protected:
+
+    unsigned nodeId;
+
+    zmq::context_t& ctx;
+    zmq::socket_t worker;
+
+    unsigned numLambdas;
+
+    // Counting down until all lambdas have returned.
+    unsigned& count;
+};
+
+
+/**
+ *
+ * Class of a forward-prop lambda communication worker.
+ * 
+ */
+class LambdaWorkerForward : public LambdaWorker {
+
+public:
+
+    LambdaWorkerForward(unsigned nodeId_, zmq::context_t& ctx_, unsigned numLambdasForward_, unsigned& countForward_,
+                        Matrix *actMatrix_, FeatType *zData_, FeatType *actData_, unsigned numFeatsNext_)
+        : LambdaWorker(nodeId_, ctx_, numLambdasForward_, countForward_),
+          actMatrix(actMatrix_), zData(zData_), actData(actData_), numFeatsNext(numFeatsNext_) { }
 
     // Continuously listens for incoming lambda connections and either sends
     // a partitioned matrix or receives computed results.
@@ -45,31 +68,42 @@ private:
 
     // Partitions the data matrix according to the partition id and
     // send it to the lambda thread for computation.
-    void sendMatrixChunk(zmq::socket_t& socket, zmq::message_t& client_id, int32_t partId);
+    void sendMatrixChunk(zmq::socket_t& socket, zmq::message_t& client_id, unsigned partId);
 
     // Accepts an incoming connection from a lambda thread and receives
-    // two matrices, a 'Z' matrix and the 'activations' matrix.
-    void recvMatrixChunks(zmq::socket_t& socket, zmq::message_t& client_id, int32_t partId,
-                          int32_t rows, int32_t cols);
+    // two matrices, a 'Z' matrix and a corresponding 'activations' matrix.
+    void recvMatrixChunks(zmq::socket_t& socket, zmq::message_t& client_id, unsigned partId);
 
-    Matrix& matrix;
+    Matrix *actMatrix;
 
-    int32_t nextIterCols;
+    unsigned numFeatsNext;
+
     FeatType *zData;
     FeatType *actData;
+};
 
-    unsigned nodeId;
 
-    zmq::context_t& ctx;
-    zmq::socket_t worker;
+/**
+ *
+ * Class of a forward-prop lambda communication worker.
+ * 
+ */
+class LambdaWorkerBackward : public LambdaWorker {
 
-    int32_t partRows;
-    int32_t partCols;
-    int32_t nParts;
+public:
 
-    // Counting down until all lambdas have returned.
-    static std::mutex count_mutex;
-    int32_t& count;
+    LambdaWorkerBackward(unsigned nodeId_, zmq::context_t& ctx_, unsigned numLambdasBackward_, unsigned& countBackward_)
+        : LambdaWorker(nodeId_, ctx_, numLambdasBackward_, countBackward_) { }
+
+    // Continuously listens for incoming lambda connections and either sends
+    // a partitioned matrix or receives computed results.
+    void work();
+
+private:
+
+    // Partitions the data matrix according to the partition id and
+    // send it to the lambda thread for computation.
+    void sendMatrixChunks(zmq::socket_t& socket, zmq::message_t& client_id, unsigned partId);
 };
 
 
@@ -82,13 +116,13 @@ class LambdaComm {
 
 public:
 
-    LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::string coordserverIp_, unsigned coordserverPort_,
-               unsigned nodeId_, int32_t nParts_, int32_t numListeners_)
-        : nodeIp(nodeIp_), dataserverPort(dataserverPort_),
-          coordserverIp(coordserverIp_), coordserverPort(coordserverPort_),
-          nodeId(nodeId_), nParts(nParts_), numListeners(numListeners_), counter(0),
-          ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), sendsocket(ctx, ZMQ_REQ) {
-        
+    LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::string coordserverIp_, unsigned coordserverPort_, unsigned nodeId_,
+               unsigned numLambdasForward_, unsigned numLambdasBackward_)
+        : nodeIp(nodeIp_), dataserverPort(dataserverPort_), coordserverIp(coordserverIp_), coordserverPort(coordserverPort_), nodeId(nodeId_), 
+          ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), coordsocket(ctx, ZMQ_REQ),
+          numLambdasForward(numLambdasForward_), numLambdasBackward(numLambdasBackward_),
+          countForward(0), countBackward(0), numListeners(numLambdasForward_) {
+
         char dhost_port[50];
         sprintf(dhost_port, "tcp://*:%u", dataserverPort);
         frontend.bind(dhost_port);
@@ -96,69 +130,56 @@ public:
 
         char chost_port[50];
         sprintf(chost_port, "tcp://%s:%u", coordserverIp.c_str(), coordserverPort);
-        sendsocket.connect(chost_port);
+        coordsocket.connect(chost_port);
 
-        // Create numListeners workers and detach them.
-        for (int i = 0; i < numListeners; ++i) {
-            workers.push_back(new ServerWorker(ctx, ZMQ_DEALER, nParts, counter, matrix, nodeId));
-            
-            worker_threads.push_back(new std::thread(std::bind(&ServerWorker::work, workers[i])));
-            worker_threads[i]->detach();
-        }
-
-        // Create a proxy pipe that connects frontend to backend. This thread hangs throughout the lifetime
-        // of the engine.
+        // Create a proxy pipe that connects frontend to backend. This thread hangs throughout the lifetime of this context.
         std::thread tproxy([&] {
             try {
                 zmq::proxy(static_cast<void *>(frontend), static_cast<void *>(backend), nullptr);
             } catch (std::exception& ex) {
-                printLog(nodeId, "ERROR: %s\n", ex.what());
-            }
-
-            for (int i = 0; i < numListeners; ++i) {    // Delete after context terminated.
-                delete worker_threads[i];
-                delete workers[i];
+                printLog(nodeId, "PROXY: %s\n", ex.what());
             }
         });
         tproxy.detach();
     }
     
-    // Start / End a lambda communication context.
-    void startContext(FeatType *dataBuf_, FeatType *zData_, FeatType *actData_, int32_t rows_, int32_t cols_,
-                      int32_t nextIterCols_, unsigned layer_);
-    void endContext();
+    // For forward-prop.
+    void newContextForward(FeatType *dataBuf, FeatType *zData, FeatType *actData, unsigned numLocalVertices,
+                           unsigned numFeats, unsigned numFeatsNext);
+    void requestLambdasForward(unsigned layer);
+    void endContextForward();
 
-    // Send a request to the coordination server for a given number of lambda threads.
-    void requestLambdas();
+    // For backward-prop.
+    void newContextBackward();
+    void requestLambdasBackward();
+    void endContextBackward();
 
     // Send a message to the coordination server to shutdown.
     void sendShutdownMessage();
 
 private:
 
-	Matrix matrix;
+    unsigned numLambdasForward;
+    unsigned numLambdasBackward;
 
-	int32_t nextIterCols;
-	FeatType *zData;
-	FeatType *actData;
-		
-	int32_t nParts;
-	int32_t numListeners;
-    std::vector<ServerWorker *> workers;
-    std::vector<std::thread *> worker_threads;
+    unsigned numListeners;
+    
+    std::vector<LambdaWorkerForward *> forwardWorkers;
+    std::vector<std::thread *> forwardWorker_threads;
+    std::vector<LambdaWorkerBackward *> backwardWorkers;
+    std::vector<std::thread *> backwardWorker_threads;
 
-	int32_t counter;
+    unsigned countForward;
+    unsigned countBackward;
 
-    unsigned layer;
-
-	zmq::context_t ctx;
-	zmq::socket_t frontend;
-	zmq::socket_t backend;
-    zmq::socket_t sendsocket;
+    zmq::context_t ctx;
+    zmq::socket_t frontend;
+    zmq::socket_t backend;
+    zmq::socket_t coordsocket;
 
     unsigned nodeId;
-	std::string nodeIp;
-	unsigned dataserverPort;
+    std::string nodeIp;
+    unsigned dataserverPort;
 
     std::string coordserverIp;
     unsigned coordserverPort;

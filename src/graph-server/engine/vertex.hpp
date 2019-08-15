@@ -30,10 +30,10 @@ public:
     Vertex() : localId(0), globalId(0), parentId(MAX_IDTYPE), graph_ptr(NULL) { lock.init(); }
     ~Vertex() { lock.destroy(); }
 
-    IdType getLocalId() { return localId; }
-    void setLocalId(IdType lvid) { localId = lvid; }
-    IdType getGlobalId() { return globalId; }
-    void setGlobalId(IdType gvid) { globalId = gvid; }
+    unsigned getLocalId() { return localId; }
+    void setLocalId(unsigned lvid) { localId = lvid; }
+    unsigned getGlobalId() { return globalId; }
+    void setGlobalId(unsigned gvid) { globalId = gvid; }
 
     VertexLocationType getVertexLocation() { return vertexLocation; }
     void setVertexLocation(VertexLocationType loc) { vertexLocation = loc; }
@@ -45,10 +45,10 @@ public:
     OutEdge& getOutEdge(unsigned i) { return outEdges[i]; }
     void addOutEdge(OutEdge edge) { outEdges.push_back(edge); }
 
-    IdType getSourceVertexLocalId(unsigned i);
-    IdType getSourceVertexGlobalId(unsigned i);
-    IdType getDestVertexLocalId(unsigned i);
-    IdType getDestVertexGlobalId(unsigned i);
+    unsigned getSourceVertexLocalId(unsigned i);
+    unsigned getSourceVertexGlobalId(unsigned i);
+    unsigned getDestVertexLocalId(unsigned i);
+    unsigned getDestVertexGlobalId(unsigned i);
 
     EdgeType getNormFactor() { return normFactor; }
     void setNormFactor(EdgeType factor) { normFactor = factor; }
@@ -56,8 +56,8 @@ public:
     Graph *getGraphPtr() { return graph_ptr; }
     void setGraphPtr(Graph *ptr) { graph_ptr = ptr; }
 
-    IdType getParent() { return parentId; }
-    void setParent(IdType p) { parentId = p; }
+    unsigned getParent() { return parentId; }
+    void setParent(unsigned p) { parentId = p; }
 
     void compactVertex();
 
@@ -70,8 +70,8 @@ public:
 
 private:
 
-    IdType localId;
-    IdType globalId;
+    unsigned localId;
+    unsigned globalId;
 
     VertexLocationType vertexLocation;
 
@@ -80,7 +80,7 @@ private:
 
     EdgeType normFactor;
 
-    IdType parentId;
+    unsigned parentId;
 
     Graph *graph_ptr;
 
@@ -100,12 +100,12 @@ public:
     GhostVertex() : degree(0) { lock.init(); }
     ~GhostVertex() { lock.destroy(); }
 
-    IdType getLocalId() { return localId; }
-    void setLocalId(IdType id) { localId = id; }
+    unsigned getLocalId() { return localId; }
+    void setLocalId(unsigned id) { localId = id; }
 
-    void addOutEdge(IdType dId) { outEdges.push_back(dId); }
+    void addOutEdge(unsigned dId) { outEdges.push_back(dId); }
 
-    int32_t getDegree() { return degree; }
+    unsigned getDegree() { return degree; }
     void incrementDegree() { ++degree; }
 
     void compactVertex();
@@ -116,10 +116,10 @@ public:
 
 private:
 
-    IdType localId;     // Added to serve as the index in the static values region.
+    unsigned localId;     // Added to serve as the index in the static values region.
 
-    std::vector<IdType> outEdges;
-    int32_t degree;
+    std::vector<unsigned> outEdges;
+    unsigned degree;
 
     RWLock lock;
 };

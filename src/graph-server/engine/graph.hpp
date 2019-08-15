@@ -20,40 +20,40 @@ class Graph {
 public:
 
     std::vector<Vertex>& getVertices() { return vertices; }
-    Vertex& getVertex(IdType lvid);
-    Vertex& getVertexByGlobal(IdType gvid);
-    bool containsVertex(IdType gvid);   // Contain searches with global ID.
+    Vertex& getVertex(unsigned lvid);
+    Vertex& getVertexByGlobal(unsigned gvid);
+    bool containsVertex(unsigned gvid);   // Contain searches with global ID.
 
-    std::map<IdType, GhostVertex>& getGhostVertices() { return ghostVertices; }
-    GhostVertex& getGhostVertex(IdType gvid);
-    bool containsGhostVertex(IdType gvid);
+    std::map<unsigned, GhostVertex>& getGhostVertices() { return ghostVertices; }
+    GhostVertex& getGhostVertex(unsigned gvid);
+    bool containsGhostVertex(unsigned gvid);
 
-    IdType getNumLocalVertices() { return numLocalVertices; }
-    void setNumLocalVertices(IdType num) { numLocalVertices = num; }
-    IdType getNumGlobalVertices() { return numGlobalVertices; }
-    void setNumGlobalVertices(IdType num) { numGlobalVertices = num; }
-    IdType getNumGhostVertices() { return numGhostVertices; }
-    void setNumGhostVertices(IdType num) { numGhostVertices = num; }
+    unsigned getNumLocalVertices() { return numLocalVertices; }
+    void setNumLocalVertices(unsigned num) { numLocalVertices = num; }
+    unsigned getNumGlobalVertices() { return numGlobalVertices; }
+    void setNumGlobalVertices(unsigned num) { numGlobalVertices = num; }
+    unsigned getNumGhostVertices() { return numGhostVertices; }
+    void setNumGhostVertices(unsigned num) { numGhostVertices = num; }
 
     unsigned long long getNumGlobalEdges() { return numGlobalEdges; }
     void incrementNumGlobalEdges() { ++numGlobalEdges; }
 
-    short getVertexPartitionId(IdType vid) { return vertexPartitionIds[vid]; }
+    short getVertexPartitionId(unsigned vid) { return vertexPartitionIds[vid]; }
     void appendVertexPartitionId(short pid) { vertexPartitionIds.push_back(pid); }
 
     void compactGraph();
 
-    std::map<IdType, IdType> globalToLocalId;
-    std::map<IdType, IdType> localToGlobalId;
+    std::map<unsigned, unsigned> globalToLocalId;
+    std::map<unsigned, unsigned> localToGlobalId;
 
 private:
 
     std::vector<Vertex> vertices;
-    std::map<IdType, GhostVertex> ghostVertices;
+    std::map<unsigned, GhostVertex> ghostVertices;
 
-    IdType numLocalVertices;
-    IdType numGlobalVertices;
-    IdType numGhostVertices;
+    unsigned numLocalVertices;
+    unsigned numGlobalVertices;
+    unsigned numGhostVertices;
 
     unsigned long long numGlobalEdges = 0;
 
