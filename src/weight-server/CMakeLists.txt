@@ -4,5 +4,5 @@ cmake_minimum_required(VERSION 3.5)
 # Add the executable.
 aux_source_directory(. WEIGHT_SRCS)
 add_executable(weightserver ${WEIGHT_SRCS})
-target_link_libraries(weightserver PUBLIC ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES})
+target_link_libraries(weightserver PUBLIC ${BLAS_LIB} ${CBLAS_LIB} ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES})
 target_compile_options(weightserver PRIVATE "-Wall" "-Werror")
