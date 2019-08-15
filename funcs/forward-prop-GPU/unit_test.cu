@@ -13,8 +13,9 @@ int main(int argc, char const *argv[])
 	ComputingUnit cu=ComputingUnit();
 	// C=cu.dot(A,B);
 	cu.activate(A);
+	
+	
 
-	// std::cout<<A.str();
 
 	return 0;
 }

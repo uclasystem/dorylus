@@ -19,7 +19,7 @@
 #include <thrust/device_vector.h>
 #include <thrust/functional.h>
 #include <thrust/transform.h>
-#include <thrust/copy.h>
+
 
 struct act_functor
 {
@@ -28,14 +28,17 @@ struct act_functor
         float operator()(const float& x) const { return std::tanh(x);}
 };
 
+
+//TODO: modify function return value and signatures to fit the real workload
+//		This is important because it can reduce memory copy from GPU and RAM
+//AWARE: to free Matrix.data in long run
 //It maintains a GPU context
 class ComputingUnit
 {
 public:
 	ComputingUnit();
 	CuMatrix dot(Matrix& A,Matrix& B); 	// use cublas for speed
-	// void activate(CuMatrix& A); //probably use thrust. Since its not a Linear Algebra op
-	void activate(Matrix& A);
+	void activate(Matrix& A); 	//use thrust. Since its not a Linear Algebra op
 
 	~ComputingUnit(){cublasDestroy(handle);}
 
@@ -65,7 +68,8 @@ void ComputingUnit::activate(Matrix& A){
 	thrust::device_ptr<float> devA_ptr(devA.devPtr);
   	thrust::transform(devA_ptr, devA_ptr+A.rows*A.cols,devA_ptr, act_functor());
   	devA.updateMatrixFromGPU();
-  	cout<<devA.str();
+    printf("%s\n", devA.str().c_str());
+
 }
 
 

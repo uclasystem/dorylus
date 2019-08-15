@@ -65,7 +65,6 @@ void CuMatrix::updateMatrixFromGPU(){
 
 CuMatrix::~CuMatrix(){
 	cudaFree (devPtr);
-	delete[] data; 
 }
 
 CuMatrix CuMatrix::dot(const CuMatrix& M){

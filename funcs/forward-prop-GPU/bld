@@ -1,0 +1,3 @@
+#!/bin/bash
+#create a unit test
+nvcc -o ut unit_test.cu -std=c++11 -lcublas
