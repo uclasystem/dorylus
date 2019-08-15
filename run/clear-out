@@ -1,0 +1,13 @@
+#!/bin/bash
+
+##
+## Clean up all the output files, tmp files and log files. ONLY on graph server master node.
+##
+## Usage: $ ./gnnman/clear-out
+##
+
+
+cd ${HOME}
+
+
+rm -rf logfiles tmpfiles outfiles

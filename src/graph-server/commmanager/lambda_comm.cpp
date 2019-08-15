@@ -26,20 +26,16 @@ LambdaWorkerForward::work() {
 
             unsigned op = parse<unsigned>((char *) header.data(), 0);
             unsigned partId = parse<unsigned>((char *) header.data(), 1);
-            unsigned rows = parse<unsigned>((char *) header.data(), 2);
-            unsigned cols = parse<unsigned>((char *) header.data(), 3);
 
             switch (op) {
                 case (OP::PULL):
                     sendMatrixChunk(worker, identity, partId);
                     break;
                 case (OP::PUSH):
-                    assert(rows <= actMatrix->getRows());
-                    assert(cols == actMatrix->getCols());
                     recvMatrixChunks(worker, identity, partId);
                     break;
                 default:
-                    printLog(nodeId, "ERROR: Unknown Op code received.\n");
+                    printLog(nodeId, "WORKER ERROR: Unknown Op code received.\n");
             }
         }
     } catch (std::exception& ex) {
@@ -87,8 +83,8 @@ LambdaWorkerForward::sendMatrixChunk(zmq::socket_t& socket, zmq::message_t& clie
 void
 LambdaWorkerForward::recvMatrixChunks(zmq::socket_t& socket, zmq::message_t& client_id, unsigned partId) {
     unsigned partRows = std::ceil((float) actMatrix->getRows() / (float) numLambdas);
-    FeatType *partitionZStart = zData + partId * partRows * actMatrix->getCols();
-    FeatType *partitionActStart = actData + partId * partRows * actMatrix->getCols();
+    FeatType *partitionZStart = zData + partId * partRows * numFeatsNext;
+    FeatType *partitionActStart = actData + partId * partRows * numFeatsNext;
 
     // Receive the pushed-back results.
     zmq::message_t data;
@@ -119,7 +115,7 @@ LambdaWorkerForward::recvMatrixChunks(zmq::socket_t& socket, zmq::message_t& cli
 
 /**
  *
- * Call newContextForward() before the lambda invokation to refresh the parameters, and call endContextForward() after
+ * Call 'newContextForward()' before the lambda invokation to refresh the parameters, and call 'endContextForward()' after
  * lambdas finish to revoke unused memory space (if necessary).
  * 
  */
@@ -131,21 +127,6 @@ LambdaComm::newContextForward(FeatType *dataBuf, FeatType *zData, FeatType *actD
     // Create a new matrix object for workers to access.
     Matrix *actMatrix = new Matrix(numLocalVertices, numFeats, dataBuf);
 
-    // Create a new ZeroMQ context and setup the sockets it holds.
-    ctx = new zmq::context_t(1);
-    frontend = new zmq::socket_t(*ctx, ZMQ_ROUTER);
-    backend = new zmq::socket_t(*ctx, ZMQ_DEALER);
-    coordsocket = new zmq::socket_t(*ctx, ZMQ_REQ);
-
-    char dhost_port[50];
-    sprintf(dhost_port, "tcp://*:%u", dataserverPort);
-    frontend->bind(dhost_port);
-    backend->bind("inproc://backend");
-
-    char chost_port[50];
-    sprintf(chost_port, "tcp://%s:%u", coordserverIp.c_str(), coordserverPort);
-    coordsocket->connect(chost_port);
-
     // Create 'numListeners' workers and detach them.
     for (unsigned i = 0; i < numListeners; ++i) {
         forwardWorkers.push_back(new LambdaWorkerForward(nodeId, ctx, numLambdasForward, countForward,
@@ -154,28 +135,12 @@ LambdaComm::newContextForward(FeatType *dataBuf, FeatType *zData, FeatType *actD
         forwardWorker_threads[i]->detach();
     }
 
-    // Create a proxy pipe that connects frontend to backend. This thread hangs throughout the lifetime of this context.
-    std::thread tproxy([&] {
-        try {
-            zmq::proxy(static_cast<void *>(*frontend), static_cast<void *>(*backend), nullptr);
-        } catch (std::exception& ex) {
-            printLog(nodeId, "ERROR: %s\n", ex.what());
-        }
-    });
-    tproxy.detach();
-
     printLog(nodeId, "Lambda FORWARD context created.\n");
 }
 
 void
 LambdaComm::endContextForward() {
     countForward = 0;
-
-    // Delete the ZeroMQ context.
-    delete ctx;
-    delete frontend;
-    delete backend;
-    delete coordsocket;
 
     // Delete the workers.
     for (unsigned i = 0; i < numListeners; ++i) {
@@ -191,7 +156,7 @@ LambdaComm::endContextForward() {
 
 /**
  *
- * Call newContextForward() before the lambda invokation to refresh the parameters, and call endContextForward() after
+ * Call 'newContextBackward()' before the lambda invokation to refresh the parameters, and call 'endContextBackward()' after
  * lambdas finish to revoke unused memory space (if necessary).
  * 
  */
@@ -213,20 +178,20 @@ LambdaComm::endContextBackward() {
  */
 void
 LambdaComm::requestLambdasForward(unsigned layer) {
-    
+
     // Send header info to tell the coordserver to trigger how many lambdas in which forward layer.
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char *) header.data(), OP::REQ, layer, numLambdasForward);
-    coordsocket->send(header, ZMQ_SNDMORE);
+    coordsocket.send(header, ZMQ_SNDMORE);
 
     // Send my ip.
     zmq::message_t ip_msg(nodeIp.size());
     std::memcpy(ip_msg.data(), nodeIp.c_str(), nodeIp.size());
-    coordsocket->send(ip_msg);
+    coordsocket.send(ip_msg);
     
     // Wait for a confirm ACK message.
     zmq::message_t confirm;
-    coordsocket->recv(&confirm);
+    coordsocket.recv(&confirm);
 
     // Block until all parts have been handled.
     std::unique_lock<std::mutex> lk(m);
@@ -252,24 +217,16 @@ LambdaComm::requestLambdasBackward() {
  */
 void
 LambdaComm::sendShutdownMessage() {
-
-    // Create a new ZeroMQ context and setup the coord socket.
-    ctx = new zmq::context_t(1);
-    coordsocket = new zmq::socket_t(*ctx, ZMQ_REQ);
-
     char chost_port[50];
     sprintf(chost_port, "tcp://%s:%u", coordserverIp.c_str(), coordserverPort);
-    coordsocket->connect(chost_port);
+    coordsocket.connect(chost_port);
 
     // Send kill message.
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char *) header.data(), OP::TERM);
-    coordsocket->send(header, ZMQ_SNDMORE);
+    coordsocket.send(header, ZMQ_SNDMORE);
 
     // Send dummy message since coordination server expects an IP as well.
     zmq::message_t dummyIP;
-    coordsocket->send(dummyIP);
-
-    delete ctx;
-    delete coordsocket;
+    coordsocket.send(dummyIP);
 }

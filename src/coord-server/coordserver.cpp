@@ -166,7 +166,7 @@ public:
                     std::cout << accMsg << std::endl;
 
                     // Issue a bunch of lambda threads to serve the request.
-                    for (int i = 0; i < nThreadsReq; i++){
+                    for (unsigned i = 0; i < nThreadsReq; i++) {
 
                         // TODO: Maybe improve this naive round robin scheduling.
                     	char *weightserverIp = weightserverAddrs[req_count % weightserverAddrs.size()];

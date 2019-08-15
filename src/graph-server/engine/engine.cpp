@@ -234,16 +234,16 @@ Engine::output() {
     //
     // The following are full feature values outputing.
     //
-    // for (Vertex& v : graph.getVertices()) {
-    //     outStream << v.getGlobalId() << ": ";
-    //     for (size_t i = 0; i <= numLayers; ++i) {
-    //         FeatType *dataPtr = localVertexActivationDataPtr(v.getLocalId(), i);
-    //         for (size_t j = 0; j < layerConfig[i]; ++j)
-    //             outStream << dataPtr[j] << " ";
-    //         outStream << "| ";
-    //     }
-    //     outStream << std::endl;
-    // }
+    for (Vertex& v : graph.getVertices()) {
+        outStream << v.getGlobalId() << ": ";
+        for (size_t i = 0; i <= numLayers; ++i) {
+            FeatType *dataPtr = localVertexActivationDataPtr(v.getLocalId(), i);
+            for (size_t j = 0; j < layerConfig[i]; ++j)
+                outStream << dataPtr[j] << " ";
+            outStream << "| ";
+        }
+        outStream << std::endl;
+    }
 
     //
     // The following are labels outputing.
@@ -369,9 +369,6 @@ Engine::forwardWorker(unsigned tid, void *args) {
                 timeWorker = getTimer();
                 printLog(nodeId, "All lambda requests finished. Results received.\n");
 
-                // End this lambda communciation context.
-                lambdaComm->endContextForward();
-
                 // Loop through all local vertices and do the data send out work. If there are any remote edges for a vertex, should send this vid to
                 // other nodes for their ghost's update.
                 for (unsigned id = 0; id < graph.getNumLocalVertices(); ++id) {
@@ -401,6 +398,10 @@ Engine::forwardWorker(unsigned tid, void *args) {
 
                 //## Global Iteration barrier. ##//
                 NodeManager::barrier();
+
+                // End this lambda communciation context. Delay this 'endContextForward()' after NodeManager to ensure that the confirm
+                // message is sent.
+                lambdaComm->endContextForward();
 
                 vecTimeSendout.push_back(getTimer() - timeWorker);
                 timeWorker = getTimer();

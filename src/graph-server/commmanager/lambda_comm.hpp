@@ -29,14 +29,14 @@ class LambdaWorker {
 
 public:
 
-    LambdaWorker(unsigned nodeId_, zmq::context_t *ctx_, unsigned numLambdas_, unsigned& count_)
-        : nodeId(nodeId_), ctx(ctx_), worker(*ctx, ZMQ_DEALER), numLambdas(numLambdas_), count(count_) { }
+    LambdaWorker(unsigned nodeId_, zmq::context_t& ctx_, unsigned numLambdas_, unsigned& count_)
+        : nodeId(nodeId_), ctx(ctx_), worker(ctx, ZMQ_DEALER), numLambdas(numLambdas_), count(count_) { }
 
 protected:
 
     unsigned nodeId;
 
-    zmq::context_t *ctx;
+    zmq::context_t& ctx;
     zmq::socket_t worker;
 
     unsigned numLambdas;
@@ -55,7 +55,7 @@ class LambdaWorkerForward : public LambdaWorker {
 
 public:
 
-    LambdaWorkerForward(unsigned nodeId_, zmq::context_t *ctx_, unsigned numLambdasForward_, unsigned& countForward_,
+    LambdaWorkerForward(unsigned nodeId_, zmq::context_t& ctx_, unsigned numLambdasForward_, unsigned& countForward_,
                         Matrix *actMatrix_, FeatType *zData_, FeatType *actData_, unsigned numFeatsNext_)
         : LambdaWorker(nodeId_, ctx_, numLambdasForward_, countForward_),
           actMatrix(actMatrix_), zData(zData_), actData(actData_), numFeatsNext(numFeatsNext_) { }
@@ -92,7 +92,7 @@ class LambdaWorkerBackward : public LambdaWorker {
 
 public:
 
-    LambdaWorkerBackward(unsigned nodeId_, zmq::context_t *ctx_, unsigned numLambdasBackward_, unsigned& countBackward_)
+    LambdaWorkerBackward(unsigned nodeId_, zmq::context_t& ctx_, unsigned numLambdasBackward_, unsigned& countBackward_)
         : LambdaWorker(nodeId_, ctx_, numLambdasBackward_, countBackward_) { }
 
     // Continuously listens for incoming lambda connections and either sends
@@ -118,9 +118,30 @@ public:
 
     LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::string coordserverIp_, unsigned coordserverPort_, unsigned nodeId_,
                unsigned numLambdasForward_, unsigned numLambdasBackward_)
-        : nodeIp(nodeIp_), dataserverPort(dataserverPort_), coordserverIp(coordserverIp_), coordserverPort(coordserverPort_),
-          nodeId(nodeId_), numLambdasForward(numLambdasForward_), numLambdasBackward(numLambdasBackward_),
-          countForward(0), countBackward(0) { }
+        : nodeIp(nodeIp_), dataserverPort(dataserverPort_), coordserverIp(coordserverIp_), coordserverPort(coordserverPort_), nodeId(nodeId_), 
+          ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), coordsocket(ctx, ZMQ_REQ),
+          numLambdasForward(numLambdasForward_), numLambdasBackward(numLambdasBackward_),
+          countForward(0), countBackward(0), numListeners(numLambdasForward_) {
+
+        char dhost_port[50];
+        sprintf(dhost_port, "tcp://*:%u", dataserverPort);
+        frontend.bind(dhost_port);
+        backend.bind("inproc://backend");
+
+        char chost_port[50];
+        sprintf(chost_port, "tcp://%s:%u", coordserverIp.c_str(), coordserverPort);
+        coordsocket.connect(chost_port);
+
+        // Create a proxy pipe that connects frontend to backend. This thread hangs throughout the lifetime of this context.
+        std::thread tproxy([&] {
+            try {
+                zmq::proxy(static_cast<void *>(frontend), static_cast<void *>(backend), nullptr);
+            } catch (std::exception& ex) {
+                printLog(nodeId, "PROXY: %s\n", ex.what());
+            }
+        });
+        tproxy.detach();
+    }
     
     // For forward-prop.
     void newContextForward(FeatType *dataBuf, FeatType *zData, FeatType *actData, unsigned numLocalVertices,
@@ -151,10 +172,10 @@ private:
     unsigned countForward;
     unsigned countBackward;
 
-    zmq::context_t *ctx;
-    zmq::socket_t *frontend;
-    zmq::socket_t *backend;
-    zmq::socket_t *coordsocket;
+    zmq::context_t ctx;
+    zmq::socket_t frontend;
+    zmq::socket_t backend;
+    zmq::socket_t coordsocket;
 
     unsigned nodeId;
     std::string nodeIp;
