@@ -1,5 +1,9 @@
 #include "weightserver.hpp"
 
+std::mutex m, term_mutex;
+std::condition_variable cv;
+bool finished = false;
+
 WeightServer::WeightServer(unsigned _port, std::string& configFileName)
     : ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), port(_port) {
 

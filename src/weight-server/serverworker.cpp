@@ -1,6 +1,12 @@
 #include "serverworker.hpp"
 
 
+std::mutex update_mutex;
+extern std::mutex m, term_mutex;
+extern std::condition_variable cv;
+extern bool finished;
+
+
 ServerWorker::ServerWorker(zmq::context_t& ctx_, int sock_type, uint32_t& counter,
          std::vector<Matrix>& _weights, std::vector<Matrix>& _updates,
          std::vector<uint32_t>& _numLambdas, WeightServer& _ws)
