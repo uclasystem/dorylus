@@ -29,8 +29,8 @@ using namespace std::chrono;
  * Request the input matrix data from dataserver.
  * 
  */
-Matrix
-requestMatrix(zmq::socket_t& socket, unsigned id) {
+static Matrix
+requestFeatsMatrix(zmq::socket_t& socket, unsigned id) {
     
     // Send pull request.
     zmq::message_t header(HEADER_SIZE);
@@ -63,10 +63,47 @@ requestMatrix(zmq::socket_t& socket, unsigned id) {
 
 /**
  *
+ * Request the input matrix data from weightserver.
+ * 
+ */
+static Matrix
+requestWeightsMatrix(zmq::socket_t& socket, unsigned layer) {
+    
+    // Send pull request.
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader((char *) header.data(), OP::PULL, layer);
+    socket.send(header);
+
+    // Listen on respond.
+    zmq::message_t respHeader;
+    socket.recv(&respHeader);
+
+    // Parse the respond.
+    unsigned layerResp = parse<unsigned>((char *) respHeader.data(), 1);
+    if (layerResp == -1) {      // Failed.
+        std::cerr << "[ ERROR ] No corresponding matrix chunk!" << std::endl;
+        return Matrix();
+    } else {                    // Get matrices data.
+        unsigned rows = parse<unsigned>((char *) respHeader.data(), 2);
+        unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
+        zmq::message_t matxData(rows * cols * sizeof(FeatType));
+        socket.recv(&matxData);
+
+        char *matxBuffer = new char[matxData.size()];
+        std::memcpy(matxBuffer, matxData.data(), matxData.size());
+
+        Matrix m(rows, cols, matxBuffer);
+        return m;
+    }
+}
+
+
+/**
+ *
  * Send multiplied matrix result back to dataserver.
  * 
  */
-void
+static void
 sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned id) {
     
     // Send push header.
@@ -93,7 +130,7 @@ sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned
  * Matrix multiplication function.
  * 
  */
-Matrix
+static Matrix
 dot(Matrix& features, Matrix& weights) {
     unsigned m = features.getRows(), k = features.getCols(), n = weights.getCols();
     Matrix result(m, n);
@@ -113,7 +150,7 @@ dot(Matrix& features, Matrix& weights) {
  * Apply activation function on a matrix.
  * 
  */
-Matrix
+static Matrix
 activate(Matrix& mat) {
     FeatType *activationData = new FeatType[mat.getRows() * mat.getCols()];
     FeatType *zData = mat.getData();
@@ -136,8 +173,9 @@ activate(Matrix& mat) {
  *      5. Send both matrices back to data server.
  * 
  */
-invocation_response
-matmul(std::string dataserver, std::string weightserver, std::string dport, std::string wport, unsigned id, unsigned layer) {
+static invocation_response
+forward_prop_layer(std::string dataserver, std::string weightserver, std::string dport, std::string wport,
+                   unsigned id, unsigned layer) {
     zmq::context_t ctx(1);
 
     //
@@ -160,32 +198,33 @@ matmul(std::string dataserver, std::string weightserver, std::string dport, std:
 
     try {
 
-        // Request weights matrix.
+        // Request weights matrix of the current layer.
         Matrix weights;
-        std::thread t([&] {
-            std::cout << "< matmul > Asking weightserver..." << std::endl;
+        std::thread t([&] {     // Weight requests run in a separate thread.
+            std::cout << "< FORWARD > Asking weightserver..." << std::endl;
             getWeightsTimer.start();
             zmq::socket_t weights_socket(ctx, ZMQ_DEALER);
             weights_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
             char whost_port[50];
             sprintf(whost_port, "tcp://%s:%s", weightserver.c_str(), wport.c_str());
             weights_socket.connect(whost_port);
-            weights = requestMatrix(weights_socket, layer);
-            std::cout << "< matmul > Got data from weightserver." << std::endl;
+            weights = requestWeightsMatrix(weights_socket, layer);
             getWeightsTimer.stop();
+            std::cout << "< FORWARD > Got data from weightserver." << std::endl;
         });
 
-        // Request feature matrix.
+        // Request feature activation matrix of the current layer.
+        Matrix feats;
+        std::cout << "< FORWARD > Asking dataserver..." << std::endl;
         getFeatsTimer.start();
-        std::cout << "< matmul > Asking dataserver..." << std::endl;
         zmq::socket_t data_socket(ctx, ZMQ_DEALER);
         data_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
         char dhost_port[50];
         sprintf(dhost_port, "tcp://%s:%s", dataserver.c_str(), dport.c_str());
         data_socket.connect(dhost_port);
-        Matrix feats = requestMatrix(data_socket, id);
-        std::cout << "< matmul > Got data from dataserver." << std::endl;
+        feats = requestFeatsMatrix(data_socket, id);
         getFeatsTimer.stop();
+        std::cout << "< FORWARD > Got data from dataserver." << std::endl;
 
         t.join();
 
@@ -196,21 +235,21 @@ matmul(std::string dataserver, std::string weightserver, std::string dport, std:
 
         // Multiplication.
         computationTimer.start();
-        std::cout << "< matmul > Doing the dot multiplication..." << std::endl;
+        std::cout << "< FORWARD > Doing the dot multiplication..." << std::endl;
         Matrix z = dot(feats, weights);
         computationTimer.stop();
 
         // Activation.
         activationTimer.start();
-        std::cout << "< matmul > Doing the activation..." << std::endl;
+        std::cout << "< FORWARD > Doing the activation..." << std::endl;
         Matrix activations = activate(z);
         activationTimer.stop();
 
         // Send back to dataserver.
         sendResTimer.start();
-        std::cout << "< matmul > Sending results back..." << std::endl;
+        std::cout << "< FORWARD > Sending results back..." << std::endl;
         sendMatrices(z, activations, data_socket, id);
-        std::cout << "< matmul > Results sent." << std::endl;
+        std::cout << "< FORWARD > Results sent." << std::endl;
         sendResTimer.stop();
 
     } catch(std::exception &ex) {
@@ -243,12 +282,11 @@ my_handler(invocation_request const& request) {
     unsigned layer = pt.get<int>("layer");
     unsigned chunkId = pt.get<int>("id");
 
-    std::cout << "Thread " << chunkId << " is requested from " << dataserver << ":" << dport
-              << ", layer " << layer << "." << std::endl;
+    std::cout << "[ACCEPTED] Thread " << chunkId << " is requested from " << dataserver << ":" << dport
+              << ", FORWARD layer " << layer << "." << std::endl;
 
-    return matmul(dataserver, weightserver, dport, wport, chunkId, layer);
+    return forward_prop_layer(dataserver, weightserver, dport, wport, chunkId, layer);
 }
-
 
 int
 main(int argc, char *argv[]) {

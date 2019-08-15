@@ -12,12 +12,16 @@
 #include <mutex>
 #include <random>
 #include <sstream>
+#include <climits>
 #include <string>
 #include <thread>
 #include <vector>
 #include <zmq.hpp>
 #include "../utils/utils.hpp"
 #include "../../utils/utils.hpp"
+
+
+#define ERR_HEADER_FIELD UINT_MAX
 
 
 /**
@@ -91,7 +95,8 @@ class LambdaWorkerBackward : public LambdaWorker {
 
 public:
 
-    LambdaWorkerBackward(unsigned nodeId_, zmq::context_t& ctx_, unsigned numLambdasBackward_, unsigned& countBackward_)
+    LambdaWorkerBackward(unsigned nodeId_, zmq::context_t& ctx_, unsigned numLambdasBackward_, unsigned& countBackward_,
+                         std::vector<Matrix *> zMatrices_, std::vector<Matrix *> actMatrices_, Matrix *targetMatrix_)
         : LambdaWorker(nodeId_, ctx_, numLambdasBackward_, countBackward_),
           zMatrices(zMatrices_), actMatrices(actMatrices_), targetMatrix(targetMatrix_) { }
 
@@ -153,7 +158,8 @@ public:
     void endContextForward();
 
     // For backward-prop.
-    void newContextBackward();
+    void newContextBackward(std::vector<FeatType *> zBufs, std::vector<FeatType *> actBufs, FeatType *targetBuf,
+                            unsigned numLocalVertices, std::vector<unsigned> layerConfig);
     void requestLambdasBackward();
     void endContextBackward();
 

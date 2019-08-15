@@ -22,7 +22,7 @@
 #include <boost/algorithm/string/trim.hpp>
 
 
-static const char *ALLOCATION_TAG = "matmulLambda";
+static const char *ALLOCATION_TAG = "GNN-Lambda";
 static std::shared_ptr<Aws::Lambda::LambdaClient> m_client;
 
 
@@ -86,7 +86,7 @@ invokeFunction(Aws::String funcName, char *dataserver, char *dport, char *weight
     jsonPayload.WithString("weightserver", weightserver);
     jsonPayload.WithString("wport", wport);
     jsonPayload.WithString("dport", dport);
-    jsonPayload.WithInteger("layer", layer);
+    jsonPayload.WithInteger("layer", layer);    // For backward-prop, layer doesn't matter.
     jsonPayload.WithInteger("id", id);
     *payload << jsonPayload.View().WriteReadable();
     invReq.SetBody(payload);
@@ -110,7 +110,11 @@ public:
         std::cout << "Detected " << weightserverAddrs.size() << " weight servers to use." << std::endl;
     }
 
-    // Runs the coordserver, keeps listening on dataserver's requests for lambda threads invocation.
+    /**
+     *
+     * Runs the coordserver, keeps listening on dataserver's requests for lambda threads invocation.
+     * 
+     */
     void run() {
         zmq::context_t ctx(1);
         zmq::socket_t frontend(ctx, ZMQ_REP);
@@ -159,10 +163,10 @@ public:
                     for (std::size_t i = 0; i < weightserverAddrs.size(); ++i)
                     	sendShutdownMessage(weightserverAddrs[i], weightserverPort);
 
-                // Else is a pull request for weight matrix. Handle that.
-                } else {
-                    std::string accMsg = "[ACCEPTED] Req for " + std::to_string(nThreadsReq)
-                                       + " lambdas for layer " + std::to_string(layer);
+                // Else is a request for lambda threads. Handle that. This is forward.
+                } else if (op == OP::REQ_FORWARD) {
+                    std::string accMsg = "[ACCEPTED] Req for FORWARD " + std::to_string(nThreadsReq)
+                                       + " lambdas for layer " + std::to_string(layer) + ".";
                     std::cout << accMsg << std::endl;
 
                     // Issue a bunch of lambda threads to serve the request.
@@ -173,16 +177,39 @@ public:
                         invokeFunction("forward-prop-josehu", dataserverIpCopy, dataserverPort, weightserverIp, weightserverPort, layer, i);
                    		req_count++;
 					}
+
+                // This is backward.
+                } else if (op == OP::REQ_BACKWARD) {
+                    std::string accMsg = "[ACCEPTED] Req for BACKWARD " + std::to_string(nThreadsReq)
+                                       + " lambdas for layer " + std::to_string(layer) + ".";
+                    std::cout << accMsg << std::endl;
+
+                    // Issue a bunch of lambda threads to serve the request.
+                    for (unsigned i = 0; i < nThreadsReq; i++) {
+
+                        // TODO: Maybe improve this naive round robin scheduling.
+                        char *weightserverIp = weightserverAddrs[req_count % weightserverAddrs.size()];
+                        invokeFunction("backward-prop-josehu", dataserverIpCopy, dataserverPort, weightserverIp, weightserverPort, 0, i);
+                        req_count++;
+                    }
+
+                // Unknown op code.
+                } else {
+                    std::cerr << "[ ERROR ] Unknown OP code (" << op << ") received." << std::endl;
                 }
             }
         } catch (std::exception& ex) {
-            std::cerr << "[ERROR] " << ex.what() << std::endl;
+            std::cerr << "[ ERROR ] " << ex.what() << std::endl;
         }
     }
 
 private:
 
-	// Load the weightservers configuration file.
+	/**
+     *
+     * Load the weightservers configuration file.
+     * 
+     */
 	void loadWeightServers(std::vector<char *>& addresses, const std::string& wServersFile){
 		std::ifstream infile(wServersFile);
 		if (!infile.good())
@@ -204,8 +231,11 @@ private:
 	}
 
 
-    // Sends a shutdown message to all the weightservers.
-
+    /**
+     *
+     * Sends a shutdown message to all the weightservers.
+     * 
+     */
     void sendShutdownMessage(char *weightserverPort, char *weightserverIp) {
         char identity[] = "coord";
         char wHostPort[50];
@@ -229,7 +259,7 @@ private:
 };
 
 
-/** Main entrance: Starts a coordserver instance and run. */
+/** Main entrance: Starts a coordserver instance and run a single listener, until termination msg received. */
 int
 main(int argc, char *argv[]) {
     assert(argc == 5);
