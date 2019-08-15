@@ -7,7 +7,7 @@ typedef float FeatType;
 
 
 static const int32_t HEADER_SIZE = sizeof(int32_t) * 5;
-enum OP { PUSH, PULL, REQ, RESP, TERM };
+enum OP { PUSH, PULL, INFO, REQ, RESP, TERM };
 
 
 /**
