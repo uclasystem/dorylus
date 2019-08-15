@@ -108,6 +108,80 @@ LambdaWorkerForward::recvMatrixChunks(zmq::socket_t& socket, zmq::message_t& cli
 }
 
 
+/**
+ *
+ * Lambdaworker is a wrapper over the sender & receiver thread.
+ * 
+ */
+void
+LambdaWorkerForward::work() {
+    worker.connect("inproc://backend");
+
+    try {
+        while (true) {
+            zmq::message_t identity;
+            zmq::message_t header;
+
+            worker.recv(&identity);
+            worker.recv(&header);
+
+            unsigned op = parse<unsigned>((char *) header.data(), 0);
+            unsigned partId = parse<unsigned>((char *) header.data(), 1);
+
+            switch (op) {
+                case (OP::PULL):
+                    sendMatrixChunk(worker, identity, partId);
+                    break;
+                case (OP::PUSH):
+                    recvMatrixChunks(worker, identity, partId);
+                    break;
+                default:
+                    printLog(nodeId, "WORKER ERROR: Unknown Op code received.\n");
+            }
+        }
+    } catch (std::exception& ex) {
+        printLog(nodeId, "ERROR: %s\n", ex.what());
+    }
+}
+
+
+/**
+ *
+ * Sending & receiving matrix chunk to / from lambda threads.
+ * 
+ */
+void
+LambdaWorkerForward::sendMatrixChunk(zmq::socket_t& socket, zmq::message_t& client_id, unsigned partId) {
+    zmq::message_t header(HEADER_SIZE);
+
+    // Reject a send request if the partition id is invalid.
+    if (partId >= numLambdas) {
+        populateHeader((char *) header.data(), -1, -1, -1, -1);
+        socket.send(client_id, ZMQ_SNDMORE);
+        socket.send(header);
+
+    // Partition id is valid, so send the matrix segment.
+    } else {
+
+        // Check to make sure that the bounds of this partition do not exceed the bounds of the data array.
+        // If they do, set partition end to the end of the array.
+        unsigned partRows = std::ceil((float) actMatrix->getRows() / (float) numLambdas);
+        if ((partId * partRows + partRows) > actMatrix->getRows())
+            partRows = partRows - (partId * partRows + partRows) + actMatrix->getRows();
+        unsigned bufSize = partRows * actMatrix->getCols() * sizeof(FeatType);
+
+        populateHeader((char *) header.data(), OP::RESP, 0, partRows, actMatrix->getCols());
+        FeatType *partitionStart = actMatrix->getData() + (partId * partRows * actMatrix->getCols());
+        zmq::message_t partitionData(bufSize);
+        std::memcpy(partitionData.data(), partitionStart, bufSize);
+
+        socket.send(client_id, ZMQ_SNDMORE);
+        socket.send(header, ZMQ_SNDMORE);
+        socket.send(partitionData);
+    }
+}
+
+
 ///////////////////////////////////
 // Below are LambdaComm methods. //
 ///////////////////////////////////

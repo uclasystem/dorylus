@@ -58,16 +58,15 @@ public:
     LambdaWorkerForward(unsigned nodeId_, zmq::context_t& ctx_, unsigned numLambdasForward_, unsigned& countForward_,
                         Matrix *actMatrix_, FeatType *zData_, FeatType *actData_, unsigned numFeatsNext_)
         : LambdaWorker(nodeId_, ctx_, numLambdasForward_, countForward_),
-          actMatrix(actMatrix_), zData(zData_), actData(actData_), numFeatsNext(numFeatsNext_) { }
+          zData(zData_), actMatrix(actMatrix_), actData(actData_), numFeatsNext(numFeatsNext_) { }
 
-    // Continuously listens for incoming lambda connections and either sends
-    // a partitioned matrix or receives computed results.
+    // Continuously listens for incoming lambda connections.
     void work();
 
 private:
 
     // Partitions the data matrix according to the partition id and
-    // send it to the lambda thread for computation.
+    // send that partition to the lambda thread for computation.
     void sendMatrixChunk(zmq::socket_t& socket, zmq::message_t& client_id, unsigned partId);
 
     // Accepts an incoming connection from a lambda thread and receives
@@ -93,17 +92,21 @@ class LambdaWorkerBackward : public LambdaWorker {
 public:
 
     LambdaWorkerBackward(unsigned nodeId_, zmq::context_t& ctx_, unsigned numLambdasBackward_, unsigned& countBackward_)
-        : LambdaWorker(nodeId_, ctx_, numLambdasBackward_, countBackward_) { }
+        : LambdaWorker(nodeId_, ctx_, numLambdasBackward_, countBackward_),
+          zMatrices(zMatrices_), actMatrices(actMatrices_), targetMatrix(targetMatrix_) { }
 
-    // Continuously listens for incoming lambda connections and either sends
-    // a partitioned matrix or receives computed results.
+    // Continuously listens for incoming lambda connections.
     void work();
 
 private:
 
-    // Partitions the data matrix according to the partition id and
-    // send it to the lambda thread for computation.
+    // Partitions the needed matrices according to the partition id and
+    // send that partition to the lambda thread for computation.
     void sendMatrixChunks(zmq::socket_t& socket, zmq::message_t& client_id, unsigned partId);
+
+    std::vector<Matrix *> zMatrices;
+    std::vector<Matrix *> actMatrices;
+    Matrix *targetMatrix;
 };
 
 
