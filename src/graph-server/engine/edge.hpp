@@ -20,7 +20,7 @@ class Edge {
 
 public:
 
-    Edge(IdType oId, EdgeLocationType eLocation, EdgeType eData = EdgeType())
+    Edge(unsigned oId, EdgeLocationType eLocation, EdgeType eData = EdgeType())
         : otherId(oId), edgeData(eData), edgeLocation(eLocation) { }
 
     EdgeType getData() { return edgeData; }
@@ -31,7 +31,7 @@ public:
 
 protected:
 
-    IdType otherId;     // Id stores local_edge ? local_vid : global_vid.
+    unsigned otherId;     // Id stores local_edge ? local_vid : global_vid.
     EdgeType edgeData;
     EdgeLocationType edgeLocation;
 };
@@ -46,10 +46,10 @@ class InEdge: public Edge {
 
 public:
 
-    InEdge(IdType sId, EdgeLocationType eLocation, EdgeType eData = EdgeType()) : Edge(sId, eLocation, eData) { }
+    InEdge(unsigned sId, EdgeLocationType eLocation, EdgeType eData = EdgeType()) : Edge(sId, eLocation, eData) { }
 
-    IdType getSourceId() { return otherId; }
-    void setSourceId(IdType sId) { otherId = sId; }
+    unsigned getSourceId() { return otherId; }
+    void setSourceId(unsigned sId) { otherId = sId; }
 };
 
 
@@ -62,10 +62,10 @@ class OutEdge: public Edge {
 
 public:
 
-    OutEdge(IdType dId, EdgeLocationType eLocation, EdgeType eData = EdgeType()) : Edge(dId, eLocation, eData) { }
+    OutEdge(unsigned dId, EdgeLocationType eLocation, EdgeType eData = EdgeType()) : Edge(dId, eLocation, eData) { }
     
-    IdType getDestId() { return otherId; }
-    void setDestId(IdType dId) { otherId = dId; }
+    unsigned getDestId() { return otherId; }
+    void setDestId(unsigned dId) { otherId = dId; }
 };
 
 

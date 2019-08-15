@@ -30,7 +30,7 @@ using namespace std::chrono;
  * 
  */
 Matrix
-requestMatrix(zmq::socket_t& socket, int32_t id) {
+requestMatrix(zmq::socket_t& socket, unsigned id) {
     
     // Send pull request.
     zmq::message_t header(HEADER_SIZE);
@@ -42,13 +42,13 @@ requestMatrix(zmq::socket_t& socket, int32_t id) {
     socket.recv(&respHeader);
 
     // Parse the respond.
-    int32_t layerResp = parse<int32_t>((char *) respHeader.data(), 1);
+    unsigned layerResp = parse<unsigned>((char *) respHeader.data(), 1);
     if (layerResp == -1) {      // Failed.
         std::cerr << "[ ERROR ] No corresponding matrix chunk!" << std::endl;
         return Matrix();
     } else {                    // Get matrix data.
-        int32_t rows = parse<int32_t>((char *) respHeader.data(), 2);
-        int32_t cols = parse<int32_t>((char *) respHeader.data(), 3);
+        unsigned rows = parse<unsigned>((char *) respHeader.data(), 2);
+        unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
         zmq::message_t matxData(rows * cols * sizeof(FeatType));
         socket.recv(&matxData);
 
@@ -67,11 +67,11 @@ requestMatrix(zmq::socket_t& socket, int32_t id) {
  * 
  */
 void
-sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, int32_t id) {
+sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned id) {
     
     // Send push header.
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::PUSH, id, zResult.rows, zResult.cols);
+    populateHeader((char *) header.data(), OP::PUSH, id, zResult.getRows(), zResult.getCols());
     socket.send(header, ZMQ_SNDMORE);
 
     // Send zData and actData.
@@ -95,7 +95,7 @@ sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, int32_t 
  */
 Matrix
 dot(Matrix& features, Matrix& weights) {
-    int m = features.rows, k = features.cols, n = weights.cols;
+    unsigned m = features.getRows(), k = features.getCols(), n = weights.getCols();
     Matrix result(m, n);
 
     auto resultData = new FeatType[m * n];
@@ -115,13 +115,13 @@ dot(Matrix& features, Matrix& weights) {
  */
 Matrix
 activate(Matrix& mat) {
-    FeatType *activationData = new FeatType[mat.rows * mat.cols];
+    FeatType *activationData = new FeatType[mat.getRows() * mat.getCols()];
     FeatType *zData = mat.getData();
     
-    for (int i = 0; i < mat.rows * mat.cols; ++i)
+    for (unsigned i = 0; i < mat.getRows() * mat.getCols(); ++i)
         activationData[i] = std::tanh(zData[i]);
 
-    return Matrix(mat.rows, mat.cols, activationData);
+    return Matrix(mat.getRows(), mat.getCols(), activationData);
 }
 
 
@@ -137,7 +137,7 @@ activate(Matrix& mat) {
  * 
  */
 invocation_response
-matmul(std::string dataserver, std::string weightserver, std::string dport, std::string wport, int32_t id, int32_t layer) {
+matmul(std::string dataserver, std::string weightserver, std::string dport, std::string wport, unsigned id, unsigned layer) {
     zmq::context_t ctx(1);
 
     //
@@ -145,12 +145,12 @@ matmul(std::string dataserver, std::string weightserver, std::string dport, std:
     //
     //      [ 4 Bytes partId ] | [ n Bytes the string of dataserverIp ]
     //
-    // One should extract the partition id by reading the first 4 Bytes, which is simply parse<int32_t>(...).
+    // One should extract the partition id by reading the first 4 Bytes, which is simply parse<unsigned>(...).
     //
-    size_t identity_len = sizeof(int32_t) + dataserver.length();
+    size_t identity_len = sizeof(unsigned) + dataserver.length();
     char identity[identity_len];
-    memcpy(identity, (char *) &id, sizeof(int32_t));
-    memcpy(identity + sizeof(int32_t), (char *) dataserver.c_str(), dataserver.length());
+    memcpy(identity, (char *) &id, sizeof(unsigned));
+    memcpy(identity + sizeof(unsigned), (char *) dataserver.c_str(), dataserver.length());
 
     Timer getWeightsTimer;
     Timer getFeatsTimer;
@@ -240,8 +240,8 @@ my_handler(invocation_request const& request) {
     std::string weightserver = pt.get<std::string>("weightserver");
     std::string dport = pt.get<std::string>("dport");
     std::string wport = pt.get<std::string>("wport");
-    int32_t layer = pt.get<int32_t>("layer");
-    int32_t chunkId = pt.get<int32_t>("id");
+    unsigned layer = pt.get<int>("layer");
+    unsigned chunkId = pt.get<int>("id");
 
     std::cout << "Thread " << chunkId << " is requested from " << dataserver << ":" << dport
               << ", layer " << layer << "." << std::endl;

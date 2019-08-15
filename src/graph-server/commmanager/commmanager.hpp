@@ -38,8 +38,8 @@ public:
     static void init();
     static void destroy();
 
-    static void dataPushOut(IdType topic, void* value, unsigned valSize);
-    static bool dataPullIn(IdType *topic, void *value, unsigned maxValSize);
+    static void dataPushOut(unsigned topic, void* value, unsigned valSize);
+    static bool dataPullIn(unsigned *topic, void *value, unsigned maxValSize);
     static void controlPushOut(unsigned to, void* value, unsigned valSize); 
     static bool controlPullIn(unsigned from, void *value, unsigned maxValSize);
 

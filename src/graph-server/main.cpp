@@ -16,8 +16,11 @@ main(int argc, char *argv[]) {
     // Initialize the engine.
     Engine::init(argc, argv);
 
-    // Start one run of the engine.
-    Engine::run();
+    // Do a forward-prop phase.
+    Engine::runForward();
+
+    // Do a backward-prop phase.
+    Engine::runBackward();
 
     // Procude the output files.
     Engine::output();

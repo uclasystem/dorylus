@@ -48,13 +48,13 @@ public:
                     
                 timerMutex.lock();
                 timers.push_back(Timer());
-                uint32_t timerId = timers.size() - 1;
+                unsigned timerId = timers.size() - 1;
                 timerMutex.unlock();
                 timers[timerId].start();
                 
-                int32_t chunkId = parse<int32_t>((char *) identity.data(), 0);
-                int32_t op = parse<int32_t>((char *) header.data(), 0);
-                int32_t layer = parse<int32_t>((char *) header.data(), 1);
+                unsigned chunkId = parse<unsigned>((char *) identity.data(), 0);
+                unsigned op = parse<unsigned>((char *) header.data(), 0);
+                unsigned layer = parse<unsigned>((char *) header.data(), 1);
 
                 if (op != OP::TERM) {
                     std::string opStr = op == 0 ? "Push" : "Pull";
@@ -86,10 +86,10 @@ public:
 
 private:
 
-    void sendWeights(zmq::socket_t& socket, zmq::message_t& client_id, int32_t layer) {
+    void sendWeights(zmq::socket_t& socket, zmq::message_t& client_id, unsigned layer) {
         Matrix& weights = weight_list[layer];
         zmq::message_t header(HEADER_SIZE);
-        populateHeader((char *) header.data(), OP::RESP, 0, weights.rows, weights.cols);
+        populateHeader((char *) header.data(), OP::RESP, 0, weights.getRows(), weights.getCols());
         
         zmq::message_t weightData(weights.getDataSize());
         std::memcpy((char *) weightData.data(), weights.getData(), weights.getDataSize());
@@ -100,7 +100,7 @@ private:
         socket.send(weightData);
     }
 
-    void recvUpdates(zmq::message_t& client_id, int32_t layer, zmq::message_t& header) {
+    void recvUpdates(zmq::message_t& client_id, unsigned layer, zmq::message_t& header) {
         // TODO: Receive updates from threads.
     }
 
@@ -110,7 +110,7 @@ private:
         // Printing all the timers for each request minus the last one since that is the
         // kill message
         std::cout << "Send times: ";
-        for (uint32_t ui = 0; ui < timers.size()-1; ++ui) {
+        for (unsigned ui = 0; ui < timers.size()-1; ++ui) {
             std::cout << timers[ui].getTime() << " ";
         }
         std::cout << std::endl;
@@ -147,16 +147,16 @@ public:
         std::default_random_engine dre(seed);
         std::uniform_real_distribution<FeatType> dist(-1.5, 1.5);
 
-        for (uint32_t u = 0; u < dims.size() - 1; ++u) {
-            uint32_t dataSize = dims[u] * dims[u + 1];
+        for (unsigned u = 0; u < dims.size() - 1; ++u) {
+            unsigned dataSize = dims[u] * dims[u + 1];
             FeatType *dptr = new FeatType[dataSize];
-            for (uint32_t ui = 0; ui < dataSize; ++ui)
+            for (unsigned ui = 0; ui < dataSize; ++ui)
                 dptr[ui] = dist(dre);
 
             layers.push_back(Matrix(dims[u], dims[u + 1], dptr));
         }
 
-        for (uint32_t u = 0; u < layers.size(); ++u)
+        for (unsigned u = 0; u < layers.size(); ++u)
             fprintf(stdout, "Layer %u Weights: %s\n", u, layers[u].shape().c_str());
     }
 
@@ -219,7 +219,7 @@ private:
         assert(dims.size() > 1);
     }
 
-    std::vector<uint32_t> dims;
+    std::vector<unsigned> dims;
     std::vector<Matrix> layers;
 
     zmq::context_t ctx;
@@ -233,7 +233,7 @@ private:
 int
 main(int argc, char *argv[]) {
     assert(argc == 3);
-    int32_t weightserverPort = std::atoi(argv[1]);
+    unsigned weightserverPort = std::atoi(argv[1]);
     std::string configFileName = argv[2];
 
     WeightServer ws(weightserverPort, configFileName);

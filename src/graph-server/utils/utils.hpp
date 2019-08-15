@@ -13,8 +13,6 @@
 
 
 /** Default vertex ID type and features type. */
-typedef unsigned IdType;
-typedef unsigned LabelType;
 typedef float FeatType;
 typedef float EdgeType;
 #define MAX_IDTYPE UINT_MAX     // Limit: MAX_IDTYPE must be at least two times the number of global vertices.

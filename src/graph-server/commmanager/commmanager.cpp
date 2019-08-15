@@ -226,12 +226,12 @@ CommManager::destroy() {
  * 
  */
 void
-CommManager::dataPushOut(IdType topic, void *value, unsigned valSize) {
-    zmq::message_t outMsg(sizeof(IdType) + valSize);
-    *((IdType *) outMsg.data()) = topic;
+CommManager::dataPushOut(unsigned topic, void *value, unsigned valSize) {
+    zmq::message_t outMsg(sizeof(unsigned) + valSize);
+    *((unsigned *) outMsg.data()) = topic;
     
     if (valSize > 0)
-        memcpy((void *)(((char *) outMsg.data()) + sizeof(IdType)), value, valSize);
+        memcpy((void *)(((char *) outMsg.data()) + sizeof(unsigned)), value, valSize);
 
     lockDataPublisher.lock();
     dataPublisher->ksend(outMsg, ZMQ_DONTWAIT); 
@@ -245,7 +245,7 @@ CommManager::dataPushOut(IdType topic, void *value, unsigned valSize) {
  * 
  */
 bool
-CommManager::dataPullIn(IdType *topic, void *value, unsigned maxValSize) {
+CommManager::dataPullIn(unsigned *topic, void *value, unsigned maxValSize) {
     zmq::message_t inMsg;
 
     lockDataSubscriber.lock();
@@ -255,9 +255,9 @@ CommManager::dataPullIn(IdType *topic, void *value, unsigned maxValSize) {
     if (!ret)
         return false;
 
-    assert(inMsg.size() - sizeof(IdType) <= maxValSize);
-    memcpy(topic, inMsg.data(), sizeof(IdType));
-    memcpy(value, ((char *) inMsg.data() + sizeof(IdType)), inMsg.size() - sizeof(IdType));
+    assert(inMsg.size() - sizeof(unsigned) <= maxValSize);
+    memcpy(topic, inMsg.data(), sizeof(unsigned));
+    memcpy(value, ((char *) inMsg.data() + sizeof(unsigned)), inMsg.size() - sizeof(unsigned));
 
     return true;
 }
@@ -327,8 +327,8 @@ CommManager::flushData() {
     lockDataPublisher.lock();
     lockDataSubscriber.lock();
 
-    zmq::message_t outMsg(sizeof(IdType));
-    *((IdType*) outMsg.data()) = NULL_CHAR;
+    zmq::message_t outMsg(sizeof(unsigned));
+    *((unsigned*) outMsg.data()) = NULL_CHAR;
    
     dataPublisher->ksend(outMsg);
 
@@ -337,7 +337,7 @@ CommManager::flushData() {
     while (rem > 0) {
         zmq::message_t inMsg;
         dataSubscriber->recv(&inMsg);
-        IdType idx = *((IdType *) inMsg.data());
+        unsigned idx = *((unsigned *) inMsg.data());
         if (idx == NULL_CHAR)
             --rem;
     }
