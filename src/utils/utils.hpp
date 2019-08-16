@@ -10,6 +10,9 @@ static const size_t HEADER_SIZE = sizeof(unsigned) * 5;
 enum OP { PUSH, PULL, REQ_FORWARD, REQ_BACKWARD, RESP, TERM };
 
 
+#define ERR_HEADER_FIELD UINT_MAX
+
+
 /**
  *
  * Serialization utilities.

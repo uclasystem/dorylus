@@ -21,9 +21,6 @@
 #include "../../utils/utils.hpp"
 
 
-#define ERR_HEADER_FIELD UINT_MAX
-
-
 /**
  *
  * Base class for a lambda communication worker.
@@ -59,13 +56,14 @@ class LambdaWorkerForward : public LambdaWorker {
 
 public:
 
-    LambdaWorkerForward(unsigned nodeId_, zmq::context_t& ctx_, unsigned numLambdasForward_, unsigned& countForward_,
-                        Matrix *actMatrix_, FeatType *zData_, FeatType *actData_, unsigned numFeatsNext_)
-        : LambdaWorker(nodeId_, ctx_, numLambdasForward_, countForward_),
-          zData(zData_), actMatrix(actMatrix_), actData(actData_), numFeatsNext(numFeatsNext_) { }
+    LambdaWorkerForward(unsigned nodeId_, zmq::context_t& ctx_, unsigned numLambdasForward_, unsigned& countForward_)
+        : LambdaWorker(nodeId_, ctx_, numLambdasForward_, countForward_) { }
 
     // Continuously listens for incoming lambda connections.
     void work();
+
+    // Refresh the member values.
+    void refreshState(Matrix *actMatrix_, FeatType *zData_, FeatType *actData_, unsigned numFeatsNext_);
 
 private:
 
@@ -140,20 +138,34 @@ public:
         sprintf(chost_port, "tcp://%s:%u", coordserverIp.c_str(), coordserverPort);
         coordsocket.connect(chost_port);
 
+        // Create 'numListeners' workers and detach them.
+        for (unsigned i = 0; i < numListeners; ++i) {
+            forwardWorkers.push_back(new LambdaWorkerForward(nodeId, ctx, numLambdasForward, countForward));
+            forwardWorker_threads.push_back(new std::thread(std::bind(&LambdaWorkerForward::work, forwardWorkers[i])));
+            forwardWorker_threads[i]->detach();
+        }
+
         // Create a proxy pipe that connects frontend to backend. This thread hangs throughout the lifetime of this context.
         std::thread tproxy([&] {
             try {
                 zmq::proxy(static_cast<void *>(frontend), static_cast<void *>(backend), nullptr);
-            } catch (std::exception& ex) {
-                printLog(nodeId, "PROXY: %s\n", ex.what());
+            } catch (std::exception& ex) { /** Context termintated. */ }
+
+            // Delete the workers after the context terminates.
+            for (unsigned i = 0; i < numListeners; ++i) {
+                delete forwardWorker_threads[i];
+                delete forwardWorkers[i];
             }
         });
         tproxy.detach();
     }
+
+    ~LambdaComm() {
+    }
     
     // For forward-prop.
-    void newContextForward(FeatType *dataBuf, FeatType *zData, FeatType *actData, unsigned numLocalVertices,
-                           unsigned numFeats, unsigned numFeatsNext);
+    void newContextForward(FeatType *dataBuf, FeatType *zData, FeatType *actData,
+                           unsigned numLocalVertices, unsigned numFeats, unsigned numFeatsNext);
     void requestLambdasForward(unsigned layer);
     void endContextForward();
 

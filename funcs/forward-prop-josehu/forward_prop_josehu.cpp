@@ -86,7 +86,7 @@ requestWeightsMatrix(zmq::socket_t& socket, unsigned layer) {
     } else {                    // Get matrices data.
         unsigned rows = parse<unsigned>((char *) respHeader.data(), 2);
         unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
-        zmq::message_t matxData(rows * cols * sizeof(FeatType));
+        zmq::message_t matxData(rows * cols * sizeof(float));
         socket.recv(&matxData);
 
         char *matxBuffer = new char[matxData.size()];
@@ -233,6 +233,7 @@ forward_prop_layer(std::string dataserver, std::string weightserver, std::string
         if (feats.empty())
             return invocation_response::failure("No chunk corresponding to request", "appliation/json");
 
+
         // Multiplication.
         computationTimer.start();
         std::cout << "< FORWARD > Doing the dot multiplication..." << std::endl;
@@ -251,6 +252,11 @@ forward_prop_layer(std::string dataserver, std::string weightserver, std::string
         sendMatrices(z, activations, data_socket, id);
         std::cout << "< FORWARD > Results sent." << std::endl;
         sendResTimer.stop();
+
+        std::cerr << "!!!!!! " << dataserver << " " << dport << " " << id << " " << layer << std::endl;
+        std::cerr << "!!!!!! " << *(float *) feats.getData() << std::endl;
+        std::cerr << "!!!!!! " << *(float *) z.getData() << std::endl;
+        std::cerr << "!!!!!! " << *(float *) activations.getData() << std::endl;
 
     } catch(std::exception &ex) {
         return invocation_response::failure(ex.what(), "application/json");

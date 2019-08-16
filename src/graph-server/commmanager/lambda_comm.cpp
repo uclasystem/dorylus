@@ -38,9 +38,21 @@ LambdaWorkerForward::work() {
                     printLog(nodeId, "WORKER ERROR: Unknown OP code (%u) received.\n", op);
             }
         }
-    } catch (std::exception& ex) {
-        printLog(nodeId, "WORKER ERROR: %s\n", ex.what());
-    }
+    } catch (std::exception& ex) { /** Context Termintated. */ }
+}
+
+
+/**
+ *
+ * Refresh the member values.
+ * 
+ */
+void
+LambdaWorkerForward::refreshState(Matrix *actMatrix_, FeatType *zData_, FeatType *actData_, unsigned numFeatsNext_) {
+    actMatrix = actMatrix_;
+    zData = zData_;
+    actData = actData_;
+    numFeatsNext = numFeatsNext_;
 }
 
 
@@ -137,9 +149,7 @@ LambdaWorkerBackward::work() {
                     printLog(nodeId, "WORKER ERROR: Unknown Op code received.\n");
             }
         }
-    } catch (std::exception& ex) {
-        printLog(nodeId, "WORKER ERROR: %s\n", ex.what());
-    }
+    } catch (std::exception& ex) { /** Context Termintated. */ }
 }
 
 
@@ -228,13 +238,8 @@ LambdaComm::newContextForward(FeatType *dataBuf, FeatType *zData, FeatType *actD
     // Create a new matrix object for workers to access.
     Matrix *actMatrix = new Matrix(numLocalVertices, numFeats, dataBuf);
 
-    // Create 'numListeners' workers and detach them.
-    for (unsigned i = 0; i < numListeners; ++i) {
-        forwardWorkers.push_back(new LambdaWorkerForward(nodeId, ctx, numLambdasForward, countForward,
-                                                         actMatrix, zData, actData, numFeatsNext));
-        forwardWorker_threads.push_back(new std::thread(std::bind(&LambdaWorkerForward::work, forwardWorkers[i])));
-        forwardWorker_threads[i]->detach();
-    }
+    for (auto&& worker : forwardWorkers)
+        worker->refreshState(actMatrix, zData, actData, numFeatsNext);
 
     printLog(nodeId, "Lambda FORWARD context created.\n");
 }
@@ -264,14 +269,6 @@ LambdaComm::requestLambdasForward(unsigned layer) {
 void
 LambdaComm::endContextForward() {
     countForward = 0;
-
-    // Delete the workers.
-    for (unsigned i = 0; i < numListeners; ++i) {
-        delete forwardWorker_threads[i];
-        delete forwardWorkers[i];
-    }
-    forwardWorkers.clear();
-    forwardWorker_threads.clear();
 
     printLog(nodeId, "Lambda FORWARD context finished.\n");
 }
@@ -359,9 +356,6 @@ LambdaComm::endContextBackward() {
  */
 void
 LambdaComm::sendShutdownMessage() {
-    char chost_port[50];
-    sprintf(chost_port, "tcp://%s:%u", coordserverIp.c_str(), coordserverPort);
-    coordsocket.connect(chost_port);
 
     // Send kill message.
     zmq::message_t header(HEADER_SIZE);
