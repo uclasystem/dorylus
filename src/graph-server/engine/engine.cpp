@@ -399,10 +399,6 @@ Engine::forwardWorker(unsigned tid, void *args) {
                 //## Global Iteration barrier. ##//
                 NodeManager::barrier();
 
-                // End this lambda communciation context. Delay this 'endContextForward()' after NodeManager to ensure that the confirm
-                // message is sent.
-                lambdaComm->endContextForward();
-
                 vecTimeSendout.push_back(getTimer() - timeWorker);
                 timeWorker = getTimer();
                 printLog(nodeId, "Global barrier after ghost data exchange crossed.\n");

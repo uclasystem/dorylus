@@ -34,7 +34,7 @@ requestFeatsMatrices(zmq::socket_t& socket, unsigned id) {
     
     // Send pull request.
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::PULL, id);
+    populateHeader((char *) header.data(), OP::PULL_BACKWARD, id);
     socket.send(header);
 
     // Listen on respond.
@@ -71,7 +71,7 @@ requestWeightsMatrices(zmq::socket_t& socket, unsigned layer) {
     
     // Send pull request.
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::PULL, layer);
+    populateHeader((char *) header.data(), OP::PULL_BACKWARD, layer);
     socket.send(header);
 
     // Listen on respond.

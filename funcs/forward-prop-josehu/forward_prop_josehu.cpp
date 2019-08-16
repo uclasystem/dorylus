@@ -34,7 +34,7 @@ requestFeatsMatrix(zmq::socket_t& socket, unsigned id) {
     
     // Send pull request.
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::PULL, id);
+    populateHeader((char *) header.data(), OP::PULL_FORWARD, id);
     socket.send(header);
 
     // Listen on respond.
@@ -71,7 +71,7 @@ requestWeightsMatrix(zmq::socket_t& socket, unsigned layer) {
     
     // Send pull request.
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::PULL, layer);
+    populateHeader((char *) header.data(), OP::PULL_FORWARD, layer);
     socket.send(header);
 
     // Listen on respond.
@@ -108,7 +108,7 @@ sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned
     
     // Send push header.
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::PUSH, id, zResult.getRows(), zResult.getCols());
+    populateHeader((char *) header.data(), OP::PUSH_FORWARD, id, zResult.getRows(), zResult.getCols());
     socket.send(header, ZMQ_SNDMORE);
 
     // Send zData and actData.
@@ -252,11 +252,6 @@ forward_prop_layer(std::string dataserver, std::string weightserver, std::string
         sendMatrices(z, activations, data_socket, id);
         std::cout << "< FORWARD > Results sent." << std::endl;
         sendResTimer.stop();
-
-        std::cerr << "!!!!!! " << dataserver << " " << dport << " " << id << " " << layer << std::endl;
-        std::cerr << "!!!!!! " << *(float *) feats.getData() << std::endl;
-        std::cerr << "!!!!!! " << *(float *) z.getData() << std::endl;
-        std::cerr << "!!!!!! " << *(float *) activations.getData() << std::endl;
 
     } catch(std::exception &ex) {
         return invocation_response::failure(ex.what(), "application/json");
