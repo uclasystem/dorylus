@@ -7,9 +7,9 @@ extern std::condition_variable cv;
 extern bool finished;
 
 
-ServerWorker::ServerWorker(zmq::context_t& ctx_, int sock_type, uint32_t& counter,
+ServerWorker::ServerWorker(zmq::context_t& ctx_, int sock_type, unsigned& counter,
          std::vector<Matrix>& _weights, std::vector<Matrix>& _updates,
-         std::vector<uint32_t>& _numLambdas, WeightServer& _ws)
+         std::vector<unsigned>& _numLambdas, WeightServer& _ws)
     : ctx(ctx_), worker(ctx, sock_type), weight_list(_weights),
     updates(_updates), numLambdas(_numLambdas), count(counter), ws(_ws) { }
 
@@ -26,8 +26,8 @@ void ServerWorker::work() {
             worker.recv(&identity);
             worker.recv(&header);
                 
-            int32_t op = parse<int32_t>((char *) header.data(), 0);
-            int32_t layer = parse<int32_t>((char *) header.data(), 1);
+            unsigned op = parse<unsigned>((char *) header.data(), 0);
+            unsigned layer = parse<unsigned>((char *) header.data(), 1);
 
             if (op != OP::TERM) {
                 std::string opStr = op == 0 ? "Push" : "Pull";
@@ -60,10 +60,10 @@ void ServerWorker::work() {
     }
 }
 
-void ServerWorker::sendWeights(zmq::socket_t& socket, zmq::message_t& client_id, int32_t layer) {
+void ServerWorker::sendWeights(zmq::socket_t& socket, zmq::message_t& client_id, unsigned layer) {
     Matrix& weights = weight_list[layer];
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::RESP, 0, weights.rows, weights.cols);
+    populateHeader((char *) header.data(), OP::RESP, 0, weights.getRows(), weights.getCols());
     
     zmq::message_t weightData(weights.getDataSize());
     std::memcpy((char *) weightData.data(), weights.getData(), weights.getDataSize());
@@ -74,7 +74,7 @@ void ServerWorker::sendWeights(zmq::socket_t& socket, zmq::message_t& client_id,
     socket.send(weightData);
 }
 
-void ServerWorker::recvUpdates(zmq::socket_t& socket, zmq::message_t& client_id, int32_t layer, zmq::message_t& header) {
+void ServerWorker::recvUpdates(zmq::socket_t& socket, zmq::message_t& client_id, unsigned layer, zmq::message_t& header) {
     zmq::message_t data;
     socket.recv(&data);
 
@@ -84,7 +84,7 @@ void ServerWorker::recvUpdates(zmq::socket_t& socket, zmq::message_t& client_id,
 
     // grab lock then sum the data received with the current update matrix
     std::lock_guard<std::mutex> update_lock(update_mutex);
-    cblas_saxpy(updates[layer].rows * updates[layer].cols, 1.0,
+    cblas_saxpy(updates[layer].getRows() * updates[layer].getCols(), 1.0,
                 (float*) data.data(), 1, updates[layer].getData(), 1);
     ++count;
 
@@ -102,8 +102,8 @@ void ServerWorker::recvUpdates(zmq::socket_t& socket, zmq::message_t& client_id,
 
 // Update the weight server with the number of lambdas being called for
 // this iteration so it knows when to average
-void ServerWorker::updateBackpropIterationInfo(int32_t layer, zmq::message_t& header) {
-    uint32_t nLambdas = parse<uint32_t>((char*) header.data(), 2);
+void ServerWorker::updateBackpropIterationInfo(unsigned layer, zmq::message_t& header) {
+    unsigned nLambdas = parse<unsigned>((char*) header.data(), 2);
 
     std::cout << "Number of lambdas for layer " << layer << " is "
       << nLambdas << std::endl;
