@@ -38,7 +38,7 @@ public:
     void run();
 
     // Average and apply update batch for the specified layer
-    void applyUpdates(int32_t layer);
+    void applyUpdates(unsigned layer);
 
 private:
 
@@ -48,15 +48,15 @@ private:
     // Defines how many concurrent weightserver threads to use.
     enum { kMaxThreads = 2 };
 
-    std::vector<uint32_t> dims;
+    std::vector<unsigned> dims;
     std::vector<Matrix> layers;
 
     // List of Matrices for holding updates until they are
     // ready to be applied
     std::vector<Matrix> updates;
     // NumLambdas request per layer
-    std::vector<uint32_t> numLambdas;
-    uint32_t count;
+    std::vector<unsigned> numLambdas;
+    unsigned count;
 
     zmq::context_t ctx;
     zmq::socket_t frontend;

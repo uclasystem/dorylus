@@ -33,18 +33,18 @@ class ServerWorker {
 
 public:
 
-    ServerWorker(zmq::context_t& ctx_, int sock_type, uint32_t& counter,
+    ServerWorker(zmq::context_t& ctx_, int sock_type, unsigned& counter,
              std::vector<Matrix>& _weights, std::vector<Matrix>& _updates,
-             std::vector<uint32_t>& _numLambdas, WeightServer& _ws);
+             std::vector<unsigned>& _numLambdas, WeightServer& _ws);
 
     // Listens on lambda threads' request for weights.
     void work();
 
 private:
 
-    void sendWeights(zmq::socket_t& socket, zmq::message_t& client_id, int32_t layer);
-    void recvUpdates(zmq::socket_t& socket, zmq::message_t& client_id, int32_t layer, zmq::message_t& header);
-    void updateBackpropIterationInfo(int32_t layer, zmq::message_t& header);
+    void sendWeights(zmq::socket_t& socket, zmq::message_t& client_id, unsigned layer);
+    void recvUpdates(zmq::socket_t& socket, zmq::message_t& client_id, unsigned layer, zmq::message_t& header);
+    void updateBackpropIterationInfo(unsigned layer, zmq::message_t& header);
     void terminateServer(zmq::socket_t& socket, zmq::message_t& client_id);
 
 
@@ -54,8 +54,8 @@ private:
     std::vector<Matrix>& weight_list;
     std::vector<Matrix>& updates;
     
-    std::vector<uint32_t>& numLambdas;
-    uint32_t& count;
+    std::vector<unsigned>& numLambdas;
+    unsigned& count;
 
     // Reference back to weight server so we can tell it to average and apply
     // final weight gradients

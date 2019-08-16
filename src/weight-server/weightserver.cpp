@@ -15,12 +15,12 @@ WeightServer::WeightServer(unsigned _port, std::string& configFileName)
     std::default_random_engine dre(seed);
     std::uniform_real_distribution<FeatType> dist(-1.5, 1.5);
 
-    for (uint32_t u = 0; u < dims.size() - 1; ++u) {
-        uint32_t dataSize = dims[u] * dims[u + 1];
+    for (unsigned u = 0; u < dims.size() - 1; ++u) {
+        unsigned dataSize = dims[u] * dims[u + 1];
         FeatType *dptr = new FeatType[dataSize];
         // Second dptr is for update matrices
         FeatType *dptr2 = new FeatType[dataSize];
-        for (uint32_t ui = 0; ui < dataSize; ++ui) {
+        for (unsigned ui = 0; ui < dataSize; ++ui) {
             dptr[ui] = dist(dre);
             dptr2[ui] = 0.0;
         }
@@ -29,7 +29,7 @@ WeightServer::WeightServer(unsigned _port, std::string& configFileName)
         updates.push_back(Matrix(dims[u], dims[u + 1], dptr2));
     }
 
-    for (uint32_t u = 0; u < layers.size(); ++u)
+    for (unsigned u = 0; u < layers.size(); ++u)
         fprintf(stdout, "Layer %u Weights: %s\n", u, layers[u].shape().c_str());
 
     numLambdas.resize(layers.size());
@@ -70,7 +70,7 @@ void WeightServer::run() {
         delete mat.getData();
 }
 
-void WeightServer::applyUpdates(int32_t layer) {
+void WeightServer::applyUpdates(unsigned layer) {
     std::cout << "Apply" << std::endl;
 }
 
