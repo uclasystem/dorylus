@@ -86,7 +86,7 @@ requestWeightsMatrices(zmq::socket_t& socket, unsigned layer) {
     } else {                    // Get matrices data.
         unsigned rows = parse<unsigned>((char *) respHeader.data(), 2);
         unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
-        zmq::message_t matxData(rows * cols * sizeof(FeatType));
+        zmq::message_t matxData(rows * cols * sizeof(float));
         socket.recv(&matxData);
 
         char *matxBuffer = new char[matxData.size()];

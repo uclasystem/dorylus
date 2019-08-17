@@ -118,10 +118,11 @@ private:
 
     // Timing stuff.
     static double timeInit;
-    static double timeProcess; 
+    static double timeForwardProcess; 
     static std::vector<double> vecTimeAggregate;
     static std::vector<double> vecTimeLambda;
     static std::vector<double> vecTimeSendout;
+    static double timeBackwardProcess; 
 
     static std::map<unsigned, unsigned> recvWaiters;
 

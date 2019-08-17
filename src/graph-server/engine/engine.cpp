@@ -53,10 +53,11 @@ unsigned Engine::iteration = 0;
 bool Engine::undirected = false;
 bool Engine::halt = false;
 double Engine::timeInit = 0.0;
-double Engine::timeProcess = 0.0;
+double Engine::timeForwardProcess = 0.0;
 std::vector<double> Engine::vecTimeAggregate;
 std::vector<double> Engine::vecTimeLambda;
 std::vector<double> Engine::vecTimeSendout;
+double Engine::timeBackwardProcess = 0.0;
 
 
 /**
@@ -66,7 +67,7 @@ std::vector<double> Engine::vecTimeSendout;
  */
 void
 Engine::init(int argc, char *argv[]) {
-    printLog(404, "Engine starts initialization...\n");
+    printLog(404, "Engine starts initialization...");
     timeInit = -getTimer();
 
     parseArgs(argc, argv);
@@ -126,12 +127,12 @@ Engine::init(int argc, char *argv[]) {
     // Create computation workers thread pool.
     computePool = new ThreadPool(cThreads);
     computePool->createPool();
-    printLog(nodeId, "Created %u computation threads.\n", cThreads);
+    printLog(nodeId, "Created %u computation threads.", cThreads);
 
     // Create data communicators thread pool.
     dataPool = new ThreadPool(dThreads);
     dataPool->createPool();
-    printLog(nodeId, "Created %u data communicator threads.\n", dThreads);
+    printLog(nodeId, "Created %u data communicator threads.", dThreads);
 
     // Compact the graph.
     graph.compactGraph();
@@ -141,7 +142,7 @@ Engine::init(int argc, char *argv[]) {
                                 numLambdas, numLambdas);
 
     timeInit += getTimer();
-    printLog(nodeId, "Engine initialization complete.\n");
+    printLog(nodeId, "Engine initialization complete.");
 }
 
 
@@ -168,9 +169,9 @@ Engine::runForward() {
 
     // Make sure all nodes start running the forward-prop phase.
     NodeManager::barrier();
-    printLog(nodeId, "Engine starts running FORWARD...\n");
+    printLog(nodeId, "Engine starts running FORWARD...");
 
-    timeProcess = -getTimer();
+    timeForwardProcess = -getTimer();
 
     // Set initial conditions.
     currId = 0;
@@ -183,18 +184,18 @@ Engine::runForward() {
     // Start data communicators.
     dataPool->perform(ghostCommunicator);
 
-    // Start workers.
+    // Start aggregation workers.
     computePool->perform(forwardWorker);
 
-    // Join all workers.
+    // Join all aggregation workers.
     computePool->sync();
 
-    timeProcess += getTimer();
+    timeForwardProcess += getTimer();
 
     // Join all data communicators.
     dataPool->sync();
 
-    printLog(nodeId, "Engine completes FORWARD at iteration %u.\n", iteration);
+    printLog(nodeId, "Engine completes FORWARD at iteration %u.", iteration);
 }
 
 
@@ -209,11 +210,20 @@ Engine::runBackward() {
 
     // Make sure all nodes start running the forward-prop phase.
     NodeManager::barrier();
-    printLog(nodeId, "Engine starts running BACKWARD...\n");
+    printLog(nodeId, "Engine starts running BACKWARD...");
 
+    timeBackwardProcess = -getTimer();
 
+    // Start backward-prop workers. Backward-prop is only a single-threaded task for dataservers, thus actually one a master
+    // thread is doing the work.
+    computePool->perform(backwardWorker);
 
-    printLog(nodeId, "Engine completes BACKWARD at iteration %u.\n", iteration);
+    // Join all backward-prop workers.
+    computePool->sync();
+
+    timeBackwardProcess += getTimer();
+
+    printLog(nodeId, "Engine completes BACKWARD at iteration %u.", iteration);
 }
 
 
@@ -227,21 +237,32 @@ void
 Engine::output() {
     std::ofstream outStream(outFile.c_str());
     if (!outStream.good())
-        printLog(nodeId, "Cannot open output file: %s [Reason: %s]\n", outFile.c_str(), std::strerror(errno));
+        printLog(nodeId, "Cannot open output file: %s [Reason: %s]", outFile.c_str(), std::strerror(errno));
 
     assert(outStream.good());
 
     //
     // The following are full feature values outputing.
     //
+    // for (Vertex& v : graph.getVertices()) {
+    //     outStream << v.getGlobalId() << ": ";
+    //     for (size_t i = 0; i <= numLayers; ++i) {
+    //         FeatType *dataPtr = localVertexActivationDataPtr(v.getLocalId(), i);
+    //         for (size_t j = 0; j < layerConfig[i]; ++j)
+    //             outStream << dataPtr[j] << " ";
+    //         outStream << "| ";
+    //     }
+    //     outStream << std::endl;
+    // }
+
+    //
+    // The follwing are only-output feature values outputing.
+    //
     for (Vertex& v : graph.getVertices()) {
         outStream << v.getGlobalId() << ": ";
-        for (size_t i = 0; i <= numLayers; ++i) {
-            FeatType *dataPtr = localVertexActivationDataPtr(v.getLocalId(), i);
-            for (size_t j = 0; j < layerConfig[i]; ++j)
-                outStream << dataPtr[j] << " ";
-            outStream << "| ";
-        }
+        FeatType *dataPtr = localVertexActivationDataPtr(v.getLocalId(), numLayers);
+        for (size_t j = 0; j < layerConfig[numLayers]; ++j)
+            outStream << dataPtr[j] << " ";
         outStream << std::endl;
     }
 
@@ -273,7 +294,7 @@ Engine::output() {
  */
 void
 Engine::destroy() {
-    printLog(nodeId, "Destroying the engine...\n");
+    printLog(nodeId, "Destroying the engine...");
 
     NodeManager::destroy();
     CommManager::destroy();
@@ -353,7 +374,7 @@ Engine::forwardWorker(unsigned tid, void *args) {
 
                 vecTimeAggregate.push_back(getTimer() - timeWorker);
                 timeWorker = getTimer();
-                printLog(nodeId, "Iteration %u finishes. Invoking lambda...\n", iteration);
+                printLog(nodeId, "Iteration %u finishes. Invoking lambda...", iteration);
 
                 // Start a new lambda communication context.
                 lambdaComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
@@ -367,7 +388,7 @@ Engine::forwardWorker(unsigned tid, void *args) {
 
                 vecTimeLambda.push_back(getTimer() - timeWorker);
                 timeWorker = getTimer();
-                printLog(nodeId, "All lambda requests finished. Results received.\n");
+                printLog(nodeId, "All lambda requests finished. Results received.");
 
                 // Loop through all local vertices and do the data send out work. If there are any remote edges for a vertex, should send this vid to
                 // other nodes for their ghost's update.
@@ -401,11 +422,11 @@ Engine::forwardWorker(unsigned tid, void *args) {
 
                 vecTimeSendout.push_back(getTimer() - timeWorker);
                 timeWorker = getTimer();
-                printLog(nodeId, "Global barrier after ghost data exchange crossed.\n");
+                printLog(nodeId, "Global barrier after ghost data exchange crossed.");
 
                 // There is a new layer ahead, please start a new iteration.
                 if (++iteration < numLayers) {
-                    printLog(nodeId, "Starting a new iteration %u at %.3lf ms...\n", iteration, timeProcess + getTimer());
+                    printLog(nodeId, "Starting a new iteration %u...", iteration);
 
                     // Reset data buffer area's size.
                     delete[] localVerticesDataBuf;
@@ -422,7 +443,7 @@ Engine::forwardWorker(unsigned tid, void *args) {
                 // No more, so deciding to halt. But still needs the communicator to check if there will be further scheduling invoked by ghost
                 // vertices. If so we are stilling going to the next iteration.
                 } else {
-                    printLog(nodeId, "Deciding to halt at iteration %u...\n", iteration);
+                    printLog(nodeId, "Deciding to halt at iteration %u...", iteration);
 
                     // Set this to signal data communicator to end its life.
                     lockHalt.lock();
@@ -506,13 +527,14 @@ Engine::ghostCommunicator(unsigned tid, void *args) {
 
 /**
  *
- * Major part of the engine's backward-prop logic. When the engine runs it wakes threads up from the thread pool
- * and assign a worker function for each.
+ * Major part of the engine's backward-prop logic. Single-threaded.
  * 
  */
 void
 Engine::backwardWorker(unsigned tid, void *args) {
+    if (tid == 0) {     // Only master thread does the actual work.
 
+    }
 }
 
 
@@ -614,14 +636,15 @@ Engine::aggregateFromNeighbors(unsigned lvid) {
  */
 void
 Engine::printEngineMetrics() {
-    printLog(nodeId, "Engine METRICS: Initialization takes %.3lf ms\n", timeInit);
-    printLog(nodeId, "Engine METRICS: Time per stage:\n");
+    printLog(nodeId, "<EM>: Initialization takes %.3lf ms", timeInit);
+    printLog(nodeId, "<EM>: Time per stage:");
     for (size_t i = 0; i < numLayers; ++i) {
-        printLog(nodeId, "\t\t\tAggregation   %2d  %.3lf ms\n", i, vecTimeAggregate[i]);
-        printLog(nodeId, "\t\t\tLambda        %2d  %.3lf ms\n", i, vecTimeLambda[i]);
-        printLog(nodeId, "\t\t\tGhost update  %2d  %.3lf ms\n", i, vecTimeSendout[i]);
+        printLog(nodeId, "<EM>    Aggregation   %2d  %.3lf ms", i, vecTimeAggregate[i]);
+        printLog(nodeId, "<EM>    Lambda        %2d  %.3lf ms", i, vecTimeLambda[i]);
+        printLog(nodeId, "<EM>    Ghost update  %2d  %.3lf ms", i, vecTimeSendout[i]);
     }
-    printLog(nodeId, "Engine METRICS: Total processing time %.3lf ms\n", timeProcess);
+    printLog(nodeId, "<EM>: Total forward-prop time %.3lf ms", timeForwardProcess);
+    printLog(nodeId, "<EM>: Backward-prop takes %.3lf ms", timeBackwardProcess);
 }
 
 
@@ -632,7 +655,7 @@ Engine::printEngineMetrics() {
  */
 void
 Engine::printGraphMetrics() {
-    printLog(nodeId, "Graph METRICS: %u global vertices, %llu global edges, %u local edges.\n",
+    printLog(nodeId, "<GM>: %u global vertices, %llu global edges, %u local edges.",
                      graph.getNumGlobalVertices(), graph.getNumGlobalEdges(), graph.getNumLocalVertices());
 }
 
@@ -742,7 +765,7 @@ Engine::parseArgs(int argc, char *argv[]) {
     numLambdas = vm["numLambdas"].as<unsigned>();
 
     printLog(404, "Parsed configuration: dThreads = %u, cThreads = %u, graphFile = %s, featuresFile = %s, dshMachinesFile = %s, "
-                  "myPrIpFile = %s, myPubIpFile = %s, undirected = %s, data port set -> %u, control port set -> %u, node port set -> %u\n",
+                  "myPrIpFile = %s, myPubIpFile = %s, undirected = %s, data port set -> %u, control port set -> %u, node port set -> %u",
                   dThreads, cThreads, graphFile.c_str(), featuresFile.c_str(), dshMachinesFile.c_str(),
                   myPrIpFile.c_str(), myPubIpFile.c_str(), undirected ? "true" : "false", data_port, ctrl_port, node_port);
 }
@@ -757,7 +780,7 @@ void
 Engine::readLayerConfigFile(std::string& layerConfigFileName) {
     std::ifstream infile(layerConfigFileName.c_str());
     if (!infile.good())
-        printLog(nodeId, "Cannot open layer configuration file: %s [Reason: %s]\n", layerConfigFileName.c_str(), std::strerror(errno));
+        printLog(nodeId, "Cannot open layer configuration file: %s [Reason: %s]", layerConfigFileName.c_str(), std::strerror(errno));
 
     assert(infile.good());
 
@@ -784,7 +807,7 @@ void
 Engine::readFeaturesFile(std::string& featuresFileName) {
     std::ifstream infile(featuresFileName.c_str());
     if (!infile.good())
-        printLog(nodeId, "Cannot open features file: %s [Reason: %s]\n", featuresFileName.c_str(), std::strerror(errno));
+        printLog(nodeId, "Cannot open features file: %s [Reason: %s]", featuresFileName.c_str(), std::strerror(errno));
 
     assert(infile.good());
 
@@ -828,7 +851,7 @@ void
 Engine::readLabelsFile(std::string& labelsFileName) {
     std::ifstream infile(labelsFileName.c_str());
     if (!infile.good())
-        printLog(nodeId, "Cannot open labels file: %s [Reason: %s]\n", labelsFileName.c_str(), std::strerror(errno));
+        printLog(nodeId, "Cannot open labels file: %s [Reason: %s]", labelsFileName.c_str(), std::strerror(errno));
 
     assert(infile.good());
 
@@ -873,7 +896,7 @@ void
 Engine::readPartsFile(std::string& partsFileName, Graph& lGraph) {
     std::ifstream infile(partsFileName.c_str());
     if (!infile.good())
-        printLog(nodeId, "Cannot open patition file: %s [Reason: %s]\n", partsFileName.c_str(), std::strerror(errno));
+        printLog(nodeId, "Cannot open patition file: %s [Reason: %s]", partsFileName.c_str(), std::strerror(errno));
 
     assert(infile.good());
 
@@ -995,7 +1018,7 @@ void
 Engine::findGhostDegrees(std::string& fileName) {
     std::ifstream infile(fileName.c_str(), std::ios::binary);
     if (!infile.good())
-        printLog(nodeId, "Cannot open BinarySnap file: %s\n", fileName.c_str());
+        printLog(nodeId, "Cannot open BinarySnap file: %s", fileName.c_str());
 
     assert(infile.good());
 
@@ -1040,7 +1063,7 @@ Engine::readGraphBS(std::string& fileName, std::set<unsigned>& inTopics, std::ve
     std::string edgeFileName = fileName + EDGES_EXT;
     std::ifstream infile(edgeFileName.c_str(), std::ios::binary);
     if(!infile.good())
-        printLog(nodeId, "Cannot open BinarySnap file: %s\n", edgeFileName.c_str());
+        printLog(nodeId, "Cannot open BinarySnap file: %s", edgeFileName.c_str());
 
     assert(infile.good());
 

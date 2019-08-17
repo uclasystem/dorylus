@@ -230,7 +230,7 @@ LambdaComm::newContextForward(FeatType *dataBuf, FeatType *zData, FeatType *actD
     for (auto&& worker : workers)
         worker->refreshState(actMatrix, zData, actData, numFeatsNext);
 
-    printLog(nodeId, "Lambda FORWARD context created.\n");
+    printLog(nodeId, "Lambda FORWARD context created.");
 }
 
 void
@@ -284,7 +284,7 @@ LambdaComm::newContextBackward(std::vector<FeatType *> zBufs, std::vector<FeatTy
     for (auto&& worker : workers)
         worker->refreshState(zMatrices, actMatrices, targetMatrix);
 
-    printLog(nodeId, "Lambda BACKWARD context created.\n");
+    printLog(nodeId, "Lambda BACKWARD context created.");
 }
 
 void
