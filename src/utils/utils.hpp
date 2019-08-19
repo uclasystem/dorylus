@@ -6,8 +6,11 @@
 typedef float FeatType;
 
 
-static const int32_t HEADER_SIZE = sizeof(int32_t) * 5;
-enum OP { PUSH, PULL, INFO, REQ, RESP, TERM };
+static const size_t HEADER_SIZE = sizeof(unsigned) * 5;
+enum OP { REQ_FORWARD, PUSH_FORWARD, PULL_FORWARD, REQ_BACKWARD, PUSH_BACKWARD, PULL_BACKWARD, RESP, INFO, TERM };
+
+
+#define ERR_HEADER_FIELD UINT_MAX
 
 
 /**
@@ -31,11 +34,11 @@ parse(const char *buf, unsigned offset) {
 
 // ID represents either layer or data partition, depending on server responding.
 static inline void
-populateHeader(char* header, unsigned op, unsigned id = 0, unsigned rows = 0, unsigned cols = 0) {
+populateHeader(char* header, unsigned op, unsigned field1 = 0, unsigned field2 = 0, unsigned field3 = 0) {
 	serialize<unsigned>(header, 0, op);
-	serialize<unsigned>(header, 1, id);
-	serialize<unsigned>(header, 2, rows);
-	serialize<unsigned>(header, 3, cols);
+	serialize<unsigned>(header, 1, field1);
+	serialize<unsigned>(header, 2, field2);
+	serialize<unsigned>(header, 3, field3);
 }
 
 

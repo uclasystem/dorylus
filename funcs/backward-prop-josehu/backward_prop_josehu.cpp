@@ -30,11 +30,11 @@ using namespace std::chrono;
  * 
  */
 static Matrix
-requestFeatsMatrix(zmq::socket_t& socket, unsigned id) {
+requestFeatsMatrices(zmq::socket_t& socket, unsigned id) {
     
     // Send pull request.
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::PULL_FORWARD, id);
+    populateHeader((char *) header.data(), OP::PULL_BACKWARD, id);
     socket.send(header);
 
     // Listen on respond.
@@ -46,7 +46,7 @@ requestFeatsMatrix(zmq::socket_t& socket, unsigned id) {
     if (layerResp == -1) {      // Failed.
         std::cerr << "[ ERROR ] No corresponding matrix chunk!" << std::endl;
         return Matrix();
-    } else {                    // Get matrix data.
+    } else {                    // Get matrices data.
         unsigned rows = parse<unsigned>((char *) respHeader.data(), 2);
         unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
         zmq::message_t matxData(rows * cols * sizeof(FeatType));
@@ -67,11 +67,11 @@ requestFeatsMatrix(zmq::socket_t& socket, unsigned id) {
  * 
  */
 static Matrix
-requestWeightsMatrix(zmq::socket_t& socket, unsigned layer) {
+requestWeightsMatrices(zmq::socket_t& socket, unsigned layer) {
     
     // Send pull request.
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::PULL_FORWARD, layer);
+    populateHeader((char *) header.data(), OP::PULL_BACKWARD, layer);
     socket.send(header);
 
     // Listen on respond.
@@ -104,24 +104,8 @@ requestWeightsMatrix(zmq::socket_t& socket, unsigned layer) {
  * 
  */
 static void
-sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned id) {
+sendWeightsUpdate(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned id) {
     
-    // Send push header.
-    zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::PUSH_FORWARD, id, zResult.getRows(), zResult.getCols());
-    socket.send(header, ZMQ_SNDMORE);
-
-    // Send zData and actData.
-    zmq::message_t zData(zResult.getDataSize());
-    std::memcpy(zData.data(), zResult.getData(), zResult.getDataSize());
-    zmq::message_t actData(actResult.getDataSize());
-    std::memcpy(actData.data(), actResult.getData(), actResult.getDataSize());
-    socket.send(zData, ZMQ_SNDMORE);
-    socket.send(actData);
-
-    // Wait for data settled reply.
-    zmq::message_t confirm;
-    socket.recv(&confirm);
 }
 
 
@@ -174,8 +158,7 @@ activate(Matrix& mat) {
  * 
  */
 static invocation_response
-forward_prop_layer(std::string dataserver, std::string weightserver, std::string dport, std::string wport,
-                   unsigned id, unsigned layer) {
+backward_prop(std::string dataserver, std::string weightserver, std::string dport, std::string wport, unsigned id) {
     zmq::context_t ctx(1);
 
     //
@@ -198,33 +181,33 @@ forward_prop_layer(std::string dataserver, std::string weightserver, std::string
 
     try {
 
-        // Request weights matrix of the current layer.
+        // Request weights matrices of the current layer.
         Matrix weights;
         std::thread t([&] {     // Weight requests run in a separate thread.
-            std::cout << "< FORWARD > Asking weightserver..." << std::endl;
+            std::cout << "< BACKWARD > Asking weightserver..." << std::endl;
             getWeightsTimer.start();
             zmq::socket_t weights_socket(ctx, ZMQ_DEALER);
             weights_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
             char whost_port[50];
             sprintf(whost_port, "tcp://%s:%s", weightserver.c_str(), wport.c_str());
             weights_socket.connect(whost_port);
-            weights = requestWeightsMatrix(weights_socket, layer);
+            // weights = requestMatrices(weights_socket, layer);
             getWeightsTimer.stop();
-            std::cout << "< FORWARD > Got data from weightserver." << std::endl;
+            std::cout << "< BACKWARD > Got data from weightserver." << std::endl;
         });
 
-        // Request feature activation matrix of the current layer.
+        // Request z, act & target matrices of the current layer.
         Matrix feats;
-        std::cout << "< FORWARD > Asking dataserver..." << std::endl;
+        std::cout << "< BACKWARD > Asking dataserver..." << std::endl;
         getFeatsTimer.start();
         zmq::socket_t data_socket(ctx, ZMQ_DEALER);
         data_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
         char dhost_port[50];
         sprintf(dhost_port, "tcp://%s:%s", dataserver.c_str(), dport.c_str());
         data_socket.connect(dhost_port);
-        feats = requestFeatsMatrix(data_socket, id);
+        feats = requestMatrices(data_socket, id);
         getFeatsTimer.stop();
-        std::cout << "< FORWARD > Got data from dataserver." << std::endl;
+        std::cout << "< BACKWARD > Got data from dataserver." << std::endl;
 
         t.join();
 
@@ -233,24 +216,23 @@ forward_prop_layer(std::string dataserver, std::string weightserver, std::string
         if (feats.empty())
             return invocation_response::failure("No chunk corresponding to request", "appliation/json");
 
-
         // Multiplication.
         computationTimer.start();
-        std::cout << "< FORWARD > Doing the dot multiplication..." << std::endl;
+        std::cout << "< BACKWARD > Doing the dot multiplication..." << std::endl;
         Matrix z = dot(feats, weights);
         computationTimer.stop();
 
         // Activation.
         activationTimer.start();
-        std::cout << "< FORWARD > Doing the activation..." << std::endl;
+        std::cout << "< BACKWARD > Doing the activation..." << std::endl;
         Matrix activations = activate(z);
         activationTimer.stop();
 
         // Send back to dataserver.
         sendResTimer.start();
-        std::cout << "< FORWARD > Sending results back..." << std::endl;
+        std::cout << "< BACKWARD > Sending results back..." << std::endl;
         sendMatrices(z, activations, data_socket, id);
-        std::cout << "< FORWARD > Results sent." << std::endl;
+        std::cout << "< BACKWARD > Results sent." << std::endl;
         sendResTimer.stop();
 
     } catch(std::exception &ex) {
@@ -280,13 +262,12 @@ my_handler(invocation_request const& request) {
     std::string weightserver = pt.get<std::string>("weightserver");
     std::string dport = pt.get<std::string>("dport");
     std::string wport = pt.get<std::string>("wport");
-    unsigned layer = pt.get<int>("layer");
     unsigned chunkId = pt.get<int>("id");
 
     std::cout << "[ACCEPTED] Thread " << chunkId << " is requested from " << dataserver << ":" << dport
-              << ", FORWARD layer " << layer << "." << std::endl;
+              << ", BACKWARD." << std::endl;
 
-    return forward_prop_layer(dataserver, weightserver, dport, wport, chunkId, layer);
+    return backward_prop(dataserver, weightserver, dport, wport, chunkId, layer);
 }
 
 int
