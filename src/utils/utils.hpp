@@ -58,6 +58,7 @@ public:
 
     unsigned getRows() { return rows; }
     unsigned getCols() { return cols; }
+    unsigned getNumElemts() { return rows * cols; }
     FeatType *getData() const { return data; }
     size_t getDataSize() const { return rows * cols * sizeof(FeatType); }
 

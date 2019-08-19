@@ -29,6 +29,8 @@ WeightServer::WeightServer(unsigned _port, std::string& configFileName)
         updates.push_back(Matrix(dims[u], dims[u + 1], dptr2));
     }
 
+    std::cerr << layers[1].str() << std::endl;
+    
     for (unsigned u = 0; u < layers.size(); ++u)
         fprintf(stdout, "Layer %u Weights: %s\n", u, layers[u].shape().c_str());
 
@@ -71,7 +73,26 @@ void WeightServer::run() {
 }
 
 void WeightServer::applyUpdates(unsigned layer) {
-    std::cout << "Apply" << std::endl;
+    std::cout << "Averaging updates" << std::endl;
+    float averagingFactor = (1.0 / (float) numLambdas[layer]);
+    cblas_sscal(updates[layer].getNumElemts(), averagingFactor, updates[layer].getData(), 1);
+
+    std::cout << "Averaged Update Matrix:\n" << updates[layer].str() << std::endl;
+    std::cout << "Previous Weight Matrix:\n" << layers[layer].str() << std::endl;
+
+    cblas_saxpy(updates[layer].getNumElemts(), 1.0, updates[layer].getData(),
+                1, layers[layer].getData(), 1);
+
+    std::cout << "Updated Weight Matrix:\n" << layers[layer].str() << std::endl;
+
+    std::cout << "Resetting update matrix" << std::endl;
+
+    // Reset the update matrix after its updates have been applied
+    // to begin aggregating the next set of updates
+    FeatType* updatesPtr = updates[layer].getData();
+    for (unsigned ui = 0; ui < updates[layer].getNumElemts(); ++ui) {
+        updatesPtr[ui] = 0;
+    }
 }
 
 // Read in layer configurations.

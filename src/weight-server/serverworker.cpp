@@ -29,18 +29,18 @@ void ServerWorker::work() {
             unsigned op = parse<unsigned>((char *) header.data(), 0);
             unsigned layer = parse<unsigned>((char *) header.data(), 1);
 
-            if (op != OP::TERM) {
-                std::string opStr = op == 0 ? "Push" : "Pull";
+            if (op == OP::PULL_FORWARD || op == OP::PUSH_BACKWARD) {
+                std::string opStr = op == OP::PUSH_BACKWARD ? "Push" : "Pull";
                 std::string accMsg = "[ACCEPTED] " + opStr + " for layer "
                                    + std::to_string(layer);
                 std::cout << accMsg << std::endl;
             }
 
             switch (op) {
-                case (OP::PULL):
+                case (OP::PULL_FORWARD):
                     sendWeights(worker, identity, layer);
                     break;
-                case (OP::PUSH):
+                case (OP::PUSH_BACKWARD):
                     recvUpdates(worker, identity, layer, header);
                     break;
                 // Used to tell the weight server how many lambda threads
@@ -75,6 +75,7 @@ void ServerWorker::sendWeights(zmq::socket_t& socket, zmq::message_t& client_id,
 }
 
 void ServerWorker::recvUpdates(zmq::socket_t& socket, zmq::message_t& client_id, unsigned layer, zmq::message_t& header) {
+    std::cout << "Summing updates" << std::endl;
     zmq::message_t data;
     socket.recv(&data);
 
@@ -84,7 +85,7 @@ void ServerWorker::recvUpdates(zmq::socket_t& socket, zmq::message_t& client_id,
 
     // grab lock then sum the data received with the current update matrix
     std::lock_guard<std::mutex> update_lock(update_mutex);
-    cblas_saxpy(updates[layer].getRows() * updates[layer].getCols(), 1.0,
+    cblas_saxpy(updates[layer].getNumElemts(), 1.0,
                 (float*) data.data(), 1, updates[layer].getData(), 1);
     ++count;
 
