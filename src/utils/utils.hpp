@@ -7,7 +7,7 @@ typedef float FeatType;
 
 
 static const size_t HEADER_SIZE = sizeof(unsigned) * 5;
-enum OP { REQ_FORWARD, PUSH_FORWARD, PULL_FORWARD, REQ_BACKWARD, PUSH_BACKWARD, PULL_BACKWARD, RESP, TERM };
+enum OP { REQ_FORWARD, PUSH_FORWARD, PULL_FORWARD, REQ_BACKWARD, PUSH_BACKWARD, PULL_BACKWARD, RESP, INFO, TERM };
 
 
 #define ERR_HEADER_FIELD UINT_MAX
@@ -58,6 +58,7 @@ public:
 
     unsigned getRows() { return rows; }
     unsigned getCols() { return cols; }
+    unsigned getNumElemts() { return rows * cols; }
     FeatType *getData() const { return data; }
     size_t getDataSize() const { return rows * cols * sizeof(FeatType); }
 
