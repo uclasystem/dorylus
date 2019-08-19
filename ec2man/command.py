@@ -18,14 +18,10 @@ def set_pub_ip(ec2_cli, instance):
     return instance
 
 
-def handle_command(ec2_cli, ctx, instance, args):
+def handle_command(ec2_cli, ctx, instance, op, args):
     """
     Handle a command to apply on the given instance.
     """
-
-    if len(args) < 1:
-        ec2man.show_error("Please specify an operation.")
-    op, args = args[0], args[1:]
 
     # Set access options if ssh-key needed.
     remote_access_opts = []

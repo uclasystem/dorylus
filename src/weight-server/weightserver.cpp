@@ -65,10 +65,10 @@ public:
                 }
 
                 switch (op) {
-                    case (OP::PULL):
+                    case (OP::PULL_FORWARD):
                         sendWeights(worker, identity, layer);
                         break;
-                    case (OP::PUSH):
+                    case (OP::PUSH_BACKWARD):
                         recvUpdates(identity, layer, header);
                         break;
                     case (OP::TERM):

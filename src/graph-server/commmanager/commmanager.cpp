@@ -27,7 +27,7 @@ unsigned CommManager::controlPortStart;
  */
 void
 CommManager::init() {
-    printLog(nodeId, "CommManager starts initialization...\n");
+    printLog(nodeId, "CommManager starts initialization...");
     numNodes = NodeManager::getNumNodes();
     nodeId = NodeManager::getMyNodeId();
     Node me = NodeManager::getNode(nodeId);
@@ -171,7 +171,7 @@ CommManager::init() {
 
     flushData();
     flushControl();
-    printLog(nodeId, "CommManager initialization complete.\n");
+    printLog(nodeId, "CommManager initialization complete.");
 }
 
 

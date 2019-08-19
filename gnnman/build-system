@@ -17,6 +17,13 @@ cd $( dirname $0 )/..
 EC2MAN_CMD="python3 -m ec2man"
 
 
+if [[ ! -z $1 ]] && [[ $1 != "graph" ]] && [[ $1 != "weight" ]] && [[ $1 != "coord" ]]; then
+    echo "Context '$1' not recognized."
+    echo "Usage: ./gnnman/build-system [Context]    # Empty means build all."
+    exit 1
+fi
+
+
 # For graph servers.
 if [[ -z $1 ]] || [[ $1 == "graph" ]]; then
     echo "Processing context 'graph'..."

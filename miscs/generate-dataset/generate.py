@@ -1,14 +1,14 @@
 import random
 
 
-dataset_dir = "../../../data/small/"
-num_vertices = 1000
-num_features = 6
-label_kinds = 4
+dataset_dir = "../../../data/large/"
+num_vertices = 30000
+num_features = 60
+label_kinds = 12
 
 
 # Generate graph.
-with open(dataset_dir + "small.graph", 'w+') as fgraph:
+with open(dataset_dir + "large.graph", 'w+') as fgraph:
     for i in range(num_vertices):
         for j in range(num_vertices):
             if random.random() > 0.99:
