@@ -31,11 +31,10 @@ class GPUComm {
 
 public:
 
-    GPUComm(unsigned nodeId_,unsigned dataserverPort_,unsigned weightPort):
+    GPUComm(unsigned nodeId_,unsigned dataserverPort_):
         nodeId(nodeId_),
         dPort(dataserverPort_),
-        dataSocket(ctx,ZMQ_REQ),
-        wPort(weightPort){
+        dataSocket(ctx,ZMQ_REQ){
 
         char ipc_addr[50];
         sprintf(ipc_addr, "ipc:///tmp/GPU_COMM:%u", dPort);
@@ -54,7 +53,6 @@ private:
     zmq::context_t ctx;
     zmq::socket_t dataSocket;
     unsigned dPort;
-    unsigned wPort;
 
     //data related objs
     FeatType *zData;
@@ -70,14 +68,13 @@ private:
 void GPUComm::requestForward(unsigned layer){
     try {
         std::string weightIp("0.0.33.3");
-        zmq::message_t ip_msg(weightIp.size());
         zmq::message_t confirm(5);
-        std::memcpy(ip_msg.data(), weightIp.c_str(), weightIp.size());
-        dataSocket.send(ip_msg);
-        dataSocket.recv(&confirm);
+
+        unsigned ROWS=10;
+        unsigned COLS=10;
 
         zmq::message_t header(HEADER_SIZE);
-        populateHeader((char *) header.data(), OP::REQ_FORWARD, layer,wPort);
+        populateHeader((char *) header.data(), OP::REQ_FORWARD, layer,ROWS,COLS);
         dataSocket.send(header);
         dataSocket.recv(&confirm);
 
@@ -90,23 +87,17 @@ void GPUComm::requestForward(unsigned layer){
         // unsigned bufSize = thisPartRows * actMatrix.getCols() * sizeof(FeatType);
         // FeatType *partitionStart = actMatrix.getData() + (partId * partRows * actMatrix.getCols());
 
-        unsigned ROWS=100;
-        unsigned COLS=100;
         unsigned bufSize = ROWS * COLS * sizeof(FeatType);
         FeatType *partitionStart = new FeatType[bufSize];
         for (int i=0;i<bufSize;++i)
             partitionStart[i]=i;
-        printf("%f\n", partitionStart[0]);
-        printf("%f\n", partitionStart[1]);
-        printf("%f\n", partitionStart[2]);
-
-        populateHeader((char *) header.data(), OP::RESP, 0, ROWS, COLS);
-        dataSocket.send(header);
-        dataSocket.recv(&confirm);
         printf("Buffer size %u\n", bufSize);
         zmq::message_t partitionData(partitionStart, bufSize, doNotFreeBuffer, NULL);
         dataSocket.send(partitionData);
+        //block until computation finish
         dataSocket.recv(&confirm);
+
+
 
     }
     catch(std::exception& ex){

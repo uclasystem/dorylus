@@ -5,28 +5,35 @@
 #include <chrono>
 #include <iostream>
 #include <fstream>
-// #include "../comp_unit/comp_unit.hpp"
+#include "../comp_unit/comp_unit.hpp"
 #include <string>
 #include <cstring>
 #include <sstream>
 #include "../../../src/utils/utils.hpp"
+#include <boost/algorithm/string/trim.hpp>
 
 class ComputingServer {
 public:
-    ComputingServer(unsigned dPort_,std::string weightServerIp_, unsigned wPort_):
+    ComputingServer(unsigned dPort_,const std::string& wServersFile,unsigned wPort_):
         dPort(dPort_),
-        weightServerIp(weightServerIp_),
         wPort(wPort_),
         dataSocket(ctx, ZMQ_REP),
         weightSocket(ctx, ZMQ_DEALER){
+            loadWeightServers(weightServerAddrs,wServersFile);
+            // for(int i=0;i<weightserverAddrs.size();++i){
+            //     printf("%s\n",weightserverAddrs[i] );
+            // }
 
     }
+
+    //read weight file 
+    void loadWeightServers(std::vector<char *>& addresses, const std::string& wServersFile);
 
     // Keep listening to computing requests
     void run();
 
     // Sending and Requesting functions
-    Matrix requestMatrix(zmq::socket_t& socket, int32_t id);
+    Matrix requestWeightsMatrix(zmq::socket_t& socket, unsigned layer);
     void sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, int32_t id);
 
 
@@ -35,12 +42,12 @@ private:
     zmq::context_t ctx;
     zmq::socket_t dataSocket;
     zmq::socket_t weightSocket;
-    
-    std::string weightServerIp;
+
+    std::vector<char*> weightServerAddrs;
     unsigned dPort;
     unsigned wPort;
     
-    // ComputingUnit cu;
+    ComputingUnit cu;
 };
 
 
@@ -49,7 +56,7 @@ void ComputingServer::run(){
     //use port as ipc addresss
     char ipc_addr[50];
     sprintf(ipc_addr, "ipc:///tmp/GPU_COMM:%u", dPort); 
-    // dataSocket.bind("tcp://*:1234");
+    dataSocket.bind("tcp://*:1234");
 
 
     std::cout << "Binding computing server to " << ipc_addr << "..." << std::endl;
@@ -61,71 +68,61 @@ void ComputingServer::run(){
     try {
         bool terminate = false;
         while (!terminate) {
-            zmq::message_t w_ip_msg;
             zmq::message_t header;
-            zmq::message_t header2;
             zmq::message_t confirm(5);
             zmq::message_t aggreChunk;
-
-            dataSocket.recv(&w_ip_msg);
-            dataSocket.send(confirm);
-
+            unsigned op;
+            unsigned layer;
+            unsigned ROWS,COLS;
 
             dataSocket.recv(&header);
-            unsigned op = parse<unsigned>((char *) header.data(), 0);
-            unsigned layer = parse<unsigned>((char *) header.data(), 1);
-            wPort = parse<unsigned>((char *) header.data(), 2);
-            dataSocket.send(confirm);
-
-            std::string weightServerIp(w_ip_msg.size()+1,' ');
-            memcpy(&weightServerIp[0], (char *) w_ip_msg.data(), w_ip_msg.size());
-            weightServerIp[w_ip_msg.size()] = '\0';
+            op = parse<unsigned>((char *) header.data(), 0);
+            layer = parse<unsigned>((char *) header.data(), 1);
+            ROWS = parse<unsigned>((char *) header.data(), 2);
+            COLS = parse<unsigned>((char *) header.data(), 3);
 
             printf("op %u\n", op);
-            printf("layer %u\n", layer);
-            printf("wPort %u\n", wPort);
-            printf("IP %s\n", weightServerIp.c_str());
-
-            dataSocket.recv(&header2);
-            op = parse<unsigned>((char *) header2.data(), 0);
-            unsigned ROWS=parse<unsigned>((char *) header2.data(), 2);
-            unsigned COLS=parse<unsigned>((char *) header2.data(), 3);;
-            printf("op %u\n", op);
+            printf("Layer %u\n", layer);
             printf("ROWS %u\n", ROWS);
             printf("COLS %u\n", COLS);
             dataSocket.send(confirm);
 
+            
 
+            Matrix weights;
+            std::thread t([&] {
+                unsigned id = 0; // id=0 for GPU
+                unsigned ipc_addr_len=strlen(ipc_addr);
+                size_t identity_len = sizeof(unsigned) + ipc_addr_len;
+                char identity[identity_len];
+                memcpy(identity, (char *) &id, sizeof(unsigned));
+                memcpy(identity + sizeof(unsigned), ipc_addr, ipc_addr_len);
+
+                std::cout << "< GPU SERVER FORWARD > Asking weightserver..." << std::endl;
+                weightSocket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
+                char whost_port[50];
+                sprintf(whost_port, "tcp://%s:%u", weightServerAddrs[0], wPort);
+                printf("connect to %s\n", whost_port);
+                weightSocket.connect(whost_port);
+                weights = requestWeightsMatrix(weightSocket, layer);
+                std::cout << "<  GPU SERVER FORWARD > Got data from weightserver." << std::endl;
+            });
+
+            std::cout << "< GPU SERVER FORWARD  > Getting data from dataserver..." << std::endl;
             dataSocket.recv(&aggreChunk);
             printf("Chunk Received\n");
             printf("%zu\n", aggreChunk.size());
-            printf("%u\n", ROWS*COLS);
-            for (unsigned i=0;i<ROWS*COLS;++i){
-                printf("%f\n", ((float*)aggreChunk.data())[i]);    
-            }
+            // printf("%u\n", ROWS*COLS);
             dataSocket.send(confirm);
-
-            // Matrix weights;
-            // std::thread t([&] {
-            //     std::cout << "< matmul > Asking weightserver..." << std::endl;
-            //     zmq::socket_t wSocket(ctx, ZMQ_DEALER);
-            //     wSocket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
-            //     char whost_port[50];
-            //     sprintf(whost_port, "tcp://%s:%s", weightserver, wport);
-            //     wSocket.connect(whost_port);
-            //     weights = requestMatrix(wSocket, layer);
-            //     std::cout << "< matmul > Got data from weightserver." << std::endl;
-            // });
-
-            // std::cout << "< matmul > Asking dataserver..." << std::endl;
+            
             // zmq::socket_t dSocket(ctx, ZMQ_DEALER);
             // dataSocket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
             // char dhost_port[50];
             // sprintf(dhost_port, "tcp://%s:%s", dataserver, dport);
             // dSocket.connect(dhost_port);
             // Matrix feats = requestMatrix(dSocket, id);
-            // std::cout << "< matmul > Got data from dataserver." << std::endl;
-            // t.join();
+            std::cout << "< GPU SERVER FORWARD > Got data from dataserver." << std::endl;
+            t.join();
 
             // Matrix z = cu.dot(feats, weights);
             // Matrix act = cu.activate(z);
@@ -157,37 +154,66 @@ void ComputingServer::sendMatrices(Matrix& zResult, Matrix& actResult, zmq::sock
         // socket.recv(&confirm);
 }
 
-// Request the input matrix data from dataserver.
-Matrix ComputingServer::requestMatrix(zmq::socket_t& socket, int32_t id) {
-    return Matrix();
 
-    // // Send pull request.
-    // zmq::message_t header(HEADER_SIZE);
-    // populateHeader((char *) header.data(), OP::PULL, id);
-    // socket.send(header);
 
-    // // Listen on respond.
-    // zmq::message_t respHeader;
-    // socket.recv(&respHeader);
+void ComputingServer::loadWeightServers(std::vector<char *>& addresses, const std::string& wServersFile){
+    std::ifstream infile(wServersFile);
+    if (!infile.good())
+        printf("Cannot open weight server file: %s [Reason: %s]\n", wServersFile.c_str(), std::strerror(errno));
 
-    // // Parse the respond.
-    // int32_t layerResp = parse<int32_t>((char *) respHeader.data(), 1);
-    // if (layerResp == -1) {      // Failed.
-    //     std::cerr << "[ ERROR ] No corresponding matrix chunk!" << std::endl;
-    //     return Matrix();
-    // } else {                    // Get matrix data.
-    //     int32_t rows = parse<int32_t>((char *) respHeader.data(), 2);
-    //     int32_t cols = parse<int32_t>((char *) respHeader.data(), 3);
-    //     zmq::message_t matxData(rows * cols * sizeof(FeatType));
-    //     socket.recv(&matxData);
+    assert(infile.good());
 
-    //     char *matxBuffer = new char[matxData.size()];
-    //     std::memcpy(matxBuffer, matxData.data(), matxData.size());
+    std::string line;
+    while (!infile.eof()) {
+        std::getline(infile, line);
+        boost::algorithm::trim(line);
 
-    //     Matrix m(rows, cols, matxBuffer);
-    //     return m;
-    // }
+        if (line.length() == 0)
+            continue;   
+        
+        char *addr = strdup(line.c_str());
+        addresses.push_back(addr);
+    }
 }
 
+
+
+
+/**
+ *
+ * Request the input matrix data from weightserver.
+ * 
+ */
+//TODO: Can be modify to zerocopy
+Matrix
+ComputingServer::requestWeightsMatrix(zmq::socket_t& socket, unsigned layer) {
+    
+    // Send pull request.
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader((char *) header.data(), OP::PULL_FORWARD, layer);
+    socket.send(header);
+
+    // Listen on respond.
+    zmq::message_t respHeader;
+    socket.recv(&respHeader);
+
+    // Parse the respond.
+    unsigned layerResp = parse<unsigned>((char *) respHeader.data(), 1);
+    if ((int)layerResp == -1) {      // Failed.
+        std::cerr << "[ ERROR ] No corresponding matrix chunk!" << std::endl;
+        return Matrix();
+    } else {                    // Get matrices data.
+        unsigned rows = parse<unsigned>((char *) respHeader.data(), 2);
+        unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
+        zmq::message_t matxData(rows * cols * sizeof(float));
+        socket.recv(&matxData);
+
+        char *matxBuffer = new char[matxData.size()];
+        std::memcpy(matxBuffer, matxData.data(), matxData.size());
+
+        Matrix m(rows, cols, matxBuffer);
+        return m;
+    }
+}
 
 #endif 

@@ -1,0 +1,2 @@
+#!/bin/bash
+g++ GPU_comm_unit_test.cpp -I/usr/local/include -L/usr/local/lib/libzmq.a -lzmq -lpthread -o ut

@@ -2,7 +2,7 @@
 
 int main()
 {
-	auto gc=GPUComm(1,1234,2234);
+	auto gc=GPUComm(1,1234);
 	gc.requestForward(2);
 	return 0;
 }

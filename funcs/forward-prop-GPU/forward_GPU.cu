@@ -17,7 +17,7 @@ int main(int argc, char const *argv[])
 	// ComputingUnit cu=ComputingUnit();
 	// C=cu.dot(A,B);
 	// cu.activate(A);
-	ComputingServer cs=ComputingServer(1234,"0.0.0.0",2234);
+	ComputingServer cs=ComputingServer(1234,"/home/cocoa/Desktop/gnn-lambda/wserverip",55432);
 	cs.run();
 	
 
