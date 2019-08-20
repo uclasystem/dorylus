@@ -31,10 +31,10 @@ class LambdaWorker {
 public:
 
     LambdaWorker(unsigned nodeId_, zmq::context_t& ctx_, unsigned numLambdasForward_, unsigned numLambdasBackward_,
-                 unsigned& countForward_, bool& finishedBackward_)
+                 unsigned& countForward_, unsigned& countBackward_)
         : nodeId(nodeId_), ctx(ctx_), workersocket(ctx, ZMQ_DEALER),
           numLambdasForward(numLambdasForward_), numLambdasBackward(numLambdasBackward_),
-          countForward(countForward_), finishedBackward(finishedBackward_) {
+          countForward(countForward_), countBackward(countBackward_) {
         workersocket.connect("inproc://backend");
     }
 
@@ -56,7 +56,7 @@ protected:
     unsigned numLambdasBackward;
 
     unsigned& countForward;     // Counting up until all lambdas have returned.
-    bool& finishedBackward;     // Set to true if 'finished' message received.
+    unsigned& countBackward;
 
 private:
 
@@ -108,7 +108,7 @@ public:
         : nodeIp(nodeIp_), dataserverPort(dataserverPort_), coordserverIp(coordserverIp_), coordserverPort(coordserverPort_), nodeId(nodeId_), 
           ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), coordsocket(ctx, ZMQ_REQ),
           numLambdasForward(numLambdasForward_), numLambdasBackward(numLambdasBackward_), numListeners(numLambdasBackward_),   // TODO: Decide numListeners.
-          countForward(0), finishedBackward(false) {
+          countForward(0), countBackward(0) {
 
         // Bind the proxy sockets.
         char dhost_port[50];
@@ -122,7 +122,7 @@ public:
 
         // Create 'numListeners' workers and detach them.
         for (unsigned i = 0; i < numListeners; ++i) {
-            workers.push_back(new LambdaWorker(nodeId, ctx, numLambdasForward, numLambdasBackward, countForward, finishedBackward));
+            workers.push_back(new LambdaWorker(nodeId, ctx, numLambdasForward, numLambdasBackward, countForward, countBackward));
             worker_threads.push_back(new std::thread(std::bind(&LambdaWorker::work, workers[i])));
             worker_threads[i]->detach();
         }
@@ -148,9 +148,9 @@ public:
     void requestLambdasForward(unsigned layer);
 
     // For backward-prop.
-    void newContextBackward(std::vector<FeatType *> zBufs, std::vector<FeatType *> actBufs, FeatType *targetBuf,
+    void newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType *targetBuf,
                             unsigned numLocalVertices, std::vector<unsigned> layerConfig);
-    void requestLambdasBackward();
+    void requestLambdasBackward(unsigned numLayers_);
 
     // Send a message to the coordination server to shutdown.
     void sendShutdownMessage();
@@ -166,7 +166,7 @@ private:
     std::vector<std::thread *> worker_threads;
 
     unsigned countForward;
-    bool finishedBackward;
+    unsigned countBackward;
 
     zmq::context_t ctx;
     zmq::socket_t frontend;

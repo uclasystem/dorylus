@@ -86,7 +86,7 @@ invokeFunction(Aws::String funcName, char *dataserver, char *dport, char *weight
     jsonPayload.WithString("weightserver", weightserver);
     jsonPayload.WithString("wport", wport);
     jsonPayload.WithString("dport", dport);
-    jsonPayload.WithInteger("layer", layer);    // For backward-prop, layer doesn't matter.
+    jsonPayload.WithInteger("layer", layer);    // For forward-prop: layer-ID; For backward-prop: numLayers.
     jsonPayload.WithInteger("id", id);
     *payload << jsonPayload.View().WriteReadable();
     invReq.SetBody(payload);
@@ -171,8 +171,6 @@ public:
 
                     // Issue a bunch of lambda threads to serve the request.
                     for (unsigned i = 0; i < nThreadsReq; i++) {
-
-                        // TODO: Maybe improve this naive round robin scheduling.
                     	char *weightserverIp = weightserverAddrs[req_count % weightserverAddrs.size()];
                         invokeFunction("forward-prop-josehu", dataserverIpCopy, dataserverPort, weightserverIp, weightserverPort, layer, i);
                    		req_count++;
@@ -181,15 +179,13 @@ public:
                 // This is backward.
                 } else if (op == OP::REQ_BACKWARD) {
                     std::string accMsg = "[ACCEPTED] Req for BACKWARD " + std::to_string(nThreadsReq)
-                                       + " lambdas for layer " + std::to_string(layer) + ".";
+                                       + " lambdas on " + std::to_string(layer) + " layers.";
                     std::cout << accMsg << std::endl;
 
                     // Issue a bunch of lambda threads to serve the request.
                     for (unsigned i = 0; i < nThreadsReq; i++) {
-
-                        // TODO: Maybe improve this naive round robin scheduling.
                         char *weightserverIp = weightserverAddrs[req_count % weightserverAddrs.size()];
-                        invokeFunction("backward-prop-josehu", dataserverIpCopy, dataserverPort, weightserverIp, weightserverPort, 0, i);
+                        invokeFunction("backward-prop-josehu", dataserverIpCopy, dataserverPort, weightserverIp, weightserverPort, layer, i);
                         req_count++;
                     }
 

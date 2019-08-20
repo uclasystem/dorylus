@@ -32,7 +32,8 @@ unsigned Engine::dataserverPort;
 std::string Engine::coordserverIp;
 unsigned Engine::coordserverPort;
 LambdaComm *Engine::lambdaComm = NULL;
-unsigned Engine::numLambdas = 0;
+unsigned Engine::numLambdasForward = 0;
+unsigned Engine::numLambdasBackward = 0;
 unsigned Engine::currId = 0;
 Lock Engine::lockCurrId;
 Lock Engine::lockRecvWaiters;
@@ -139,7 +140,7 @@ Engine::init(int argc, char *argv[]) {
 
     // Create the lambda communication manager.
     lambdaComm = new LambdaComm(NodeManager::getNode(nodeId).pubip, dataserverPort, coordserverIp, coordserverPort, nodeId,
-                                numLambdas, numLambdas);
+                                numLambdasForward, numLambdasBackward);
 
     timeInit += getTimer();
     printLog(nodeId, "Engine initialization complete.");
@@ -195,7 +196,7 @@ Engine::runForward() {
     // Join all data communicators.
     dataPool->sync();
 
-    printLog(nodeId, "Engine completes FORWARD at iteration %u.", iteration);
+    printLog(nodeId, "Engine completes FORWARD at iter %u.", iteration);
 }
 
 
@@ -223,7 +224,7 @@ Engine::runBackward() {
 
     timeBackwardProcess += getTimer();
 
-    printLog(nodeId, "Engine completes BACKWARD at iteration %u.", iteration);
+    printLog(nodeId, "Engine completes BACKWARD propagation.");
 }
 
 
@@ -534,6 +535,15 @@ void
 Engine::backwardWorker(unsigned tid, void *args) {
     if (tid == 0) {     // Only master thread does the actual work.
 
+        // Start a new lambda communication context.
+        lambdaComm->newContextBackward(localVerticesZData, localVerticesActivationData, localVerticesLabels,
+                                       graph.getNumLocalVertices(), layerConfig);
+
+        // Trigger a request towards the coordicate server. Wait until the request completes.
+        std::thread treq([&] {
+            lambdaComm->requestLambdasBackward(numLayers);
+        });
+        treq.join();
     }
 }
 
@@ -695,7 +705,8 @@ Engine::parseArgs(int argc, char *argv[]) {
         ("ctrlport", boost::program_options::value<unsigned>(), "Port start for control communication")
         ("nodeport", boost::program_options::value<unsigned>(), "Port for node manager")
 
-        ("numLambdas", boost::program_options::value<unsigned>()->default_value(unsigned(1), "1"), "Number of lambdas to request")
+        ("numlambdasforward", boost::program_options::value<unsigned>()->default_value(unsigned(1), "5"), "Number of lambdas to request at forward")
+        ("numlambdasbackward", boost::program_options::value<unsigned>()->default_value(unsigned(1), "10"), "Number of lambdas to request at backward")
         ;
 
     boost::program_options::variables_map vm;
@@ -761,8 +772,11 @@ Engine::parseArgs(int argc, char *argv[]) {
     unsigned node_port = vm["nodeport"].as<unsigned>();
     NodeManager::setNodePort(node_port);
 
-    assert(vm.count("numLambdas"));
-    numLambdas = vm["numLambdas"].as<unsigned>();
+    assert(vm.count("numlambdasforward"));
+    numLambdasForward = vm["numlambdasforward"].as<unsigned>();
+
+    assert(vm.count("numlambdasbackward"));
+    numLambdasBackward = vm["numlambdasbackward"].as<unsigned>();
 
     printLog(404, "Parsed configuration: dThreads = %u, cThreads = %u, graphFile = %s, featuresFile = %s, dshMachinesFile = %s, "
                   "myPrIpFile = %s, myPubIpFile = %s, undirected = %s, data port set -> %u, control port set -> %u, node port set -> %u",
