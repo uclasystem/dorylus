@@ -1,6 +1,6 @@
 #include "weightserver.hpp"
 
-std::mutex m, term_mutex;
+std::mutex m, term_mutex, update_mutex;
 std::condition_variable cv;
 bool finished = false;
 

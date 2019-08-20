@@ -1,8 +1,7 @@
 #include "serverworker.hpp"
 
 
-std::mutex update_mutex;
-extern std::mutex m, term_mutex;
+extern std::mutex m, term_mutex, update_mutex;
 extern std::condition_variable cv;
 extern bool finished;
 
