@@ -150,10 +150,10 @@ dot(Matrix& features, Matrix& weights) {
  */
 static Matrix
 activate(Matrix& mat) {
-    FeatType *activationData = new FeatType[mat.getRows() * mat.getCols()];
+    FeatType *activationData = new FeatType[mat.getNumElemts()];
     FeatType *zData = mat.getData();
     
-    for (unsigned i = 0; i < mat.getRows() * mat.getCols(); ++i)
+    for (unsigned i = 0; i < mat.getNumElemts(); ++i)
         activationData[i] = std::tanh(zData[i]);
 
     return Matrix(mat.getRows(), mat.getCols(), activationData);

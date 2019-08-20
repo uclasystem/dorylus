@@ -51,7 +51,7 @@ requestFeatsMatrices(zmq::socket_t& socket, unsigned id, unsigned numLayers) {
 
     GraphData graphData;
 
-    // Receive z matrices chunks, from layer 1-> last.
+    // Receive z matrices chunks, from layer 1 -> last.
     for (size_t i = 1; i <= numLayers; ++i) {
         zmq::message_t respHeader;
         socket.recv(&respHeader);
@@ -122,23 +122,35 @@ requestFeatsMatrices(zmq::socket_t& socket, unsigned id, unsigned numLayers) {
  * 
  */
 static std::vector<Matrix>
-requestWeightsMatrices(zmq::socket_t& socket, unsigned layer) {
+requestWeightsMatrices(zmq::socket_t& socket, unsigned id, unsigned numLayers) {
+    
+    // Send pull request.
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader((char *) header.data(), OP::PULL_BACKWARD, id);
+    socket.send(header);
+
     std::vector<Matrix> weightsData;
 
-    // TODO!
-    FeatType *w2Data = new FeatType[10 * 4] {
-        0.170054, -0.901535, 0.908919, 0.194343,
-        -0.674725, -0.105672, -0.0228593, -0.198091,
-        0.685961, -0.0546585, -0.646025, -0.733765,
-        0.609123, -1.47173, -0.315495, 1.48348,
-        -0.210511, -1.06066, -0.483713, 0.234035,
-        0.420494, -0.757625, -1.40361, 1.47215,
-        1.44152, -0.354305, 0.190449, -0.114473,
-        -0.955115, 0.389505, 0.408238, 0.265304,
-        0.970574, 1.43, 0.952564, -1.24768,
-        0.221666, -0.46031, 0.575747, -1.4179
-    };
-    weightsData.push_back(Matrix(10, 4, w2Data));
+    // Receive weight matrices, from layer 2 -> last.
+    for (size_t i = 2; i <= numLayers; ++i) {
+        zmq::message_t respHeader;
+        socket.recv(&respHeader);
+        unsigned layerResp = parse<unsigned>((char *) respHeader.data(), 1);
+        if (layerResp == ERR_HEADER_FIELD) {    // Failed.
+            std::cerr << "[ ERROR ] No corresponding weight matrix!" << std::endl;
+            return weightsData;
+        } else {                    // Get matrices data.
+            unsigned rows = parse<unsigned>((char *) respHeader.data(), 2);
+            unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
+            zmq::message_t matxData(rows * cols * sizeof(FeatType));
+            socket.recv(&matxData);
+
+            FeatType *matxBuffer = new FeatType[rows * cols];
+            std::memcpy(matxBuffer, matxData.data(), matxData.size());
+
+            weightsData.push_back(Matrix(rows, cols, matxBuffer));
+        }
+    }
 
     return weightsData;
 }
@@ -150,12 +162,28 @@ requestWeightsMatrices(zmq::socket_t& socket, unsigned layer) {
  * 
  */
 static void
-sendWeightsUpdates(std::vector<Matrix> weightsUpdates, zmq::socket_t& socket, unsigned id) {
-    // TODO!
-    std::cout << "!!! Weights upates: ";
-    for (Matrix& mat : weightsUpdates)
-        std::cout << "(" << mat.getRows() << ", " << mat.getCols() << ") ";
-    std::cout << std::endl;
+sendWeightsUpdates(zmq::socket_t& socket, std::vector<Matrix> weightsUpdates, unsigned id) {
+    
+    // Send push header.
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader((char *) header.data(), OP::PUSH_BACKWARD, id);
+    socket.send(header, ZMQ_SNDMORE);
+
+    // Send updates to all weight matrices given by my chunk.
+    for (unsigned i = 0; i < weightsUpdates.size(); ++i) {
+        Matrix& updateMat = weightsUpdates[i];
+
+        zmq::message_t updateData(updateMat.getDataSize());
+        std::memcpy(updateData.data(), updateMat.getData(), updateMat.getDataSize());
+        if (i == weightsUpdates.size() - 1)
+            socket.send(updateData);
+        else
+            socket.send(updateData, ZMQ_SNDMORE);
+    }
+
+    // Wait for updates settled reply.
+    zmq::message_t confirm;
+    socket.recv(&confirm);
 }
 
 
@@ -185,7 +213,7 @@ sendFinishMsg(zmq::socket_t& socket, unsigned id) {
  */
 static Matrix
 softmaxRows(Matrix& mat) {
-    FeatType *res = new FeatType[mat.getRows() * mat.getCols()];
+    FeatType *res = new FeatType[mat.getNumElemts()];
 
     for (unsigned i = 0; i < mat.getRows(); ++i) {
         unsigned length = mat.getCols();
@@ -215,10 +243,10 @@ hadamardSub(Matrix& matLeft, Matrix& matRight) {
     assert(matLeft.getRows() == matRight.getRows());
     assert(matLeft.getCols() == matRight.getCols());
     
-    FeatType *res = new FeatType[matLeft.getRows() * matLeft.getCols()];
+    FeatType *res = new FeatType[matLeft.getNumElemts()];
     FeatType *leftData = matLeft.getData(), *rightData = matRight.getData();
 
-    for (unsigned i = 0; i < matLeft.getRows() * matLeft.getCols(); ++i)
+    for (unsigned i = 0; i < matLeft.getNumElemts(); ++i)
         res[i] = leftData[i] - rightData[i];
 
     return Matrix(matLeft.getRows(), matRight.getCols(), res);
@@ -229,10 +257,10 @@ hadamardMul(Matrix& matLeft, Matrix& matRight) {
     assert(matLeft.getRows() == matRight.getRows());
     assert(matLeft.getCols() == matRight.getCols());
     
-    FeatType *res = new FeatType[matLeft.getRows() * matLeft.getCols()];
+    FeatType *res = new FeatType[matLeft.getNumElemts()];
     FeatType *leftData = matLeft.getData(), *rightData = matRight.getData();
 
-    for (unsigned i = 0; i < matLeft.getRows() * matLeft.getCols(); ++i)
+    for (unsigned i = 0; i < matLeft.getNumElemts(); ++i)
         res[i] = leftData[i] * rightData[i];
 
     return Matrix(matLeft.getRows(), matRight.getCols(), res);
@@ -246,10 +274,10 @@ hadamardMul(Matrix& matLeft, Matrix& matRight) {
  */
 static Matrix
 activateDerivate(Matrix& mat) {
-    FeatType *res = new FeatType[mat.getRows() * mat.getCols()];
+    FeatType *res = new FeatType[mat.getNumElemts()];
     FeatType *zData = mat.getData();
 
-    for (unsigned i = 0; i < mat.getRows() * mat.getCols(); ++i)
+    for (unsigned i = 0; i < mat.getNumElemts(); ++i)
         res[i] = 1 - std::pow(std::tanh(zData[i]), 2);
 
     return Matrix(mat.getRows(), mat.getCols(), res);
@@ -385,7 +413,7 @@ backward_prop(std::string dataserver, std::string weightserver, std::string dpor
         std::thread t([&] {     // Weight requests run in a separate thread.
             std::cout << "< BACKWARD > Asking weightserver..." << std::endl;
             getWeightsTimer.start();
-            weightsData = requestWeightsMatrices(weights_socket, numLayers);
+            weightsData = requestWeightsMatrices(weights_socket, id, numLayers);
             getWeightsTimer.stop();
             std::cout << "< BACKWARD > Got data from weightserver." << std::endl;
         });
@@ -399,8 +427,8 @@ backward_prop(std::string dataserver, std::string weightserver, std::string dpor
 
         t.join();
 
-        // if (weightsData.empty())
-        //     return invocation_response::failure("Weights could not be loaded", "application/json");
+        if (weightsData.empty())
+            return invocation_response::failure("Weights could not be loaded", "application/json");
         if (graphData.zMatrices.empty())
             return invocation_response::failure("No chunks corresponding to request", "appliation/json");
 
@@ -413,7 +441,7 @@ backward_prop(std::string dataserver, std::string weightserver, std::string dpor
         // Send weight updates to weightserver, and finish message to dataserver.
         sendResTimer.start();
         std::cout << "< BACKWARD > Sending weight updates back..." << std::endl;
-        sendWeightsUpdates(weightsUpdates, weights_socket, id);
+        sendWeightsUpdates(weights_socket, weightsUpdates, id);
         std::cout << "< BACKWARD > Weight updates sent." << std::endl;
         sendFinishMsg(data_socket, id);
         std::cout << "< BACKWARD > Finish message sent." << std::endl;

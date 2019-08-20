@@ -126,7 +126,7 @@ public:
         // Setup lambda client.
         Aws::Client::ClientConfiguration clientConfig;
         clientConfig.requestTimeoutMs = 900000;
-        clientConfig.region = "us-east-2";
+        clientConfig.region = "us-east-1";
         m_client = Aws::MakeShared<Aws::Lambda::LambdaClient>(ALLOCATION_TAG, clientConfig);
 
         // Keeps listening on dataserver's requests.
@@ -158,7 +158,7 @@ public:
 
                 // If it is a termination message, then shut all weightservers first and then shut myself down.
                 if (op == OP::TERM) {
-                    std::cerr << "Terminating the servers..." << std::endl;
+                    std::cerr << "[SHUTDOWN] Terminating the servers..." << std::endl;
                     terminate = true;
                     for (std::size_t i = 0; i < weightserverAddrs.size(); ++i)
                     	sendShutdownMessage(weightserverAddrs[i], weightserverPort);
@@ -194,9 +194,7 @@ public:
                     std::cerr << "[ ERROR ] Unknown OP code (" << op << ") received." << std::endl;
                 }
             }
-        } catch (std::exception& ex) {
-            std::cerr << "[ ERROR ] " << ex.what() << std::endl;
-        }
+        } catch (std::exception& ex) { /** Context Termintated. */ }
     }
 
 private:

@@ -37,7 +37,7 @@ case $1 in
         DSHMACHINESFILE=${HOME}/dshmachines
 
         # Kill running graphservers.
-        echo "Killing existing 'graphserver' processes..."
+        echo -e "\e[33;1mKilling existing 'graphserver' processes...\e[0m"
         dsh -f ${DSHMACHINESFILE} -c "killall -u $( whoami ) graphserver"
 
         # Count the machines.
@@ -65,7 +65,7 @@ case $1 in
         # Increment the running mark.
         RUN_MARK=$(( $( cat run/run-mark ) + 1 ))
         echo ${RUN_MARK} > run/run-mark
-        echo "Running MARK # ${RUN_MARK}..."
+        echo -e "\e[33;1mRunning GRAPH servers with: [ MARK # ${RUN_MARK} ]...\e[0m"
 
         # Set logging file.
         LOGFILEDIR=${HOME}/logfiles
@@ -106,11 +106,11 @@ case $1 in
         DSHMACHINESFILE=${HOME}/dshmachines
 
         # Kill running weightservers.
-        echo "Killing existing 'weightserver' processes..."
+        echo -e "\e[33;1mKilling existing 'weightserver' processes...\e[0m"
         dsh -f ${DSHMACHINESFILE} -c "killall -u $( whoami ) weightserver"
 
         # Run weightserver on all dsh nodes.
-        echo "Running WEIGHT on all dsh machines in 'weight' context..."
+        echo -e "\e[33;1mRunning WEIGHT servers on all machines in 'weight' context...\e[0m"
         dsh -M -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ./build/weightserver ${WPORT} ../layerconfig"
         ;;
 
@@ -126,11 +126,11 @@ case $1 in
         LAMBDA_TIMEOUT=
 
         # Kill running coordserver.
-        echo "Killing existing 'coordserver' processes..."
+        echo -e "\e[33;1mKilling existing 'coordserver' processes...\e[0m"
         killall -u $( whoami ) coordserver
 
         # Run coordserver.
-        echo "Running COORD..."
+        echo -e "\e[33;1mRunning central COORD server..\e[0m"
         ./build/coordserver ${CPORT} ../wserverip ${WPORT} ${GPORT}
         ;;
 

@@ -706,7 +706,7 @@ Engine::parseArgs(int argc, char *argv[]) {
         ("nodeport", boost::program_options::value<unsigned>(), "Port for node manager")
 
         ("numlambdasforward", boost::program_options::value<unsigned>()->default_value(unsigned(1), "5"), "Number of lambdas to request at forward")
-        ("numlambdasbackward", boost::program_options::value<unsigned>()->default_value(unsigned(1), "10"), "Number of lambdas to request at backward")
+        ("numlambdasbackward", boost::program_options::value<unsigned>()->default_value(unsigned(1), "20"), "Number of lambdas to request at backward")
         ;
 
     boost::program_options::variables_map vm;
