@@ -1,10 +1,12 @@
-// #include "comp_unit/comp_unit.hpp"
 #include "comp_server/comp_server.hpp"
+#include "comp_unit/comp_unit.hpp"
 #include <iostream>
 #include <cstring>
 #include <cstdio>
-#include "../../src/utils/utils.hpp"
 #include <sstream>
+#include <chrono>
+#include "../../src/utils/utils.hpp"
+
 
 int main(int argc, char const *argv[])
 {
@@ -15,8 +17,8 @@ int main(int argc, char const *argv[])
 	// ComputingUnit cu=ComputingUnit();
 	// C=cu.dot(A,B);
 	// cu.activate(A);
-	ComputingServer cs=ComputingServer(2000,"0.0.0.0",20001);
-
+	ComputingServer cs=ComputingServer(1234,"0.0.0.0",2234);
+	cs.run();
 	
 
 

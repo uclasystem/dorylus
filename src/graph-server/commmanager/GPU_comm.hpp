@@ -19,26 +19,28 @@
 #include "../../utils/utils.hpp"
 
 
-
+void doNotFreeBuffer(void *data, void *hint){
+    printf("Buffer is not freed :)\n");
+}
 /**
  *
- * Communicate with local GPU process using TCP
+ * Communicate with local GPU process using IPC
  * 
  */
 class GPUComm {
 
 public:
 
-    GPUComm(unsigned nodeId_,unsigned dataserverPort_):
+    GPUComm(unsigned nodeId_,unsigned dataserverPort_,unsigned weightPort):
         nodeId(nodeId_),
-        dataserverPort(dataserverPort_),
-        dataSocket(ctx,ZMQ_REQ){
+        dPort(dataserverPort_),
+        dataSocket(ctx,ZMQ_REQ),
+        wPort(weightPort){
 
-        char dataIPCAddress[50];
-        sprintf(dataIPCAddress, "ipc:///tmp/feeds/%u", dataserverPort);
-        int ret = dataSocket.connect(dataIPCAddress);
-        if (ret != 0 ){ printLog(nodeId,"IPC connect to %s failed",dataIPCAddress);}
-
+        char ipc_addr[50];
+        sprintf(ipc_addr, "ipc:///tmp/GPU_COMM:%u", dPort);
+        dataSocket.connect(ipc_addr);
+        // dataSocket.connect("tcp://0.0.0.0:1234");
     }
     // For forward-prop.
     void requestForward(unsigned layer);
@@ -51,7 +53,8 @@ private:
     //ntw related objs
     zmq::context_t ctx;
     zmq::socket_t dataSocket;
-    unsigned dataserverPort;
+    unsigned dPort;
+    unsigned wPort;
 
     //data related objs
     FeatType *zData;
@@ -65,8 +68,52 @@ private:
 };
 
 void GPUComm::requestForward(unsigned layer){
+    try {
+        std::string weightIp("0.0.33.3");
+        zmq::message_t ip_msg(weightIp.size());
+        zmq::message_t confirm(5);
+        std::memcpy(ip_msg.data(), weightIp.c_str(), weightIp.size());
+        dataSocket.send(ip_msg);
+        dataSocket.recv(&confirm);
 
+        zmq::message_t header(HEADER_SIZE);
+        populateHeader((char *) header.data(), OP::REQ_FORWARD, layer,wPort);
+        dataSocket.send(header);
+        dataSocket.recv(&confirm);
+
+        // Check to make sure that the bounds of this partition do not exceed the bounds of the data array.
+        // If they do, set partition end to the end of the array.
+        // unsigned partRows = std::ceil((float) actMatrix.getRows() / (float) numLambdasForward);
+        // unsigned thisPartRows = partRows;
+        // if ((partId * partRows + partRows) > actMatrix.getRows())
+        //     thisPartRows = partRows - (partId * partRows + partRows) + actMatrix.getRows();
+        // unsigned bufSize = thisPartRows * actMatrix.getCols() * sizeof(FeatType);
+        // FeatType *partitionStart = actMatrix.getData() + (partId * partRows * actMatrix.getCols());
+
+        unsigned ROWS=100;
+        unsigned COLS=100;
+        unsigned bufSize = ROWS * COLS * sizeof(FeatType);
+        FeatType *partitionStart = new FeatType[bufSize];
+        for (int i=0;i<bufSize;++i)
+            partitionStart[i]=i;
+        printf("%f\n", partitionStart[0]);
+        printf("%f\n", partitionStart[1]);
+        printf("%f\n", partitionStart[2]);
+
+        populateHeader((char *) header.data(), OP::RESP, 0, ROWS, COLS);
+        dataSocket.send(header);
+        dataSocket.recv(&confirm);
+        printf("Buffer size %u\n", bufSize);
+        zmq::message_t partitionData(partitionStart, bufSize, doNotFreeBuffer, NULL);
+        dataSocket.send(partitionData);
+        dataSocket.recv(&confirm);
+
+    }
+    catch(std::exception& ex){
+        std::cerr << "[ERROR] " << ex.what() << std::endl;
+    }
 }
+
 
 void GPUComm::sendShutdownMessage(){
 
