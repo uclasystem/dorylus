@@ -1,6 +1,7 @@
 #ifndef __WEIGHT_SERVER_HPP__
 #define __WEIGHT_SERVER_HPP__
 
+
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -16,29 +17,26 @@
 #include <zmq.hpp>
 #include <boost/algorithm/string/trim.hpp>
 #include "../utils/utils.hpp"
-
-#include <cblas.h>
-
 #include "serverworker.hpp"
 
 
 /**
  *
  * Class of the weightserver. Weightservers are only responsible for replying weight requests from lambdas,
- * and possibly handle weight updates.
+ * and handle weight updates.
  * 
  */
-class WeightServer{
+class WeightServer {
+
 public:
 
     WeightServer(unsigned _port, std::string& configFileName);
 
-    // Runs the weightserver, start a bunch of worker threads and create a proxy through frontend to
-    // backend.
+    // Runs the weightserver, start a bunch of worker threads and create a proxy through frontend to backend.
     void run();
 
-    // Average and apply update batch for the specified layer
-    void applyUpdates(unsigned layer);
+    // Average and apply update batches.
+    void applyUpdates();
 
 private:
 
@@ -49,20 +47,21 @@ private:
     enum { kMaxThreads = 2 };
 
     std::vector<unsigned> dims;
-    std::vector<Matrix> layers;
+    std::vector<Matrix> weightMats;
 
     // List of Matrices for holding updates until they are
-    // ready to be applied
+    // ready to be applied.
     std::vector<Matrix> updates;
-    // NumLambdas request per layer
-    std::vector<unsigned> numLambdas;
+
+    // Number of lambdas requests at backprop.
+    unsigned numLambdas;
     unsigned count;
 
     zmq::context_t ctx;
     zmq::socket_t frontend;
     zmq::socket_t backend;
     unsigned port;
-
 };
+
 
 #endif

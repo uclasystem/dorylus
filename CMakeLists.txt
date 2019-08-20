@@ -18,11 +18,6 @@ set(ZMQ_INC /usr/local/include)
 set(ZMQ_LIB /usr/local/lib/libzmq.a)
 include_directories(${ZMQ_INC})
 
-# Include BLAS
-set(BLAS_LIB    /usr/lib/x86_64-linux-gnu/libopenblas.so.0)
-set(CBLAS_LIB   /usr/local/lib/cblas_LINUX.a)
-set(CBLAS_INC   /usr/local/include)
-
 
 # Include Boost lib.
 find_package(Boost COMPONENTS system filesystem program_options REQUIRED)

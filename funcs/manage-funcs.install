@@ -97,4 +97,6 @@ if [[ ! -d /usr/local/blas/OpenBLAS ]]; then
     make
     sudo mkdir -p /usr/local/blas/OpenBLAS
     sudo make PREFIX=/usr/local/blas/OpenBLAS install
+    cd ..
+    rm -rf OpenBLAS
 fi

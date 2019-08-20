@@ -104,7 +104,8 @@ private:
     static std::string coordserverIp;
     static unsigned coordserverPort;
 
-    static unsigned numLambdas;
+    static unsigned numLambdasForward;
+    static unsigned numLambdasBackward;
     static LambdaComm *lambdaComm;
 
     static unsigned nodeId;

@@ -86,7 +86,7 @@ invokeFunction(Aws::String funcName, char *dataserver, char *dport, char *weight
     jsonPayload.WithString("weightserver", weightserver);
     jsonPayload.WithString("wport", wport);
     jsonPayload.WithString("dport", dport);
-    jsonPayload.WithInteger("layer", layer);    // For backward-prop, layer doesn't matter.
+    jsonPayload.WithInteger("layer", layer);    // For forward-prop: layer-ID; For backward-prop: numLayers.
     jsonPayload.WithInteger("id", id);
     *payload << jsonPayload.View().WriteReadable();
     invReq.SetBody(payload);
@@ -126,7 +126,7 @@ public:
         // Setup lambda client.
         Aws::Client::ClientConfiguration clientConfig;
         clientConfig.requestTimeoutMs = 900000;
-        clientConfig.region = "us-east-2";
+        clientConfig.region = "us-east-1";
         m_client = Aws::MakeShared<Aws::Lambda::LambdaClient>(ALLOCATION_TAG, clientConfig);
 
         // Keeps listening on dataserver's requests.
@@ -158,7 +158,7 @@ public:
 
                 // If it is a termination message, then shut all weightservers first and then shut myself down.
                 if (op == OP::TERM) {
-                    std::cerr << "Terminating the servers..." << std::endl;
+                    std::cerr << "[SHUTDOWN] Terminating the servers..." << std::endl;
                     terminate = true;
                     for (std::size_t i = 0; i < weightserverAddrs.size(); ++i)
                     	sendShutdownMessage(weightserverAddrs[i], weightserverPort);
@@ -171,8 +171,6 @@ public:
 
                     // Issue a bunch of lambda threads to serve the request.
                     for (unsigned i = 0; i < nThreadsReq; i++) {
-
-                        // TODO: Maybe improve this naive round robin scheduling.
                     	char *weightserverIp = weightserverAddrs[req_count % weightserverAddrs.size()];
                         invokeFunction("forward-prop-josehu", dataserverIpCopy, dataserverPort, weightserverIp, weightserverPort, layer, i);
                    		req_count++;
@@ -181,15 +179,13 @@ public:
                 // This is backward.
                 } else if (op == OP::REQ_BACKWARD) {
                     std::string accMsg = "[ACCEPTED] Req for BACKWARD " + std::to_string(nThreadsReq)
-                                       + " lambdas for layer " + std::to_string(layer) + ".";
+                                       + " lambdas on " + std::to_string(layer) + " layers.";
                     std::cout << accMsg << std::endl;
 
                     // Issue a bunch of lambda threads to serve the request.
                     for (unsigned i = 0; i < nThreadsReq; i++) {
-
-                        // TODO: Maybe improve this naive round robin scheduling.
                         char *weightserverIp = weightserverAddrs[req_count % weightserverAddrs.size()];
-                        invokeFunction("backward-prop-josehu", dataserverIpCopy, dataserverPort, weightserverIp, weightserverPort, 0, i);
+                        invokeFunction("backward-prop-josehu", dataserverIpCopy, dataserverPort, weightserverIp, weightserverPort, layer, i);
                         req_count++;
                     }
 
@@ -198,9 +194,7 @@ public:
                     std::cerr << "[ ERROR ] Unknown OP code (" << op << ") received." << std::endl;
                 }
             }
-        } catch (std::exception& ex) {
-            std::cerr << "[ ERROR ] " << ex.what() << std::endl;
-        }
+        } catch (std::exception& ex) { /** Context Termintated. */ }
     }
 
 private:
