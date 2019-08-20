@@ -119,7 +119,7 @@ CoordServer::run() {
         weightsockets[i].setsockopt(ZMQ_IDENTITY, identity, strlen(identity) + 1);
         char whost_port[50];
         sprintf(whost_port, "tcp://%s:%s", weightserverAddrs[i], weightserverPort);
-        std::cout << "  find weightserver " << whost_port << std::endl;
+        std::cout << "  found weightserver " << whost_port << std::endl;
         weightsockets[i].connect(whost_port);
     }
 
@@ -263,6 +263,10 @@ CoordServer::sendShutdownMessage(zmq::socket_t& weightsocket) {
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char *) header.data(), OP::TERM);
     weightsocket.send(header);
+
+    // Set receive timeou 1s property on this weightsocket, in case that a weightserver is dying too quickly that it's
+    // confirm message it not sent from buffer yet. Using timeout here because shutdown is not a big deal.
+    weightsocket.setsockopt(ZMQ_RCVTIMEO, 500);
 
     // Wait for termination confirmed reply.
     zmq::message_t confirm;

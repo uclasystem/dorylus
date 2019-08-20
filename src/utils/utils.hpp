@@ -69,7 +69,7 @@ public:
 
     bool empty() { return rows == 0 || cols == 0; }
 
-    std::string shape() { return "(" + std::to_string(rows) + "," + std::to_string(cols) + ")"; }
+    std::string shape() { return "(" + std::to_string(rows) + ", " + std::to_string(cols) + ")"; }
 
     std::string str() {
         std::stringstream output;

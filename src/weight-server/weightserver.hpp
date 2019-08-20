@@ -44,7 +44,7 @@ private:
     void initializeWeightMatrices(std::string& configFileName);
 
     // Defines how many concurrent weightserver threads to use.
-    enum { kMaxThreads = 2 };
+    enum { kMaxThreads = 5 };
 
     std::vector<unsigned> dims;
     std::vector<Matrix> weightMats;

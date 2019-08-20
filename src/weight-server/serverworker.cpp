@@ -168,15 +168,15 @@ ServerWorker::recvUpdates(zmq::message_t& client_id) {
 void
 ServerWorker::setBackpropNumLambdas(zmq::message_t& client_id, unsigned numLambdas_) {
 
-    // Send confirm ACK message.
-    zmq::message_t confirm;
-    workersocket.send(client_id, ZMQ_SNDMORE);
-    workersocket.send(confirm);
-
     // This is not a thread-safe call, but as the coordination server should
     // only send one info message per server, it should be fine.
     numLambdas = numLambdas_;
     std::cout << "[  INFO  ] Number of lambdas set to " << numLambdas << "." << std::endl;
+
+    // Send confirm ACK message.
+    zmq::message_t confirm;
+    workersocket.send(client_id, ZMQ_SNDMORE);
+    workersocket.send(confirm);
 }
 
 
