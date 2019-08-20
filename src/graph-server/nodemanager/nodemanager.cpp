@@ -26,13 +26,12 @@ unsigned NodeManager::nodePort;
  */
 void
 NodeManager::init(std::string dshMachinesFile, std::string myPrIpFile, std::string myPubIpFile) {
-    printLog(404, "NodeManager starts initialization...\n");
-
+    printLog(me.id, "NodeManager starts initialization...");
     getPrIP(myPrIpFile, me.ip);
     getPubIP(myPubIpFile, me.pubip);
     parseNodeConfig(dshMachinesFile);
     allNodes[me.id].pubip = me.pubip;       // Set my node struct's pubip, in case CommManager uses it.
-    printLog(me.id, "Private IP: %s, Public IP: %s\n", me.ip.c_str(), me.pubip.c_str());
+    printLog(me.id, "Private IP: %s, Public IP: %s", me.ip.c_str(), me.pubip.c_str());
 
     // Initialize node barriering sockets.
     nodePublisher = new zmq::socket_t(nodeContext, ZMQ_PUB);
@@ -109,7 +108,7 @@ NodeManager::init(std::string dshMachinesFile, std::string myPrIpFile, std::stri
         }
     }
 
-    printLog(me.id, "NodeManager initialization complete.\n");
+    printLog(me.id, "NodeManager initialization complete.");
 }
 
 
@@ -121,7 +120,7 @@ NodeManager::init(std::string dshMachinesFile, std::string myPrIpFile, std::stri
 void
 NodeManager::barrier() {
     inBarrier = true;
-    printLog(me.id, "Hits on a global barrier |xxx|...\n");
+    printLog(me.id, "Hits on a global barrier |xxx|...");
 
     // Send BARRIER message.
     zmq::message_t outMsg(sizeof(NodeMessage));
@@ -143,7 +142,7 @@ NodeManager::barrier() {
     // message queue after leaving the global barrier. Thus, we do not need to flush.
 
     inBarrier = false;
-    printLog(me.id, "Left that global barrier |xxx|.\n");
+    printLog(me.id, "Left that global barrier |xxx|.");
 }
 
 

@@ -2,9 +2,10 @@
 #include <thread>
 
 
-std::mutex m;
-std::condition_variable cv;
 std::mutex count_mutex;
+std::condition_variable cv_forward;
+std::mutex finish_mutex;
+std::condition_variable cv_backward;
 
 
 /**
@@ -13,98 +14,196 @@ std::mutex count_mutex;
  * 
  */
 void
-LambdaWorkerForward::work() {
-    worker.connect("inproc://backend");
-
+LambdaWorker::work() {
     try {
         while (true) {
             zmq::message_t identity;
             zmq::message_t header;
 
-            worker.recv(&identity);
-            worker.recv(&header);
+            workersocket.recv(&identity);
+            workersocket.recv(&header);
 
             unsigned op = parse<unsigned>((char *) header.data(), 0);
             unsigned partId = parse<unsigned>((char *) header.data(), 1);
 
             switch (op) {
-                case (OP::PULL):
-                    sendMatrixChunk(worker, identity, partId);
+                case (OP::PULL_FORWARD):
+                    sendAggregatedChunk(identity, partId);
                     break;
-                case (OP::PUSH):
-                    recvMatrixChunks(worker, identity, partId);
+                case (OP::PUSH_FORWARD):
+                    recvLambdaResults(identity, partId);
+                    break;
+                case (OP::PULL_BACKWARD):
+                    sendBackpropChunks(identity, partId);
+                    break;
+                case (OP::PUSH_BACKWARD):
+                    recvBackpropFinishMsg(identity);
                     break;
                 default:
-                    printLog(nodeId, "WORKER ERROR: Unknown Op code received.\n");
+                    break;  /** Not an op that I care about. */
             }
         }
-    } catch (std::exception& ex) {
-        printLog(nodeId, "ERROR: %s\n", ex.what());
-    }
+    } catch (std::exception& ex) { /** Context Termintated. */ }
 }
 
 
 /**
  *
- * Sending & receiving matrix chunk to / from lambda threads.
+ * Reset the member values for the next round of communication.
  * 
  */
 void
-LambdaWorkerForward::sendMatrixChunk(zmq::socket_t& socket, zmq::message_t& client_id, unsigned partId) {
+LambdaWorker::refreshState(Matrix actMatrix_, FeatType *zData_, FeatType *actData_, unsigned numFeatsNext_) {           // For forward-prop.
+    actMatrix = actMatrix_;
+    zData = zData_;
+    actData = actData_;
+    numFeatsNext = numFeatsNext_;
+}
+
+void
+LambdaWorker::refreshState(std::vector<Matrix> zMatrices_, std::vector<Matrix> actMatrices_, Matrix targetMatrix_) {    // For backward-prop.
+    zMatrices = zMatrices_;
+    actMatrices = actMatrices_;
+    targetMatrix = targetMatrix_;
+}
+
+
+/**
+ *
+ * Sending & receiving messages to / from lambda threads.
+ * 
+ */
+void
+LambdaWorker::sendAggregatedChunk(zmq::message_t& client_id, unsigned partId) {
     zmq::message_t header(HEADER_SIZE);
 
     // Reject a send request if the partition id is invalid.
-    if (partId >= numLambdas) {
-        populateHeader((char *) header.data(), -1, -1, -1, -1);
-        socket.send(client_id, ZMQ_SNDMORE);
-        socket.send(header);
+    if (partId >= numLambdasForward) {
+        populateHeader((char *) header.data(), ERR_HEADER_FIELD, ERR_HEADER_FIELD, ERR_HEADER_FIELD, ERR_HEADER_FIELD);
+        workersocket.send(client_id, ZMQ_SNDMORE);
+        workersocket.send(header);
 
     // Partition id is valid, so send the matrix segment.
     } else {
 
+        workersocket.send(client_id, ZMQ_SNDMORE);
+
         // Check to make sure that the bounds of this partition do not exceed the bounds of the data array.
         // If they do, set partition end to the end of the array.
-        unsigned partRows = std::ceil((float) actMatrix->getRows() / (float) numLambdas);
-        if ((partId * partRows + partRows) > actMatrix->getRows())
-            partRows = partRows - (partId * partRows + partRows) + actMatrix->getRows();
-        unsigned bufSize = partRows * actMatrix->getCols() * sizeof(FeatType);
+        unsigned partRows = std::ceil((float) actMatrix.getRows() / (float) numLambdasForward);
+        unsigned thisPartRows = partRows;
+        if ((partId * partRows + partRows) > actMatrix.getRows())
+            thisPartRows = partRows - (partId * partRows + partRows) + actMatrix.getRows();
+        unsigned bufSize = thisPartRows * actMatrix.getCols() * sizeof(FeatType);
+        FeatType *partitionStart = actMatrix.getData() + (partId * partRows * actMatrix.getCols());
 
-        populateHeader((char *) header.data(), OP::RESP, 0, partRows, actMatrix->getCols());
-        FeatType *partitionStart = actMatrix->getData() + (partId * partRows * actMatrix->getCols());
+        populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, actMatrix.getCols());
+        workersocket.send(header, ZMQ_SNDMORE);
+
         zmq::message_t partitionData(bufSize);
         std::memcpy(partitionData.data(), partitionStart, bufSize);
-
-        socket.send(client_id, ZMQ_SNDMORE);
-        socket.send(header, ZMQ_SNDMORE);
-        socket.send(partitionData);
+        workersocket.send(partitionData);
     }
 }
 
 void
-LambdaWorkerForward::recvMatrixChunks(zmq::socket_t& socket, zmq::message_t& client_id, unsigned partId) {
-    unsigned partRows = std::ceil((float) actMatrix->getRows() / (float) numLambdas);
+LambdaWorker::recvLambdaResults(zmq::message_t& client_id, unsigned partId) {
+    unsigned partRows = std::ceil((float) actMatrix.getRows() / (float) numLambdasForward);
     FeatType *partitionZStart = zData + partId * partRows * numFeatsNext;
     FeatType *partitionActStart = actData + partId * partRows * numFeatsNext;
 
     // Receive the pushed-back results.
     zmq::message_t data;
-    socket.recv(&data);
+    workersocket.recv(&data);
     std::memcpy(partitionZStart, data.data(), data.size());
-    socket.recv(&data);
+    workersocket.recv(&data);
     std::memcpy(partitionActStart, data.data(), data.size());
 
     // Send confirm ACK message.
     zmq::message_t confirm;
-    socket.send(client_id, ZMQ_SNDMORE);
-    socket.send(confirm);
+    workersocket.send(client_id, ZMQ_SNDMORE);
+    workersocket.send(confirm);
 
     // Check for total number of partitions received. If all partitions received, wake up lambdaComm.
-    std::lock_guard<std::mutex> lock(count_mutex);
-    ++count;
-    if (count == numLambdas) {
-        delete actMatrix;       // All chunks finished, so delete the matrix object here.
-        cv.notify_one();
+    std::lock_guard<std::mutex> lk(count_mutex);
+    ++countForward;
+    if (countForward == numLambdasForward)
+        cv_forward.notify_one();
+}
+
+void
+LambdaWorker::sendBackpropChunks(zmq::message_t& client_id, unsigned partId) {
+    zmq::message_t header(HEADER_SIZE);
+
+    // Reject a send request if the partition id is invalid.
+    if (partId >= numLambdasBackward) {
+        populateHeader((char *) header.data(), ERR_HEADER_FIELD, ERR_HEADER_FIELD, ERR_HEADER_FIELD, ERR_HEADER_FIELD);
+        workersocket.send(client_id, ZMQ_SNDMORE);
+        workersocket.send(header);
+
+    // Partition id is valid, so send the matrix segments.
+    } else {
+
+        workersocket.send(client_id, ZMQ_SNDMORE);
+
+        // Check to make sure that the bounds of this partition do not exceed the bounds of the data array.
+        // If they do, set partition end to the end of the array.
+        unsigned partRows = std::ceil((float) targetMatrix.getRows() / (float) numLambdasBackward);
+        unsigned thisPartRows = partRows;
+        if ((partId * partRows + partRows) > targetMatrix.getRows())
+            thisPartRows = partRows - (partId * partRows + partRows) + targetMatrix.getRows();
+
+        // Send z matrices, from layer 1-> last.
+        for (Matrix& matrix : zMatrices) {
+            unsigned bufSize = thisPartRows * matrix.getCols() * sizeof(FeatType);
+            FeatType *partitionStart = matrix.getData() + (partId * partRows * matrix.getCols());
+
+            populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, matrix.getCols());
+            workersocket.send(header, ZMQ_SNDMORE);
+
+            zmq::message_t partitionData(bufSize);
+            std::memcpy(partitionData.data(), partitionStart, bufSize);
+            workersocket.send(partitionData, ZMQ_SNDMORE);
+        }
+
+        // Send activation matrices, from layer 0 -> last.
+        for (Matrix& matrix : actMatrices) {
+            unsigned bufSize = thisPartRows * matrix.getCols() * sizeof(FeatType);
+            FeatType *partitionStart = matrix.getData() + (partId * partRows * matrix.getCols());
+
+            populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, matrix.getCols());
+            workersocket.send(header, ZMQ_SNDMORE);
+
+            zmq::message_t partitionData(bufSize);
+            std::memcpy(partitionData.data(), partitionStart, bufSize);
+            workersocket.send(partitionData, ZMQ_SNDMORE);
+        }
+
+        // Send target label matrix.
+        unsigned bufSize = thisPartRows * targetMatrix.getCols() * sizeof(FeatType);
+        FeatType *partitionStart = targetMatrix.getData() + (partId * partRows * targetMatrix.getCols());
+
+        populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, targetMatrix.getCols());
+        workersocket.send(header, ZMQ_SNDMORE);
+
+        zmq::message_t partitionData(bufSize);
+        std::memcpy(partitionData.data(), partitionStart, bufSize);
+        workersocket.send(partitionData);
     }
+}
+
+void
+LambdaWorker::recvBackpropFinishMsg(zmq::message_t& client_id) {
+
+    // Send confirm ACK message.
+    zmq::message_t confirm;
+    workersocket.send(client_id, ZMQ_SNDMORE);
+    workersocket.send(confirm);
+
+    // Wake up lambdaComm.
+    std::lock_guard<std::mutex> lk(finish_mutex);
+    finishedBackward = true;
+    cv_backward.notify_one();
 }
 
 
@@ -115,73 +214,31 @@ LambdaWorkerForward::recvMatrixChunks(zmq::socket_t& socket, zmq::message_t& cli
 
 /**
  *
- * Call 'newContextForward()' before the lambda invokation to refresh the parameters, and call 'endContextForward()' after
- * lambdas finish to revoke unused memory space (if necessary).
+ * Call 'newContext()' before the lambda invokation to refresh the parameters, then call `requestLambdas()` to tell the coordserver to
+ * trigger lambda threads.
  * 
  */
 void
-LambdaComm::newContextForward(FeatType *dataBuf, FeatType *zData, FeatType *actData, unsigned numLocalVertices,
-                              unsigned numFeats, unsigned numFeatsNext) {
+LambdaComm::newContextForward(FeatType *dataBuf, FeatType *zData, FeatType *actData,
+                              unsigned numLocalVertices, unsigned numFeats, unsigned numFeatsNext) {
     countForward = 0;
 
     // Create a new matrix object for workers to access.
-    Matrix *actMatrix = new Matrix(numLocalVertices, numFeats, dataBuf);
+    Matrix actMatrix(numLocalVertices, numFeats, dataBuf);
 
-    // Create 'numListeners' workers and detach them.
-    for (unsigned i = 0; i < numListeners; ++i) {
-        forwardWorkers.push_back(new LambdaWorkerForward(nodeId, ctx, numLambdasForward, countForward,
-                                                         actMatrix, zData, actData, numFeatsNext));
-        forwardWorker_threads.push_back(new std::thread(std::bind(&LambdaWorkerForward::work, forwardWorkers[i])));
-        forwardWorker_threads[i]->detach();
-    }
+    // Refresh workers' members, and connect their worker sockets to the backend.
+    for (auto&& worker : workers)
+        worker->refreshState(actMatrix, zData, actData, numFeatsNext);
 
-    printLog(nodeId, "Lambda FORWARD context created.\n");
+    printLog(nodeId, "Lambda FORWARD context created.");
 }
 
-void
-LambdaComm::endContextForward() {
-    countForward = 0;
-
-    // Delete the workers.
-    for (unsigned i = 0; i < numListeners; ++i) {
-        delete forwardWorker_threads[i];
-        delete forwardWorkers[i];
-    }
-    forwardWorkers.clear();
-    forwardWorker_threads.clear();
-
-    printLog(nodeId, "Lambda FORWARD context finished.\n");
-}
-
-
-/**
- *
- * Call 'newContextBackward()' before the lambda invokation to refresh the parameters, and call 'endContextBackward()' after
- * lambdas finish to revoke unused memory space (if necessary).
- * 
- */
-void
-LambdaComm::newContextBackward() {
-    printLog(nodeId, "Lambda BACKWARD context created.\n");
-}
-
-void
-LambdaComm::endContextBackward() {
-    printLog(nodeId, "Lambda BACKWARD context finished.\n");
-}
-
-
-/**
- *
- * Send a request to the coordination server for a given number of lambda threads to do the forward function.
- * 
- */
 void
 LambdaComm::requestLambdasForward(unsigned layer) {
 
     // Send header info to tell the coordserver to trigger how many lambdas in which forward layer.
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::REQ, layer, numLambdasForward);
+    populateHeader((char *) header.data(), OP::REQ_FORWARD, layer, numLambdasForward);
     coordsocket.send(header, ZMQ_SNDMORE);
 
     // Send my ip.
@@ -194,19 +251,62 @@ LambdaComm::requestLambdasForward(unsigned layer) {
     coordsocket.recv(&confirm);
 
     // Block until all parts have been handled.
-    std::unique_lock<std::mutex> lk(m);
-    cv.wait(lk, [&]{ return countForward == numLambdasForward; });
+    std::unique_lock<std::mutex> lk(count_mutex);
+    cv_forward.wait(lk, [&]{ return countForward == numLambdasForward; });
 }
 
 
 /**
  *
- * Send a request to the coordination server for a given number of lambda threads to do the backward function.
+ * Call 'newContext()' before the lambda invokation to refresh the parameters, then call `requestLambdas()` to tell the coordserver to
+ * trigger lambda threads.
  * 
  */
 void
+LambdaComm::newContextBackward(std::vector<FeatType *> zBufs, std::vector<FeatType *> actBufs, FeatType *targetBuf,
+                               unsigned numLocalVertices, std::vector<unsigned> layerConfig) {
+    finishedBackward = false;
+
+    // Create new matrix objects for workers to access.
+    std::vector<Matrix> zMatrices;
+    assert(zBufs.size() == layerConfig.size());
+    for (size_t i = 1; i < layerConfig.size(); ++i)
+        zMatrices.push_back(Matrix(numLocalVertices, layerConfig[i], zBufs[i]));
+
+    std::vector<Matrix> actMatrices;
+    assert(actBufs.size() == layerConfig.size());
+    for (size_t i = 0; i < layerConfig.size(); ++i)
+        actMatrices.push_back(Matrix(numLocalVertices, layerConfig[i], actBufs[i]));
+
+    Matrix targetMatrix(numLocalVertices, layerConfig[layerConfig.size() - 1], targetBuf);
+
+    // Refresh workers' members.
+    for (auto&& worker : workers)
+        worker->refreshState(zMatrices, actMatrices, targetMatrix);
+
+    printLog(nodeId, "Lambda BACKWARD context created.");
+}
+
+void
 LambdaComm::requestLambdasBackward() {
+
+    // Send header info to tell the coordserver to trigger how many lambdas to trigger.
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader((char *) header.data(), OP::REQ_BACKWARD, 0, numLambdasBackward);
+    coordsocket.send(header, ZMQ_SNDMORE);
+
+    // Send my ip.
+    zmq::message_t ip_msg(nodeIp.size());
+    std::memcpy(ip_msg.data(), nodeIp.c_str(), nodeIp.size());
+    coordsocket.send(ip_msg);
     
+    // Wait for a confirm ACK message.
+    zmq::message_t confirm;
+    coordsocket.recv(&confirm);
+
+    // Block until all parts have been handled.
+    std::unique_lock<std::mutex> lk(finish_mutex);
+    cv_backward.wait(lk, [&]{ return finishedBackward; });
 }
 
 
@@ -217,9 +317,6 @@ LambdaComm::requestLambdasBackward() {
  */
 void
 LambdaComm::sendShutdownMessage() {
-    char chost_port[50];
-    sprintf(chost_port, "tcp://%s:%u", coordserverIp.c_str(), coordserverPort);
-    coordsocket.connect(chost_port);
 
     // Send kill message.
     zmq::message_t header(HEADER_SIZE);

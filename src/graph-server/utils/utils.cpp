@@ -14,14 +14,15 @@
  * 
  */
 void
-printLog(const unsigned nodeId, const char *format, ...) {
+printLog(const unsigned nodeId, const char *msg, ...) {
 
-    // Print node ID.
-    fprintf(stderr, "[ Node %u ] ", nodeId);
+    // Plug in the node ID.
+    char format[16 + strlen(msg)];
+    sprintf(format, "[ Node %3u ]  %s\n", nodeId, msg);
 
     // Print the log message.
     va_list argptr;
-    va_start(argptr, format);
+    va_start(argptr, msg);
     vfprintf(stderr, format, argptr);
     va_end(argptr);
 }

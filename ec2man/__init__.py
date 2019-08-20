@@ -3,6 +3,7 @@ import json
 import os
 import pickle
 import subprocess
+import multiprocessing
     
 import ec2man
 
@@ -121,13 +122,35 @@ def process_target(ctx, target, args):
         idx = int(target)
         if (idx >= len(ctx.instances)):
             show_error("No instance corresponding to the given index " + target + ".")
-        else:
-            ctx.instances[idx] = handle_command(ec2_cli, ctx, ctx.instances[idx], args)
+        if len(args) < 1:
+            show_error("Please specify an operation.")
+        op, args = args[0], args[1:]
+        ctx.instances[idx] = handle_command(ec2_cli, ctx, ctx.instances[idx], op, args)
     
     # Process all instances in the context.
     elif target == 'all':
-        for i in range(len(ctx.instances)):
-            ctx.instances[i] = handle_command(ec2_cli, ctx, ctx.instances[i], args)
+        if len(args) < 1:
+            show_error("Please specify an operation.")
+        op, args = args[0], args[1:]
+
+        if op == "put" or op == "rsync":    # Multithreading these ops.
+
+            threads = []
+
+            def thread_handler(tid):
+                ctx.instances[tid] = handle_command(ec2_cli, ctx, ctx.instances[tid], op, args)
+
+            for i in range(len(ctx.instances)):
+                t = multiprocessing.Process(target=thread_handler, args=(i,))
+                t.start()
+                threads.append(t)
+
+            for t in threads:
+                t.join()
+
+        else:                               # Normal single threaded.
+            for i in range(len(ctx.instances)):
+                ctx.instances[i] = handle_command(ec2_cli, ctx, ctx.instances[i], op, args)
 
     # Get information of current context.
     elif target == 'info':
