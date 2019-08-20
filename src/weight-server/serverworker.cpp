@@ -58,10 +58,10 @@ ServerWorker::work() {
                     recvUpdates(identity);
                     break;
                 case (OP::INFO):    // Used to tell how many lambda threads it should expect for this round.
-                    setBackpropNumLambdas(arg);
+                    setBackpropNumLambdas(identity, arg);
                     break;
                 case (OP::TERM):
-                    terminateServer();
+                    terminateServer(identity);
                     break;
                 default:
                     break;  /** Not an op that I care about. */
@@ -166,7 +166,12 @@ ServerWorker::recvUpdates(zmq::message_t& client_id) {
  * 
  */
 void
-ServerWorker::setBackpropNumLambdas(unsigned numLambdas_) {
+ServerWorker::setBackpropNumLambdas(zmq::message_t& client_id, unsigned numLambdas_) {
+
+    // Send confirm ACK message.
+    zmq::message_t confirm;
+    workersocket.send(client_id, ZMQ_SNDMORE);
+    workersocket.send(confirm);
 
     // This is not a thread-safe call, but as the coordination server should
     // only send one info message per server, it should be fine.
@@ -182,7 +187,13 @@ ServerWorker::setBackpropNumLambdas(unsigned numLambdas_) {
  * 
  */
 void
-ServerWorker::terminateServer() {
+ServerWorker::terminateServer(zmq::message_t& client_id) {
+
+    // Send confirm ACK message.
+    zmq::message_t confirm;
+    workersocket.send(client_id, ZMQ_SNDMORE);
+    workersocket.send(confirm);
+    
     std::cerr << "[SHUTDOWN] Server shutting down..." << std::endl;
 
     std::lock_guard<std::mutex> lock(term_mutex);

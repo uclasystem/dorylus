@@ -43,8 +43,8 @@ private:
     void sendWeightsForwardLayer(zmq::message_t& client_id, unsigned layer);
     void sendWeightsBackward(zmq::message_t& client_id);
     void recvUpdates(zmq::message_t& client_id);
-    void setBackpropNumLambdas(unsigned numLambdas_);
-    void terminateServer();
+    void setBackpropNumLambdas(zmq::message_t& client_id, unsigned numLambdas_);
+    void terminateServer(zmq::message_t& client_id);
 
     zmq::context_t &ctx;
     zmq::socket_t workersocket;
