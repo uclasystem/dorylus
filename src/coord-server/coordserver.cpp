@@ -126,7 +126,7 @@ public:
         // Setup lambda client.
         Aws::Client::ClientConfiguration clientConfig;
         clientConfig.requestTimeoutMs = 900000;
-        clientConfig.region = "us-east-1";
+        clientConfig.region = "us-east-2";
         m_client = Aws::MakeShared<Aws::Lambda::LambdaClient>(ALLOCATION_TAG, clientConfig);
 
         // Keeps listening on dataserver's requests.
