@@ -1,8 +1,7 @@
 #include "serverworker.hpp"
 
 
-std::mutex update_mutex;
-extern std::mutex m, term_mutex;
+extern std::mutex m, term_mutex, update_mutex;
 extern std::condition_variable cv;
 extern bool finished;
 
@@ -74,31 +73,37 @@ void ServerWorker::sendWeights(zmq::socket_t& socket, zmq::message_t& client_id,
     socket.send(weightData);
 }
 
+// Receive a given update from a worker
+// If all updates have been received for this batch, alert the weight server
+// that it is time to average and apply them
 void ServerWorker::recvUpdates(zmq::socket_t& socket, zmq::message_t& client_id, unsigned layer, zmq::message_t& header) {
-    std::cout << "Summing updates" << std::endl;
     zmq::message_t data;
     socket.recv(&data);
 
+    // send ACK message back to server
     zmq::message_t confirm;
     socket.send(client_id, ZMQ_SNDMORE);
     socket.send(confirm);
 
     // grab lock then sum the data received with the current update matrix
     std::lock_guard<std::mutex> update_lock(update_mutex);
-    cblas_saxpy(updates[layer].getNumElemts(), 1.0,
-                (float*) data.data(), 1, updates[layer].getData(), 1);
-    ++count;
+    cblas_saxpy(weight_list[layer].getNumElemts(), -1.0, (float*) data.data(),
+                1, weight_list[layer].getData(), 1);
 
-    // If all the lambda results have been collected, reset the counter
-    // and tell the weight server to average and apply updates
-    if (count == numLambdas[layer]) {
-        count = 0;
-
-        std::thread t([&]{
-            ws.applyUpdates(layer);
-        });
-        t.detach();
-    }
+//    cblas_saxpy(updates[layer].getNumElemts(), 1.0,
+//                (float*) data.data(), 1, updates[layer].getData(), 1);
+//    ++count;
+//
+//    // If all the lambda results have been collected, reset the counter
+//    // and tell the weight server to average and apply updates
+//    if (count == numLambdas[layer]) {
+//        count = 0;
+//
+//        std::thread t([&]{
+//            ws.applyUpdates(layer);
+//        });
+//        t.detach();
+//    }
 }
 
 // Update the weight server with the number of lambdas being called for
@@ -114,6 +119,8 @@ void ServerWorker::updateBackpropIterationInfo(unsigned layer, zmq::message_t& h
     numLambdas[layer] = nLambdas;
 }
 
+// After receiving the termination message from the coordination server
+// alert the main thread that it can shutdown
 void ServerWorker::terminateServer(zmq::socket_t& socket, zmq::message_t& client_id) {
     std::cerr << "Server shutting down..." << std::endl;
 
