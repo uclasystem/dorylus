@@ -71,7 +71,7 @@ WeightServer::run() {
         delete workers[i];
     }
     for (Matrix& mat : weightMats)
-        delete mat.getData();
+        delete[] mat.getData();
 }
 
 

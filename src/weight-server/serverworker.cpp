@@ -196,7 +196,7 @@ ServerWorker::terminateServer(zmq::message_t& client_id) {
     
     std::cerr << "[SHUTDOWN] Server shutting down..." << std::endl;
 
-    std::lock_guard<std::mutex> lock(term_mutex);
+    std::lock_guard<std::mutex> lk(term_mutex);
     finished = true;
     cv.notify_one();
 }
