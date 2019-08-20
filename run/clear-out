@@ -10,4 +10,4 @@
 cd ${HOME}
 
 
-rm -rf logfiles tmpfiles outfiles
+rm -rf logfiles tmpfiles outfiles gnn-lambda/run/run-mark

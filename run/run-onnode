@@ -63,6 +63,9 @@ case $1 in
         COMM_THREADS=1
 
         # Increment the running mark.
+        if [[ ! -f run/run-mark ]]; then
+            touch run/run-mark
+        fi
         RUN_MARK=$(( $( cat run/run-mark ) + 1 ))
         echo ${RUN_MARK} > run/run-mark
         echo -e "\e[33;1mRunning GRAPH servers with: [ MARK # ${RUN_MARK} ]...\e[0m"
@@ -111,7 +114,7 @@ case $1 in
 
         # Run weightserver on all dsh nodes.
         echo -e "\e[33;1mRunning WEIGHT servers on all machines in 'weight' context...\e[0m"
-        dsh -M -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ./build/weightserver ${WPORT} ../layerconfig"
+        dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ./build/weightserver ${WPORT} ../layerconfig"
         ;;
 
     #
