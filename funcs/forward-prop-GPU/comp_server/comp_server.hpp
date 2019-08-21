@@ -33,7 +33,7 @@ public:
     void run();
 
     // Sending and Requesting functions
-    Matrix requestWeightsMatrix(zmq::socket_t& socket, unsigned layer);
+    Matrix& requestWeightsMatrix(zmq::socket_t& socket, unsigned layer);
     void sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, int32_t id);
 
 
@@ -185,7 +185,7 @@ void ComputingServer::loadWeightServers(std::vector<char *>& addresses, const st
  * 
  */
 //TODO: Can be modify to zerocopy
-Matrix
+Matrix&
 ComputingServer::requestWeightsMatrix(zmq::socket_t& socket, unsigned layer) {
     
     // Send pull request.
