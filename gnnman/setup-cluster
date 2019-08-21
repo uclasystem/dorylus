@@ -47,8 +47,15 @@ done
 # For weight servers.
 echo "Processing context 'weight'..."
 
+NUM_GRAPH_NODES=$(( $( ${EC2MAN_CMD} weight info | wc -l | awk '{print $1}' ) - 1 ))
+for i in $( seq 0 $(( ${NUM_GRAPH_NODES} - 1 )) ); do
+    ${EC2MAN_CMD} weight $i prip > myprip
+    ${EC2MAN_CMD} weight $i put myprip
+    rm -f myprip
+done
+
 ${EC2MAN_CMD} weight dshfile > dshmachines
-${EC2MAN_CMD} weight all put dshmachines run/layerconfig run/wserverport
+${EC2MAN_CMD} weight all put dshmachines run/dataport run/layerconfig run/wserverport
 rm -f dshmachines
 
 

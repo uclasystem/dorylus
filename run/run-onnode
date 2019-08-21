@@ -81,7 +81,26 @@ case $1 in
 
         # Run the command on all dsh machines.
         echo "DSH command: ./build/graphserver --graphfile ${DATASET}/parts_${NDS}/graph.bsnap --featuresfile ${DATASET}/features.bsnap --labelsfile ${DATASET}/labels.bsnap --dshmachinesfile ${DSHMACHINESFILE} --layerfile ${LAYERFILE} --pubipfile ${MYPUBIPFILE} --pripfile ${MYPRIPFILE} --dataserverport ${GPORT} --coordserverip ${CSERVERIP} --coordserverport ${CPORT} --undirected ${UNDIRECTED} --tmpdir=${TMPFILEDIR} --cthreads ${COMP_THREADS} --dthreads ${COMM_THREADS} --dataport ${DATAPORT} --ctrlport ${CTRLPORT} --nodeport ${NODEPORT} --numlambdasforward ${NUM_LAMBDAS_FORWARD} --numlambdasbackward ${NUM_LAMBDAS_BACKWARD}"
-        dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ./build/graphserver --graphfile ${DATASET}/parts_${NDS}/graph.bsnap --featuresfile ${DATASET}/features.bsnap --labelsfile ${DATASET}/labels.bsnap --dshmachinesfile ${DSHMACHINESFILE} --layerfile ${LAYERFILE} --pubipfile ${MYPUBIPFILE} --pripfile ${MYPRIPFILE} --dataserverport ${GPORT} --coordserverip ${CSERVERIP} --coordserverport ${CPORT} --undirected ${UNDIRECTED} --tmpdir=${TMPFILEDIR} --cthreads ${COMP_THREADS} --dthreads ${COMM_THREADS} --dataport ${DATAPORT} --ctrlport ${CTRLPORT} --nodeport ${NODEPORT} --numlambdasforward ${NUM_LAMBDAS_FORWARD} --numlambdasbackward ${NUM_LAMBDAS_BACKWARD}" 1> /dev/null 2>> ${LOGFILE}
+        dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ./build/graphserver \
+			--graphfile ${DATASET}/parts_${NDS}/graph.bsnap \
+			--featuresfile ${DATASET}/features.bsnap \
+			--labelsfile ${DATASET}/labels.bsnap \
+			--dshmachinesfile ${DSHMACHINESFILE} \
+			--layerfile ${LAYERFILE} \
+			--pubipfile ${MYPUBIPFILE} \
+			--pripfile ${MYPRIPFILE} \
+			--dataserverport ${GPORT} \
+			--coordserverip ${CSERVERIP} \
+			--coordserverport ${CPORT} \
+			--undirected ${UNDIRECTED} \
+			--tmpdir=${TMPFILEDIR} \
+			--cthreads ${COMP_THREADS} \
+			--dthreads ${COMM_THREADS} \
+			--dataport ${DATAPORT} \
+			--ctrlport ${CTRLPORT} \
+			--nodeport ${NODEPORT} \
+			--numlambdasforward ${NUM_LAMBDAS_FORWARD} \
+			--numlambdasbackward ${NUM_LAMBDAS_BACKWARD}" 1> /dev/null 2>> ${LOGFILE}
         
         # Gather the output files.
         OUTFILEDIR=${HOME}/outfiles/${RUN_MARK}.$2
@@ -105,7 +124,9 @@ case $1 in
     #
     "weight")
         WPORT=$( < ../wserverport )
+        DATAPORT=$( < ../dataport )
 
+        MYPRIPFILE=${HOME}/myprip
         DSHMACHINESFILE=${HOME}/dshmachines
 
         # Kill running weightservers.
@@ -114,7 +135,7 @@ case $1 in
 
         # Run weightserver on all dsh nodes.
         echo -e "\e[33;1mRunning WEIGHT servers on all machines in 'weight' context...\e[0m"
-        dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ./build/weightserver ${WPORT} ../layerconfig"
+        dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ./build/weightserver ${DSHMACHINESFILE} ${MYPRIPFILE} ${DATAPORT} ${WPORT} ../layerconfig"
         ;;
 
     #
