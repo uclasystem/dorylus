@@ -97,8 +97,6 @@ void GPUComm::requestForward(unsigned layer){
         //block until computation finish
         dataSocket.recv(&confirm);
 
-
-
     }
     catch(std::exception& ex){
         std::cerr << "[ERROR] " << ex.what() << std::endl;

@@ -11,6 +11,12 @@
 #include <sstream>
 #include "../../../src/utils/utils.hpp"
 #include <boost/algorithm/string/trim.hpp>
+#include <vector>
+#include <thread>
+
+void doNotFreeBuffer(void *data, void *hint){
+    printf("Buffer is not freed :)\n");
+}
 
 class ComputingServer {
 public:
@@ -20,9 +26,11 @@ public:
         dataSocket(ctx, ZMQ_REP),
         weightSocket(ctx, ZMQ_DEALER){
             loadWeightServers(weightServerAddrs,wServersFile);
-            // for(int i=0;i<weightserverAddrs.size();++i){
-            //     printf("%s\n",weightserverAddrs[i] );
-            // }
+            printf("%zu\n",weightServerAddrs.size() );
+            printf("LOADING WSERVER FILE\n");
+            for(int i=0;i<weightServerAddrs.size();++i){
+                printf("%s\n",weightServerAddrs[i] );
+            }
 
     }
 
@@ -33,7 +41,7 @@ public:
     void run();
 
     // Sending and Requesting functions
-    Matrix& requestWeightsMatrix(zmq::socket_t& socket, unsigned layer);
+    Matrix requestWeightsMatrix(zmq::socket_t& socket, unsigned layer);
     void sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, int32_t id);
 
 
@@ -87,26 +95,30 @@ void ComputingServer::run(){
             printf("COLS %u\n", COLS);
             dataSocket.send(confirm);
 
-            
 
-            Matrix weights;
-            std::thread t([&] {
-                unsigned id = 0; // id=0 for GPU
-                unsigned ipc_addr_len=strlen(ipc_addr);
-                size_t identity_len = sizeof(unsigned) + ipc_addr_len;
-                char identity[identity_len];
-                memcpy(identity, (char *) &id, sizeof(unsigned));
-                memcpy(identity + sizeof(unsigned), ipc_addr, ipc_addr_len);
+            std::vector<Matrix> weights;
+            std::vector<std::thread> wThreads;
+            for(size_t i=0;i<weightServerAddrs.size();i++){
+                wThreads.push_back(
+                    std::thread([&] (size_t index){
+                        printf("for %zu\n",index);
+                        unsigned id = 0; // id=0 for GPU
+                        unsigned ipc_addr_len=strlen(ipc_addr);
+                        size_t identity_len = sizeof(unsigned) + ipc_addr_len;
+                        char identity[identity_len];
+                        memcpy(identity, (char *) &id, sizeof(unsigned));
+                        memcpy(identity + sizeof(unsigned), ipc_addr, ipc_addr_len);
 
-                std::cout << "< GPU SERVER FORWARD > Asking weightserver..." << std::endl;
-                weightSocket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
-                char whost_port[50];
-                sprintf(whost_port, "tcp://%s:%u", weightServerAddrs[0], wPort);
-                printf("connect to %s\n", whost_port);
-                weightSocket.connect(whost_port);
-                weights = requestWeightsMatrix(weightSocket, layer);
-                std::cout << "<  GPU SERVER FORWARD > Got data from weightserver." << std::endl;
-            });
+                        std::cout << "< GPU SERVER FORWARD > Asking weightserver..." << std::endl;
+                        weightSocket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
+                        char whost_port[50];
+                        sprintf(whost_port, "tcp://%s:%u", weightServerAddrs.at(index), wPort);
+                        printf("connect to %s\n", whost_port);
+                        weightSocket.connect(whost_port);
+                        weights.push_back(requestWeightsMatrix(weightSocket, layer));
+                        std::cout << "<  GPU SERVER FORWARD > Got data from weightserver." << std::endl;
+                },i)
+            );}
 
             std::cout << "< GPU SERVER FORWARD  > Getting data from dataserver..." << std::endl;
             dataSocket.recv(&aggreChunk);
@@ -122,8 +134,9 @@ void ComputingServer::run(){
             // dSocket.connect(dhost_port);
             // Matrix feats = requestMatrix(dSocket, id);
             std::cout << "< GPU SERVER FORWARD > Got data from dataserver." << std::endl;
-            t.join();
-
+            for(auto &t: wThreads)
+                t.join();
+            // break;
             // Matrix z = cu.dot(feats, weights);
             // Matrix act = cu.activate(z);
             // sendMatrices(z,act,dSocket,id);
@@ -185,7 +198,7 @@ void ComputingServer::loadWeightServers(std::vector<char *>& addresses, const st
  * 
  */
 //TODO: Can be modify to zerocopy
-Matrix&
+Matrix
 ComputingServer::requestWeightsMatrix(zmq::socket_t& socket, unsigned layer) {
     
     // Send pull request.
