@@ -124,7 +124,8 @@ ServerWorker::sendWeightsBackward(zmq::message_t& client_id) {
  */
 void
 ServerWorker::recvUpdates(zmq::message_t& client_id) {
-    for (Matrix& weightMat : weightMats) {
+    for (unsigned i = 0; i < weightMats.size(); ++i) {
+        Matrix& weightMat = weightMats[i];
         zmq::message_t update;
         workersocket.recv(&update);
 
@@ -135,6 +136,19 @@ ServerWorker::recvUpdates(zmq::message_t& client_id) {
         std::lock_guard<std::mutex> update_lock(update_mutex);
         for (unsigned i = 0; i < weightMat.getNumElemts(); ++i)
             weightData[i] -= updateData[i];
+
+        // If I have received all updates from this Lambda decrement the counter
+        if (i == weightMats.size() - 1) {
+            numLambdas--;
+
+            // If this is the final update, begin global aggregation
+            if (numLambdas == 0) {
+                std::thread t([&]{
+                    ws.applyUpdates(layer);
+                });
+                t.detach();
+            }
+        }
     }
 
     // Send confirm ACK message.

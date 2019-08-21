@@ -20,7 +20,7 @@
 #include "serverworker.hpp"
 
 
-enum CTRL_MSG { MASTERUP, WORKERUP, INITDONE };
+enum CTRL_MSG { MASTERUP, WORKERUP, INITDONE, ACK };
 
 /**
  *
@@ -52,6 +52,10 @@ private:
 
     // Read in layer configurations.
     void initializeWeightMatrices(std::string& configFileName);
+
+    // The master constructs the weight matrices and then sends them
+    // to the workers
+    void distributeWeightMatrices();
 
     // Defines how many concurrent weightserver threads to use.
     enum { kMaxThreads = 5 };
