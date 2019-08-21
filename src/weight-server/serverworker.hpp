@@ -1,6 +1,7 @@
 #ifndef __SERVER_WORKER_HPP__
 #define __SERVER_WORKER_HPP__
 
+
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -16,13 +17,11 @@
 #include <zmq.hpp>
 #include <boost/algorithm/string/trim.hpp>
 #include "../utils/utils.hpp"
-
-#include <cblas.h>
-
 #include "weightserver.hpp"
 
 
 class WeightServer;
+
 
 /**
  *
@@ -33,32 +32,31 @@ class ServerWorker {
 
 public:
 
-    ServerWorker(zmq::context_t& ctx_, int sock_type, unsigned& counter,
-             std::vector<Matrix>& _weights, std::vector<Matrix>& _updates,
-             std::vector<unsigned>& _numLambdas, WeightServer& _ws);
+    ServerWorker(zmq::context_t& ctx_, unsigned& counter, WeightServer& _ws,
+                 std::vector<Matrix>& weights_, std::vector<Matrix>& updates_, unsigned& numLambdas_);
 
     // Listens on lambda threads' request for weights.
     void work();
 
 private:
 
-    void sendWeights(zmq::socket_t& socket, zmq::message_t& client_id, unsigned layer);
-    void recvUpdates(zmq::socket_t& socket, zmq::message_t& client_id, unsigned layer, zmq::message_t& header);
-    void updateBackpropIterationInfo(unsigned layer, zmq::message_t& header);
-    void terminateServer(zmq::socket_t& socket, zmq::message_t& client_id);
-
-
+    void sendWeightsForwardLayer(zmq::message_t& client_id, unsigned layer);
+    void sendWeightsBackward(zmq::message_t& client_id);
+    void recvUpdates(zmq::message_t& client_id);
+    void setBackpropNumLambdas(zmq::message_t& client_id, unsigned numLambdas_);
+    void terminateServer(zmq::message_t& client_id);
 
     zmq::context_t &ctx;
-    zmq::socket_t worker;
-    std::vector<Matrix>& weight_list;
+    zmq::socket_t workersocket;
+
+    std::vector<Matrix>& weightMats;
     std::vector<Matrix>& updates;
     
-    std::vector<unsigned>& numLambdas;
+    unsigned& numLambdas;
     unsigned& count;
 
     // Reference back to weight server so we can tell it to average and apply
-    // final weight gradients
+    // final weight gradients.
     WeightServer& ws;
 };
 

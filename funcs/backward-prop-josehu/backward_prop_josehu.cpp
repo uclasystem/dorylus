@@ -4,6 +4,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include <algorithm>
 #include <cmath>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/json_parser.hpp>
@@ -11,6 +12,9 @@
 #include <zmq.hpp>
 #include <aws/lambda-runtime/runtime.h>
 #include "../../src/utils/utils.hpp"
+
+
+#define LEARNING_RATE 0.1
 
 
 #define SND_MORE true
@@ -24,125 +28,335 @@ using namespace aws::lambda_runtime;
 using namespace std::chrono;
 
 
+/** Struct for wrapping over the returned matrices. */
+typedef struct {
+    std::vector<Matrix> zMatrices;          // Layer 1 -> last.
+    std::vector<Matrix> actMatrices;        // Layer 0 -> last.
+    Matrix targetMatrix;
+} GraphData;
+
+
 /**
  *
- * Request the input matrix data from dataserver.
+ * Request the graph feature matrices data from dataserver.
  * 
  */
-static Matrix
-requestFeatsMatrices(zmq::socket_t& socket, unsigned id) {
+static GraphData
+requestFeatsMatrices(zmq::socket_t& socket, unsigned id, unsigned numLayers) {
     
     // Send pull request.
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char *) header.data(), OP::PULL_BACKWARD, id);
     socket.send(header);
 
-    // Listen on respond.
+    GraphData graphData;
+
+    // Receive z matrices chunks, from layer 1 -> last.
+    for (size_t i = 1; i <= numLayers; ++i) {
+        zmq::message_t respHeader;
+        socket.recv(&respHeader);
+        unsigned layerResp = parse<unsigned>((char *) respHeader.data(), 1);
+        if (layerResp == ERR_HEADER_FIELD) {    // Failed.
+            std::cerr << "[ ERROR ] No corresponding matrix chunk!" << std::endl;
+            return graphData;
+        } else {                    // Get matrices data.
+            unsigned rows = parse<unsigned>((char *) respHeader.data(), 2);
+            unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
+            zmq::message_t matxData(rows * cols * sizeof(FeatType));
+            socket.recv(&matxData);
+
+            FeatType *matxBuffer = new FeatType[rows * cols];
+            std::memcpy(matxBuffer, matxData.data(), matxData.size());
+
+            graphData.zMatrices.push_back(Matrix(rows, cols, matxBuffer));
+        }
+    }
+
+    // Receive act matrices chunks, from layer 0 -> last.
+    for (size_t i = 0; i <= numLayers; ++i) {
+        zmq::message_t respHeader;
+        socket.recv(&respHeader);
+        unsigned layerResp = parse<unsigned>((char *) respHeader.data(), 1);
+        if (layerResp == ERR_HEADER_FIELD) {    // Failed.
+            std::cerr << "[ ERROR ] No corresponding matrix chunk!" << std::endl;
+            return graphData;
+        } else {                    // Get matrices data.
+            unsigned rows = parse<unsigned>((char *) respHeader.data(), 2);
+            unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
+            zmq::message_t matxData(rows * cols * sizeof(FeatType));
+            socket.recv(&matxData);
+
+            FeatType *matxBuffer = new FeatType[rows * cols];
+            std::memcpy(matxBuffer, matxData.data(), matxData.size());
+
+            graphData.actMatrices.push_back(Matrix(rows, cols, matxBuffer));
+        }
+    }
+
+    // Receive target label matrix chunk.
     zmq::message_t respHeader;
     socket.recv(&respHeader);
-
-    // Parse the respond.
     unsigned layerResp = parse<unsigned>((char *) respHeader.data(), 1);
-    if (layerResp == -1) {      // Failed.
+    if (layerResp == ERR_HEADER_FIELD) {    // Failed.
         std::cerr << "[ ERROR ] No corresponding matrix chunk!" << std::endl;
-        return Matrix();
+        return graphData;
     } else {                    // Get matrices data.
         unsigned rows = parse<unsigned>((char *) respHeader.data(), 2);
         unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
         zmq::message_t matxData(rows * cols * sizeof(FeatType));
         socket.recv(&matxData);
 
-        char *matxBuffer = new char[matxData.size()];
+        FeatType *matxBuffer = new FeatType[rows * cols];
         std::memcpy(matxBuffer, matxData.data(), matxData.size());
 
-        Matrix m(rows, cols, matxBuffer);
-        return m;
+        graphData.targetMatrix = Matrix(rows, cols, matxBuffer);
     }
+
+    return graphData;
 }
 
 
 /**
  *
- * Request the input matrix data from weightserver.
+ * Request the weight matrices data from weightserver.
  * 
  */
-static Matrix
-requestWeightsMatrices(zmq::socket_t& socket, unsigned layer) {
+static std::vector<Matrix>
+requestWeightsMatrices(zmq::socket_t& socket, unsigned id, unsigned numLayers) {
     
     // Send pull request.
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::PULL_BACKWARD, layer);
+    populateHeader((char *) header.data(), OP::PULL_BACKWARD, id);
     socket.send(header);
 
-    // Listen on respond.
-    zmq::message_t respHeader;
-    socket.recv(&respHeader);
+    std::vector<Matrix> weightsData;
 
-    // Parse the respond.
-    unsigned layerResp = parse<unsigned>((char *) respHeader.data(), 1);
-    if (layerResp == -1) {      // Failed.
-        std::cerr << "[ ERROR ] No corresponding matrix chunk!" << std::endl;
-        return Matrix();
-    } else {                    // Get matrices data.
-        unsigned rows = parse<unsigned>((char *) respHeader.data(), 2);
-        unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
-        zmq::message_t matxData(rows * cols * sizeof(float));
-        socket.recv(&matxData);
+    // Receive weight matrices, from layer 2 -> last.
+    for (size_t i = 2; i <= numLayers; ++i) {
+        zmq::message_t respHeader;
+        socket.recv(&respHeader);
+        unsigned layerResp = parse<unsigned>((char *) respHeader.data(), 1);
+        if (layerResp == ERR_HEADER_FIELD) {    // Failed.
+            std::cerr << "[ ERROR ] No corresponding weight matrix!" << std::endl;
+            return weightsData;
+        } else {                    // Get matrices data.
+            unsigned rows = parse<unsigned>((char *) respHeader.data(), 2);
+            unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
+            zmq::message_t matxData(rows * cols * sizeof(FeatType));
+            socket.recv(&matxData);
 
-        char *matxBuffer = new char[matxData.size()];
-        std::memcpy(matxBuffer, matxData.data(), matxData.size());
+            FeatType *matxBuffer = new FeatType[rows * cols];
+            std::memcpy(matxBuffer, matxData.data(), matxData.size());
 
-        Matrix m(rows, cols, matxBuffer);
-        return m;
+            weightsData.push_back(Matrix(rows, cols, matxBuffer));
+        }
     }
+
+    return weightsData;
 }
 
 
 /**
  *
- * Send multiplied matrix result back to dataserver.
+ * Send weight updates back to weightserver.
  * 
  */
 static void
-sendWeightsUpdate(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned id) {
+sendWeightsUpdates(zmq::socket_t& socket, std::vector<Matrix> weightsUpdates, unsigned id) {
     
+    // Send push header.
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader((char *) header.data(), OP::PUSH_BACKWARD, id);
+    socket.send(header, ZMQ_SNDMORE);
+
+    // Send updates to all weight matrices given by my chunk.
+    for (unsigned i = 0; i < weightsUpdates.size(); ++i) {
+        Matrix& updateMat = weightsUpdates[i];
+
+        zmq::message_t updateData(updateMat.getDataSize());
+        std::memcpy(updateData.data(), updateMat.getData(), updateMat.getDataSize());
+        if (i == weightsUpdates.size() - 1)
+            socket.send(updateData);
+        else
+            socket.send(updateData, ZMQ_SNDMORE);
+    }
+
+    // Wait for updates settled reply.
+    zmq::message_t confirm;
+    socket.recv(&confirm);
 }
 
 
 /**
  *
- * Matrix multiplication function.
+ * Send finish message back to dataserver.
  * 
  */
-static Matrix
-dot(Matrix& features, Matrix& weights) {
-    unsigned m = features.getRows(), k = features.getCols(), n = weights.getCols();
-    Matrix result(m, n);
+static void
+sendFinishMsg(zmq::socket_t& socket, unsigned id) {
+    
+    // Send push header.
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader((char *) header.data(), OP::PUSH_BACKWARD, id);
+    socket.send(header);
 
-    auto resultData = new FeatType[m * n];
-    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, 1.0,
-                features.getData(), k, weights.getData(), n, 0.0, resultData, n);
-
-    result.setData(resultData);
-
-    return result;
+    // Wait for message confirmed reply.
+    zmq::message_t confirm;
+    socket.recv(&confirm);
 }
 
 
 /**
  *
- * Apply activation function on a matrix.
+ * Softmax on a row-wise matrix, where each element softmax with respect to its row.
  * 
  */
 static Matrix
-activate(Matrix& mat) {
-    FeatType *activationData = new FeatType[mat.getRows() * mat.getCols()];
+softmaxRows(Matrix& mat) {
+    FeatType *res = new FeatType[mat.getNumElemts()];
+
+    for (unsigned i = 0; i < mat.getRows(); ++i) {
+        unsigned length = mat.getCols();
+        FeatType *vecSrc = mat.getData() + i * length;
+        FeatType *vecDst = res + i * length;
+
+        FeatType denom = 0.;
+        for (unsigned j = 0; j < length; ++j) {
+            vecDst[j] = std::exp(vecSrc[j]);
+            denom += vecDst[j];
+        }
+        for (unsigned j = 0; j < length; ++j)
+            vecDst[j] /= denom;
+    }
+
+    return Matrix(mat.getRows(), mat.getCols(), res);
+}
+
+
+/**
+ *
+ * Element-wise subtraction & multiplication. MUST ensure inputs are in the same size.
+ * 
+ */
+static Matrix
+hadamardSub(Matrix& matLeft, Matrix& matRight) {
+    assert(matLeft.getRows() == matRight.getRows());
+    assert(matLeft.getCols() == matRight.getCols());
+    
+    FeatType *res = new FeatType[matLeft.getNumElemts()];
+    FeatType *leftData = matLeft.getData(), *rightData = matRight.getData();
+
+    for (unsigned i = 0; i < matLeft.getNumElemts(); ++i)
+        res[i] = leftData[i] - rightData[i];
+
+    return Matrix(matLeft.getRows(), matRight.getCols(), res);
+}
+
+static Matrix
+hadamardMul(Matrix& matLeft, Matrix& matRight) {
+    assert(matLeft.getRows() == matRight.getRows());
+    assert(matLeft.getCols() == matRight.getCols());
+    
+    FeatType *res = new FeatType[matLeft.getNumElemts()];
+    FeatType *leftData = matLeft.getData(), *rightData = matRight.getData();
+
+    for (unsigned i = 0; i < matLeft.getNumElemts(); ++i)
+        res[i] = leftData[i] * rightData[i];
+
+    return Matrix(matLeft.getRows(), matRight.getCols(), res);
+}
+
+
+/**
+ *
+ * Apply derivate of the activation function on a matrix.
+ * 
+ */
+static Matrix
+activateDerivate(Matrix& mat) {
+    FeatType *res = new FeatType[mat.getNumElemts()];
     FeatType *zData = mat.getData();
-    
-    for (unsigned i = 0; i < mat.getRows() * mat.getCols(); ++i)
-        activationData[i] = std::tanh(zData[i]);
 
-    return Matrix(mat.getRows(), mat.getCols(), activationData);
+    for (unsigned i = 0; i < mat.getNumElemts(); ++i)
+        res[i] = 1 - std::pow(std::tanh(zData[i]), 2);
+
+    return Matrix(mat.getRows(), mat.getCols(), res);
+}
+
+
+/**
+ *
+ * Matrix multiplication functions used.
+ * 
+ */
+static Matrix
+dotGDwithWTrans(Matrix& matLeft, Matrix& matRight) {
+    unsigned m = matLeft.getRows(), k = matLeft.getCols(), n = matRight.getRows();
+    assert(k == matRight.getCols());
+
+    FeatType *res = new FeatType[m * n];
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, m, n, k, 1.0,
+                matLeft.getData(), k, matRight.getData(), k, 0.0, res, n);
+
+    return Matrix(m, n, res);
+}
+
+static Matrix
+dotActTranswithGD(Matrix& matLeft, Matrix& matRight, float alpha) {
+    unsigned m = matLeft.getCols(), k = matLeft.getRows(), n = matRight.getCols();
+    assert(k == matRight.getRows());
+
+    FeatType *res = new FeatType[m * n];
+    cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, m, n, k, alpha,
+                matLeft.getData(), m, matRight.getData(), n, 0.0, res, n);
+
+    return Matrix(m, n, res);
+}
+
+
+/**
+ *
+ * Main logic of gradient computation and a naive gradient descent to get weight updates.
+ *
+ * Attention:
+ *   zMatrices   vec contains z1   -> zout;
+ *   actMatrices vec contains act0 -> actout;
+ *   weightData  vec contains w2   -> wout.
+ * 
+ */
+static std::vector<Matrix>
+gradientComputation(GraphData& graphData, std::vector<Matrix>& weightsData) {
+    
+    std::vector<Matrix> gradients;
+    std::vector<Matrix> weightsUpdates;
+
+    // Compute last layer's gradients.
+    Matrix softmaxRes = softmaxRows(graphData.actMatrices.back());
+    Matrix subRes = hadamardSub(softmaxRes, graphData.targetMatrix);
+    Matrix derivateRes = activateDerivate(graphData.zMatrices.back());
+    gradients.push_back(hadamardMul(subRes, derivateRes));
+    delete[] softmaxRes.getData();
+    delete[] subRes.getData();
+    delete[] derivateRes.getData();
+
+    // Compute previous layers gradients.
+    for (unsigned i = weightsData.size(); i > 0; --i) {
+        Matrix dotRes = dotGDwithWTrans(gradients.back(), weightsData[i - 1]);
+        Matrix derivateRes = activateDerivate(graphData.zMatrices[i - 1]);
+        gradients.push_back(hadamardMul(dotRes, derivateRes));
+        delete[] dotRes.getData();
+        delete[] derivateRes.getData();
+    }
+
+    std::reverse(gradients.begin(), gradients.end());
+
+    // Compute weights updates.
+    for (unsigned i = 0; i < gradients.size(); ++i) {
+        weightsUpdates.push_back(dotActTranswithGD(graphData.actMatrices[i], gradients[i], LEARNING_RATE));
+        delete[] gradients[i].getData();
+    }
+
+    return weightsUpdates;
 }
 
 
@@ -150,15 +364,15 @@ activate(Matrix& mat) {
  *
  * Main logic:
  * 
- *      1. Querying matrix data from dataserver;
- *      2. Querying weight matrix from weightserver;
- *      3. Conduct the matrix multiplication to get Z matrix;
- *      4. Perform activation on Z to get Activated matrix;
- *      5. Send both matrices back to data server.
+ *      1. Querying matrices chunks from dataserver;
+ *      2. Querying weight matrices from weightserver;
+ *      3. Conduct the gradient descent computation to get weight updates;
+ *      4. Send weight updates back to weight servers.
  * 
  */
 static invocation_response
-backward_prop(std::string dataserver, std::string weightserver, std::string dport, std::string wport, unsigned id) {
+backward_prop(std::string dataserver, std::string weightserver, std::string dport, std::string wport,
+              unsigned id, unsigned numLayers) {
     zmq::context_t ctx(1);
 
     //
@@ -175,65 +389,74 @@ backward_prop(std::string dataserver, std::string weightserver, std::string dpor
 
     Timer getWeightsTimer;
     Timer getFeatsTimer;
-    Timer computationTimer;
-    Timer activationTimer;
+    Timer gradientTimer;
     Timer sendResTimer;
 
     try {
+        GraphData graphData;
+        std::vector<Matrix> weightsData;     // Layer 2 -> last.
+        std::vector<Matrix> weightsUpdates;
 
-        // Request weights matrices of the current layer.
-        Matrix weights;
-        std::thread t([&] {     // Weight requests run in a separate thread.
-            std::cout << "< BACKWARD > Asking weightserver..." << std::endl;
-            getWeightsTimer.start();
-            zmq::socket_t weights_socket(ctx, ZMQ_DEALER);
-            weights_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
-            char whost_port[50];
-            sprintf(whost_port, "tcp://%s:%s", weightserver.c_str(), wport.c_str());
-            weights_socket.connect(whost_port);
-            // weights = requestMatrices(weights_socket, layer);
-            getWeightsTimer.stop();
-            std::cout << "< BACKWARD > Got data from weightserver." << std::endl;
-        });
+        zmq::socket_t weights_socket(ctx, ZMQ_DEALER);
+        weights_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
+        char whost_port[50];
+        sprintf(whost_port, "tcp://%s:%s", weightserver.c_str(), wport.c_str());
+        weights_socket.connect(whost_port);
 
-        // Request z, act & target matrices of the current layer.
-        Matrix feats;
-        std::cout << "< BACKWARD > Asking dataserver..." << std::endl;
-        getFeatsTimer.start();
         zmq::socket_t data_socket(ctx, ZMQ_DEALER);
         data_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
         char dhost_port[50];
         sprintf(dhost_port, "tcp://%s:%s", dataserver.c_str(), dport.c_str());
         data_socket.connect(dhost_port);
-        feats = requestMatrices(data_socket, id);
+
+        // Request weights matrices.
+        std::thread t([&] {     // Weight requests run in a separate thread.
+            std::cout << "< BACKWARD > Asking weightserver..." << std::endl;
+            getWeightsTimer.start();
+            weightsData = requestWeightsMatrices(weights_socket, id, numLayers);
+            getWeightsTimer.stop();
+            std::cout << "< BACKWARD > Got data from weightserver." << std::endl;
+        });
+
+        // Request z, act & target matrices chunks.
+        std::cout << "< BACKWARD > Asking dataserver..." << std::endl;
+        getFeatsTimer.start();
+        graphData = requestFeatsMatrices(data_socket, id, numLayers);
         getFeatsTimer.stop();
         std::cout << "< BACKWARD > Got data from dataserver." << std::endl;
 
         t.join();
 
-        if (weights.empty())
+        if (weightsData.empty())
             return invocation_response::failure("Weights could not be loaded", "application/json");
-        if (feats.empty())
-            return invocation_response::failure("No chunk corresponding to request", "appliation/json");
+        if (graphData.zMatrices.empty())
+            return invocation_response::failure("No chunks corresponding to request", "appliation/json");
 
-        // Multiplication.
-        computationTimer.start();
-        std::cout << "< BACKWARD > Doing the dot multiplication..." << std::endl;
-        Matrix z = dot(feats, weights);
-        computationTimer.stop();
+        // Gradient computation.
+        gradientTimer.start();
+        std::cout << "< BACKWARD > Doing the gradient descent computation..." << std::endl;
+        weightsUpdates = gradientComputation(graphData, weightsData);
+        gradientTimer.stop();
 
-        // Activation.
-        activationTimer.start();
-        std::cout << "< BACKWARD > Doing the activation..." << std::endl;
-        Matrix activations = activate(z);
-        activationTimer.stop();
-
-        // Send back to dataserver.
+        // Send weight updates to weightserver, and finish message to dataserver.
         sendResTimer.start();
-        std::cout << "< BACKWARD > Sending results back..." << std::endl;
-        sendMatrices(z, activations, data_socket, id);
-        std::cout << "< BACKWARD > Results sent." << std::endl;
+        std::cout << "< BACKWARD > Sending weight updates back..." << std::endl;
+        sendWeightsUpdates(weights_socket, weightsUpdates, id);
+        std::cout << "< BACKWARD > Weight updates sent." << std::endl;
+        sendFinishMsg(data_socket, id);
+        std::cout << "< BACKWARD > Finish message sent." << std::endl;
         sendResTimer.stop();
+
+        // Delete malloced spaces.
+        for (Matrix& mat : weightsData)
+            delete[] mat.getData();
+        for (Matrix& mat : graphData.zMatrices)
+            delete[] mat.getData();
+        for (Matrix& mat : graphData.actMatrices)
+            delete[] mat.getData();
+        delete[] graphData.targetMatrix.getData();
+        for (Matrix& mat : weightsUpdates)
+            delete[] mat.getData();
 
     } catch(std::exception &ex) {
         return invocation_response::failure(ex.what(), "application/json");
@@ -241,10 +464,10 @@ backward_prop(std::string dataserver, std::string weightserver, std::string dpor
 
     // Couldn't parse JSON with AWS SDK from ptree.
     // For now creating a string with the times to be parsed on server.
-    std::string res = std::to_string(id) + ": " + std::to_string(getWeightsTimer.getTime()) + " " + \
+    std::string res = std::to_string(id) + ": " +
+                      std::to_string(getWeightsTimer.getTime()) + " " +     \
                       std::to_string(getFeatsTimer.getTime())  + " " +      \
-                      std::to_string(computationTimer.getTime()) + " " +    \
-                      std::to_string(activationTimer.getTime()) + " " +     \
+                      std::to_string(gradientTimer.getTime()) + " " +       \
                       std::to_string(sendResTimer.getTime());
 
     return invocation_response::success(res, "application/json");
@@ -262,12 +485,13 @@ my_handler(invocation_request const& request) {
     std::string weightserver = pt.get<std::string>("weightserver");
     std::string dport = pt.get<std::string>("dport");
     std::string wport = pt.get<std::string>("wport");
+    unsigned numLayers = pt.get<int>("layer");
     unsigned chunkId = pt.get<int>("id");
 
     std::cout << "[ACCEPTED] Thread " << chunkId << " is requested from " << dataserver << ":" << dport
-              << ", BACKWARD." << std::endl;
+              << ", BACKWARD on " << numLayers << " layers." << std::endl;
 
-    return backward_prop(dataserver, weightserver, dport, wport, chunkId, layer);
+    return backward_prop(dataserver, weightserver, dport, wport, chunkId, numLayers);
 }
 
 int

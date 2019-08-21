@@ -1,130 +1,202 @@
 #include "serverworker.hpp"
 
 
-extern std::mutex m, term_mutex, update_mutex;
+extern std::mutex term_mutex, update_mutex;
 extern std::condition_variable cv;
 extern bool finished;
 
 
-ServerWorker::ServerWorker(zmq::context_t& ctx_, int sock_type, unsigned& counter,
-         std::vector<Matrix>& _weights, std::vector<Matrix>& _updates,
-         std::vector<unsigned>& _numLambdas, WeightServer& _ws)
-    : ctx(ctx_), worker(ctx, sock_type), weight_list(_weights),
-    updates(_updates), numLambdas(_numLambdas), count(counter), ws(_ws) { }
+/**
+ *
+ * ServerWorker constructor.
+ * 
+ */
+ServerWorker::ServerWorker(zmq::context_t& ctx_, unsigned& counter, WeightServer& _ws,
+                           std::vector<Matrix>& weights_, std::vector<Matrix>& updates_, unsigned& numLambdas_)
+    : ctx(ctx_), workersocket(ctx, ZMQ_DEALER), count(counter), ws(_ws),
+      weightMats(weights_), updates(updates_), numLambdas(numLambdas_) {
+    workersocket.connect("inproc://backend");
+}
 
 
-// Listens on lambda threads' request for weights.
-void ServerWorker::work() {
-    worker.connect("inproc://backend");
-
+/**
+ *
+ * Listen on lambda threads' requests.
+ * 
+ */
+void
+ServerWorker::work() {
     std::cout << "[Weight] Starts listening for lambdas' requests..." << std::endl;
     try {
         while (true) {
             zmq::message_t identity;
             zmq::message_t header;
-            worker.recv(&identity);
-            worker.recv(&header);
+            workersocket.recv(&identity);
+            workersocket.recv(&header);
                 
             unsigned op = parse<unsigned>((char *) header.data(), 0);
-            unsigned layer = parse<unsigned>((char *) header.data(), 1);
+            unsigned arg = parse<unsigned>((char *) header.data(), 1);
 
-            if (op == OP::PULL_FORWARD || op == OP::PUSH_BACKWARD) {
-                std::string opStr = op == OP::PUSH_BACKWARD ? "Push" : "Pull";
-                std::string accMsg = "[ACCEPTED] " + opStr + " for layer "
-                                   + std::to_string(layer);
+            std::string accMsg;
+            if (op == OP::PULL_FORWARD)
+                accMsg = "[ACCEPTED] Pull FORWARD for layer " + std::to_string(arg) + ".";
+            else if (op == OP::PULL_BACKWARD)
+                accMsg = "[ACCEPTED] Pull BACKWARD from thread " + std::to_string(arg) + ".";
+            else if (op == OP::PUSH_BACKWARD)
+                accMsg = "[ UPDATE ] Push BACKWARD from thread " + std::to_string(arg) + ".";
+            if (!accMsg.empty())
                 std::cout << accMsg << std::endl;
-            }
 
             switch (op) {
                 case (OP::PULL_FORWARD):
-                    sendWeights(worker, identity, layer);
+                    sendWeightsForwardLayer(identity, arg);
+                    break;
+                case (OP::PULL_BACKWARD):
+                    sendWeightsBackward(identity);
                     break;
                 case (OP::PUSH_BACKWARD):
-                    recvUpdates(worker, identity, layer, header);
+                    recvUpdates(identity);
                     break;
-                // Used to tell the weight server how many lambda threads
-                // it should expect for this round of backprop
-                case (OP::INFO):
-                    updateBackpropIterationInfo(layer, header);
+                case (OP::INFO):    // Used to tell how many lambda threads it should expect for this round.
+                    setBackpropNumLambdas(identity, arg);
                     break;
                 case (OP::TERM):
-                    terminateServer(worker, identity);
+                    terminateServer(identity);
                     break;
                 default:
-                    std::cerr << "ServerWorker: Unknown Op code received." << std::endl;
+                    break;  /** Not an op that I care about. */
             }
         }
-    } catch (std::exception& ex) {
-        std::cerr << ex.what() << std::endl;
+    } catch (std::exception& ex) { /** Context Termintated. */ }
+}
+
+
+/**
+ *
+ * Send weight matrix to lambdas.
+ * 
+ */
+void
+ServerWorker::sendWeightsForwardLayer(zmq::message_t& client_id, unsigned layer) {
+    workersocket.send(client_id, ZMQ_SNDMORE);    // The identity message will be implicitly consumed to route to the correct client.
+
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader((char *) header.data(), OP::RESP, 0, weightMats[layer].getRows(), weightMats[layer].getCols());
+    workersocket.send(header, ZMQ_SNDMORE);
+
+    zmq::message_t weightData(weightMats[layer].getDataSize());
+    std::memcpy((char *) weightData.data(), weightMats[layer].getData(), weightMats[layer].getDataSize());
+    workersocket.send(weightData);
+}
+
+
+/**
+ *
+ * Send weight matrices 2 -> last to lambdas for backward-prop computation.
+ * 
+ */
+void
+ServerWorker::sendWeightsBackward(zmq::message_t& client_id) {
+    workersocket.send(client_id, ZMQ_SNDMORE);
+
+    for (unsigned i = 1; i < weightMats.size(); ++i) {
+        Matrix& weightMat = weightMats[i];
+
+        zmq::message_t header(HEADER_SIZE);
+        populateHeader((char *) header.data(), OP::RESP, 0, weightMat.getRows(), weightMat.getCols());
+        workersocket.send(header, ZMQ_SNDMORE);
+
+        zmq::message_t weightData(weightMat.getDataSize());
+        std::memcpy((char *) weightData.data(), weightMat.getData(), weightMat.getDataSize());
+        if (i == weightMats.size() - 1)
+            workersocket.send(weightData);
+        else
+            workersocket.send(weightData, ZMQ_SNDMORE);
     }
 }
 
-void ServerWorker::sendWeights(zmq::socket_t& socket, zmq::message_t& client_id, unsigned layer) {
-    Matrix& weights = weight_list[layer];
-    zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::RESP, 0, weights.getRows(), weights.getCols());
-    
-    zmq::message_t weightData(weights.getDataSize());
-    std::memcpy((char *) weightData.data(), weights.getData(), weights.getDataSize());
-    
-    // The identity message will be implicitly consumed to route the message to the correct client.
-    socket.send(client_id, ZMQ_SNDMORE);
-    socket.send(header, ZMQ_SNDMORE);
-    socket.send(weightData);
-}
 
-// Receive a given update from a worker
-// If all updates have been received for this batch, alert the weight server
-// that it is time to average and apply them
-void ServerWorker::recvUpdates(zmq::socket_t& socket, zmq::message_t& client_id, unsigned layer, zmq::message_t& header) {
-    zmq::message_t data;
-    socket.recv(&data);
+/**
+ *
+ * Receive a given update from a worker. If all udpates have been received, alert the weight server that it is
+ * time to average and apply them.
+ * 
+ */
+void
+ServerWorker::recvUpdates(zmq::message_t& client_id) {
+    for (Matrix& weightMat : weightMats) {
+        zmq::message_t update;
+        workersocket.recv(&update);
 
-    // send ACK message back to server
+        float *weightData = weightMat.getData();
+        float *updateData = (float *) update.data();
+
+        // Grab lock then sum the data received with the current update matrix.
+        std::lock_guard<std::mutex> update_lock(update_mutex);
+        for (unsigned i = 0; i < weightMat.getNumElemts(); ++i)
+            weightData[i] -= updateData[i];
+    }
+
+    // Send confirm ACK message.
     zmq::message_t confirm;
-    socket.send(client_id, ZMQ_SNDMORE);
-    socket.send(confirm);
+    workersocket.send(client_id, ZMQ_SNDMORE);
+    workersocket.send(confirm);
 
-    // grab lock then sum the data received with the current update matrix
-    std::lock_guard<std::mutex> update_lock(update_mutex);
-    cblas_saxpy(weight_list[layer].getNumElemts(), -1.0, (float*) data.data(),
-                1, weight_list[layer].getData(), 1);
+    // cblas_saxpy(updates[layer].getNumElemts(), 1.0,
+    //             (float*) data.data(), 1, updates[layer].getData(), 1);
+    // ++count;
 
-//    cblas_saxpy(updates[layer].getNumElemts(), 1.0,
-//                (float*) data.data(), 1, updates[layer].getData(), 1);
-//    ++count;
-//
-//    // If all the lambda results have been collected, reset the counter
-//    // and tell the weight server to average and apply updates
-//    if (count == numLambdas[layer]) {
-//        count = 0;
-//
-//        std::thread t([&]{
-//            ws.applyUpdates(layer);
-//        });
-//        t.detach();
-//    }
+    // // If all the lambda results have been collected, reset the counter
+    // // and tell the weight server to average and apply updates
+    // if (count == numLambdas[layer]) {
+    //     count = 0;
+
+    //     std::thread t([&]{
+    //         ws.applyUpdates(layer);
+    //     });
+    //     t.detach();
+    // }
 }
 
-// Update the weight server with the number of lambdas being called for
-// this iteration so it knows when to average
-void ServerWorker::updateBackpropIterationInfo(unsigned layer, zmq::message_t& header) {
-    unsigned nLambdas = parse<unsigned>((char*) header.data(), 2);
 
-    std::cout << "Number of lambdas for layer " << layer << " is "
-      << nLambdas << std::endl;
+/**
+ *
+ * Update the weightserver with number of lambdas being called for this iteration.
+ * Therefore it knows when to average.
+ * 
+ */
+void
+ServerWorker::setBackpropNumLambdas(zmq::message_t& client_id, unsigned numLambdas_) {
 
-    // This is not a thread-safe call but as the coordination server should
-    // only send one info message per server it should be fine
-    numLambdas[layer] = nLambdas;
+    // This is not a thread-safe call, but as the coordination server should
+    // only send one info message per server, it should be fine.
+    numLambdas = numLambdas_;
+    std::cout << "[  INFO  ] Number of lambdas set to " << numLambdas << "." << std::endl;
+
+    // Send confirm ACK message.
+    zmq::message_t confirm;
+    workersocket.send(client_id, ZMQ_SNDMORE);
+    workersocket.send(confirm);
 }
 
-// After receiving the termination message from the coordination server
-// alert the main thread that it can shutdown
-void ServerWorker::terminateServer(zmq::socket_t& socket, zmq::message_t& client_id) {
-    std::cerr << "Server shutting down..." << std::endl;
 
-    std::lock_guard<std::mutex> lock(m);
+/**
+ *
+ * After receiving the termination message from the coordination server alert
+ * the main thread that it can shutdown.
+ * 
+ */
+void
+ServerWorker::terminateServer(zmq::message_t& client_id) {
+
+    // Send confirm ACK message.
+    zmq::message_t confirm;
+    workersocket.send(client_id, ZMQ_SNDMORE);
+    workersocket.send(confirm);
+    
+    std::cerr << "[SHUTDOWN] Server shutting down..." << std::endl;
+
+    std::lock_guard<std::mutex> lock(term_mutex);
     finished = true;
     cv.notify_one();
 }

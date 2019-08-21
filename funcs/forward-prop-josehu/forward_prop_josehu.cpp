@@ -52,7 +52,7 @@ requestFeatsMatrix(zmq::socket_t& socket, unsigned id) {
         zmq::message_t matxData(rows * cols * sizeof(FeatType));
         socket.recv(&matxData);
 
-        char *matxBuffer = new char[matxData.size()];
+        FeatType *matxBuffer = new FeatType[rows * cols];
         std::memcpy(matxBuffer, matxData.data(), matxData.size());
 
         Matrix m(rows, cols, matxBuffer);
@@ -80,7 +80,7 @@ requestWeightsMatrix(zmq::socket_t& socket, unsigned layer) {
 
     // Parse the respond.
     unsigned layerResp = parse<unsigned>((char *) respHeader.data(), 1);
-    if (layerResp == -1) {      // Failed.
+    if (layerResp == ERR_HEADER_FIELD) {    // Failed.
         std::cerr << "[ ERROR ] No corresponding matrix chunk!" << std::endl;
         return Matrix();
     } else {                    // Get matrices data.
@@ -89,7 +89,7 @@ requestWeightsMatrix(zmq::socket_t& socket, unsigned layer) {
         zmq::message_t matxData(rows * cols * sizeof(float));
         socket.recv(&matxData);
 
-        char *matxBuffer = new char[matxData.size()];
+        FeatType *matxBuffer = new FeatType[rows * cols];
         std::memcpy(matxBuffer, matxData.data(), matxData.size());
 
         Matrix m(rows, cols, matxBuffer);
@@ -133,15 +133,13 @@ sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned
 static Matrix
 dot(Matrix& features, Matrix& weights) {
     unsigned m = features.getRows(), k = features.getCols(), n = weights.getCols();
-    Matrix result(m, n);
+    assert(k == weights.getRows());
 
-    auto resultData = new FeatType[m * n];
+    FeatType *res = new FeatType[m * n];
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, 1.0,
-                features.getData(), k, weights.getData(), n, 0.0, resultData, n);
+                features.getData(), k, weights.getData(), n, 0.0, res, n);
 
-    result.setData(resultData);
-
-    return result;
+    return Matrix(m, n, res);
 }
 
 
@@ -152,10 +150,10 @@ dot(Matrix& features, Matrix& weights) {
  */
 static Matrix
 activate(Matrix& mat) {
-    FeatType *activationData = new FeatType[mat.getRows() * mat.getCols()];
+    FeatType *activationData = new FeatType[mat.getNumElemts()];
     FeatType *zData = mat.getData();
     
-    for (unsigned i = 0; i < mat.getRows() * mat.getCols(); ++i)
+    for (unsigned i = 0; i < mat.getNumElemts(); ++i)
         activationData[i] = std::tanh(zData[i]);
 
     return Matrix(mat.getRows(), mat.getCols(), activationData);
@@ -197,31 +195,32 @@ forward_prop_layer(std::string dataserver, std::string weightserver, std::string
     Timer sendResTimer;
 
     try {
+        Matrix weights, feats, z, activations;
 
+        zmq::socket_t weights_socket(ctx, ZMQ_DEALER);
+        weights_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
+        char whost_port[50];
+        sprintf(whost_port, "tcp://%s:%s", weightserver.c_str(), wport.c_str());
+        weights_socket.connect(whost_port);
+
+        zmq::socket_t data_socket(ctx, ZMQ_DEALER);
+        data_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
+        char dhost_port[50];
+        sprintf(dhost_port, "tcp://%s:%s", dataserver.c_str(), dport.c_str());
+        data_socket.connect(dhost_port);
+        
         // Request weights matrix of the current layer.
-        Matrix weights;
         std::thread t([&] {     // Weight requests run in a separate thread.
             std::cout << "< FORWARD > Asking weightserver..." << std::endl;
             getWeightsTimer.start();
-            zmq::socket_t weights_socket(ctx, ZMQ_DEALER);
-            weights_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
-            char whost_port[50];
-            sprintf(whost_port, "tcp://%s:%s", weightserver.c_str(), wport.c_str());
-            weights_socket.connect(whost_port);
             weights = requestWeightsMatrix(weights_socket, layer);
             getWeightsTimer.stop();
             std::cout << "< FORWARD > Got data from weightserver." << std::endl;
         });
 
         // Request feature activation matrix of the current layer.
-        Matrix feats;
         std::cout << "< FORWARD > Asking dataserver..." << std::endl;
         getFeatsTimer.start();
-        zmq::socket_t data_socket(ctx, ZMQ_DEALER);
-        data_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
-        char dhost_port[50];
-        sprintf(dhost_port, "tcp://%s:%s", dataserver.c_str(), dport.c_str());
-        data_socket.connect(dhost_port);
         feats = requestFeatsMatrix(data_socket, id);
         getFeatsTimer.stop();
         std::cout << "< FORWARD > Got data from dataserver." << std::endl;
@@ -237,13 +236,13 @@ forward_prop_layer(std::string dataserver, std::string weightserver, std::string
         // Multiplication.
         computationTimer.start();
         std::cout << "< FORWARD > Doing the dot multiplication..." << std::endl;
-        Matrix z = dot(feats, weights);
+        z = dot(feats, weights);
         computationTimer.stop();
 
         // Activation.
         activationTimer.start();
         std::cout << "< FORWARD > Doing the activation..." << std::endl;
-        Matrix activations = activate(z);
+        activations = activate(z);
         activationTimer.stop();
 
         // Send back to dataserver.
@@ -253,13 +252,20 @@ forward_prop_layer(std::string dataserver, std::string weightserver, std::string
         std::cout << "< FORWARD > Results sent." << std::endl;
         sendResTimer.stop();
 
+        // Delete malloced spaces.
+        delete[] weights.getData();
+        delete[] feats.getData();
+        delete[] z.getData();
+        delete[] activations.getData();
+
     } catch(std::exception &ex) {
         return invocation_response::failure(ex.what(), "application/json");
     }
 
     // Couldn't parse JSON with AWS SDK from ptree.
     // For now creating a string with the times to be parsed on server.
-    std::string res = std::to_string(id) + ": " + std::to_string(getWeightsTimer.getTime()) + " " + \
+    std::string res = std::to_string(id) + ": " +
+                      std::to_string(getWeightsTimer.getTime()) + " " +     \
                       std::to_string(getFeatsTimer.getTime())  + " " +      \
                       std::to_string(computationTimer.getTime()) + " " +    \
                       std::to_string(activationTimer.getTime()) + " " +     \

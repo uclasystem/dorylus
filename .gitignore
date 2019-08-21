@@ -18,5 +18,6 @@ ec2man/profile
 *.pyc
 
 inputs/data
+inputs/small
 
 wiki
