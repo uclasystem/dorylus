@@ -160,8 +160,10 @@ CoordServer::run() {
             if (op == OP::TERM) {
                 std::cerr << "[SHUTDOWN] Terminating the servers..." << std::endl;
                 terminate = true;
-                for (unsigned i = 0; i < weightserverAddrs.size(); ++i)
+                for (unsigned i = 0; i < weightserverAddrs.size(); ++i) {
                     sendShutdownMessage(weightsockets[i]);
+                    free(weightserverAddrs[i]);     // Free the `strdup`ed weightserver Ips.
+                }
 
             // Else is a request for lambda threads. Handle that. This is forward.
             } else if (op == OP::REQ_FORWARD) {

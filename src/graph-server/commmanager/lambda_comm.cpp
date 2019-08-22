@@ -108,12 +108,10 @@ LambdaComm::newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType *t
 
     // Create new matrix objects for workers to access.
     std::vector<Matrix> zMatrices;
-    assert(zBufs.size() == layerConfig.size());
     for (size_t i = 1; i < layerConfig.size(); ++i)
         zMatrices.push_back(Matrix(numLocalVertices, layerConfig[i], zBufs[i]));
 
     std::vector<Matrix> actMatrices;
-    assert(actBufs.size() == layerConfig.size());
     for (size_t i = 0; i < layerConfig.size(); ++i)
         actMatrices.push_back(Matrix(numLocalVertices, layerConfig[i], actBufs[i]));
 

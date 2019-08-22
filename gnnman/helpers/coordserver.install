@@ -9,7 +9,7 @@ cd ${HOME}
 
 
 # Basic packages.
-APT_INSTALL_LIST="build-essential libtool pkg-config autoconf libboost-all-dev cmake git libssl-dev libcurl4-openssl-dev zlib1g-dev"
+APT_INSTALL_LIST="build-essential awscli libtool pkg-config autoconf libboost-all-dev cmake git libssl-dev libcurl4-openssl-dev zlib1g-dev"
 YUM_GROUPINSTALL="'Development Tools'"; YUM_INSTALL_LIST="boost-devel cmake git openssl-devel libcurl-devel zlib-devel"
 
 OS_DISTRO=$( awk -F= '/^NAME/{print $2}' /etc/os-release | sed -e 's/^"//' -e 's/"$//' )
