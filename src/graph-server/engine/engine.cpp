@@ -34,6 +34,7 @@ unsigned Engine::coordserverPort;
 LambdaComm *Engine::lambdaComm = NULL;
 unsigned Engine::numLambdasForward = 0;
 unsigned Engine::numLambdasBackward = 0;
+GPUComm *Engine::gpuComm = NULL;
 unsigned Engine::currId = 0;
 Lock Engine::lockCurrId;
 Lock Engine::lockRecvWaiters;
@@ -61,6 +62,7 @@ std::vector<double> Engine::vecTimeSendout;
 double Engine::timeBackwardProcess = 0.0;
 
 
+
 /**
  *
  * Initialize the engine with the given command line arguments.
@@ -74,9 +76,10 @@ Engine::init(int argc, char *argv[]) {
     parseArgs(argc, argv);
     
     // Initialize the node manager and communication manager.
-    NodeManager::init(dshMachinesFile, myPrIpFile, myPubIpFile);    // NodeManger should go first.
+    NodeManager::init(dshMachinesFile, myPrIpFile, myPubIpFile);    // NodeManger should go first. 
+    
     nodeId = NodeManager::getMyNodeId();
-    numNodes = NodeManager::getNumNodes();
+    numNodes = NodeManager::getNumNodes(); 
     assert(numNodes <= 256);    // Cluster size limitation.
     outFile += std::to_string(nodeId);
     CommManager::init();
@@ -139,8 +142,11 @@ Engine::init(int argc, char *argv[]) {
     graph.compactGraph();
 
     // Create the lambda communication manager.
-    lambdaComm = new LambdaComm(NodeManager::getNode(nodeId).pubip, dataserverPort, coordserverIp, coordserverPort, nodeId,
-                                numLambdasForward, numLambdasBackward);
+    // lambdaComm = new LambdaComm(NodeManager::getNode(nodeId).pubip, dataserverPort, coordserverIp, coordserverPort, nodeId,
+                                // numLambdasForward, numLambdasBackward);
+
+    // Create the GPU communication manager
+    gpuComm = new GPUComm(nodeId, dataserverPort);
 
     timeInit += getTimer();
     printLog(nodeId, "Engine initialization complete.");
@@ -307,8 +313,10 @@ Engine::destroy() {
     condRecvWaitersEmpty.destroy();
     lockHalt.destroy();
 
-    lambdaComm->sendShutdownMessage();
-    delete lambdaComm;
+    // lambdaComm->sendShutdownMessage();
+    // delete lambdaComm;
+    gpuComm->sendShutdownMessage();
+    delete gpuComm;
 
     for (size_t i = 0; i <= numLayers; ++i) {
         delete[] localVerticesZData[i];
@@ -378,12 +386,16 @@ Engine::forwardWorker(unsigned tid, void *args) {
                 printLog(nodeId, "Iteration %u finishes. Invoking lambda...", iteration);
 
                 // Start a new lambda communication context.
-                lambdaComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
+                // lambdaComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
+                                              // graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1));
+
+                gpuComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
                                               graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1));
 
                 // Trigger a request towards the coordicate server. Wait until the request completes.
                 std::thread treq([&] {
-                    lambdaComm->requestLambdasForward(iteration);
+                    // lambdaComm->requestLambdasForward(iteration);
+                    gpuComm->requestForward(iteration);
                 });
                 treq.join();
 

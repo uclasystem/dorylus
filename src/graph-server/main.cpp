@@ -20,10 +20,10 @@ main(int argc, char *argv[]) {
     Engine::runForward();
 
     // Do a backward-prop phase.
-    Engine::runBackward();
+    // Engine::runBackward();
 
     // Procude the output files.
-    Engine::output();
+    // Engine::output();
 
     // Destroy the engine.
     Engine::destroy();

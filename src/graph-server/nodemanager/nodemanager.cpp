@@ -38,7 +38,9 @@ NodeManager::init(std::string dshMachinesFile, std::string myPrIpFile, std::stri
     nodePublisher->setsockopt(ZMQ_SNDHWM, 0);       // Set no limit on number of message queueing.
     nodePublisher->setsockopt(ZMQ_RCVHWM, 0);
     char hostPort[50];
-    sprintf(hostPort, "tcp://%s:%u", me.ip.c_str(), nodePort);
+    // sprintf(hostPort, "tcp://%s:%u", me.ip.c_str(), nodePort);
+    printLog(me.id, "Binding to myself");//GPU
+    sprintf(hostPort, "tcp://%s:%u", "*", nodePort); //GPU
     nodePublisher->bind(hostPort);
 
     nodeSubscriber = new zmq::socket_t(nodeContext, ZMQ_SUB);
@@ -48,6 +50,7 @@ NodeManager::init(std::string dshMachinesFile, std::string myPrIpFile, std::stri
         char hostPort[50];
         sprintf(hostPort, "tcp://%s:%u", node.ip.c_str(), nodePort);
         nodeSubscriber->connect(hostPort);
+        printf("host Port%s\n",hostPort );
     }
     nodeSubscriber->setsockopt(ZMQ_SUBSCRIBE, NULL, 0);
 
@@ -55,7 +58,7 @@ NodeManager::init(std::string dshMachinesFile, std::string myPrIpFile, std::stri
     // has finished initialization.
     if (me.master) {
         unsigned remaining = getNumNodes() - 1;
-
+        printf("I am master\n");
         // Keeps polling until all workers' respond processed.
         while (remaining > 0) {
 
@@ -63,6 +66,7 @@ NodeManager::init(std::string dshMachinesFile, std::string myPrIpFile, std::stri
             zmq::message_t outMsg(sizeof(NodeMessage));
             NodeMessage nMsg(MASTERUP);
             *((NodeMessage *) outMsg.data()) = nMsg;
+            printf("SENDING\n");
             nodePublisher->ksend(outMsg);
 
             // Sleep for 0.5 sec before checking the responds, to avoid clobbing the sockets.
@@ -72,8 +76,10 @@ NodeManager::init(std::string dshMachinesFile, std::string myPrIpFile, std::stri
             zmq::message_t inMsg;
             while (nodeSubscriber->krecv(&inMsg, ZMQ_DONTWAIT)) {
                 NodeMessage nMsg = *((NodeMessage *) inMsg.data());
-                if (nMsg.messageType == WORKERUP)
+                if (nMsg.messageType == WORKERUP){
+                    printf("RECEVed master\n");
                     --remaining;
+                }
             }
         }
 
@@ -85,9 +91,10 @@ NodeManager::init(std::string dshMachinesFile, std::string myPrIpFile, std::stri
 
     // Worker nodes, when received master's MASTERUP message, respond a WORKERUP message.
     } else {
-
+        printf("I am slave\n");
         // Wait for master's polling request.
         zmq::message_t inMsg;
+        printf("RECEVING\n");
         while (nodeSubscriber->recv(&inMsg)) {
             NodeMessage nMsg = *((NodeMessage *) inMsg.data());
             if (nMsg.messageType == MASTERUP)

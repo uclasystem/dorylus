@@ -19,9 +19,6 @@
 #include "../../utils/utils.hpp"
 
 
-void doNotFreeBuffer(void *data, void *hint){
-    printf("Buffer is not freed :)\n");
-}
 /**
  *
  * Communicate with local GPU process using IPC
@@ -39,9 +36,10 @@ public:
         char ipc_addr[50];
         sprintf(ipc_addr, "ipc:///tmp/GPU_COMM:%u", dPort);
         dataSocket.connect(ipc_addr);
-        // dataSocket.connect("tcp://0.0.0.0:1234");
     }
     // For forward-prop.
+    void newContextForward(FeatType *dataBuf, FeatType *zData, FeatType *actData,
+                              unsigned numLocalVertices, unsigned numFeats, unsigned numFeatsNext);
     void requestForward(unsigned layer);
 
     // Send a message to the coordination server to shutdown.
@@ -55,59 +53,15 @@ private:
     unsigned dPort;
 
     //data related objs
-    FeatType *zData;
+    Matrix actMatrix;   // Current layer's feats.
+    FeatType *zData;    // Places to store the results from lambda.
     FeatType *actData;
-    Matrix *actMatrix;
     unsigned numFeatsNext;
-
 
     unsigned nodeId;
 
 };
 
-void GPUComm::requestForward(unsigned layer){
-    try {
-        std::string weightIp("0.0.33.3");
-        zmq::message_t confirm(5);
-
-        unsigned ROWS=10;
-        unsigned COLS=10;
-
-        zmq::message_t header(HEADER_SIZE);
-        populateHeader((char *) header.data(), OP::REQ_FORWARD, layer,ROWS,COLS);
-        dataSocket.send(header);
-        dataSocket.recv(&confirm);
-
-        // Check to make sure that the bounds of this partition do not exceed the bounds of the data array.
-        // If they do, set partition end to the end of the array.
-        // unsigned partRows = std::ceil((float) actMatrix.getRows() / (float) numLambdasForward);
-        // unsigned thisPartRows = partRows;
-        // if ((partId * partRows + partRows) > actMatrix.getRows())
-        //     thisPartRows = partRows - (partId * partRows + partRows) + actMatrix.getRows();
-        // unsigned bufSize = thisPartRows * actMatrix.getCols() * sizeof(FeatType);
-        // FeatType *partitionStart = actMatrix.getData() + (partId * partRows * actMatrix.getCols());
-
-        unsigned bufSize = ROWS * COLS * sizeof(FeatType);
-        FeatType *partitionStart = new FeatType[bufSize];
-        for (int i=0;i<bufSize;++i)
-            partitionStart[i]=i;
-        printf("Buffer size %u\n", bufSize);
-        zmq::message_t partitionData(partitionStart, bufSize, doNotFreeBuffer, NULL);
-        dataSocket.send(partitionData);
-        //block until computation finish
-        dataSocket.recv(&confirm);
-
-    }
-    catch(std::exception& ex){
-        std::cerr << "[ERROR] " << ex.what() << std::endl;
-    }
-}
-
-
-void GPUComm::sendShutdownMessage(){
-
-
-}
 
 
 

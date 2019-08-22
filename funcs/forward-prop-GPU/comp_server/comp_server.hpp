@@ -74,8 +74,7 @@ void ComputingServer::run(){
     std::cout << "[GPU] Starts listening for GPU requests from DATASERVER..." << std::endl;
 
     try {
-        bool terminate = false;
-        while (!terminate) {
+        while (true) {
             zmq::message_t header;
             zmq::message_t confirm(5);
             zmq::message_t aggreChunk;
@@ -95,6 +94,8 @@ void ComputingServer::run(){
             printf("COLS %u\n", COLS);
             dataSocket.send(confirm);
 
+            if(op==OP::TERM)
+                break;
 
             std::vector<Matrix> weights;
             std::vector<std::thread> wThreads;
