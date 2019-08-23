@@ -100,7 +100,6 @@ case $1 in
             --nodeport ${NODEPORT} \
             --numlambdasforward ${NUM_LAMBDAS_FORWARD} \
             --numlambdasbackward ${NUM_LAMBDAS_BACKWARD}"
-        echo "DSH command: ${DSH_COMMAND}"
         dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ${DSH_COMMAND}" 1> /dev/null 2>> ${LOGFILE}
         
         # Gather the output files.
@@ -160,7 +159,6 @@ case $1 in
             ${WPORT} \
             ../layerconfig \
             ${TMPFILEDIR}"
-        echo "DSH command: ${DSH_COMMAND}"
         dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ${DSH_COMMAND}"
 
         # Gather the output files.
@@ -207,7 +205,6 @@ case $1 in
             ${WPORT} \
             ${GPORT} \
             ${OUTFILEDIR}"
-        echo "Command: ${RUN_COMMAND}"
         ${RUN_COMMAND}
 
         echo "Check the output results in \"~/outfiles/\" folder."

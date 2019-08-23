@@ -15,11 +15,10 @@ static std::ofstream outfile;
 
 
 /** Logging utility. */
-static void
-WeightServer::serverLog(std::string& info) {
+void
+WeightServer::serverLog(std::string info) {
     std::string msgBase = master ? "[MASTER]" : "[WORKER]";
-    std::string msg = msgBase + info;
-    std::cout << msg << std::endl;
+    std::cout << msgBase << " " << info << std::endl;
 }
 
 
@@ -29,20 +28,26 @@ WeightServer::serverLog(std::string& info) {
  * 
  */
 WeightServer::WeightServer(std::string& weightServersFile, std::string& myPrIpFile,
-                           unsigned _listenerPort, std::string& configFileName, unsigned _serverPort)
+                           unsigned _listenerPort, std::string& configFileName,
+                           unsigned _serverPort, std::string& tmpFileName)
     : ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
       listenerPort(_listenerPort), numLambdas(0), count(0),
       dataCtx(1), publisher(dataCtx, ZMQ_PUB), subscriber(dataCtx, ZMQ_SUB),
       serverPort(_serverPort) {
 
-	// Read the dsh file to get info about all weight server nodes.
-	initializeWeightServerComms(weightServersFile, myPrIpFile);
+    // Read the dsh file to get info about all weight server nodes.
+    initializeWeightServerComms(weightServersFile, myPrIpFile);
 
-    // Read in layer configurations and initialize matrices.
+    // Read in layer configurations and initialize weight matrices.
     initializeWeightMatrices(configFileName);
 
     // Send weight matrix info to all servers and wait for ack.
     distributeWeightMatrices();
+
+    // Set output file name.
+    tmpFileName += std::to_string(nodeId);
+    outfile.open(tmpFileName, std::fstream::out);
+    assert(outfile.good());
 }
 
 WeightServer::~WeightServer() {
@@ -92,6 +97,9 @@ WeightServer::run() {
  * 
  */
 void WeightServer::applyUpdates() {
+
+    Timer updateTimer;
+    updateTimer.start();
 
     // Master code.
     if (master) {
@@ -148,7 +156,7 @@ void WeightServer::applyUpdates() {
                 acksNeeded--;
         }
 
-        serverLog("Master finished updating the weights");
+        serverLog("Finished updating the weights.");
 
     // Worker code.
     } else {
@@ -182,8 +190,11 @@ void WeightServer::applyUpdates() {
         std::memcpy(ackMsg.data(), &msgType, sizeof(unsigned));
         publisher.send(ackMsg);
 
-        serverLog("All workers weights updated");
+        serverLog("All workers weights updated.");
     }
+
+    updateTimer.stop();
+    outfile << "U: " << updateTimer.getTime() << std::endl;     // Output timing results.
 
     // Reset number of lambdas.
     numLambdas = 0;
@@ -200,7 +211,7 @@ WeightServer::initializeWeightServerComms(std::string& weightServersFile, std::s
     std::string myIp;
     std::string masterIp = parseNodeConfig(weightServersFile, myPrIpFile, myIp);
     if (master)
-        serverLog("Initializing nodes");
+        serverLog("Initializing nodes...");
 
     // Everyone needs to bind to a publisher socket.
     // Need to use the private IP because of port restrictions.
@@ -280,7 +291,7 @@ WeightServer::initializeWeightServerComms(std::string& weightServersFile, std::s
     }
 
     if (master)
-        serverLog("All weight servers connected");
+        serverLog("All weight servers connected.");
 }
 
 std::string
@@ -298,9 +309,11 @@ WeightServer::parseNodeConfig(std::string& weightServersFile, std::string& myPrI
         if (line.length() > 0) {
             std::string ip = line.substr(line.find('@') + 1);
 
-            // Set first node as master.
-            if (ip == myIp)
-                master = allNodeIps.empty();
+            // Set first node in file as master.
+            if (ip == myIp) {
+                nodeId = allNodeIps.size();
+                master = (nodeId == 0);
+            }
 
             // Even if this is not your IP, it is the master IP.
             if (allNodeIps.empty())
@@ -358,8 +371,8 @@ WeightServer::initializeWeightMatrices(std::string& configFileName) {
             weightMats.push_back(Matrix(dims[u], dims[u + 1], dptr));
         }
 
-       for (unsigned u = 0; u < weightMats.size(); ++u)
-           fprintf(stdout, "Layer %u - Weights: %s\n", u, weightMats[u].shape().c_str());
+        for (unsigned u = 0; u < weightMats.size(); ++u)
+            serverLog("Layer " + std::to_string(u) + " - Weights: " + weightMats[u].shape());
     }
 }
 
@@ -422,7 +435,7 @@ WeightServer::distributeWeightMatrices() {
     }
 
     if (master)
-        serverLog("All nodes up to date");
+        serverLog("All nodes up to date.");
 }
 
 
@@ -437,13 +450,11 @@ main(int argc, char *argv[]) {
     unsigned serverPort = std::atoi(argv[3]);
     unsigned listenerPort = std::atoi(argv[4]);
     std::string configFileName = argv[5];
-    std::string tmpfileName = std::string(argv[6]) + "/output";
     
-    // Set output file location.
-    outfile.open(tmpfileName, std::fstream::out);
-    assert(outfile.good());
+    // Set output file location. Still needs to append nodeId.
+    std::string tmpFileName = std::string(argv[6]) + "/output_";
 
-    WeightServer ws(weightServersFile, myPrIpFile, listenerPort, configFileName, serverPort);
+    WeightServer ws(weightServersFile, myPrIpFile, listenerPort, configFileName, serverPort, tmpFileName);
     
     // Run in a detached thread because so that we can wait
     // on a condition variable.

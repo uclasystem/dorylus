@@ -34,7 +34,7 @@ public:
 
     WeightServer(std::string& weightServersFile, std::string& myPrIpFile,
                  unsigned _listenerPort, std::string& configFileName,
-                 unsigned _serverPort, std::ofstream outfile);
+                 unsigned _serverPort, std::string& tmpFileName);
     ~WeightServer();
 
     // Runs the weightserver, start a bunch of worker threads and create a proxy through frontend to backend.
@@ -46,7 +46,7 @@ public:
 private:
 
     // For debugging.
-    void serverLog(std::string& info);
+    void serverLog(std::string info);
 
 	// Use dsh file to open sockets to other weight servers for aggregation.
 	void initializeWeightServerComms(std::string& weightServersFile, std::string& myPrIpFile);
@@ -75,6 +75,7 @@ private:
 
     // Members related to communications.
 	bool master;
+    unsigned nodeId;
 	std::vector<std::string> allNodeIps;
 
     zmq::context_t dataCtx;
