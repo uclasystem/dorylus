@@ -80,8 +80,28 @@ case $1 in
         dsh -f ${DSHMACHINESFILE} -c "rm -rf ${TMPFILEDIR} && mkdir -p ${TMPFILEDIR}"
 
         # Run the command on all dsh machines.
-        echo "DSH command: ./build/graphserver --graphfile ${DATASET}/parts_${NDS}/graph.bsnap --featuresfile ${DATASET}/features.bsnap --labelsfile ${DATASET}/labels.bsnap --dshmachinesfile ${DSHMACHINESFILE} --layerfile ${LAYERFILE} --pubipfile ${MYPUBIPFILE} --pripfile ${MYPRIPFILE} --dataserverport ${GPORT} --coordserverip ${CSERVERIP} --coordserverport ${CPORT} --undirected ${UNDIRECTED} --tmpdir=${TMPFILEDIR} --cthreads ${COMP_THREADS} --dthreads ${COMM_THREADS} --dataport ${DATAPORT} --ctrlport ${CTRLPORT} --nodeport ${NODEPORT} --numlambdasforward ${NUM_LAMBDAS_FORWARD} --numlambdasbackward ${NUM_LAMBDAS_BACKWARD}"
-        dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ./build/graphserver --graphfile ${DATASET}/parts_${NDS}/graph.bsnap --featuresfile ${DATASET}/features.bsnap --labelsfile ${DATASET}/labels.bsnap --dshmachinesfile ${DSHMACHINESFILE} --layerfile ${LAYERFILE} --pubipfile ${MYPUBIPFILE} --pripfile ${MYPRIPFILE} --dataserverport ${GPORT} --coordserverip ${CSERVERIP} --coordserverport ${CPORT} --undirected ${UNDIRECTED} --tmpdir=${TMPFILEDIR} --cthreads ${COMP_THREADS} --dthreads ${COMM_THREADS} --dataport ${DATAPORT} --ctrlport ${CTRLPORT} --nodeport ${NODEPORT} --numlambdasforward ${NUM_LAMBDAS_FORWARD} --numlambdasbackward ${NUM_LAMBDAS_BACKWARD}" 1> /dev/null 2>> ${LOGFILE}
+        DSH_COMMAND="./build/graphserver \
+            --graphfile ${DATASET}/parts_${NDS}/graph.bsnap \
+            --featuresfile ${DATASET}/features.bsnap \
+            --labelsfile ${DATASET}/labels.bsnap \
+            --dshmachinesfile ${DSHMACHINESFILE} \
+            --layerfile ${LAYERFILE} \
+            --pubipfile ${MYPUBIPFILE} \
+            --pripfile ${MYPRIPFILE} \
+            --dataserverport ${GPORT} \
+            --coordserverip ${CSERVERIP} \
+            --coordserverport ${CPORT} \
+            --undirected ${UNDIRECTED} \
+            --tmpdir=${TMPFILEDIR} \
+            --cthreads ${COMP_THREADS} \
+            --dthreads ${COMM_THREADS} \
+            --dataport ${DATAPORT} \
+            --ctrlport ${CTRLPORT} \
+            --nodeport ${NODEPORT} \
+            --numlambdasforward ${NUM_LAMBDAS_FORWARD} \
+            --numlambdasbackward ${NUM_LAMBDAS_BACKWARD}"
+        echo "DSH command: ${DSH_COMMAND}"
+        dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ${DSH_COMMAND}" 1> /dev/null 2>> ${LOGFILE}
         
         # Gather the output files.
         OUTFILEDIR=${HOME}/outfiles/${RUN_MARK}.$2
@@ -105,7 +125,9 @@ case $1 in
     #
     "weight")
         WPORT=$( < ../wserverport )
+        DATAPORT=$( < ../dataport )
 
+        MYPRIPFILE=${HOME}/myprip
         DSHMACHINESFILE=${HOME}/dshmachines
 
         # Kill running weightservers.
@@ -131,8 +153,15 @@ case $1 in
         dsh -f ${DSHMACHINESFILE} -c "rm -rf ${TMPFILEDIR} && mkdir -p ${TMPFILEDIR}"
 
         # Run weightserver on all dsh machines.
-        echo "DSH command: ./build/weightserver ${WPORT} ../layerconfig ${TMPFILEDIR}"
-        dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ./build/weightserver ${WPORT} ../layerconfig ${TMPFILEDIR}"
+        DSH_COMMAND="./build/weightserver \
+            ${DSHMACHINESFILE} \
+            ${MYPRIPFILE} \
+            ${DATAPORT} \
+            ${WPORT} \
+            ../layerconfig \
+            ${TMPFILEDIR}"
+        echo "DSH command: ${DSH_COMMAND}"
+        dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ${DSH_COMMAND}"
 
         # Gather the output files.
         OUTFILEDIR=${HOME}/outfiles/${RUN_MARK}.weights
@@ -172,8 +201,14 @@ case $1 in
         mkdir -p ${OUTFILEDIR}
 
         # Run coordserver.
-        echo "Command: ./build/coordserver ${CPORT} ../wserverip ${WPORT} ${GPORT} ${OUTFILEDIR}"
-        ./build/coordserver ${CPORT} ../wserverip ${WPORT} ${GPORT} ${OUTFILEDIR}
+        RUN_COMMAND="./build/coordserver \
+            ${CPORT} \
+            ../wserverip \
+            ${WPORT} \
+            ${GPORT} \
+            ${OUTFILEDIR}"
+        echo "Command: ${RUN_COMMAND}"
+        ${RUN_COMMAND}
 
         echo "Check the output results in \"~/outfiles/\" folder."
         ;;
