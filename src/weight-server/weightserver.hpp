@@ -44,6 +44,9 @@ public:
 
 private:
 
+    //Debug
+    void serverLog(std::string& info);
+
 	// Use dsh file to open sockets to other weight servers for aggregation
 	void initializeWeightServerComms(std::string& weightServersFile,
 		std::string& myPrIpFile);

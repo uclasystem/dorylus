@@ -5,13 +5,12 @@ std::mutex term_mutex, update_mutex;
 std::condition_variable cv;
 bool finished = false;
 
-void workerLog(std::string msg) {
-    std::cout << "[WORKER] " << msg << std::endl;
+void WeightServer::serverLog(std::string& info) {
+    std::string msgBase = master ? "[MASTER]" : "[WORKER]";
+    std::string msg = msgBase + info;
+    std::cout << msgBase << std::endl;
 }
 
-void masterLog(std::string msg) {
-    std::cout << "[MASTER] " << msg << std::endl;
-}
 
 
 /**
@@ -21,7 +20,7 @@ void masterLog(std::string msg) {
  */
 WeightServer::WeightServer(std::string& weightServersFile, std::string& myPrIpFile, unsigned _listenerPort, std::string& configFileName, unsigned _serverPort)
     : ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
-      listenerPort(_listenerPort), numLambdas(20), count(0),
+      listenerPort(_listenerPort), numLambdas(0), count(0),
       dataCtx(1), publisher(dataCtx, ZMQ_PUB), subscriber(dataCtx, ZMQ_SUB),
       serverPort(_serverPort) {
 
@@ -33,18 +32,6 @@ WeightServer::WeightServer(std::string& weightServersFile, std::string& myPrIpFi
 
     // Send weight matrix info to all servers and wait for ack
     distributeWeightMatrices();
-
-    if (master) {
-        int layer = 0;
-        for (Matrix& mat : weightMats) {
-            fprintf(stderr, "[MASTER] Layer %u\n%s\n", ++layer, mat.str().c_str());
-        }
-    } else {
-        int layer = 0;
-        for (Matrix& mat : weightMats) {
-            fprintf(stderr, "[WORKER] Layer %u\n%s\n", ++layer, mat.str().c_str());
-        }
-    }
 }
 
 
@@ -56,6 +43,7 @@ WeightServer::WeightServer(std::string& weightServersFile, std::string& myPrIpFi
 void
 WeightServer::run() {
     char host_port[50];
+
     sprintf(host_port, "tcp://*:%u", listenerPort);
     std::cout << "Binding weight server to " << host_port << "..." << std::endl;
     frontend.bind(host_port);
@@ -94,23 +82,60 @@ WeightServer::run() {
 void WeightServer::applyUpdates() {
     // Grab this lock in case a labmda is fast enough to start updating the
     // weights before we can finish the apply
-    std::lock_guard<std::mutex> update_lock(update_mutex);
     if (master) {
+        // For all nodes
         for (unsigned i = 0; i < allNodeIps.size() - 1; ++i) {
+            // For all layers
             for (unsigned l = 0; l < weightMats.size(); ++l) {
+                // Recv update info from other weight servesr and aggregate
                 zmq::message_t updateMsg;
                 subscriber.recv(&updateMsg);
 
-                FeatType* updateData = updateMsg.data();
-                FeatType* weightData = weightMats[i].getData();
-                for (unsigned u = 0; u < weightMats[i].getNumElemts(); ++u) {
+                FeatType* updateData = (FeatType*) updateMsg.data();
+                FeatType* weightData = weightMats[l].getData();
+                for (unsigned u = 0; u < weightMats[l].getNumElemts(); ++u) {
                     weightData[u] += updateData[u];
                 }
             }
         }
 
+        // Once all updates have been aggregated, average the values by the number
+        // of weight server nodes
+        float averagingFactor = (1.0 / (float) allNodeIps.size());
+        for (unsigned l = 0; l < weightMats.size(); ++l) {
+            FeatType* weightData = weightMats[l].getData();
+            for (unsigned u = 0; u < weightMats[l].getNumElemts(); ++u) {
+                weightData[u] *= averagingFactor;
+            }
+        }
+
+        for (unsigned l = 0; l < weightMats.size(); ++l) {
+            Matrix& weightMat = weightMats[l];
+            zmq::message_t weightDataMsg(weightMat.getDataSize());
+            std::memcpy(weightDataMsg.data(), weightMat.getData(), weightMat.getDataSize());
+
+            if (l == weightMats.size() - 1)
+                publisher.send(weightDataMsg);
+            else
+                publisher.send(weightDataMsg, ZMQ_SNDMORE);
+        }
+
+        zmq::message_t inMsg;
+        unsigned acksNeeded = allNodeIps.size() - 1;
+        while (acksNeeded > 0) {
+            subscriber.recv(&inMsg);
+
+            unsigned msgType;
+            std::memcpy(&msgType, inMsg.data(), inMsg.size());
+            if (msgType == CTRL_MSG::ACK)
+                acksNeeded--;
+        }
+
+        std::cout << "Master finished updating the weights" << std::endl;
+
     // Worker code
     } else {
+        // Send all updated weight matrices to the master for aggregation
         for (unsigned i = 0; i < weightMats.size(); ++i) {
             Matrix& weightMat = weightMats[i];
             zmq::message_t weightDataMsg(weightMat.getDataSize());
@@ -121,7 +146,27 @@ void WeightServer::applyUpdates() {
             else
                 publisher.send(weightDataMsg, ZMQ_SNDMORE);
         }
+
+        // Wait for the master to reply with the aggregated and averaged weight values
+        for (Matrix& weightMat : weightMats) {
+            zmq::message_t updatedWeightMsg;
+            subscriber.recv(&updatedWeightMsg);
+
+            assert(weightMat.getDataSize() == updatedWeightMsg.size());
+
+            // If there are no errors, copy the new data into the weight matrix
+            std::memcpy(weightMat.getData(), updatedWeightMsg.data(), weightMat.getDataSize());
+        }
+
+        unsigned msgType = CTRL_MSG::ACK;
+        zmq::message_t ackMsg(sizeof(unsigned));
+        std::memcpy(ackMsg.data(), &msgType, sizeof(unsigned));
+        publisher.send(ackMsg);
+
+        std::cout << "All workers weights updated" << std::endl;
     }
+
+    numLambdas = 0;
 }
 
 /**
@@ -212,15 +257,12 @@ WeightServer::initializeWeightServerComms(std::string& weightServersFile,
         std::memcpy(outMsg.data(), &outMsgType, sizeof(unsigned));
         publisher.send(outMsg);
 
-        workerLog("Waiting for done message");
         while (subscriber.recv(&inMsg)) {
-            workerLog("Inside while");
             unsigned doneMsg;
             std::memcpy(&doneMsg, inMsg.data(), sizeof(unsigned));
             if (doneMsg == CTRL_MSG::INITDONE)
                 break;
         }
-        workerLog("Finished init");
     }
 
     if (master) {
@@ -322,7 +364,6 @@ WeightServer::distributeWeightMatrices() {
                 publisher.send(weightData);
             else
                 publisher.send(weightData, ZMQ_SNDMORE);
-            masterLog("Sending weight matrix to socket");
         }
 
         // Get an ack from every worker node that they have received the weights
@@ -344,13 +385,11 @@ WeightServer::distributeWeightMatrices() {
         int more = 0;
         do {
             zmq::message_t weightData;
-            workerLog("Waiting on weightData");
             subscriber.recv(&weightData);
 
             char* matxData = new char[weightData.size()];
             std::memcpy(matxData, weightData.data(), weightData.size());
 
-            workerLog("Pushing matrix onto list");
             weightMats.push_back(Matrix(dims[count], dims[count+1], matxData));
             ++count;
 
@@ -377,8 +416,8 @@ main(int argc, char *argv[]) {
     // TODO:
     //  May need to start using an arg parser like boost
     assert(argc == 5);
-	std::string weightServersFile = argv[1];
-	std::string myPrIpFile = argv[2];
+    std::string weightServersFile = argv[1];
+    std::string myPrIpFile = argv[2];
     unsigned serverPort = std::atoi(argv[3]);
     unsigned listenerPort = std::atoi(argv[4]);
     std::string configFileName = argv[5];

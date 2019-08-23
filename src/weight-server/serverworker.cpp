@@ -143,10 +143,7 @@ ServerWorker::recvUpdates(zmq::message_t& client_id) {
 
             // If this is the final update, begin global aggregation
             if (numLambdas == 0) {
-                std::thread t([&]{
-                    ws.applyUpdates(layer);
-                });
-                t.detach();
+                ws.applyUpdates();
             }
         }
     }
@@ -184,7 +181,8 @@ ServerWorker::setBackpropNumLambdas(zmq::message_t& client_id, unsigned numLambd
 
     // This is not a thread-safe call, but as the coordination server should
     // only send one info message per server, it should be fine.
-    numLambdas = numLambdas_;
+    std::lock_guard<std::mutex> update_lock(update_mutex);
+    numLambdas += numLambdas_;
     std::cout << "[  INFO  ] Number of lambdas set to " << numLambdas << "." << std::endl;
 
     // Send confirm ACK message.
