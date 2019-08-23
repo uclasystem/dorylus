@@ -319,7 +319,10 @@ Engine::destroy() {
     lockHalt.destroy();
 
     lambdaComm->sendShutdownMessage();
-    delete lambdaComm;
+    std::thread tdel([&] {      // Avoid the ZeroMQ signaler assertion failure to stuck the shutdown process.
+        delete lambdaComm;
+    });
+    tdel.detach();
 
     for (size_t i = 0; i <= numLayers; ++i) {
         delete[] localVerticesZData[i];
