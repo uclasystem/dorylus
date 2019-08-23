@@ -11,16 +11,12 @@ extern bool finished;
  * ServerWorker constructor & destructor.
  * 
  */
-ServerWorker::ServerWorker(zmq::context_t& ctx_, zmq::socket_t *socket_, unsigned& counter, WeightServer& _ws,
+ServerWorker::ServerWorker(zmq::context_t& ctx_, unsigned& counter, WeightServer& _ws,
                            std::vector<Matrix>& weights_, std::vector<Matrix>& updates_, unsigned& numLambdas_)
-    : ctx(ctx_), workersocket(socket_), count(counter), ws(_ws),
+    : ctx(ctx_), workersocket(ctx, ZMQ_DEALER), count(counter), ws(_ws),
       weightMats(weights_), updates(updates_), numLambdas(numLambdas_) {
-    workersocket->setsockopt(ZMQ_LINGER, 0);
-    workersocket->connect("inproc://backend");
-}
-
-ServerWorker::~ServerWorker() {
-    workersocket->disconnect("inproc://backend");
+    workersocket.setsockopt(ZMQ_LINGER, 0);
+    workersocket.connect("inproc://backend");
 }
 
 
@@ -36,8 +32,8 @@ ServerWorker::work() {
         while (true) {
             zmq::message_t identity;
             zmq::message_t header;
-            workersocket->recv(&identity);
-            workersocket->recv(&header);
+            workersocket.recv(&identity);
+            workersocket.recv(&header);
                 
             unsigned op = parse<unsigned>((char *) header.data(), 0);
             unsigned arg = parse<unsigned>((char *) header.data(), 1);
@@ -83,15 +79,15 @@ ServerWorker::work() {
  */
 void
 ServerWorker::sendWeightsForwardLayer(zmq::message_t& client_id, unsigned layer) {
-    workersocket->send(client_id, ZMQ_SNDMORE);    // The identity message will be implicitly consumed to route to the correct client.
+    workersocket.send(client_id, ZMQ_SNDMORE);    // The identity message will be implicitly consumed to route to the correct client.
 
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char *) header.data(), OP::RESP, 0, weightMats[layer].getRows(), weightMats[layer].getCols());
-    workersocket->send(header, ZMQ_SNDMORE);
+    workersocket.send(header, ZMQ_SNDMORE);
 
     zmq::message_t weightData(weightMats[layer].getDataSize());
     std::memcpy((char *) weightData.data(), weightMats[layer].getData(), weightMats[layer].getDataSize());
-    workersocket->send(weightData);
+    workersocket.send(weightData);
 }
 
 
@@ -102,21 +98,21 @@ ServerWorker::sendWeightsForwardLayer(zmq::message_t& client_id, unsigned layer)
  */
 void
 ServerWorker::sendWeightsBackward(zmq::message_t& client_id) {
-    workersocket->send(client_id, ZMQ_SNDMORE);
+    workersocket.send(client_id, ZMQ_SNDMORE);
 
     for (unsigned i = 1; i < weightMats.size(); ++i) {
         Matrix& weightMat = weightMats[i];
 
         zmq::message_t header(HEADER_SIZE);
         populateHeader((char *) header.data(), OP::RESP, 0, weightMat.getRows(), weightMat.getCols());
-        workersocket->send(header, ZMQ_SNDMORE);
+        workersocket.send(header, ZMQ_SNDMORE);
 
         zmq::message_t weightData(weightMat.getDataSize());
         std::memcpy((char *) weightData.data(), weightMat.getData(), weightMat.getDataSize());
         if (i == weightMats.size() - 1)
-            workersocket->send(weightData);
+            workersocket.send(weightData);
         else
-            workersocket->send(weightData, ZMQ_SNDMORE);
+            workersocket.send(weightData, ZMQ_SNDMORE);
     }
 }
 
@@ -131,7 +127,7 @@ void
 ServerWorker::recvUpdates(zmq::message_t& client_id) {
     for (Matrix& weightMat : weightMats) {
         zmq::message_t update;
-        workersocket->recv(&update);
+        workersocket.recv(&update);
 
         float *weightData = weightMat.getData();
         float *updateData = (float *) update.data();
@@ -144,8 +140,8 @@ ServerWorker::recvUpdates(zmq::message_t& client_id) {
 
     // Send confirm ACK message.
     zmq::message_t confirm;
-    workersocket->send(client_id, ZMQ_SNDMORE);
-    workersocket->send(confirm);
+    workersocket.send(client_id, ZMQ_SNDMORE);
+    workersocket.send(confirm);
 
     // cblas_saxpy(updates[layer].getNumElemts(), 1.0,
     //             (float*) data.data(), 1, updates[layer].getData(), 1);
@@ -180,8 +176,8 @@ ServerWorker::setBackpropNumLambdas(zmq::message_t& client_id, unsigned numLambd
 
     // Send confirm ACK message.
     zmq::message_t confirm;
-    workersocket->send(client_id, ZMQ_SNDMORE);
-    workersocket->send(confirm);
+    workersocket.send(client_id, ZMQ_SNDMORE);
+    workersocket.send(confirm);
 }
 
 
@@ -196,8 +192,8 @@ ServerWorker::terminateServer(zmq::message_t& client_id) {
 
     // Send confirm ACK message.
     zmq::message_t confirm;
-    workersocket->send(client_id, ZMQ_SNDMORE);
-    workersocket->send(confirm);
+    workersocket.send(client_id, ZMQ_SNDMORE);
+    workersocket.send(confirm);
     
     std::cerr << "[SHUTDOWN] Server shutting down..." << std::endl;
 

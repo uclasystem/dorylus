@@ -10,18 +10,14 @@ extern std::condition_variable cv_forward, cv_backward;
  * LambdaWorker constructor & destructor.
  * 
  */
-LambdaWorker::LambdaWorker(unsigned nodeId_, zmq::context_t& ctx_, zmq::socket_t *socket_,
+LambdaWorker::LambdaWorker(unsigned nodeId_, zmq::context_t& ctx_,
                            unsigned numLambdasForward_, unsigned numLambdasBackward_,
                            unsigned& countForward_, unsigned& countBackward_)
-    : nodeId(nodeId_), ctx(ctx_), workersocket(socket_),
+    : nodeId(nodeId_), ctx(ctx_), workersocket(ctx, ZMQ_DEALER),
       numLambdasForward(numLambdasForward_), numLambdasBackward(numLambdasBackward_),
       countForward(countForward_), countBackward(countBackward_) {
-    workersocket->setsockopt(ZMQ_LINGER, 0);
-    workersocket->connect("inproc://backend");
-}
-
-LambdaWorker::~LambdaWorker() {
-    workersocket->disconnect("inproc://backend");
+    workersocket.setsockopt(ZMQ_LINGER, 0);
+    workersocket.connect("inproc://backend");
 }
 
 
@@ -37,8 +33,8 @@ LambdaWorker::work() {
             zmq::message_t identity;
             zmq::message_t header;
 
-            workersocket->recv(&identity);
-            workersocket->recv(&header);
+            workersocket.recv(&identity);
+            workersocket.recv(&header);
 
             unsigned op = parse<unsigned>((char *) header.data(), 0);
             unsigned partId = parse<unsigned>((char *) header.data(), 1);
@@ -95,15 +91,15 @@ LambdaWorker::sendAggregatedChunk(zmq::message_t& client_id, unsigned partId) {
 
     // Reject a send request if the partition id is invalid.
     if (partId >= numLambdasForward) {
-        workersocket->send(client_id, ZMQ_SNDMORE);
+        workersocket.send(client_id, ZMQ_SNDMORE);
         zmq::message_t header(HEADER_SIZE);
         populateHeader((char *) header.data(), ERR_HEADER_FIELD, ERR_HEADER_FIELD, ERR_HEADER_FIELD, ERR_HEADER_FIELD);
-        workersocket->send(header);
+        workersocket.send(header);
 
     // Partition id is valid, so send the matrix segment.
     } else {
 
-        workersocket->send(client_id, ZMQ_SNDMORE);
+        workersocket.send(client_id, ZMQ_SNDMORE);
 
         // Check to make sure that the bounds of this partition do not exceed the bounds of the data array.
         // If they do, set partition end to the end of the array.
@@ -116,11 +112,11 @@ LambdaWorker::sendAggregatedChunk(zmq::message_t& client_id, unsigned partId) {
 
         zmq::message_t header(HEADER_SIZE);
         populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, actMatrix.getCols());
-        workersocket->send(header, ZMQ_SNDMORE);
+        workersocket.send(header, ZMQ_SNDMORE);
 
         zmq::message_t partitionData(bufSize);
         std::memcpy(partitionData.data(), partitionStart, bufSize);
-        workersocket->send(partitionData);
+        workersocket.send(partitionData);
     }
 }
 
@@ -132,15 +128,15 @@ LambdaWorker::recvLambdaResults(zmq::message_t& client_id, unsigned partId) {
 
     // Receive the pushed-back results.
     zmq::message_t data;
-    workersocket->recv(&data);
+    workersocket.recv(&data);
     std::memcpy(partitionZStart, data.data(), data.size());
-    workersocket->recv(&data);
+    workersocket.recv(&data);
     std::memcpy(partitionActStart, data.data(), data.size());
 
     // Send confirm ACK message.
     zmq::message_t confirm;
-    workersocket->send(client_id, ZMQ_SNDMORE);
-    workersocket->send(confirm);
+    workersocket.send(client_id, ZMQ_SNDMORE);
+    workersocket.send(confirm);
 
     // Check for total number of partitions received. If all partitions received, wake up lambdaComm.
     std::lock_guard<std::mutex> lk(count_mutex);
@@ -154,15 +150,15 @@ LambdaWorker::sendBackpropChunks(zmq::message_t& client_id, unsigned partId) {
 
     // Reject a send request if the partition id is invalid.
     if (partId >= numLambdasBackward) {
-        workersocket->send(client_id, ZMQ_SNDMORE);
+        workersocket.send(client_id, ZMQ_SNDMORE);
         zmq::message_t header(HEADER_SIZE);
         populateHeader((char *) header.data(), ERR_HEADER_FIELD, ERR_HEADER_FIELD, ERR_HEADER_FIELD, ERR_HEADER_FIELD);
-        workersocket->send(header);
+        workersocket.send(header);
 
     // Partition id is valid, so send the matrix segments.
     } else {
 
-        workersocket->send(client_id, ZMQ_SNDMORE);
+        workersocket.send(client_id, ZMQ_SNDMORE);
 
         // Check to make sure that the bounds of this partition do not exceed the bounds of the data array.
         // If they do, set partition end to the end of the array.
@@ -178,11 +174,11 @@ LambdaWorker::sendBackpropChunks(zmq::message_t& client_id, unsigned partId) {
 
             zmq::message_t header(HEADER_SIZE);
             populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, matrix.getCols());
-            workersocket->send(header, ZMQ_SNDMORE);
+            workersocket.send(header, ZMQ_SNDMORE);
 
             zmq::message_t partitionData(bufSize);
             std::memcpy(partitionData.data(), partitionStart, bufSize);
-            workersocket->send(partitionData, ZMQ_SNDMORE);
+            workersocket.send(partitionData, ZMQ_SNDMORE);
         }
 
         // Send activation matrices, from layer 0 -> last.
@@ -192,11 +188,11 @@ LambdaWorker::sendBackpropChunks(zmq::message_t& client_id, unsigned partId) {
 
             zmq::message_t header(HEADER_SIZE);
             populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, matrix.getCols());
-            workersocket->send(header, ZMQ_SNDMORE);
+            workersocket.send(header, ZMQ_SNDMORE);
 
             zmq::message_t partitionData(bufSize);
             std::memcpy(partitionData.data(), partitionStart, bufSize);
-            workersocket->send(partitionData, ZMQ_SNDMORE);
+            workersocket.send(partitionData, ZMQ_SNDMORE);
         }
 
         // Send target label matrix.
@@ -205,11 +201,11 @@ LambdaWorker::sendBackpropChunks(zmq::message_t& client_id, unsigned partId) {
 
         zmq::message_t header(HEADER_SIZE);
         populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, targetMatrix.getCols());
-        workersocket->send(header, ZMQ_SNDMORE);
+        workersocket.send(header, ZMQ_SNDMORE);
 
         zmq::message_t partitionData(bufSize);
         std::memcpy(partitionData.data(), partitionStart, bufSize);
-        workersocket->send(partitionData);
+        workersocket.send(partitionData);
     }
 }
 
@@ -218,8 +214,8 @@ LambdaWorker::recvBackpropFinishMsg(zmq::message_t& client_id) {
 
     // Send confirm ACK message.
     zmq::message_t confirm;
-    workersocket->send(client_id, ZMQ_SNDMORE);
-    workersocket->send(confirm);
+    workersocket.send(client_id, ZMQ_SNDMORE);
+    workersocket.send(confirm);
 
     // Check for total number of partitions received. If all partitions received, wake up lambdaComm.
     std::lock_guard<std::mutex> lk(count_mutex);

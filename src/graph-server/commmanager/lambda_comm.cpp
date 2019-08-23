@@ -8,7 +8,6 @@ std::condition_variable cv_forward, cv_backward;
 
 static std::vector<LambdaWorker *> workers;
 static std::vector<std::thread *> worker_threads;
-static std::vector<zmq::socket_t *> worker_sockets;
 
 
 /**
@@ -35,8 +34,7 @@ LambdaComm::LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::strin
 
     // Create 'numListeners' workers and detach them.
     for (unsigned i = 0; i < numListeners; ++i) {
-        worker_sockets.push_back(new zmq::socket_t(ctx, ZMQ_DEALER));
-        workers.push_back(new LambdaWorker(nodeId, ctx, worker_sockets[i], numLambdasForward, numLambdasBackward, countForward, countBackward));
+        workers.push_back(new LambdaWorker(nodeId, ctx, numLambdasForward, numLambdasBackward, countForward, countBackward));
         worker_threads.push_back(new std::thread(std::bind(&LambdaWorker::work, workers[i])));
         worker_threads[i]->detach();
     }
@@ -57,8 +55,6 @@ LambdaComm::~LambdaComm() {
         delete workers[i];
         delete worker_threads[i];
     }
-    for (zmq::socket_t *socket : worker_sockets)
-        delete socket;
 }
 
 

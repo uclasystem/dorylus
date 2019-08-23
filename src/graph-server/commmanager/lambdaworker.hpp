@@ -30,10 +30,9 @@ class LambdaWorker {
 
 public:
 
-    LambdaWorker(unsigned nodeId_, zmq::context_t& ctx_, zmq::socket_t *socket_,
+    LambdaWorker(unsigned nodeId_, zmq::context_t& ctx_,
                  unsigned numLambdasForward_, unsigned numLambdasBackward_,
                  unsigned& countForward_, unsigned& countBackward_);
-    ~LambdaWorker();
 
     // Continuously listens for incoming lambda connections.
     void work();
@@ -47,7 +46,7 @@ protected:
     unsigned nodeId;
 
     zmq::context_t& ctx;
-    zmq::socket_t *workersocket;
+    zmq::socket_t workersocket;
 
     unsigned numLambdasForward;
     unsigned numLambdasBackward;

@@ -318,7 +318,6 @@ Engine::destroy() {
     condRecvWaitersEmpty.destroy();
     lockHalt.destroy();
 
-    // Delete allocated resources for the lambda communicator.
     lambdaComm->sendShutdownMessage();
     delete lambdaComm;
 

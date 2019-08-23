@@ -8,7 +8,6 @@ bool finished = false;
 
 static std::vector<ServerWorker *> workers;
 static std::vector<std::thread *> worker_threads;
-static std::vector<zmq::socket_t *> worker_sockets;
 static std::ofstream outfile;
 
 
@@ -53,8 +52,6 @@ WeightServer::~WeightServer() {
         delete workers[i];
         delete worker_threads[i];
     }
-    for (zmq::socket_t *socket : worker_sockets)
-        delete socket;
     for (Matrix& mat : weightMats)
         delete[] mat.getData();
 }
@@ -77,8 +74,7 @@ WeightServer::run() {
     std::vector<std::thread *> worker_threads;
     WeightServer& me = *this;
     for (int i = 0; i < NUM_LISTENERS; ++i) {
-        worker_sockets.push_back(new zmq::socket_t(ctx, ZMQ_DEALER));
-        workers.push_back(new ServerWorker(ctx, worker_sockets[i], count, me, weightMats, updates, numLambdas));
+        workers.push_back(new ServerWorker(ctx, count, me, weightMats, updates, numLambdas));
         worker_threads.push_back(new std::thread(std::bind(&ServerWorker::work, workers[i])));
         worker_threads[i]->detach();
     }

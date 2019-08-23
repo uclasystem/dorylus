@@ -59,8 +59,8 @@ case $1 in
 
         # Minor options.
         UNDIRECTED=0    # Currently are all directed graphs.
-        COMP_THREADS=6  # Default values.
-        COMM_THREADS=2
+        COMP_THREADS=7  # Default values.
+        COMM_THREADS=1
 
         # Increment the running mark.
         if [[ ! -f run/run-mark ]]; then
