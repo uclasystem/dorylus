@@ -15,8 +15,8 @@ find_package(Boost COMPONENTS system filesystem program_options REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 
 # Include ZeroMQ.
-set(ZMQ_INC /usr/local/include)
-set(ZMQ_LIB /usr/local/lib/libzmq.a)
+set(ZMQ_INC /usr/include)
+set(ZMQ_LIB /usr/lib/libzmq.so)
 include_directories(${ZMQ_INC})
 
 # Include Threads.

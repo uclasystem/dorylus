@@ -383,12 +383,12 @@ Engine::forwardWorker(unsigned tid, void *args) {
 
                 vecTimeAggregate.push_back(getTimer() - timeWorker);
                 timeWorker = getTimer();
-                printLog(nodeId, "Iteration %u finishes. Invoking lambda...", iteration);
+                // printLog(nodeId, "Iteration %u finishes. Invoking lambda...", iteration);
 
                 // Start a new lambda communication context.
                 // lambdaComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
                                               // graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1));
-
+                printLog(nodeId, "Iteration %u finishes. Invoking GPU...", iteration);
                 gpuComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
                                               graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1));
 

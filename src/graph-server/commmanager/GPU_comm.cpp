@@ -20,6 +20,7 @@ void GPUComm::requestForward(unsigned layer){
     try {
         zmq::message_t confirm(5);
         zmq::message_t header(HEADER_SIZE);
+        zmq::message_t result;//size plz
 
         unsigned actRows=actMatrix.getRows();
         unsigned actCols=actMatrix.getCols();
@@ -32,7 +33,7 @@ void GPUComm::requestForward(unsigned layer){
         zmq::message_t dataMsg(actMatrix.getData(), actRows*actCols, doNotFreeBuffer, NULL);
         dataSocket.send(dataMsg);
         //block until computation finish
-        dataSocket.recv(&confirm);
+        dataSocket.recv(&result);
 
     }
     catch(std::exception& ex){

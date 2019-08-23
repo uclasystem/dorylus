@@ -26,7 +26,7 @@ public:
         dataSocket(ctx, ZMQ_REP),
         weightSocket(ctx, ZMQ_DEALER){
             loadWeightServers(weightServerAddrs,wServersFile);
-            printf("%zu\n",weightServerAddrs.size() );
+            // printf("%zu\n",weightServerAddrs.size() );
             printf("LOADING WSERVER FILE\n");
             for(int i=0;i<weightServerAddrs.size();++i){
                 printf("%s\n",weightServerAddrs[i] );
@@ -64,8 +64,6 @@ void ComputingServer::run(){
     //use port as ipc addresss
     char ipc_addr[50];
     sprintf(ipc_addr, "ipc:///tmp/GPU_COMM:%u", dPort); 
-    dataSocket.bind("tcp://*:1234");
-
 
     std::cout << "Binding computing server to " << ipc_addr << "..." << std::endl;
     dataSocket.bind(ipc_addr);
@@ -125,19 +123,14 @@ void ComputingServer::run(){
             dataSocket.recv(&aggreChunk);
             printf("Chunk Received\n");
             printf("%zu\n", aggreChunk.size());
-            // printf("%u\n", ROWS*COLS);
             dataSocket.send(confirm);
             
-            // zmq::socket_t dSocket(ctx, ZMQ_DEALER);
-            // dataSocket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
-            // char dhost_port[50];
-            // sprintf(dhost_port, "tcp://%s:%s", dataserver, dport);
-            // dSocket.connect(dhost_port);
-            // Matrix feats = requestMatrix(dSocket, id);
             std::cout << "< GPU SERVER FORWARD > Got data from dataserver." << std::endl;
             for(auto &t: wThreads)
                 t.join();
-            // break;
+            printf("joined\n");
+            // Matrix feats;
+            // Matrix weights;
             // Matrix z = cu.dot(feats, weights);
             // Matrix act = cu.activate(z);
             // sendMatrices(z,act,dSocket,id);
