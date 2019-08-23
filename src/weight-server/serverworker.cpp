@@ -138,14 +138,13 @@ ServerWorker::recvUpdates(zmq::message_t& client_id) {
         for (unsigned i = 0; i < weightMat.getNumElemts(); ++i)
             weightData[i] -= updateData[i];
 
-        // If I have received all updates from this Lambda decrement the counter
+        // If I have received all updates from this Lambda decrement the counter.
         if (i == weightMats.size() - 1) {
             numLambdas--;
 
-            // If this is the final update, begin global aggregation
-            if (numLambdas == 0) {
+            // If this is the final update, begin global aggregation.
+            if (numLambdas == 0)
                 ws.applyUpdates();
-            }
         }
     }
 
@@ -153,21 +152,6 @@ ServerWorker::recvUpdates(zmq::message_t& client_id) {
     zmq::message_t confirm;
     workersocket.send(client_id, ZMQ_SNDMORE);
     workersocket.send(confirm);
-
-    // cblas_saxpy(updates[layer].getNumElemts(), 1.0,
-    //             (float*) data.data(), 1, updates[layer].getData(), 1);
-    // ++count;
-
-    // // If all the lambda results have been collected, reset the counter
-    // // and tell the weight server to average and apply updates
-    // if (count == numLambdas[layer]) {
-    //     count = 0;
-
-    //     std::thread t([&]{
-    //         ws.applyUpdates(layer);
-    //     });
-    //     t.detach();
-    // }
 }
 
 

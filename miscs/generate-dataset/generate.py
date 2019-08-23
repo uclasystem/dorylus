@@ -24,7 +24,7 @@ with open(dataset_dir + "features", 'w+') as ffeats:
     for i in range(num_vertices):
         for j in range(num_features - 1):
             ffeats.write(str(random.random()) + ", ")
-        ffeats.write(str(random.random()) + "\n")exit
+        ffeats.write(str(random.random()) + "\n")
 
 print("Features done.")
 
