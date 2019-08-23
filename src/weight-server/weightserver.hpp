@@ -31,6 +31,7 @@ class WeightServer {
 public:
 
     WeightServer(unsigned _port, std::string& configFileName);
+    ~WeightServer();
 
     // Runs the weightserver, start a bunch of worker threads and create a proxy through frontend to backend.
     void run();
@@ -42,9 +43,6 @@ private:
 
     // Read in layer configurations.
     void initializeWeightMatrices(std::string& configFileName);
-
-    // Defines how many concurrent weightserver threads to use.
-    enum { kMaxThreads = 5 };
 
     std::vector<unsigned> dims;
     std::vector<Matrix> weightMats;

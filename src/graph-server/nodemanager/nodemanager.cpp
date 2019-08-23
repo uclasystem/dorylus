@@ -153,8 +153,6 @@ NodeManager::barrier() {
  */
 void
 NodeManager::destroy() {
-    barrier();
-
     nodePublisher->close();
     nodeSubscriber->close();
 

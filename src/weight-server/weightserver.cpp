@@ -6,9 +6,18 @@ std::condition_variable cv;
 bool finished = false;
 
 
+static std::vector<ServerWorker *> workers;
+static std::vector<std::thread *> worker_threads;
+static std::vector<zmq::socket_t *> worker_sockets;
+static std::ofstream outfile;
+
+
+#define NUM_LISTENERS 5
+
+
 /**
  *
- * Weightserver constructor.
+ * Weightserver constructor & destructor.
  * 
  */
 WeightServer::WeightServer(unsigned _port, std::string& configFileName)
@@ -37,6 +46,19 @@ WeightServer::WeightServer(unsigned _port, std::string& configFileName)
         fprintf(stdout, "Layer %u - Weights: %s\n", u, weightMats[u].shape().c_str());
 }
 
+WeightServer::~WeightServer() {
+
+    // Delete allocated resources.
+    for (int i = 0; i < NUM_LISTENERS; ++i) {
+        delete workers[i];
+        delete worker_threads[i];
+    }
+    for (zmq::socket_t *socket : worker_sockets)
+        delete socket;
+    for (Matrix& mat : weightMats)
+        delete[] mat.getData();
+}
+
 
 /**
  *
@@ -54,9 +76,9 @@ WeightServer::run() {
     std::vector<ServerWorker *> workers;
     std::vector<std::thread *> worker_threads;
     WeightServer& me = *this;
-    for (int i = 0; i < kMaxThreads; ++i) {
-        workers.push_back(new ServerWorker(ctx, count, me, weightMats, updates, numLambdas));
-
+    for (int i = 0; i < NUM_LISTENERS; ++i) {
+        worker_sockets.push_back(new zmq::socket_t(ctx, ZMQ_DEALER));
+        workers.push_back(new ServerWorker(ctx, worker_sockets[i], count, me, weightMats, updates, numLambdas));
         worker_threads.push_back(new std::thread(std::bind(&ServerWorker::work, workers[i])));
         worker_threads[i]->detach();
     }
@@ -64,14 +86,6 @@ WeightServer::run() {
     try {
         zmq::proxy(static_cast<void *>(frontend), static_cast<void *>(backend), nullptr);
     } catch (std::exception& ex) { /** Context termintated. */ }
-
-    // Delete the workers after the context terminates.
-    for (int i = 0; i < kMaxThreads; ++i) {
-        delete worker_threads[i];
-        delete workers[i];
-    }
-    for (Matrix& mat : weightMats)
-        delete[] mat.getData();
 }
 
 
@@ -117,9 +131,14 @@ WeightServer::initializeWeightMatrices(std::string& configFileName) {
 /** Main entrance: Starts a weightserver instance and run. */
 int
 main(int argc, char *argv[]) {
-    assert(argc == 3);
+    assert(argc == 4);
     unsigned weightserverPort = std::atoi(argv[1]);
     std::string configFileName = argv[2];
+
+    // Set output file location.
+    std::string tmpfileName = std::string(argv[3]) + "/output";
+    outfile.open(tmpfileName, std::fstream::out);
+    assert(outfile.good());
 
     WeightServer ws(weightserverPort, configFileName);
     

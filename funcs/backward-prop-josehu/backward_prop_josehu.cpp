@@ -1,4 +1,5 @@
 #include <chrono>
+#include <ratio>
 #include <iostream>
 #include <memory>
 #include <sstream>
@@ -389,7 +390,7 @@ backward_prop(std::string dataserver, std::string weightserver, std::string dpor
 
     Timer getWeightsTimer;
     Timer getFeatsTimer;
-    Timer gradientTimer;
+    Timer computationTimer;
     Timer sendResTimer;
 
     try {
@@ -433,10 +434,10 @@ backward_prop(std::string dataserver, std::string weightserver, std::string dpor
             return invocation_response::failure("No chunks corresponding to request", "appliation/json");
 
         // Gradient computation.
-        gradientTimer.start();
+        computationTimer.start();
         std::cout << "< BACKWARD > Doing the gradient descent computation..." << std::endl;
         weightsUpdates = gradientComputation(graphData, weightsData);
-        gradientTimer.stop();
+        computationTimer.stop();
 
         // Send weight updates to weightserver, and finish message to dataserver.
         sendResTimer.start();
@@ -467,7 +468,7 @@ backward_prop(std::string dataserver, std::string weightserver, std::string dpor
     std::string res = std::to_string(id) + ": " +
                       std::to_string(getWeightsTimer.getTime()) + " " +     \
                       std::to_string(getFeatsTimer.getTime())  + " " +      \
-                      std::to_string(gradientTimer.getTime()) + " " +       \
+                      std::to_string(computationTimer.getTime()) + " " +    \
                       std::to_string(sendResTimer.getTime());
 
     return invocation_response::success(res, "application/json");

@@ -44,6 +44,8 @@ private:
     std::vector<char*> weightserverAddrs;
 
     zmq::context_t ctx;
+
+    std::ofstream outfile;
 };
 
 

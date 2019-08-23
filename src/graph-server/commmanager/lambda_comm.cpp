@@ -6,9 +6,14 @@ std::mutex count_mutex;
 std::condition_variable cv_forward, cv_backward;
 
 
+static std::vector<LambdaWorker *> workers;
+static std::vector<std::thread *> worker_threads;
+static std::vector<zmq::socket_t *> worker_sockets;
+
+
 /**
  *
- * Lambda communication manager constructor.
+ * Lambda communication manager constructor & destructor.
  * 
  */
 LambdaComm::LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::string coordserverIp_, unsigned coordserverPort_, unsigned nodeId_,
@@ -30,7 +35,8 @@ LambdaComm::LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::strin
 
     // Create 'numListeners' workers and detach them.
     for (unsigned i = 0; i < numListeners; ++i) {
-        workers.push_back(new LambdaWorker(nodeId, ctx, numLambdasForward, numLambdasBackward, countForward, countBackward));
+        worker_sockets.push_back(new zmq::socket_t(ctx, ZMQ_DEALER));
+        workers.push_back(new LambdaWorker(nodeId, ctx, worker_sockets[i], numLambdasForward, numLambdasBackward, countForward, countBackward));
         worker_threads.push_back(new std::thread(std::bind(&LambdaWorker::work, workers[i])));
         worker_threads[i]->detach();
     }
@@ -40,14 +46,19 @@ LambdaComm::LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::strin
         try {
             zmq::proxy(static_cast<void *>(frontend), static_cast<void *>(backend), nullptr);
         } catch (std::exception& ex) { /** Context termintated. */ }
-
-        // Delete the workers after the context terminates.
-        for (unsigned i = 0; i < numListeners; ++i) {
-            delete workers[i];
-            delete worker_threads[i];
-        }
     });
     tproxy.detach();
+}
+
+LambdaComm::~LambdaComm() {
+
+    // Delete allocated resources.
+    for (unsigned i = 0; i < numListeners; ++i) {
+        delete workers[i];
+        delete worker_threads[i];
+    }
+    for (zmq::socket_t *socket : worker_sockets)
+        delete socket;
 }
 
 

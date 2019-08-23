@@ -33,6 +33,7 @@ public:
 
     LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::string coordserverIp_, unsigned coordserverPort_, unsigned nodeId_,
                unsigned numLambdasForward_, unsigned numLambdasBackward_);
+    ~LambdaComm();
     
     // For forward-prop.
     void newContextForward(FeatType *dataBuf, FeatType *zData, FeatType *actData,
@@ -53,9 +54,6 @@ private:
     unsigned numLambdasBackward;
 
     unsigned numListeners;
-    
-    std::vector<LambdaWorker *> workers;
-    std::vector<std::thread *> worker_threads;
 
     unsigned countForward;
     unsigned countBackward;
