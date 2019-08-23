@@ -26,7 +26,7 @@ unsigned NodeManager::nodePort;
  */
 void
 NodeManager::init(std::string dshMachinesFile, std::string myPrIpFile, std::string myPubIpFile) {
-    printLog(me.id, "NodeManager starts initialization...");
+    printLog(404, "NodeManager starts initialization...");
     getPrIP(myPrIpFile, me.ip);
     getPubIP(myPubIpFile, me.pubip);
     parseNodeConfig(dshMachinesFile);
@@ -153,8 +153,6 @@ NodeManager::barrier() {
  */
 void
 NodeManager::destroy() {
-    barrier();
-
     nodePublisher->close();
     nodeSubscriber->close();
 

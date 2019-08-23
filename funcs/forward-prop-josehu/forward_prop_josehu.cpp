@@ -1,4 +1,5 @@
 #include <chrono>
+#include <ratio>
 #include <iostream>
 #include <memory>
 #include <sstream>
@@ -191,7 +192,6 @@ forward_prop_layer(std::string dataserver, std::string weightserver, std::string
     Timer getWeightsTimer;
     Timer getFeatsTimer;
     Timer computationTimer;
-    Timer activationTimer;
     Timer sendResTimer;
 
     try {
@@ -237,13 +237,11 @@ forward_prop_layer(std::string dataserver, std::string weightserver, std::string
         computationTimer.start();
         std::cout << "< FORWARD > Doing the dot multiplication..." << std::endl;
         z = dot(feats, weights);
-        computationTimer.stop();
 
         // Activation.
-        activationTimer.start();
         std::cout << "< FORWARD > Doing the activation..." << std::endl;
         activations = activate(z);
-        activationTimer.stop();
+        computationTimer.stop();
 
         // Send back to dataserver.
         sendResTimer.start();
@@ -268,7 +266,6 @@ forward_prop_layer(std::string dataserver, std::string weightserver, std::string
                       std::to_string(getWeightsTimer.getTime()) + " " +     \
                       std::to_string(getFeatsTimer.getTime())  + " " +      \
                       std::to_string(computationTimer.getTime()) + " " +    \
-                      std::to_string(activationTimer.getTime()) + " " +     \
                       std::to_string(sendResTimer.getTime());
 
     return invocation_response::success(res, "application/json");

@@ -22,6 +22,7 @@
 
 enum CTRL_MSG { MASTERUP, WORKERUP, INITDONE, ACK };
 
+
 /**
  *
  * Class of the weightserver. Weightservers are only responsible for replying weight requests from lambdas,
@@ -33,8 +34,9 @@ class WeightServer {
 public:
 
     WeightServer(std::string& weightServersFile, std::string& myPrIpFile,
-        unsigned _listenerPort, std::string& configFileName,
-        unsigned _serverPort);
+                 unsigned _listenerPort, std::string& configFileName,
+                 unsigned _serverPort, std::string& tmpFileName);
+    ~WeightServer();
 
     // Runs the weightserver, start a bunch of worker threads and create a proxy through frontend to backend.
     void run();
@@ -44,31 +46,23 @@ public:
 
 private:
 
-    //Debug
-    void serverLog(std::string& info);
+    // For debugging.
+    void serverLog(std::string info);
 
-	// Use dsh file to open sockets to other weight servers for aggregation
-	void initializeWeightServerComms(std::string& weightServersFile,
-		std::string& myPrIpFile);
-
+	// Use dsh file to open sockets to other weight servers for aggregation.
+	void initializeWeightServerComms(std::string& weightServersFile, std::string& myPrIpFile);
 	std::string parseNodeConfig(std::string& weightServersFile, std::string& myPrIpFile, std::string& myIp);
 
-    // Read in layer configurations.
+    // Read in layer configurations. The master constructs the weight matrices and then sends them
+    // to the workers.
     void initializeWeightMatrices(std::string& configFileName);
-
-    // The master constructs the weight matrices and then sends them
-    // to the workers
     void distributeWeightMatrices();
-
-    // Defines how many concurrent weightserver threads to use.
-    enum { kMaxThreads = 5 };
 
     std::vector<unsigned> dims;
     std::vector<Matrix> weightMats;
 
-    // List of Matrices for holding updates until they are
-    // ready to be applied.
-    std::vector<Matrix> updates;
+    // List of Matrices for holding updates until they are ready to be applied.
+    std::vector<Matrix> updateMats;
 
     // Number of lambdas requests at backprop.
     unsigned numLambdas;
@@ -79,8 +73,9 @@ private:
     zmq::socket_t backend;
     unsigned listenerPort;
 
-    // Members related to comms
+    // Members related to communications.
 	bool master;
+    unsigned nodeId;
 	std::vector<std::string> allNodeIps;
 
     zmq::context_t dataCtx;

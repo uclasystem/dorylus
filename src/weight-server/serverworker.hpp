@@ -50,7 +50,7 @@ private:
     zmq::socket_t workersocket;
 
     std::vector<Matrix>& weightMats;
-    std::vector<Matrix>& updates;
+    std::vector<Matrix>& updateMats;
     
     unsigned& numLambdas;
     unsigned& count;

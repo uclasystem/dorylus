@@ -79,10 +79,11 @@ if [[ ! -d /usr/local/blas/CBLAS ]]; then     # Only install if not installed ye
     cd ..
     wget http://www.netlib.org/blas/blast-forum/cblas.tgz
     tar xf cblas.tgz
+    rm cblas.tgz
     mv BLAS-3.8.0/blas_LINUX.a CBLAS/
     rm -rf BLAS-3.8.0
     cd CBLAS
-    sed -i "" 's/BLLIB\ =\ \/Users\/julie\/Documents\/Boulot\/lapack-dev\/lapack\/trunk\/blas_LINUX.a/BLLIB\ =\ ..\/blas_LINUX.a/g' Makefile.in
+    sed -i 's/BLLIB\ =\ \/Users\/julie\/Documents\/Boulot\/lapack-dev\/lapack\/trunk\/blas_LINUX.a/BLLIB\ =\ ..\/blas_LINUX.a/g' Makefile.in
     make
     cd ..
     sudo mkdir -p /usr/local/blas

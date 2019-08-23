@@ -6,9 +6,13 @@ std::mutex count_mutex;
 std::condition_variable cv_forward, cv_backward;
 
 
+static std::vector<LambdaWorker *> workers;
+static std::vector<std::thread *> worker_threads;
+
+
 /**
  *
- * Lambda communication manager constructor.
+ * Lambda communication manager constructor & destructor.
  * 
  */
 LambdaComm::LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::string coordserverIp_, unsigned coordserverPort_, unsigned nodeId_,
@@ -40,14 +44,17 @@ LambdaComm::LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::strin
         try {
             zmq::proxy(static_cast<void *>(frontend), static_cast<void *>(backend), nullptr);
         } catch (std::exception& ex) { /** Context termintated. */ }
-
-        // Delete the workers after the context terminates.
-        for (unsigned i = 0; i < numListeners; ++i) {
-            delete workers[i];
-            delete worker_threads[i];
-        }
     });
     tproxy.detach();
+}
+
+LambdaComm::~LambdaComm() {
+
+    // Delete allocated resources.
+    for (unsigned i = 0; i < numListeners; ++i) {
+        delete workers[i];
+        delete worker_threads[i];
+    }
 }
 
 
@@ -108,12 +115,10 @@ LambdaComm::newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType *t
 
     // Create new matrix objects for workers to access.
     std::vector<Matrix> zMatrices;
-    assert(zBufs.size() == layerConfig.size());
     for (size_t i = 1; i < layerConfig.size(); ++i)
         zMatrices.push_back(Matrix(numLocalVertices, layerConfig[i], zBufs[i]));
 
     std::vector<Matrix> actMatrices;
-    assert(actBufs.size() == layerConfig.size());
     for (size_t i = 0; i < layerConfig.size(); ++i)
         actMatrices.push_back(Matrix(numLocalVertices, layerConfig[i], actBufs[i]));
 

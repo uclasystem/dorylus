@@ -209,7 +209,7 @@ Engine::runForward() {
 void
 Engine::runBackward() {
 
-    // Make sure all nodes start running the forward-prop phase.
+    // Make sure all nodes start running the backward-prop phase.
     NodeManager::barrier();
     printLog(nodeId, "Engine starts running BACKWARD...");
 
@@ -257,15 +257,15 @@ Engine::output() {
     // }
 
     //
-    // The follwing are only-output feature values outputing.
+    // The follwing are only-last-layer feature values outputing.
     //
-    for (Vertex& v : graph.getVertices()) {
-        outStream << v.getGlobalId() << ": ";
-        FeatType *dataPtr = localVertexActivationDataPtr(v.getLocalId(), numLayers);
-        for (size_t j = 0; j < layerConfig[numLayers]; ++j)
-            outStream << dataPtr[j] << " ";
-        outStream << std::endl;
-    }
+    // for (Vertex& v : graph.getVertices()) {
+    //     outStream << v.getGlobalId() << ": ";
+    //     FeatType *dataPtr = localVertexActivationDataPtr(v.getLocalId(), numLayers);
+    //     for (size_t j = 0; j < layerConfig[numLayers]; ++j)
+    //         outStream << dataPtr[j] << " ";
+    //     outStream << std::endl;
+    // }
 
     //
     // The following are labels outputing.
@@ -278,7 +278,18 @@ Engine::output() {
     //     outStream << std::endl;
     // }
 
-    // Benchmarking results.
+    //
+    // The following are timing results outputing.
+    //
+    outStream << "I: " << timeInit << std::endl;
+    for (unsigned i = 0; i < numLayers; ++i) {
+        outStream << "A: " << vecTimeAggregate[i] << std::endl
+                  << "L: " << vecTimeLambda[i] << std::endl
+                  << "G: " << vecTimeSendout[i] << std::endl;
+    }
+    outStream << "B: " << timeBackwardProcess << std::endl;
+
+    // Write benchmarking results to log file.
     if (master()) {
         assert(vecTimeAggregate.size() == numLayers);
         assert(vecTimeLambda.size() == numLayers);

@@ -6,15 +6,16 @@
 #include <aws/core/utils/HashingUtils.h>
 #include <aws/lambda/LambdaClient.h>
 #include <aws/lambda/model/InvokeRequest.h>
-
+#include <ctype.h>
 #include "coordserver.hpp"
+
+
+using namespace std::chrono;
 
 
 static const char *ALLOCATION_TAG = "GNN-Lambda";
 static std::shared_ptr<Aws::Lambda::LambdaClient> m_client;
-
-
-using namespace std::chrono;
+static std::ofstream outfile;
 
 
 /**
@@ -37,8 +38,8 @@ callback(const Aws::Lambda::LambdaClient *client, const Aws::Lambda::Model::Invo
 
         // No error found means a successful respond.
         if (functionResult.find("error") == std::string::npos) {
-            std::string num = functionResult.substr(0, functionResult.find(":")).c_str();
             std::cout << "\033[1;32m[SUCCESS]\033[0m\t" << functionResult << std::endl;
+            outfile << functionResult << std::endl;
             
         // There is error in the results.
         } else
@@ -160,8 +161,10 @@ CoordServer::run() {
             if (op == OP::TERM) {
                 std::cerr << "[SHUTDOWN] Terminating the servers..." << std::endl;
                 terminate = true;
-                for (unsigned i = 0; i < weightserverAddrs.size(); ++i)
+                for (unsigned i = 0; i < weightserverAddrs.size(); ++i) {
                     sendShutdownMessage(weightsockets[i]);
+                    free(weightserverAddrs[i]);     // Free the `strdup`ed weightserver Ips.
+                }
 
             // Else is a request for lambda threads. Handle that. This is forward.
             } else if (op == OP::REQ_FORWARD) {
@@ -277,11 +280,16 @@ CoordServer::sendShutdownMessage(zmq::socket_t& weightsocket) {
 /** Main entrance: Starts a coordserver instance and run a single listener, until termination msg received. */
 int
 main(int argc, char *argv[]) {
-    assert(argc == 5);
+    assert(argc == 6);
     char *coordserverPort = argv[1];
     char *weightserverFile = argv[2];
     char *weightserverPort = argv[3];
     char *dataserverPort = argv[4];
+
+    // Set output file location.
+    std::string outfileName = std::string(argv[5]) + "/output";
+    outfile.open(outfileName, std::fstream::out);
+    assert(outfile.good());
 
     Aws::SDKOptions options;
     Aws::InitAPI(options);
