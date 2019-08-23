@@ -22,6 +22,7 @@
 
 enum CTRL_MSG { MASTERUP, WORKERUP, INITDONE, ACK };
 
+
 /**
  *
  * Class of the weightserver. Weightservers are only responsible for replying weight requests from lambdas,
@@ -60,9 +61,8 @@ private:
     std::vector<unsigned> dims;
     std::vector<Matrix> weightMats;
 
-    // List of Matrices for holding updates until they are
-    // ready to be applied.
-    std::vector<Matrix> updates;
+    // List of Matrices for holding updates until they are ready to be applied.
+    std::vector<Matrix> updateMats;
 
     // Number of lambdas requests at backprop.
     unsigned numLambdas;

@@ -14,7 +14,7 @@ extern bool finished;
 ServerWorker::ServerWorker(zmq::context_t& ctx_, unsigned& counter, WeightServer& _ws,
                            std::vector<Matrix>& weights_, std::vector<Matrix>& updates_, unsigned& numLambdas_)
     : ctx(ctx_), workersocket(ctx, ZMQ_DEALER), count(counter), ws(_ws),
-      weightMats(weights_), updates(updates_), numLambdas(numLambdas_) {
+      weightMats(weights_), updateMats(updates_), numLambdas(numLambdas_) {
     workersocket.setsockopt(ZMQ_LINGER, 0);
     workersocket.connect("inproc://backend");
 }
@@ -125,21 +125,20 @@ ServerWorker::sendWeightsBackward(zmq::message_t& client_id) {
  */
 void
 ServerWorker::recvUpdates(zmq::message_t& client_id) {
-    for (unsigned i = 0; i < weightMats.size(); ++i) {
-        Matrix& weightMat = weightMats[i];
-        zmq::message_t update;
-        workersocket.recv(&update);
+    for (unsigned i = 0; i < updateMats.size(); ++i) {
+        zmq::message_t updateMsg;
+        workersocket.recv(&updateMsg);
 
-        float *weightData = weightMat.getData();
-        float *updateData = (float *) update.data();
+        float *updateSum = updateMats[i].getData();
+        float *updateNew = (float *) updateMsg.data();
 
-        // Grab lock then sum the data received with the current update matrix.
+        // Grab lock then sum the data received in this update matrix.
         std::lock_guard<std::mutex> update_lock(update_mutex);
-        for (unsigned i = 0; i < weightMat.getNumElemts(); ++i)
-            weightData[i] -= updateData[i];
+        for (unsigned u = 0; u < updateMats[i].getNumElemts(); ++u)
+            updateSum[u] += updateNew[u];
 
         // If I have received all updates from this Lambda decrement the counter.
-        if (i == weightMats.size() - 1) {
+        if (i == updateMats.size() - 1) {
             numLambdas--;
 
             // If this is the final update, begin global aggregation.

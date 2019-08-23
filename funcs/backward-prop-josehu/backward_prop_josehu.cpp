@@ -15,7 +15,7 @@
 #include "../../src/utils/utils.hpp"
 
 
-#define LEARNING_RATE 0.1
+#define LEARNING_RATE (0.1)
 
 
 #define SND_MORE true
@@ -303,12 +303,12 @@ dotGDwithWTrans(Matrix& matLeft, Matrix& matRight) {
 }
 
 static Matrix
-dotActTranswithGD(Matrix& matLeft, Matrix& matRight, float alpha) {
+dotActTranswithGD(Matrix& matLeft, Matrix& matRight, float learning_rate) {
     unsigned m = matLeft.getCols(), k = matLeft.getRows(), n = matRight.getCols();
     assert(k == matRight.getRows());
 
     FeatType *res = new FeatType[m * n];
-    cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, m, n, k, alpha,
+    cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, m, n, k, learning_rate,
                 matLeft.getData(), m, matRight.getData(), n, 0.0, res, n);
 
     return Matrix(m, n, res);

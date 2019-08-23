@@ -80,7 +80,7 @@ WeightServer::run() {
     std::vector<std::thread *> worker_threads;
     WeightServer& me = *this;
     for (int i = 0; i < NUM_LISTENERS; ++i) {
-        workers.push_back(new ServerWorker(ctx, count, me, weightMats, updates, numLambdas));
+        workers.push_back(new ServerWorker(ctx, count, me, weightMats, updateMats, numLambdas));
         worker_threads.push_back(new std::thread(std::bind(&ServerWorker::work, workers[i])));
         worker_threads[i]->detach();
     }
@@ -108,31 +108,28 @@ void WeightServer::applyUpdates() {
         for (unsigned i = 0; i < allNodeIps.size() - 1; ++i) {
 
             // For all layers.
-            for (unsigned l = 0; l < weightMats.size(); ++l) {
+            for (unsigned l = 0; l < updateMats.size(); ++l) {
 
                 // Recv update info from other weight servesr and aggregate.
                 zmq::message_t updateMsg;
                 subscriber.recv(&updateMsg);
 
-                FeatType* updateData = (FeatType*) updateMsg.data();
-                FeatType* weightData = weightMats[l].getData();
-                for (unsigned u = 0; u < weightMats[l].getNumElemts(); ++u) {
-                    weightData[u] += updateData[u];
-                }
+                float *updateSum = updateMats[l].getData();
+                float *updateNew = (float *) updateMsg.data();
+                for (unsigned u = 0; u < updateMats[l].getNumElemts(); ++u)
+                    updateSum[u] += updateNew[u];
             }
         }
 
-        // Once all updates have been aggregated, average the values by the number
-        // of weight server nodes.
-        float averagingFactor = (1.0 / (float) allNodeIps.size());
+        // Once all updates have been aggregated, apply to the weights matrices.
         for (unsigned l = 0; l < weightMats.size(); ++l) {
-            FeatType* weightData = weightMats[l].getData();
-            for (unsigned u = 0; u < weightMats[l].getNumElemts(); ++u) {
-                weightData[u] *= averagingFactor;
-            }
+            float *weightData = weightMats[l].getData();
+            float *updateSum = updateMats[l].getData();
+            for (unsigned u = 0; u < weightMats[l].getNumElemts(); ++u)
+                weightData[u] -= updateSum[u];
         }
 
-        // Send out the averaged weights.
+        // Send out the updated weights.
         for (unsigned l = 0; l < weightMats.size(); ++l) {
             Matrix& weightMat = weightMats[l];
             zmq::message_t weightDataMsg(weightMat.getDataSize());
@@ -158,19 +155,22 @@ void WeightServer::applyUpdates() {
 
         serverLog("Finished updating the weights.");
 
+        for (Matrix& mat : weightMats)
+            outfile << mat.str() << std::endl;
+
     // Worker code.
     } else {
 
         // Send all updated weight matrices to the master for aggregation.
-        for (unsigned i = 0; i < weightMats.size(); ++i) {
-            Matrix& weightMat = weightMats[i];
-            zmq::message_t weightDataMsg(weightMat.getDataSize());
-            std::memcpy(weightDataMsg.data(), weightMat.getData(), weightMat.getDataSize());
+        for (unsigned i = 0; i < updateMats.size(); ++i) {
+            Matrix& updateMat = updateMats[i];
+            zmq::message_t updateDataMsg(updateMat.getDataSize());
+            std::memcpy(updateDataMsg.data(), updateMat.getData(), updateMat.getDataSize());
 
-            if (i == weightMats.size() - 1)
-                publisher.send(weightDataMsg);
+            if (i == updateMats.size() - 1)
+                publisher.send(updateDataMsg);
             else
-                publisher.send(weightDataMsg, ZMQ_SNDMORE);
+                publisher.send(updateDataMsg, ZMQ_SNDMORE);
         }
 
         // Wait for the master to reply with the aggregated and averaged weight values.
@@ -195,6 +195,13 @@ void WeightServer::applyUpdates() {
 
     updateTimer.stop();
     outfile << "U: " << updateTimer.getTime() << std::endl;     // Output timing results.
+
+    // Clear the update buffer.
+    for (unsigned l = 0; l < updateMats.size(); ++l) {
+        float *updateData = updateMats[l].getData();
+        for (unsigned u = 0; u < updateMats[l].getNumElemts(); ++u)
+            updateData[u] = 0.;
+    }
 
     // Reset number of lambdas.
     numLambdas = 0;
@@ -359,11 +366,11 @@ WeightServer::initializeWeightMatrices(std::string& configFileName) {
     if (master) {
         auto seed = 8888;
         std::default_random_engine dre(seed);
-        std::uniform_real_distribution<FeatType> dist(-1.5, 1.5);
+        std::uniform_real_distribution<float> dist(-1.5, 1.5);
 
         for (unsigned u = 0; u < dims.size() - 1; ++u) {
             unsigned dataSize = dims[u] * dims[u + 1];
-            FeatType *dptr = new FeatType[dataSize];
+            float *dptr = new float[dataSize];
             
             for (unsigned ui = 0; ui < dataSize; ++ui)
                 dptr[ui] = dist(dre);
@@ -373,6 +380,17 @@ WeightServer::initializeWeightMatrices(std::string& configFileName) {
 
         for (unsigned u = 0; u < weightMats.size(); ++u)
             serverLog("Layer " + std::to_string(u) + " - Weights: " + weightMats[u].shape());
+    }
+
+    // For all nodes, initialize empty update matrices buffers.
+    for (unsigned u = 0; u < dims.size() - 1; ++u) {
+        unsigned dataSize = dims[u] * dims[u + 1];
+        float *dptr = new float[dataSize];
+        
+        for (unsigned ui = 0; ui < dataSize; ++ui)
+            dptr[ui] = 0.;
+
+        updateMats.push_back(Matrix(dims[u], dims[u + 1], dptr));
     }
 }
 
@@ -387,7 +405,7 @@ WeightServer::distributeWeightMatrices() {
             Matrix& weights = weightMats[i];
 
             zmq::message_t weightData(weights.getDataSize());
-            std::memcpy((char*) weightData.data(), weights.getData(), weights.getDataSize());
+            std::memcpy((char *) weightData.data(), weights.getData(), weights.getDataSize());
 
             if (i == weightMats.size() - 1)
                 publisher.send(weightData);
@@ -417,7 +435,7 @@ WeightServer::distributeWeightMatrices() {
             zmq::message_t weightData;
             subscriber.recv(&weightData);
 
-            char* matxData = new char[weightData.size()];
+            char *matxData = new char[weightData.size()];
             std::memcpy(matxData, weightData.data(), weightData.size());
 
             weightMats.push_back(Matrix(dims[count], dims[count+1], matxData));
