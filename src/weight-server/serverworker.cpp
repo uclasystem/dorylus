@@ -124,7 +124,8 @@ ServerWorker::sendWeightsBackward(zmq::message_t& client_id) {
  */
 void
 ServerWorker::recvUpdates(zmq::message_t& client_id) {
-    for (Matrix& weightMat : weightMats) {
+    for (unsigned i = 0; i < weightMats.size(); ++i) {
+        Matrix& weightMat = weightMats[i];
         zmq::message_t update;
         workersocket.recv(&update);
 
@@ -135,6 +136,16 @@ ServerWorker::recvUpdates(zmq::message_t& client_id) {
         std::lock_guard<std::mutex> update_lock(update_mutex);
         for (unsigned i = 0; i < weightMat.getNumElemts(); ++i)
             weightData[i] -= updateData[i];
+
+        // If I have received all updates from this Lambda decrement the counter
+        if (i == weightMats.size() - 1) {
+            numLambdas--;
+
+            // If this is the final update, begin global aggregation
+            if (numLambdas == 0) {
+                ws.applyUpdates();
+            }
+        }
     }
 
     // Send confirm ACK message.
@@ -170,7 +181,8 @@ ServerWorker::setBackpropNumLambdas(zmq::message_t& client_id, unsigned numLambd
 
     // This is not a thread-safe call, but as the coordination server should
     // only send one info message per server, it should be fine.
-    numLambdas = numLambdas_;
+    std::lock_guard<std::mutex> update_lock(update_mutex);
+    numLambdas += numLambdas_;
     std::cout << "[  INFO  ] Number of lambdas set to " << numLambdas << "." << std::endl;
 
     // Send confirm ACK message.
