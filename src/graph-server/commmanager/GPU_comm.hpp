@@ -36,10 +36,16 @@ public:
         char ipc_addr[50];
         sprintf(ipc_addr, "ipc:///tmp/GPU_COMM:%u", dPort);
         dataSocket.connect(ipc_addr);
+
+        zmq::message_t confirm(5);
+        zmq::message_t init_header(HEADER_SIZE);
+        populateHeader((char*)init_header.data(),nodeId);
+        dataSocket.send(init_header);
+        dataSocket.recv(&confirm);
     }
     // For forward-prop.
-    void newContextForward(FeatType *dataBuf, FeatType *zData, FeatType *actData,
-                              unsigned numLocalVertices, unsigned numFeats, unsigned numFeatsNext);
+    void newContextForward(FeatType *dataBuf, FeatType *zData_, FeatType *actData_,
+                              unsigned numLocalVertices, unsigned numFeats, unsigned numFeatsNext_);
     void requestForward(unsigned layer);
 
     // Send a message to the coordination server to shutdown.

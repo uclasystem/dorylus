@@ -69,8 +69,6 @@ void ComputingUnit::activate(Matrix& A){
 	thrust::device_ptr<float> devA_ptr(devA.devPtr);
   	thrust::transform(devA_ptr, devA_ptr+A.getRows()*A.getCols(),devA_ptr, act_functor());
   	devA.updateMatrixFromGPU();
-    printf("%s\n", devA.str().c_str());
-
 }
 
 
