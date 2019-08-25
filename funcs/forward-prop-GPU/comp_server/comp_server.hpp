@@ -23,8 +23,8 @@ public:
     ComputingServer(unsigned dPort_,const std::string& wServersFile,unsigned wPort_):
         dPort(dPort_),
         wPort(wPort_),
-        dataSocket(ctx, ZMQ_REP),
-        weightSocket(ctx, ZMQ_DEALER){
+        dataSocket(dctx, ZMQ_REP),
+        weightSocket(wctx, ZMQ_DEALER){
             loadWeightServers(weightServerAddrs,wServersFile);
             // printf("%zu\n",weightServerAddrs.size() );
             // printf("LOADING WSERVER FILE\n");
@@ -48,7 +48,8 @@ public:
 
 private:
     //ntw related objs
-    zmq::context_t ctx;
+    zmq::context_t dctx;
+    zmq::context_t wctx;
     zmq::socket_t dataSocket;
     zmq::socket_t weightSocket;
 
@@ -119,7 +120,9 @@ void ComputingServer::run(){
             
             Matrix feats=requestFeatsMatrix(rows,cols);
             wThread.join();
-
+            printf("joined\n");
+            
+            printf("frow: %u, fcol: %u\n", feats.getRows(),feats.getCols());
             printf("feats got %s\n", feats.str().c_str());
             Matrix z = cu.dot(feats, weights);
             printf("Z calculated %s\n", z.str().c_str());
@@ -179,13 +182,21 @@ void ComputingServer::loadWeightServers(std::vector<char *>& addresses, const st
 Matrix
 ComputingServer::requestFeatsMatrix(unsigned rows,unsigned cols) {
     zmq::message_t confirm(5);
-    zmq::message_t aggreChunk(rows * cols * sizeof(FeatType));
+    printf("rfRow: %u rfCol: %u\n", rows,cols);
+    zmq::message_t aggreChunk;
     std::cout << "< GPU SERVER FORWARD  > Getting data from dataserver..." << std::endl;
     dataSocket.recv(&aggreChunk);
+    printf("Feats size recved %u\n", aggreChunk.size());
     std::cout << "< GPU SERVER FORWARD > Got data from dataserver." << std::endl;
-
     FeatType * feats_buffer=new FeatType[rows * cols];
-    memcpy(feats_buffer,aggreChunk.data(),rows * cols * sizeof(FeatType));
+    printf("rf memcpy start\n");
+    for (unsigned i=0;i<rows * cols;++i){ 
+        ((FeatType*)(aggreChunk.data()))[i]+=1;
+        // printf("%u\n",i );
+        // printf("%f\n",((FeatType*)(aggreChunk.data()))[i] );
+    }
+    memcpy((char*)feats_buffer,(char*)aggreChunk.data(),rows * cols * sizeof(FeatType));
+    printf("rf memcpy done\n");
     Matrix m(rows, cols,feats_buffer);
     return m;
 }
@@ -205,7 +216,7 @@ ComputingServer::requestWeightsMatrix(zmq::socket_t& socket, unsigned layer) {
     socket.send(header);
 
     // Listen on respond.
-    zmq::message_t respHeader;
+    zmq::message_t respHeader(HEADER_SIZE);
     socket.recv(&respHeader);
 
     // Parse the respond.
@@ -216,13 +227,13 @@ ComputingServer::requestWeightsMatrix(zmq::socket_t& socket, unsigned layer) {
     } else {                    // Get matrices data.
         unsigned rows = parse<unsigned>((char *) respHeader.data(), 2);
         unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
-        zmq::message_t matxData(rows * cols * sizeof(float));
-        socket.recv(&matxData);
-
-        char *matxBuffer = new char[matxData.size()];
-        std::memcpy(matxBuffer, matxData.data(), matxData.size());
-
-        Matrix m(rows, cols, matxBuffer);
+        zmq::message_t wData(rows * cols * sizeof(FeatType));
+        socket.recv(&wData);
+        FeatType *wBuffer = new FeatType[rows*cols];
+        printf("rw memcpy start\n");
+        memcpy((char*)wBuffer,(char*)wData.data(),rows * cols * sizeof(FeatType));
+        printf("rw memcpy done\n");
+        Matrix m(rows, cols, wBuffer);
         return m;
     }
 }

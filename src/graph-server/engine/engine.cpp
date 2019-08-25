@@ -109,7 +109,6 @@ Engine::init(int argc, char *argv[]) {
 
     // Create labels storage area. Read in labels and store as one-hot format.
     localVerticesLabels = new FeatType[layerConfig[numLayers] * graph.getNumLocalVertices()];
-
     // Set a local index for all ghost vertices along the way. This index is used for indexing within the ghost data arrays.
     unsigned ghostCount = 0;
     for (auto it = graph.getGhostVertices().begin(); it != graph.getGhostVertices().end(); ++it)
@@ -890,7 +889,7 @@ Engine::readLabelsFile(std::string& labelsFileName) {
     unsigned lKinds = fHeader.labelKinds;
     unsigned curr;
     FeatType one_hot_arr[lKinds] = {0};
-
+    
     while (infile.read(reinterpret_cast<char *> (&curr) , sizeof(unsigned))) {
 
         // Set the vertex's label values, if it is one of my local vertices & is labeled.
@@ -907,8 +906,8 @@ Engine::readLabelsFile(std::string& labelsFileName) {
 
         ++gvid;
     }
-    infile.close();
 
+    infile.close();
     assert(gvid == graph.getNumGlobalVertices());
 }
 
