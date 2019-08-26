@@ -49,12 +49,17 @@ LambdaComm::LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::strin
 }
 
 LambdaComm::~LambdaComm() {
-
     // Delete allocated resources.
     for (unsigned i = 0; i < numListeners; ++i) {
         delete workers[i];
         delete worker_threads[i];
     }
+
+    frontend.close();
+    backend.close();
+    coordsocket.close();
+
+    ctx.close();
 }
 
 

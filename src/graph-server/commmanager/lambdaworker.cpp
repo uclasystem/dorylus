@@ -20,6 +20,10 @@ LambdaWorker::LambdaWorker(unsigned nodeId_, zmq::context_t& ctx_,
     workersocket.connect("inproc://backend");
 }
 
+LambdaWorker::~LambdaWorker() {
+    workersocket.close();
+}
+
 
 /**
  *

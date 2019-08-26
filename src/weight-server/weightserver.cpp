@@ -51,14 +51,24 @@ WeightServer::WeightServer(std::string& weightServersFile, std::string& myPrIpFi
 }
 
 WeightServer::~WeightServer() {
-
+    std::cout << "[SHUTDOWN] Deletin workers" << std::endl;
     // Delete allocated resources.
     for (int i = 0; i < NUM_LISTENERS; ++i) {
         delete workers[i];
         delete worker_threads[i];
     }
+
     for (Matrix& mat : weightMats)
         delete[] mat.getData();
+
+    std::cout << "[SHUTDOWN] Closing ZMQ" << std::endl;
+    frontend.close();
+    backend.close();
+    ctx.close();
+    
+    publisher.close(); 
+    subscriber.close();
+    dataCtx.close();
 }
 
 
@@ -488,6 +498,7 @@ main(int argc, char *argv[]) {
     // then end the main thread.
     std::unique_lock<std::mutex> lk(term_mutex);
     cv.wait(lk, [&]{ return finished; });
+    std::cerr << "We are terminating the weight server" << std::endl;
     
     return 0;
 }

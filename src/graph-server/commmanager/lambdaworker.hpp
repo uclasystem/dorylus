@@ -34,6 +34,8 @@ public:
                  unsigned numLambdasForward_, unsigned numLambdasBackward_,
                  unsigned& countForward_, unsigned& countBackward_);
 
+    ~LambdaWorker();
+
     // Continuously listens for incoming lambda connections.
     void work();
 

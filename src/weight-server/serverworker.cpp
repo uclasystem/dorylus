@@ -20,6 +20,15 @@ ServerWorker::ServerWorker(zmq::context_t& ctx_, unsigned& counter, WeightServer
 }
 
 
+ServerWorker::~ServerWorker() {
+    std::cout << "Closing sockets" << std::endl;
+    workersocket.close();
+
+    std::cout << "Closing context" << std::endl;
+    ctx.close();
+}
+
+
 /**
  *
  * Listen on lambda threads' requests.
