@@ -135,6 +135,8 @@ void ComputingServer::run(){
             cu.activate(act_z);
             printf("Act Caluclated %s\n", act_z.str().c_str());
             sendMatrices(z,act_z);
+            delete[] (feats.getData());
+            delete[] (z.getData());
         }
     } catch (std::exception& ex) {
         std::cerr << "[ERROR] " << ex.what() << std::endl;
@@ -161,7 +163,7 @@ void ComputingServer::sendMatrices(Matrix& zResult, Matrix& actResult) {
         zmq::message_t actData(actResult.getData(),actResult.getDataSize(),doNotFreeBuffer, NULL);
         dataSocket.send(actData);
         dataSocket.recv(&confirm);
-        dataSocket.send(confirm);
+        dataSocket.send(confirm); 
 }
 
 

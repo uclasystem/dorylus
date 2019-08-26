@@ -50,16 +50,6 @@ void GPUComm::requestForward(unsigned layer){
         dataSocket.send(confirm);
         dataSocket.recv(&confirm);
 
-
-        Matrix y(newActRows,newActCols,(FeatType*)newZ.data());
-        printLog(nodeId,"newZ %s\n", y.str().c_str());
-
-        Matrix t(newActRows,newActCols,(FeatType*)newAct.data());
-        printLog(nodeId,"newAct %s\n", t.str().c_str());
-        // dataSocket.send(confirm);
-
-        // dataSocket.send(&confirm);
-
     }
     catch(std::exception& ex){
         std::cerr << "[ERROR] " << ex.what() << std::endl;
