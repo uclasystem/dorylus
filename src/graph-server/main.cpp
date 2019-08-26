@@ -23,7 +23,7 @@ main(int argc, char *argv[]) {
     // Engine::runBackward();
 
     // Procude the output files.
-    // Engine::output();
+    Engine::output();
 
     // Destroy the engine.
     Engine::destroy();

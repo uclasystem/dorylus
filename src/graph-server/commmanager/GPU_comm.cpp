@@ -34,15 +34,18 @@ void GPUComm::requestForward(unsigned layer){
 
         zmq::message_t resultHeader(HEADER_SIZE);
         dataSocket.recv(&resultHeader);
-        unsigned newActRows=parse<unsigned>((char *) header.data(), 0);
-        unsigned newActCols=parse<unsigned>((char *) header.data(), 1);
-        unsigned recvSize=newActRows*newActCols*sizeof(FeatType);
-        zmq::message_t newZ(recvSize);
+        dataSocket.send(confirm);
+        unsigned newActRows=parse<unsigned>((char *) resultHeader.data(), 0);
+        unsigned newActCols=parse<unsigned>((char *) resultHeader.data(), 1);
+        std::size_t recvSize = newActRows*newActCols*sizeof(FeatType);
+        zmq::message_t newZ;
         dataSocket.recv(&newZ);
         memcpy(zData,newZ.data(),recvSize);
-        zmq::message_t newAct(recvSize);
+        dataSocket.send(confirm);
+        zmq::message_t newAct;
         dataSocket.recv(&newAct);
         memcpy(actData,newAct.data(),recvSize);
+        // dataSocket.send(confirm);
 
         // dataSocket.send(&confirm);
 

@@ -846,8 +846,7 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
     std::vector<FeatType> feature_vec;
 
     feature_vec.resize(nFeats);
-    while (infile.read(reinterpret_cast<char *> (&feature_vec[0]) , sizeof(FeatType) * nFeats)) {
-
+    while (infile.read(reinterpret_cast<char *> (&feature_vec[0]) , sizeof(FeatType) * nFeats)) {        
         // Set the vertex's initial values, if it is one of my local vertices / ghost vertices.
         if (graph.containsGhostVertex(gvid)) {      // Global vertex.
             FeatType *actDataPtr = ghostVertexActivationDataPtr(graph.getGhostVertex(gvid).getLocalId(), 0);

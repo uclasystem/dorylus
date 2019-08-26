@@ -15,7 +15,7 @@
 #include <thread>
 
 void doNotFreeBuffer(void *data, void *hint){
-    printf("Buffer is not freed :)\n");
+    // printf("Buffer is not freed :)\n");
 }
 
 class ComputingServer {
@@ -84,6 +84,7 @@ void ComputingServer::run(){
 
     try {
         while (true) {
+            printf("RECV HEADER\n");
             zmq::message_t header(HEADER_SIZE);
             dataSocket.recv(&header);
             unsigned op = parse<unsigned>((char *) header.data(), 0);
@@ -91,10 +92,10 @@ void ComputingServer::run(){
             unsigned rows = parse<unsigned>((char *) header.data(), 2);
             unsigned cols = parse<unsigned>((char *) header.data(), 3);
 
-            printf("op %u\n", op);
-            printf("Layer %u\n", layer);
-            printf("Rows %u\n", rows);
-            printf("Cols %u\n", cols);
+            // printf("op %u\n", op);
+            // printf("Layer %u\n", layer);
+            // printf("Rows %u\n", rows);
+            // printf("Cols %u\n", cols);
             dataSocket.send(confirm);
 
             if(op==OP::TERM)
@@ -123,9 +124,8 @@ void ComputingServer::run(){
             printf("joined\n");
             
             printf("frow: %u, fcol: %u\n", feats.getRows(),feats.getCols());
-            printf("feats got %s\n", feats.str().c_str());
             Matrix z = cu.dot(feats, weights);
-            printf("Z calculated %s\n", z.str().c_str());
+            // printf("Z calculated %s\n", z.str().c_str());
 
             FeatType act_buffer[z.getRows()*z.getCols()];
             memcpy(act_buffer,z.getData(),z.getDataSize());
@@ -141,19 +141,22 @@ void ComputingServer::run(){
 
 //Send multiplied matrix result back to dataserver.
 void ComputingServer::sendMatrices(Matrix& zResult, Matrix& actResult) {
+        zmq::message_t confirm;
+        printf("zResult %s\n", zResult.str().c_str());
+        printf("actResult %s\n", actResult.str().c_str());
         // // Send push header.
         zmq::message_t header(HEADER_SIZE);
         populateHeader((char *) header.data(),zResult.getRows(), zResult.getCols());
-        dataSocket.send(header, ZMQ_SNDMORE);
-
+        dataSocket.send(header);
+        dataSocket.recv(&confirm);
         // // Send zData and actData.
+        printf("zResultSize %s \n", zResult.shape().c_str());
         zmq::message_t zData(zResult.getData(),zResult.getDataSize(),doNotFreeBuffer, NULL);
-        dataSocket.send(zData, ZMQ_SNDMORE);
+        dataSocket.send(zData);
+        dataSocket.recv(&confirm);
+        printf("actResultSize %s \n", actResult.shape().c_str());
         zmq::message_t actData(actResult.getData(),actResult.getDataSize(),doNotFreeBuffer, NULL);
         dataSocket.send(actData);
-        // // Wait for data settled reply.
-        // zmq::message_t confirm;
-        // socket.recv(&confirm);
 }
 
 
@@ -186,18 +189,15 @@ ComputingServer::requestFeatsMatrix(unsigned rows,unsigned cols) {
     zmq::message_t aggreChunk;
     std::cout << "< GPU SERVER FORWARD  > Getting data from dataserver..." << std::endl;
     dataSocket.recv(&aggreChunk);
-    printf("Feats size recved %u\n", aggreChunk.size());
+
+    printf("Feats size recved %lu\n", aggreChunk.size());
     std::cout << "< GPU SERVER FORWARD > Got data from dataserver." << std::endl;
     FeatType * feats_buffer=new FeatType[rows * cols];
     printf("rf memcpy start\n");
-    for (unsigned i=0;i<rows * cols;++i){ 
-        ((FeatType*)(aggreChunk.data()))[i]+=1;
-        // printf("%u\n",i );
-        // printf("%f\n",((FeatType*)(aggreChunk.data()))[i] );
-    }
     memcpy((char*)feats_buffer,(char*)aggreChunk.data(),rows * cols * sizeof(FeatType));
     printf("rf memcpy done\n");
     Matrix m(rows, cols,feats_buffer);
+    // printf("RF: %s\n", m.str().c_str());
     return m;
 }
 

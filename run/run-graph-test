@@ -29,6 +29,10 @@ MYPRIPFILE=${HOME}/myip
 MYPUBIPFILE=${HOME}/myip
 DSHMACHINESFILE=${HOME}/dshmachines
 
+# Kill running graphservers.
+echo -e "\e[33;1mKilling existing 'graphserver' processes...\e[0m"
+dsh -f ${DSHMACHINESFILE} -c "killall -u $( whoami ) graphserver"
+
 # Count the machines.
 NDS=$( wc -l ${DSHMACHINESFILE} | cut -d" " -f1 )
 for i in $( seq 1 ${NDS} ); do
@@ -68,13 +72,32 @@ LOGFILE=${LOGFILEDIR}/${RUN_MARK}.$1.log
 TMPFILEDIR=${HOME}/tmpfiles
 rm -rf ${TMPFILEDIR} && mkdir -p ${TMPFILEDIR}
     
-echo "./build/graphserver --graphfile ${DATASET}/parts_${NDS}/graph.bsnap --featuresfile ${DATASET}/features.bsnap --labelsfile ${DATASET}/labels.bsnap --dshmachinesfile ${DSHMACHINESFILE} --layerfile ${LAYERFILE} --pubipfile ${MYPUBIPFILE} --pripfile ${MYPRIPFILE} --dataserverport ${GPORT} --coordserverip ${CSERVERIP} --coordserverport ${CPORT} --undirected ${UNDIRECTED} --tmpdir=${TMPFILEDIR} --cthreads ${COMP_THREADS} --dthreads ${COMM_THREADS} --dataport ${DATAPORT} --ctrlport ${CTRLPORT} --nodeport ${NODEPORT} --numlambdasforward ${NUM_LAMBDAS_FORWARD} --numlambdasbackward ${NUM_LAMBDAS_BACKWARD}"
+
 # Run the command on all dsh machines.
-cd ${HOME}/gnn-lambda && ./build/graphserver --graphfile ${DATASET}/parts_${NDS}/graph.bsnap --featuresfile ${DATASET}/features.bsnap --labelsfile ${DATASET}/labels.bsnap --dshmachinesfile ${DSHMACHINESFILE} --layerfile ${LAYERFILE} --pubipfile ${MYPUBIPFILE} --pripfile ${MYPRIPFILE} --dataserverport ${GPORT} --coordserverip ${CSERVERIP} --coordserverport ${CPORT} --undirected ${UNDIRECTED} --tmpdir=${TMPFILEDIR} --cthreads ${COMP_THREADS} --dthreads ${COMM_THREADS} --dataport ${DATAPORT} --ctrlport ${CTRLPORT} --nodeport ${NODEPORT} --numlambdasforward ${NUM_LAMBDAS_FORWARD} --numlambdasbackward ${NUM_LAMBDAS_BACKWARD}
- # 1> /dev/null 2>> ${LOGFILE}
+echo "DSH command: ./build/graphserver --graphfile ${DATASET}/parts_${NDS}/graph.bsnap --featuresfile ${DATASET}/features.bsnap --labelsfile ${DATASET}/labels.bsnap --dshmachinesfile ${DSHMACHINESFILE} --layerfile ${LAYERFILE} --pubipfile ${MYPUBIPFILE} --pripfile ${MYPRIPFILE} --dataserverport ${GPORT} --coordserverip ${CSERVERIP} --coordserverport ${CPORT} --undirected ${UNDIRECTED} --tmpdir=${TMPFILEDIR} --cthreads ${COMP_THREADS} --dthreads ${COMM_THREADS} --dataport ${DATAPORT} --ctrlport ${CTRLPORT} --nodeport ${NODEPORT} --numlambdasforward ${NUM_LAMBDAS_FORWARD} --numlambdasbackward ${NUM_LAMBDAS_BACKWARD}"
+dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ./build/graphserver \
+    --graphfile ${DATASET}/parts_${NDS}/graph.bsnap \
+    --featuresfile ${DATASET}/features.bsnap \
+    --labelsfile ${DATASET}/labels.bsnap \
+    --dshmachinesfile ${DSHMACHINESFILE} \
+    --layerfile ${LAYERFILE} \
+    --pubipfile ${MYPUBIPFILE} \
+    --pripfile ${MYPRIPFILE} \
+    --dataserverport ${GPORT} \
+    --coordserverip ${CSERVERIP} \
+    --coordserverport ${CPORT} \
+    --undirected ${UNDIRECTED} \
+    --tmpdir=${TMPFILEDIR} \
+    --cthreads ${COMP_THREADS} \
+    --dthreads ${COMM_THREADS} \
+    --dataport ${DATAPORT} \
+    --ctrlport ${CTRLPORT} \
+    --nodeport ${NODEPORT} \
+    --numlambdasforward ${NUM_LAMBDAS_FORWARD} \
+    --numlambdasbackward ${NUM_LAMBDAS_BACKWARD}" 1> /dev/null 2>> ${LOGFILE}
 
 # Gather the output files.
-OUTFILEDIR=${HOME}/outfiles/${RUN_MARK}.$1
+OUTFILEDIR=${HOME}/outfiles/${RUN_MARK}.$2
 mkdir -p ${OUTFILEDIR}
 for i in $( seq 1 ${NDS} ); do
     scp -q ${DSHNODES[$i]}:${TMPFILEDIR}/output_* ${OUTFILEDIR}/
@@ -88,5 +111,3 @@ if [ -e ${OUTFILEDIR}/output_0 ]; then
 else
   echo -e "\e[91;1mExecution fails (at least on this node), check the log file!\e[0m"
 fi
-
-
