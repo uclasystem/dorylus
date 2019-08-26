@@ -5,6 +5,7 @@ enable_language(CUDA)
 #set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DVERBOSE_ERRORS -fno-omit-frame-pointer -fsanitize=address")
 set(CUDA_64_BIT_DEVICE_CODE ON)
 
+
 # Project name.
 project(forward-GPU LANGUAGES CXX CUDA)
 

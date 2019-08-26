@@ -121,16 +121,19 @@ void ComputingServer::run(){
             
             Matrix feats=requestFeatsMatrix(rows,cols);
             wThread.join();
-            printf("joined\n");
+            // printf("joined\n");
             
-            printf("frow: %u, fcol: %u\n", feats.getRows(),feats.getCols());
+            // printf("frow: %u, fcol: %u\n", feats.getRows(),feats.getCols());
             Matrix z = cu.dot(feats, weights);
-            // printf("Z calculated %s\n", z.str().c_str());
+            printf("Z calculated %s\n", z.str().c_str());
 
             FeatType act_buffer[z.getRows()*z.getCols()];
             memcpy(act_buffer,z.getData(),z.getDataSize());
+
+            // printf("z DATASIZE %u\n", z.getDataSize());
             Matrix act_z(z.getRows(),z.getCols(),act_buffer);
             cu.activate(act_z);
+            printf("Act Caluclated %s\n", act_z.str().c_str());
             sendMatrices(z,act_z);
         }
     } catch (std::exception& ex) {
@@ -142,8 +145,8 @@ void ComputingServer::run(){
 //Send multiplied matrix result back to dataserver.
 void ComputingServer::sendMatrices(Matrix& zResult, Matrix& actResult) {
         zmq::message_t confirm;
-        printf("zResult %s\n", zResult.str().c_str());
-        printf("actResult %s\n", actResult.str().c_str());
+        // printf("zResult %s\n", zResult.str().c_str());
+        // printf("actResult %s\n", actResult.str().c_str());
         // // Send push header.
         zmq::message_t header(HEADER_SIZE);
         populateHeader((char *) header.data(),zResult.getRows(), zResult.getCols());
@@ -157,6 +160,8 @@ void ComputingServer::sendMatrices(Matrix& zResult, Matrix& actResult) {
         printf("actResultSize %s \n", actResult.shape().c_str());
         zmq::message_t actData(actResult.getData(),actResult.getDataSize(),doNotFreeBuffer, NULL);
         dataSocket.send(actData);
+        dataSocket.recv(&confirm);
+        dataSocket.send(confirm);
 }
 
 

@@ -8,7 +8,6 @@
 #include <sstream>
 #include <string>
 #include <thread>
-#include <cmath>
 #include <cstdlib>
 #include <cmath>
 #include <cuda_runtime.h>
@@ -45,7 +44,7 @@ struct act_functor
 {
     act_functor(){}
     __host__ __device__
-        float operator()(const float& x) const { return std::tanh(x);}
+        float operator()(const float& x) const { return tanhf(x);}
 };
 
 ComputingUnit::ComputingUnit(){

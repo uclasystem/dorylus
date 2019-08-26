@@ -31,20 +31,31 @@ void GPUComm::requestForward(unsigned layer){
 
         zmq::message_t dataMsg(actMatrix.getData(), actRows*actCols*sizeof(FeatType), doNotFreeBuffer, NULL);
         dataSocket.send(dataMsg);
-
         zmq::message_t resultHeader(HEADER_SIZE);
         dataSocket.recv(&resultHeader);
         dataSocket.send(confirm);
         unsigned newActRows=parse<unsigned>((char *) resultHeader.data(), 0);
         unsigned newActCols=parse<unsigned>((char *) resultHeader.data(), 1);
         std::size_t recvSize = newActRows*newActCols*sizeof(FeatType);
+        printLog(nodeId, "RecvSize %lu",recvSize);
         zmq::message_t newZ;
         dataSocket.recv(&newZ);
         memcpy(zData,newZ.data(),recvSize);
+        printLog(nodeId, "newZSize  %lu",newZ.size());
         dataSocket.send(confirm);
         zmq::message_t newAct;
         dataSocket.recv(&newAct);
+        printLog(nodeId, "newActSize  %lu",newAct.size());
         memcpy(actData,newAct.data(),recvSize);
+        dataSocket.send(confirm);
+        dataSocket.recv(&confirm);
+
+
+        Matrix y(newActRows,newActCols,(FeatType*)newZ.data());
+        printLog(nodeId,"newZ %s\n", y.str().c_str());
+
+        Matrix t(newActRows,newActCols,(FeatType*)newAct.data());
+        printLog(nodeId,"newAct %s\n", t.str().c_str());
         // dataSocket.send(confirm);
 
         // dataSocket.send(&confirm);

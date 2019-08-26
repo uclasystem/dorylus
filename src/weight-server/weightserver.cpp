@@ -346,8 +346,8 @@ WeightServer::initializeWeightMatrices(std::string& configFileName) {
             weightMats.push_back(Matrix(dims[u], dims[u + 1], dptr));
         }
 
-//        for (unsigned u = 0; u < weightMats.size(); ++u)
-//            fprintf(stdout, "Layer %u - Weights: %s\n", u, weightMats[u].shape().c_str());
+       // for (unsigned u = 0; u < weightMats.size(); ++u)
+           // fprintf(stdout, "Layer %u - Weights: %s\n", u, weightMats[u].shape().c_str());
     }
 }
 
