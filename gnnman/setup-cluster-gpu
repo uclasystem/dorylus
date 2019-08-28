@@ -1,15 +1,7 @@
 #!/bin/bash
 
-##
-## Start all the machines listed in the manager. Generates proper dshmachine files and put them on to the machines.
-## Generates weightserver info file (send to coordserver) and coordserver info file (send to graphserver) as well.
-## Also, the `layerconfig` file is sent to all graphservers and weightservers.
-##
-## Usage: $ ./gnnman/setup-cluster
-##
-## Options:
-##      Default: Graph servers receive a graph servers' copy, and weight servers receive a weight servers' copy of
-##               'dshmachines'.
+## Similar to setup-cluster except this one is used for machines with GPU and weight server only
+## Usage: $ ./gnnman/setup-cluster-gpu
 ##
 ## All these config files are put in the home directory `~/` for convience.
 ##
@@ -28,11 +20,13 @@ fi
 # Start all machines...
 ${EC2MAN_CMD} weight all start
 
+rm -f ~/wserverip
+${EC2MAN_CMD} weight all pubip > wserverip
 
 # For graph servers.
 echo "Processing context 'graph'..."
 echo "0.0.0.0" > cserverip #just a placeholder
-requiredFiles="cserverip $HOME/dshmachines run/layerconfig run/cserverport run/gserverport run/dataport run/ctrlport run/nodeport"
+requiredFiles="$HOME/dshmachines wserverip cserverip run/layerconfig run/cserverport run/gserverport run/dataport run/ctrlport run/nodeport run/wserverport"
 machineList=$( < ~/dshmachines )
 for machine in $machineList
 do 
@@ -47,11 +41,10 @@ do
 	scp myprip $machine:~
 done
 rm -f myprip mypubip
-
+rm -f wserverip
 
 # For weight servers.
 echo "Processing context 'weight'..."
-rm -f ~/wserverip
 NUM_GRAPH_NODES=$(( $( ${EC2MAN_CMD} weight info | wc -l | awk '{print $1}' ) - 1 ))
 for i in $( seq 0 $(( ${NUM_GRAPH_NODES} - 1 )) ); do
     ${EC2MAN_CMD} weight $i prip > myprip

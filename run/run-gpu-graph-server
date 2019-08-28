@@ -2,20 +2,6 @@
 ## This script is used for running GPU graph server only
 
 cd ${HOME}/gnn-lambda/
-echo "Make Sure you build forward-prop-GPU under funcs"
-echo "You need these file to run GPU graph server"
-echo "../wserverip **different from lambda"
-echo "~/dshmachines #Don't use domain names"
-echo "../cserverport"
-echo "../gserverport"
-echo "../gserverport"
-echo "../dataport"
-echo " ../cserverip #Placehoder since coord server is not used here"
-echo "../cserverport #Placehoder since coord server is not used here"
-echo "../myprip" 
-echo "../mypubip"
-
-
 
 CPORT=$( < ../cserverport )
 GPORT=$( < ../gserverport )
@@ -74,7 +60,6 @@ LOGFILE=${LOGFILEDIR}/${RUN_MARK}.$1.log
 # Set temporary directory.
 TMPFILEDIR=${HOME}/tmpfiles
 rm -rf ${TMPFILEDIR} && mkdir -p ${TMPFILEDIR}
-    
 
 # Run the command on all dsh machines.
 echo "DSH command: ./build/graphserver --graphfile ${DATASET}/parts_${NDS}/graph.bsnap --featuresfile ${DATASET}/features.bsnap --labelsfile ${DATASET}/labels.bsnap --dshmachinesfile ${DSHMACHINESFILE} --layerfile ${LAYERFILE} --pubipfile ${MYPUBIPFILE} --pripfile ${MYPRIPFILE} --dataserverport ${GPORT} --coordserverip ${CSERVERIP} --coordserverport ${CPORT} --undirected ${UNDIRECTED} --tmpdir=${TMPFILEDIR} --cthreads ${COMP_THREADS} --dthreads ${COMM_THREADS} --dataport ${DATAPORT} --ctrlport ${CTRLPORT} --nodeport ${NODEPORT} --numlambdasforward ${NUM_LAMBDAS_FORWARD} --numlambdasbackward ${NUM_LAMBDAS_BACKWARD} --GPU 1"

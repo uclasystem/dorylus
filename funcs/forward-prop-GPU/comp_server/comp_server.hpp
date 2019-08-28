@@ -26,12 +26,6 @@ public:
         dataSocket(dctx, ZMQ_REP),
         weightSocket(wctx, ZMQ_DEALER){
             loadWeightServers(weightServerAddrs,wServersFile);
-            // printf("%zu\n",weightServerAddrs.size() );
-            // printf("LOADING WSERVER FILE\n");
-            // for(int i=0;i<weightServerAddrs.size();++i){
-            //     printf("%s\n",weightServerAddrs[i] );
-            // }
-
     }
 
     //read weight file 
@@ -115,16 +109,18 @@ void ComputingServer::run(){
             
             Matrix feats=requestFeatsMatrix(rows,cols);
             wThread.join();
-            printf("done recv\n");
+            printf("Finish receiving all data\n");
+            printf("Start Feat .* Weight\n");
             Matrix z = cu.dot(feats, weights);
-            printf("dot\n");
+            printf("Start Act(Z)\n");
             FeatType* act_buffer=new FeatType[z.getRows()*z.getCols()];
             memcpy(act_buffer,z.getData(),z.getDataSize());
             Matrix act_z(z.getRows(),z.getCols(),act_buffer);
             cu.activate(act_z);
+            printf("Sending Z and Act Z\n");
             sendMatrices(z,act_z);
-            // delete[] (feats.getData());
-            // delete[] (z.getData());
+            delete[] (feats.getData());
+            delete[] (z.getData());
         }
     } catch (std::exception& ex) {
         std::cerr << "[ERROR] " << ex.what() << std::endl;
