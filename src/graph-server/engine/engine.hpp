@@ -108,7 +108,9 @@ private:
     static unsigned numLambdasForward;
     static unsigned numLambdasBackward;
     static LambdaComm *lambdaComm;
+    static unsigned gpuEnabled;
     static GPUComm *gpuComm;
+    
 
     static unsigned nodeId;
     static unsigned numNodes;

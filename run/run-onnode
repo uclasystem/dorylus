@@ -100,7 +100,8 @@ case $1 in
             --ctrlport ${CTRLPORT} \
             --nodeport ${NODEPORT} \
             --numlambdasforward ${NUM_LAMBDAS_FORWARD} \
-            --numlambdasbackward ${NUM_LAMBDAS_BACKWARD}" 1> /dev/null 2>> ${LOGFILE}
+            --numlambdasbackward ${NUM_LAMBDAS_BACKWARD} \
+            --GPU 0" 1> /dev/null 2>> ${LOGFILE}
         
         # Gather the output files.
         OUTFILEDIR=${HOME}/outfiles/${RUN_MARK}.$2

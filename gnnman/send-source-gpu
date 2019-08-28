@@ -1,0 +1,15 @@
+#!/bin/bash
+dshfile=~/dshmachines
+if [ ! -f $dshfile ] ; then
+	echo "You need to write $dshfile file manually"
+	exit 1
+fi
+pwd
+machineList=$( < ~/dshmachines )
+for machine in $machineList
+do 
+	scp  -r ./src $machine:~/gnn-lambda/
+	scp  -r ./funcs/forward-prop-GPU $machine:~/gnn-lambda/funcs/
+	scp  ./run/run-gpu-graph-server $machine:~/gnn-lambda/run/run-gpu-graph-server
+
+done

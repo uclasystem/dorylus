@@ -35,6 +35,7 @@ LambdaComm *Engine::lambdaComm = NULL;
 unsigned Engine::numLambdasForward = 0;
 unsigned Engine::numLambdasBackward = 0;
 GPUComm *Engine::gpuComm = NULL;
+unsigned Engine::gpuEnabled = 0;
 unsigned Engine::currId = 0;
 Lock Engine::lockCurrId;
 Lock Engine::lockRecvWaiters;
@@ -74,7 +75,7 @@ Engine::init(int argc, char *argv[]) {
     timeInit = -getTimer();
 
     parseArgs(argc, argv);
-    
+
     // Initialize the node manager and communication manager.
     NodeManager::init(dshMachinesFile, myPrIpFile, myPubIpFile);    // NodeManger should go first. 
     
@@ -140,12 +141,14 @@ Engine::init(int argc, char *argv[]) {
     // Compact the graph.
     graph.compactGraph();
 
-    // Create the lambda communication manager.
-    // lambdaComm = new LambdaComm(NodeManager::getNode(nodeId).pubip, dataserverPort, coordserverIp, coordserverPort, nodeId,
-                                // numLambdasForward, numLambdasBackward);
-
-    // Create the GPU communication manager
-    gpuComm = new GPUComm(nodeId, dataserverPort);
+    if(gpuEnabled==1){
+        // Create the GPU communication manager
+        gpuComm = new GPUComm(nodeId, dataserverPort);
+    }else{
+        // Create the lambda communication manager.
+        lambdaComm = new LambdaComm(NodeManager::getNode(nodeId).pubip, dataserverPort, coordserverIp, coordserverPort, nodeId,
+                                numLambdasForward, numLambdasBackward);
+    }
 
     timeInit += getTimer();
     printLog(nodeId, "Engine initialization complete.");
@@ -312,10 +315,14 @@ Engine::destroy() {
     condRecvWaitersEmpty.destroy();
     lockHalt.destroy();
 
-    // lambdaComm->sendShutdownMessage();
-    // delete lambdaComm;
-    gpuComm->sendShutdownMessage();
-    delete gpuComm;
+    if(gpuEnabled==1){
+        gpuComm->sendShutdownMessage();
+        delete gpuComm;    
+    }else{
+        lambdaComm->sendShutdownMessage();
+        delete lambdaComm;    
+    }
+    
 
     for (size_t i = 0; i <= numLayers; ++i) {
         delete[] localVerticesZData[i];
@@ -384,17 +391,22 @@ Engine::forwardWorker(unsigned tid, void *args) {
                 timeWorker = getTimer();
                 // printLog(nodeId, "Iteration %u finishes. Invoking lambda...", iteration);
 
-                // Start a new lambda communication context.
-                // lambdaComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
-                                              // graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1));
-                printLog(nodeId, "Iteration %u finishes. Invoking GPU...", iteration);
-                gpuComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
-                                              graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1));
-
+                if(gpuEnabled==1){
+                    printLog(nodeId, "Iteration %u finishes. Invoking GPU...", iteration);
+                    gpuComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
+                                                graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1));
+                }else{
+                    // Start a new lambda communication context.
+                    lambdaComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
+                                                    graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1));    
+                }
+                
                 // Trigger a request towards the coordicate server. Wait until the request completes.
                 std::thread treq([&] {
-                    // lambdaComm->requestLambdasForward(iteration);
-                    gpuComm->requestForward(iteration);
+                    if(gpuEnabled==1)
+                        gpuComm->requestForward(iteration);
+                    else
+                        lambdaComm->requestLambdasForward(iteration);
                 });
                 treq.join();
 
@@ -718,6 +730,8 @@ Engine::parseArgs(int argc, char *argv[]) {
 
         ("numlambdasforward", boost::program_options::value<unsigned>()->default_value(unsigned(1), "5"), "Number of lambdas to request at forward")
         ("numlambdasbackward", boost::program_options::value<unsigned>()->default_value(unsigned(1), "20"), "Number of lambdas to request at backward")
+
+        ("GPU", boost::program_options::value<unsigned>(), "Number of lambdas to request at backward")
         ;
 
     boost::program_options::variables_map vm;
@@ -788,6 +802,9 @@ Engine::parseArgs(int argc, char *argv[]) {
 
     assert(vm.count("numlambdasbackward"));
     numLambdasBackward = vm["numlambdasbackward"].as<unsigned>();
+
+    assert(vm.count("GPU"));
+    gpuEnabled = vm["GPU"].as<unsigned>();
 
     printLog(404, "Parsed configuration: dThreads = %u, cThreads = %u, graphFile = %s, featuresFile = %s, dshMachinesFile = %s, "
                   "myPrIpFile = %s, myPubIpFile = %s, undirected = %s, data port set -> %u, control port set -> %u, node port set -> %u",
