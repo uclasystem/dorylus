@@ -752,7 +752,7 @@ Engine::parseArgs(int argc, char *argv[]) {
         ("numlambdasforward", boost::program_options::value<unsigned>()->default_value(unsigned(1), "5"), "Number of lambdas to request at forward")
         ("numlambdasbackward", boost::program_options::value<unsigned>()->default_value(unsigned(1), "20"), "Number of lambdas to request at backward")
 
-        ("GPU", boost::program_options::value<unsigned>(), "Number of lambdas to request at backward")
+        ("GPU", boost::program_options::value<unsigned>(), "Enable GPU or not")
         ;
 
     boost::program_options::variables_map vm;
