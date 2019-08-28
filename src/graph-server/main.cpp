@@ -20,8 +20,8 @@ main(int argc, char *argv[]) {
     Engine::runForward();
 
     // Do a backward-prop phase.
-    // if(Engine::gpuEnabled==0)
-        // Engine::runBackward();
+    if(Engine::isGPUEnabled()==0)
+        Engine::runBackward();
 
     // Procude the output files.
     Engine::output();

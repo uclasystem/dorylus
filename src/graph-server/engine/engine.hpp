@@ -62,6 +62,7 @@ public:
     static void output();
     static void destroy();
     static bool master();
+    static bool isGPUEnabled();
 
 private:
 

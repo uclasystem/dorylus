@@ -166,6 +166,16 @@ Engine::master() {
     return NodeManager::amIMaster();
 }
 
+/**
+ *
+ * Whether I am the master mode or not.
+ * 
+ */
+bool
+Engine::isGPUEnabled() {
+    return Engine::gpuEnabled;
+}
+
 
 /**
  *

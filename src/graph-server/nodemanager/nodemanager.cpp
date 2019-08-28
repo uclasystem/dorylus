@@ -38,9 +38,7 @@ NodeManager::init(std::string dshMachinesFile, std::string myPrIpFile, std::stri
     nodePublisher->setsockopt(ZMQ_SNDHWM, 0);       // Set no limit on number of message queueing.
     nodePublisher->setsockopt(ZMQ_RCVHWM, 0);
     char hostPort[50];
-    // sprintf(hostPort, "tcp://%s:%u", me.ip.c_str(), nodePort);
-    sprintf(hostPort, "tcp://%s:%u", "*", nodePort); //GPU
-    printLog(me.id, "Binding to %s",hostPort);//GPU
+    sprintf(hostPort, "tcp://%s:%u", me.ip.c_str(), nodePort);
     nodePublisher->bind(hostPort);
 
     nodeSubscriber = new zmq::socket_t(nodeContext, ZMQ_SUB);
@@ -74,9 +72,8 @@ NodeManager::init(std::string dshMachinesFile, std::string myPrIpFile, std::stri
             zmq::message_t inMsg;
             while (nodeSubscriber->krecv(&inMsg, ZMQ_DONTWAIT)) {
                 NodeMessage nMsg = *((NodeMessage *) inMsg.data());
-                if (nMsg.messageType == WORKERUP){
+                if (nMsg.messageType == WORKERUP)
                     --remaining;
-                }
             }
         }
 
@@ -91,7 +88,6 @@ NodeManager::init(std::string dshMachinesFile, std::string myPrIpFile, std::stri
 
         // Wait for master's polling request.
         zmq::message_t inMsg;
-
         while (nodeSubscriber->recv(&inMsg)) {
             NodeMessage nMsg = *((NodeMessage *) inMsg.data());
             if (nMsg.messageType == MASTERUP)
