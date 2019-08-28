@@ -1,0 +1,5 @@
+#/bin/bash
+dPort=$( < ~/gserverport)
+wPort=$( < ~/wserverport)
+
+./forward_GPU $dPort ~/wserverip $wPort 

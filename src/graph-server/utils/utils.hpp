@@ -19,7 +19,6 @@ typedef float EdgeType;
                                 // From 0 to numGlobalVertices are normal ghost vertices update message,
                                 // From MAX_IDTYPE downto MAX_IDTYPE - numGlobalVertices are receive signals.
 
-
 extern std::map<size_t, std::string> typeToFormatSpecifier;
 
 

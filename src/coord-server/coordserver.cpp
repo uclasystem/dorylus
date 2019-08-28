@@ -280,7 +280,9 @@ CoordServer::sendShutdownMessage(zmq::socket_t& weightsocket) {
 /** Main entrance: Starts a coordserver instance and run a single listener, until termination msg received. */
 int
 main(int argc, char *argv[]) {
+
     assert(argc == 6);
+    
     char *coordserverPort = argv[1];
     char *weightserverFile = argv[2];
     char *weightserverPort = argv[3];
