@@ -1,4 +1,5 @@
 #include <chrono>
+#include <ratio>
 #include <iostream>
 #include <memory>
 #include <sstream>
@@ -14,7 +15,7 @@
 #include "../../src/utils/utils.hpp"
 
 
-#define LEARNING_RATE 0.1
+#define LEARNING_RATE (0.1)
 
 
 #define SND_MORE true
@@ -302,12 +303,12 @@ dotGDwithWTrans(Matrix& matLeft, Matrix& matRight) {
 }
 
 static Matrix
-dotActTranswithGD(Matrix& matLeft, Matrix& matRight, float alpha) {
+dotActTranswithGD(Matrix& matLeft, Matrix& matRight, float learning_rate) {
     unsigned m = matLeft.getCols(), k = matLeft.getRows(), n = matRight.getCols();
     assert(k == matRight.getRows());
 
     FeatType *res = new FeatType[m * n];
-    cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, m, n, k, alpha,
+    cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, m, n, k, learning_rate,
                 matLeft.getData(), m, matRight.getData(), n, 0.0, res, n);
 
     return Matrix(m, n, res);
@@ -389,7 +390,7 @@ backward_prop(std::string dataserver, std::string weightserver, std::string dpor
 
     Timer getWeightsTimer;
     Timer getFeatsTimer;
-    Timer gradientTimer;
+    Timer computationTimer;
     Timer sendResTimer;
 
     try {
@@ -433,10 +434,10 @@ backward_prop(std::string dataserver, std::string weightserver, std::string dpor
             return invocation_response::failure("No chunks corresponding to request", "appliation/json");
 
         // Gradient computation.
-        gradientTimer.start();
+        computationTimer.start();
         std::cout << "< BACKWARD > Doing the gradient descent computation..." << std::endl;
         weightsUpdates = gradientComputation(graphData, weightsData);
-        gradientTimer.stop();
+        computationTimer.stop();
 
         // Send weight updates to weightserver, and finish message to dataserver.
         sendResTimer.start();
@@ -467,7 +468,7 @@ backward_prop(std::string dataserver, std::string weightserver, std::string dpor
     std::string res = std::to_string(id) + ": " +
                       std::to_string(getWeightsTimer.getTime()) + " " +     \
                       std::to_string(getFeatsTimer.getTime())  + " " +      \
-                      std::to_string(gradientTimer.getTime()) + " " +       \
+                      std::to_string(computationTimer.getTime()) + " " +    \
                       std::to_string(sendResTimer.getTime());
 
     return invocation_response::success(res, "application/json");

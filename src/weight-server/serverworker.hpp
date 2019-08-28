@@ -35,6 +35,8 @@ public:
     ServerWorker(zmq::context_t& ctx_, unsigned& counter, WeightServer& _ws,
                  std::vector<Matrix>& weights_, std::vector<Matrix>& updates_, unsigned& numLambdas_);
 
+    ~ServerWorker();
+
     // Listens on lambda threads' request for weights.
     void work();
 
@@ -50,7 +52,7 @@ private:
     zmq::socket_t workersocket;
 
     std::vector<Matrix>& weightMats;
-    std::vector<Matrix>& updates;
+    std::vector<Matrix>& updateMats;
     
     unsigned& numLambdas;
     unsigned& count;

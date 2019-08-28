@@ -59,7 +59,7 @@ case $1 in
 
         # Minor options.
         UNDIRECTED=0    # Currently are all directed graphs.
-        COMP_THREADS=3  # Default values.
+        COMP_THREADS=7  # Default values.
         COMM_THREADS=1
 
         # Increment the running mark.
@@ -80,8 +80,7 @@ case $1 in
         dsh -f ${DSHMACHINESFILE} -c "rm -rf ${TMPFILEDIR} && mkdir -p ${TMPFILEDIR}"
 
         # Run the command on all dsh machines.
-        echo "DSH command: ./build/graphserver --graphfile ${DATASET}/parts_${NDS}/graph.bsnap --featuresfile ${DATASET}/features.bsnap --labelsfile ${DATASET}/labels.bsnap --dshmachinesfile ${DSHMACHINESFILE} --layerfile ${LAYERFILE} --pubipfile ${MYPUBIPFILE} --pripfile ${MYPRIPFILE} --dataserverport ${GPORT} --coordserverip ${CSERVERIP} --coordserverport ${CPORT} --undirected ${UNDIRECTED} --tmpdir=${TMPFILEDIR} --cthreads ${COMP_THREADS} --dthreads ${COMM_THREADS} --dataport ${DATAPORT} --ctrlport ${CTRLPORT} --nodeport ${NODEPORT} --numlambdasforward ${NUM_LAMBDAS_FORWARD} --numlambdasbackward ${NUM_LAMBDAS_BACKWARD}"
-        dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ./build/graphserver \
+        DSH_COMMAND="./build/graphserver \
             --graphfile ${DATASET}/parts_${NDS}/graph.bsnap \
             --featuresfile ${DATASET}/features.bsnap \
             --labelsfile ${DATASET}/labels.bsnap \
@@ -100,8 +99,10 @@ case $1 in
             --ctrlport ${CTRLPORT} \
             --nodeport ${NODEPORT} \
             --numlambdasforward ${NUM_LAMBDAS_FORWARD} \
-            --numlambdasbackward ${NUM_LAMBDAS_BACKWARD} \
-            --GPU 0" 1> /dev/null 2>> ${LOGFILE}
+            --numlambdasbackward ${NUM_LAMBDAS_BACKWARD}\
+            --GPU 0"
+        dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ${DSH_COMMAND}" 1> /dev/null 2>> ${LOGFILE}
+
         
         # Gather the output files.
         OUTFILEDIR=${HOME}/outfiles/${RUN_MARK}.$2
@@ -134,9 +135,42 @@ case $1 in
         echo -e "\e[33;1mKilling existing 'weightserver' processes...\e[0m"
         dsh -f ${DSHMACHINESFILE} -c "killall -u $( whoami ) weightserver"
 
-        # Run weightserver on all dsh nodes.
-        echo -e "\e[33;1mRunning WEIGHT servers on all machines in 'weight' context...\e[0m"
-        dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ./build/weightserver ${DSHMACHINESFILE} ${MYPRIPFILE} ${DATAPORT} ${WPORT} ../layerconfig"
+        # Count the machines.
+        NDS=$( wc -l ${DSHMACHINESFILE} | cut -d" " -f1 )
+        for i in $( seq 1 ${NDS} ); do
+          DSHNODES[$i]=$( head -n $i ${DSHMACHINESFILE} | tail -n 1 )
+        done
+
+        # Increment the running mark.
+        if [[ ! -f run/run-mark ]]; then
+            touch run/run-mark
+        fi
+        RUN_MARK=$(( $( cat run/run-mark ) + 1 ))
+        echo ${RUN_MARK} > run/run-mark
+        echo -e "\e[33;1mRunning WEIGHT servers with: [ MARK # ${RUN_MARK} ]...\e[0m"
+
+        # Set temporary directory.
+        TMPFILEDIR=${HOME}/tmpfiles
+        dsh -f ${DSHMACHINESFILE} -c "rm -rf ${TMPFILEDIR} && mkdir -p ${TMPFILEDIR}"
+
+        # Run weightserver on all dsh machines.
+        DSH_COMMAND="./build/weightserver \
+            ${DSHMACHINESFILE} \
+            ${MYPRIPFILE} \
+            ${DATAPORT} \
+            ${WPORT} \
+            ../layerconfig \
+            ${TMPFILEDIR}"
+        dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ${DSH_COMMAND}"
+
+        # Gather the output files.
+        OUTFILEDIR=${HOME}/outfiles/${RUN_MARK}.weights
+        mkdir -p ${OUTFILEDIR}
+        for i in $( seq 1 ${NDS} ); do
+            scp -q ${DSHNODES[$i]}:${TMPFILEDIR}/output_* ${OUTFILEDIR}/
+        done
+
+        echo "Check the output results in \"~/outfiles/\" folder."
         ;;
 
     #
@@ -154,9 +188,28 @@ case $1 in
         echo -e "\e[33;1mKilling existing 'coordserver' processes...\e[0m"
         killall -u $( whoami ) coordserver
 
+        # Increment the running mark.
+        if [[ ! -f run/run-mark ]]; then
+            touch run/run-mark
+        fi
+        RUN_MARK=$(( $( cat run/run-mark ) + 1 ))
+        echo ${RUN_MARK} > run/run-mark
+        echo -e "\e[33;1mRunning COORD server with: [ MARK # ${RUN_MARK} ]...\e[0m"
+
+        # Set output file directory.
+        OUTFILEDIR=${HOME}/outfiles/${RUN_MARK}.coord
+        mkdir -p ${OUTFILEDIR}
+
         # Run coordserver.
-        echo -e "\e[33;1mRunning central COORD server..\e[0m"
-        ./build/coordserver ${CPORT} ../wserverip ${WPORT} ${GPORT}
+        RUN_COMMAND="./build/coordserver \
+            ${CPORT} \
+            ../wserverip \
+            ${WPORT} \
+            ${GPORT} \
+            ${OUTFILEDIR}"
+        ${RUN_COMMAND}
+
+        echo "Check the output results in \"~/outfiles/\" folder."
         ;;
 
     *)

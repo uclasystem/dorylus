@@ -7,15 +7,21 @@ extern std::condition_variable cv_forward, cv_backward;
 
 /**
  *
- * LambdaWorker constructor.
+ * LambdaWorker constructor & destructor.
  * 
  */
-LambdaWorker::LambdaWorker(unsigned nodeId_, zmq::context_t& ctx_, unsigned numLambdasForward_, unsigned numLambdasBackward_,
-             unsigned& countForward_, unsigned& countBackward_)
+LambdaWorker::LambdaWorker(unsigned nodeId_, zmq::context_t& ctx_,
+                           unsigned numLambdasForward_, unsigned numLambdasBackward_,
+                           unsigned& countForward_, unsigned& countBackward_)
     : nodeId(nodeId_), ctx(ctx_), workersocket(ctx, ZMQ_DEALER),
       numLambdasForward(numLambdasForward_), numLambdasBackward(numLambdasBackward_),
       countForward(countForward_), countBackward(countBackward_) {
+    workersocket.setsockopt(ZMQ_LINGER, 0);
     workersocket.connect("inproc://backend");
+}
+
+LambdaWorker::~LambdaWorker() {
+    workersocket.close();
 }
 
 

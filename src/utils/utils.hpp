@@ -103,8 +103,8 @@ struct Timer {
     void start() { begin = std::chrono::high_resolution_clock::now(); }
     void stop() { end = std::chrono::high_resolution_clock::now(); }
 
-    double getTime() {
-        std::chrono::duration<double> time_span = std::chrono::duration_cast<std::chrono::duration<double>>(end - begin);
+    double getTime() {      // Get floating-point milliseconds.
+        std::chrono::duration<double, std::milli> time_span = end - begin;
         return time_span.count();
     }
 };

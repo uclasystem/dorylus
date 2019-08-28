@@ -214,9 +214,6 @@ CommManager::destroy() {
     delete[] controlSubscribers;
     delete[] lockControlPublishers;
     delete[] lockControlSubscribers;
-
-    dataContext.close();
-    controlContext.close();
 }
 
 
