@@ -422,7 +422,7 @@ Engine::forwardWorker(unsigned tid, void *args) {
                                                     graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1));    
                 }
                 
-                // Trigger a request towards the coordicate server. Wait until the request completes.
+                // Trigger a request towards the coordinate server. Wait until the request completes.
                 std::thread treq([&] {
                     if(gpuEnabled==1)
                         gpuComm->requestForward(iteration);
