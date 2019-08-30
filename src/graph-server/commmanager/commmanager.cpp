@@ -23,7 +23,7 @@ unsigned CommManager::controlPortStart;
 /**
  *
  * Initialize the communication manager. Should be invoked after the node managers have been settled.
- * 
+ *
  */
 void
 CommManager::init() {
@@ -43,20 +43,23 @@ CommManager::init() {
     dataSubscriber = new zmq::socket_t(dataContext, ZMQ_SUB);
     dataSubscriber->setsockopt(ZMQ_SNDHWM, 0);
     dataSubscriber->setsockopt(ZMQ_RCVHWM, 0);
+    char filter[9]; // filter for data subscriber
+    sprintf(filter, "%8X", nodeId);
+    dataSubscriber->setsockopt(ZMQ_SUBSCRIBE, filter, 8);
+    dataSubscriber->setsockopt(ZMQ_SUBSCRIBE, "FFFFFFFF", 8);
     for (unsigned i = 0; i < numNodes; ++i) {
         Node node = NodeManager::getNode(i);
         char hostPort[50];
         sprintf(hostPort, "tcp://%s:%u", node.ip.c_str(), dataPort);
         dataSubscriber->connect(hostPort);
     }
-    dataSubscriber->setsockopt(ZMQ_SUBSCRIBE, NULL, 0);
 
     lockDataPublisher.init();
     lockDataSubscriber.init();
 
     // Control publishers & subscribers.
     controlPublishers = new zmq::socket_t*[numNodes];
-    controlSubscribers = new zmq::socket_t*[numNodes];    
+    controlSubscribers = new zmq::socket_t*[numNodes];
     lockControlPublishers = new Lock[numNodes];
     lockControlSubscribers = new Lock[numNodes];
 
@@ -68,7 +71,7 @@ CommManager::init() {
         controlPublishers[i]->setsockopt(ZMQ_SNDHWM, 0);
         controlPublishers[i]->setsockopt(ZMQ_RCVHWM, 0);
         char hostPort[50];
-        int prt = controlPortStart + i; 
+        int prt = controlPortStart + i;
         sprintf(hostPort, "tcp://%s:%d", me.ip.c_str(), prt);
         controlPublishers[i]->bind(hostPort);
 
@@ -79,12 +82,12 @@ CommManager::init() {
         sprintf(hostPort, "tcp://%s:%d", node.ip.c_str(), controlPortStart + me.id);
         controlSubscribers[i]->connect(hostPort);
         char tpc = CONTROL_MESSAGE_TOPIC;
-        controlSubscribers[i]->setsockopt(ZMQ_SUBSCRIBE, &tpc, 1); 
-        
+        controlSubscribers[i]->setsockopt(ZMQ_SUBSCRIBE, &tpc, 1);
+
         lockControlPublishers[i].init();
         lockControlSubscribers[i].init();
     }
-    
+
     // Subscribe mutually with everyone.
     // Send IAMUP, respond IAMUP, send ISEEYOU, and respond ISEEYOU.
     bool subscribed[numNodes];
@@ -92,7 +95,7 @@ CommManager::init() {
         subscribed[i] = false;
     subscribed[nodeId] = true;
     unsigned remaining = numNodes - 1;
-    
+
     double lastSents[numNodes];
     for (unsigned i = 0; i < numNodes; ++i)
         lastSents[i] = -getTimer() - 500.0;         // Give 0.5 sec pause before doing polls.
@@ -137,14 +140,14 @@ CommManager::init() {
                         if (cMsg.messageType == ISEEYOUUP) {
                             zmq::message_t outAckMsg(sizeof(ControlMessage));
                             ControlMessage cAckMsg(ISEEYOUUP);
-                            *((ControlMessage *) outAckMsg.data()) = cAckMsg;  
+                            *((ControlMessage *) outAckMsg.data()) = cAckMsg;
                             controlPublishers[i]->ksend(outAckMsg);
 
                             subscribed[i] = true;
                             --remaining;
                             break;
                         }
-                    } else 
+                    } else
                         break;
                 }
 
@@ -178,7 +181,7 @@ CommManager::init() {
 /**
  *
  * Destroy the communication manager.
- * 
+ *
  */
 void
 CommManager::destroy() {
@@ -205,7 +208,7 @@ CommManager::destroy() {
         controlSubscribers[i]->close();
         delete controlPublishers[i];
         delete controlSubscribers[i];
-    
+
         lockControlPublishers[i].destroy();
         lockControlSubscribers[i].destroy();
     }
@@ -216,22 +219,33 @@ CommManager::destroy() {
     delete[] lockControlSubscribers;
 }
 
-
+void
+CommManager::rawMsgPushOut(zmq::message_t &msg) {
+    lockDataPublisher.lock();
+    dataPublisher->ksend(msg, ZMQ_DONTWAIT);
+    lockDataPublisher.unlock();
+}
 /**
  *
  * Push a value on a certain topic to all the nodes (including myself).
- * 
+ *
  */
 void
-CommManager::dataPushOut(unsigned topic, void *value, unsigned valSize) {
-    zmq::message_t outMsg(sizeof(unsigned) + valSize);
-    *((unsigned *) outMsg.data()) = topic;
-    
+CommManager::dataPushOut(unsigned receiver, unsigned sender, unsigned topic, void *value, unsigned valSize) {
+    zmq::message_t outMsg(sizeof(char) * 8 + sizeof(unsigned) + sizeof(unsigned) + valSize);
+    char *msgPtr = (char *)outMsg.data();
+    sprintf(msgPtr, "%8X", receiver);
+    msgPtr += 8;
+    *((unsigned *)msgPtr) = sender;
+    msgPtr += sizeof(unsigned);
+    *((unsigned *)msgPtr) = topic;
+    msgPtr += sizeof(unsigned);
+
     if (valSize > 0)
-        memcpy((void *)(((char *) outMsg.data()) + sizeof(unsigned)), value, valSize);
+        memcpy((void *)msgPtr, value, valSize);
 
     lockDataPublisher.lock();
-    dataPublisher->ksend(outMsg, ZMQ_DONTWAIT); 
+    dataPublisher->ksend(outMsg, ZMQ_DONTWAIT);
     lockDataPublisher.unlock();
 }
 
@@ -239,10 +253,10 @@ CommManager::dataPushOut(unsigned topic, void *value, unsigned valSize) {
 /**
  *
  * Pull a value on a certain topic in.
- * 
+ *
  */
 bool
-CommManager::dataPullIn(unsigned *topic, void *value, unsigned maxValSize) {
+CommManager::dataPullIn(unsigned *sender, unsigned *topic, void *value, unsigned maxValSize) {
     zmq::message_t inMsg;
 
     lockDataSubscriber.lock();
@@ -252,9 +266,15 @@ CommManager::dataPullIn(unsigned *topic, void *value, unsigned maxValSize) {
     if (!ret)
         return false;
 
-    assert(inMsg.size() - sizeof(unsigned) <= maxValSize);
-    memcpy(topic, inMsg.data(), sizeof(unsigned));
-    memcpy(value, ((char *) inMsg.data() + sizeof(unsigned)), inMsg.size() - sizeof(unsigned));
+    unsigned valSize = inMsg.size() - sizeof(char) * 8 - sizeof(unsigned) - sizeof(unsigned);
+    assert(valSize <= maxValSize);
+    char *msgPtr = (char *)inMsg.data();
+    msgPtr += 8;
+    memcpy(sender, (unsigned *)msgPtr, sizeof(unsigned));
+    msgPtr += sizeof(unsigned);
+    memcpy(topic, msgPtr, sizeof(unsigned));
+    msgPtr += sizeof(unsigned);
+    memcpy(value, msgPtr, valSize);
 
     return true;
 }
@@ -263,12 +283,12 @@ CommManager::dataPullIn(unsigned *topic, void *value, unsigned maxValSize) {
 /**
  *
  * Push a value to a specific node (cannot be myself).
- * 
+ *
  */
 void
 CommManager::controlPushOut(unsigned to, void *value, unsigned valSize) {
     assert(to >= 0 && to < numNodes);
-    assert(to != nodeId); 
+    assert(to != nodeId);
     zmq::message_t outMsg(sizeof(ControlMessage) + valSize);
     *((ControlMessage *) outMsg.data()) = ControlMessage(APPMSG);
 
@@ -284,7 +304,7 @@ CommManager::controlPushOut(unsigned to, void *value, unsigned valSize) {
 /**
  *
  * Pull a value in from a specific node (cannot be myself).
- * 
+ *
  */
 bool
 CommManager::controlPullIn(unsigned from, void *value, unsigned maxValSize) {
@@ -304,7 +324,7 @@ CommManager::controlPullIn(unsigned from, void *value, unsigned maxValSize) {
 
     assert(inMsg.size() - sizeof(ControlMessage) <= maxValSize);
     memcpy(value, ((char *) inMsg.data() + sizeof(ControlMessage)), inMsg.size() - sizeof(ControlMessage));
-    
+
     return true;
 }
 
@@ -317,16 +337,18 @@ CommManager::controlPullIn(unsigned from, void *value, unsigned maxValSize) {
 /**
  *
  * Flush the data communication pipe between myself and all living nodes.
- * 
+ *
  */
 void
 CommManager::flushData() {
     lockDataPublisher.lock();
     lockDataSubscriber.lock();
 
-    zmq::message_t outMsg(sizeof(unsigned));
-    *((unsigned*) outMsg.data()) = NULL_CHAR;
-   
+    zmq::message_t outMsg(sizeof(char) * 8 + sizeof(unsigned));
+    char *msgPtr = (char *)(outMsg.data());
+    sprintf(msgPtr, "FFFFFFFF");
+    msgPtr += 8;
+    *(unsigned *)msgPtr = NULL_CHAR;
     dataPublisher->ksend(outMsg);
 
     unsigned rem = numNodes;
@@ -334,7 +356,9 @@ CommManager::flushData() {
     while (rem > 0) {
         zmq::message_t inMsg;
         dataSubscriber->recv(&inMsg);
-        unsigned idx = *((unsigned *) inMsg.data());
+        char *msgPtr = (char *)inMsg.data();
+        msgPtr += 8;
+        unsigned idx = *((unsigned *)msgPtr);
         if (idx == NULL_CHAR)
             --rem;
     }
@@ -347,7 +371,7 @@ CommManager::flushData() {
 /**
  *
  * Flush the control communication pipe between myself and all living nodes.
- * 
+ *
  */
 void CommManager::flushControl() {
     for (unsigned i = 0; i < numNodes; ++i) {

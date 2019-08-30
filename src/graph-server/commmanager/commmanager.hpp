@@ -29,7 +29,7 @@ typedef struct controlMessage {
 /**
  *
  * Class of the communication manager. Responsible for communications between nodes.
- * 
+ *
  */
 class CommManager {
 
@@ -38,9 +38,10 @@ public:
     static void init();
     static void destroy();
 
-    static void dataPushOut(unsigned topic, void* value, unsigned valSize);
-    static bool dataPullIn(unsigned *topic, void *value, unsigned maxValSize);
-    static void controlPushOut(unsigned to, void* value, unsigned valSize); 
+    static void rawMsgPushOut(zmq::message_t &msg);
+    static void dataPushOut(unsigned receiver, unsigned sender, unsigned topic, void* value, unsigned valSize);
+    static bool dataPullIn(unsigned *sender, unsigned *topic, void *value, unsigned maxValSize);
+    static void controlPushOut(unsigned to, void* value, unsigned valSize);
     static bool controlPullIn(unsigned from, void *value, unsigned maxValSize);
 
     static void setDataPort(unsigned dPort) { dataPort = dPort; }

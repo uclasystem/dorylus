@@ -20,7 +20,10 @@
 #include "../utils/utils.hpp"
 
 
-#define MAX_MSG_SIZE 8192   // Max size (bytes) for a message received by the data communicator.
+#define MAX_MSG_SIZE (256 * 1024)   // Max size (bytes) for a message received by the data communicator.
+#define NODE_ID_DIGITS 8 // Digits num of node id.
+#define NODE_ID_HEADER "%8X" // Header for node id. For communication.
+#define DATA_HEADER_SIZE (NODE_ID_DIGITS + sizeof(unsigned) + sizeof(unsigned))
 
 
 /** For files cli options. */
@@ -49,7 +52,7 @@ struct LabelsHeaderType {
 /**
  *
  * Class of a GNN-LAMBDA engine executing on a node.
- * 
+ *
  */
 class Engine {
 
@@ -96,6 +99,8 @@ private:
     static FeatType **localVerticesZData;       // Global contiguous array for all vertices' data (row-wise order).
     static FeatType **localVerticesActivationData;
     static FeatType **ghostVerticesActivationData;
+    static unsigned *ghostVCnts;
+    static unsigned **batchMsgBuf;
 
     static FeatType *localVerticesDataBuf;      // A smaller buffer storing current iter's data after aggregation.
 
@@ -104,8 +109,9 @@ private:
     static unsigned currId;
     static Lock lockCurrId;
 
-    static Lock lockRecvWaiters;
-    static Cond condRecvWaitersEmpty;
+    static int recvCnt;
+    static Lock lockRecvCnt;
+    static Cond condRecvCnt;
 
     static Lock lockHalt;
 
@@ -133,7 +139,6 @@ private:
     static LambdaComm *lambdaComm;
     static unsigned gpuEnabled;
     static GPUComm *gpuComm;
-    
     static unsigned nodeId;
     static unsigned numNodes;
 
@@ -147,13 +152,11 @@ private:
 
     // Timing stuff.
     static double timeInit;
-    static double timeForwardProcess; 
+    static double timeForwardProcess;
     static std::vector<double> vecTimeAggregate;
     static std::vector<double> vecTimeLambda;
     static std::vector<double> vecTimeSendout;
-    static double timeBackwardProcess; 
-
-    static std::map<unsigned, unsigned> recvWaiters;
+    static double timeBackwardProcess;
 
     static Barrier barComp;
 
@@ -172,6 +175,10 @@ private:
     static FeatType *localVertexDataBufPtr(unsigned lvid, unsigned layer);
     static FeatType *localVertexLabelsPtr(unsigned lvid);
 
+
+    // Ghost update operation, send vertices to other nodes
+    static void verticesPushOut(unsigned receiver, unsigned sender, unsigned totCnt, unsigned *lvids);
+
     // Aggregation operation (along with normalization).
     static void aggregateFromNeighbors(unsigned lvid);
 
@@ -181,7 +188,7 @@ private:
     static void readFeaturesFile(std::string& featuresFileName);
     static void readLabelsFile(std::string& labelsFileName);
     static void readPartsFile(std::string& partsFileName, Graph& lGraph);
-    static void processEdge(unsigned& from, unsigned& to, Graph& lGraph, std::set<unsigned>* inTopics, std::set<unsigned>* oTopics); 
+    static void processEdge(unsigned& from, unsigned& to, Graph& lGraph, std::set<unsigned>* inTopics, std::set<unsigned>* oTopics, int **ghostVTables, unsigned *ghostVCnts);
     static void findGhostDegrees(std::string& fileName);
     static void setEdgeNormalizations();
     static void readGraphBS(std::string& fileName, std::set<unsigned>& inTopics, std::vector<unsigned>& outTopics);

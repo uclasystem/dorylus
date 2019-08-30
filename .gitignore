@@ -18,6 +18,10 @@ ec2man/profile
 *.pyc
 
 inputs/data
-inputs/small
+inputs/small.*
+inputs/featurestobinary
+inputs/graphtobinary
+inputs/labelstobinary
+inputs/partitioner
 
 wiki

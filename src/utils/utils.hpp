@@ -1,6 +1,8 @@
 #ifndef __GLOBAL_UTILS_HPP__
 #define __GLOBAL_UTILS_HPP__
 
+#include <iostream>
+#include <iomanip>
 
 /** Feature type is float, so be consistent. */
 typedef float FeatType;
@@ -16,7 +18,7 @@ enum OP { REQ_FORWARD, PUSH_FORWARD, PULL_FORWARD, REQ_BACKWARD, PUSH_BACKWARD, 
 /**
  *
  * Serialization utilities.
- * 
+ *
  */
 template<class T>
 static inline void
@@ -46,7 +48,7 @@ populateHeader(char* header, unsigned op, unsigned field1 = 0, unsigned field2 =
 /**
  *
  * Struct for a matrix.
- * 
+ *
  */
 class Matrix {
 
@@ -83,7 +85,7 @@ public:
         output << "Matrix Dims: " << shape() << "\n";
         for (unsigned i = 0; i < rows; ++i) {
             for (unsigned j = 0; j < cols; ++j) {
-                output << data[i * cols + j] << " ";
+                output << std::fixed << std::setprecision(8) << data[i * cols + j] << " ";
             }
             output << "\n";
         }
@@ -101,7 +103,7 @@ private:
 /**
  *
  * Struct for a timer.
- * 
+ *
  */
 struct Timer {
     std::chrono::high_resolution_clock::time_point begin;
