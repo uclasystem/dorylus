@@ -34,10 +34,13 @@ public:
     LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::string coordserverIp_, unsigned coordserverPort_, unsigned nodeId_,
                unsigned numLambdasForward_, unsigned numLambdasBackward_);
     ~LambdaComm();
+
+    void setTrainValidationSplit(float trainPortion);
     
     // For forward-prop.
     void newContextForward(FeatType *dataBuf, FeatType *zData, FeatType *actData,
-                           unsigned numLocalVertices, unsigned numFeats, unsigned numFeatsNext);
+                           unsigned numLocalVertices, unsigned numFeats, unsigned numFeatsNext,
+                           unsigned trainValBoundary, bool eval);
     void requestLambdasForward(unsigned layer);
 
     // For backward-prop.
@@ -52,6 +55,9 @@ private:
 
     unsigned numLambdasForward;
     unsigned numLambdasBackward;
+
+    bool evaluate;
+    std::vector<bool> trainPartitions;
 
     unsigned numListeners;
 

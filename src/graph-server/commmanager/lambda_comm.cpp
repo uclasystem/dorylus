@@ -17,7 +17,7 @@ static std::vector<std::thread *> worker_threads;
  */
 LambdaComm::LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::string coordserverIp_, unsigned coordserverPort_, unsigned nodeId_,
            unsigned numLambdasForward_, unsigned numLambdasBackward_)
-    : nodeIp(nodeIp_), dataserverPort(dataserverPort_), coordserverIp(coordserverIp_), coordserverPort(coordserverPort_), nodeId(nodeId_), 
+    : nodeIp(nodeIp_), dataserverPort(dataserverPort_), coordserverIp(coordserverIp_), coordserverPort(coordserverPort_), nodeId(nodeId_), trainPartitions(trainPartitions_),
       ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), coordsocket(ctx, ZMQ_REQ),
       numLambdasForward(numLambdasForward_), numLambdasBackward(numLambdasBackward_), numListeners(numLambdasBackward_),   // TODO: Decide numListeners.
       countForward(0), countBackward(0) {
@@ -62,6 +62,33 @@ LambdaComm::~LambdaComm() {
     ctx.close();
 }
 
+/**
+ *
+ * Set the training validation split based on the partitions
+ * float trainPortion must be between (0,1)
+ *
+ */
+void setTrainValidationSplit(float trainPortion) {
+    // forward propagation partitioning determined by the number of forward lambdas
+    // so assign partitions based on the num of forward lambdas
+    unsigned numTrainParts = std::ceil((float)numLambdasForward * trainPortion);
+
+    // NOTE: could be optimized as a bit vector but probaly not that big a deal
+    // Set the first 'numTrainParts' partitions to true
+    trainPartition = std::vector<bool>(numLambdasForward);
+    for (unsigned i = 0; i < trainPartition.size(); ++i) {
+        if (i < numTrainParts)
+            trainPartition.push_back(true);
+        else
+            trainPartition.push_back(false);
+    }
+
+    // Randomize which partitions are the training ones so it is not always
+    // the first 'numTrainParts'
+    // COMMENTED OUT FOR DEBUGGING
+//    std::random_shuffle(trainPartition.begin(), trainPartition.end());
+}
+
 
 /**
  *
@@ -71,15 +98,16 @@ LambdaComm::~LambdaComm() {
  */
 void
 LambdaComm::newContextForward(FeatType *dataBuf, FeatType *zData, FeatType *actData,
-                              unsigned numLocalVertices, unsigned numFeats, unsigned numFeatsNext) {
+                              unsigned numLocalVertices, unsigned numFeats, unsigned numFeatsNext, bool eval) {
     countForward = 0;
+    evaluate = eval;
 
     // Create a new matrix object for workers to access.
     Matrix actMatrix(numLocalVertices, numFeats, dataBuf);
 
     // Refresh workers' members, and connect their worker sockets to the backend.
     for (auto&& worker : workers)
-        worker->refreshState(actMatrix, zData, actData, numFeatsNext);
+        worker->refreshState(actMatrix, zData, actData, numFeatsNext, eval);
 
     printLog(nodeId, "Lambda FORWARD context created.");
 }

@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <iostream>
 #include <fstream>
 #include <cmath>
@@ -34,6 +35,9 @@ unsigned Engine::coordserverPort;
 LambdaComm *Engine::lambdaComm = NULL;
 unsigned Engine::numLambdasForward = 0;
 unsigned Engine::numLambdasBackward = 0;
+unsigned Engine::numEpochs = 0;
+unsigned Engine::valFreq = 0;
+std::vector<bool> Engine::trainPartition;
 GPUComm *Engine::gpuComm = NULL;
 unsigned Engine::gpuEnabled = 0;
 unsigned Engine::currId = 0;
@@ -54,6 +58,7 @@ FeatType *Engine::localVerticesDataBuf = NULL;
 FeatType *Engine::localVerticesLabels = NULL;
 unsigned Engine::iteration = 0;
 bool Engine::undirected = false;
+bool Engine::evaluate = false;
 bool Engine::halt = false;
 double Engine::timeInit = 0.0;
 double Engine::timeForwardProcess = 0.0;
@@ -155,6 +160,18 @@ Engine::init(int argc, char *argv[]) {
 }
 
 
+/**
+ *
+ * Set the training validation split based on the partitions
+ * float trainPortion must be between (0,1)
+ *
+ */
+void
+setTrainValidationSplit(float trainPortion) {
+    lambdaComm->setTrainValidationSplit(trainPortion);
+}
+
+
 
 /**
  *
@@ -176,6 +193,41 @@ Engine::isGPUEnabled() {
     return Engine::gpuEnabled;
 }
 
+void
+Engine::makeBarrier() {
+    NodeManager::barrier();
+}
+
+/**
+ *
+ * How many epochs to run for
+ *
+ */
+unsigned
+Engine::getNumEpochs() {
+    return Engine::numEpochs;
+}
+
+/**
+ *
+ * How many epochs to run before validation
+ *
+ */
+unsigned
+Engine::getValFreq() {
+    return Engine::valFreq;
+}
+
+/**
+ *
+ * Return the ID of this node
+ *
+ */
+unsigned
+Engine::getNodeId() {
+    return Engine::nodeId;
+}
+
 
 /**
  *
@@ -184,7 +236,7 @@ Engine::isGPUEnabled() {
  * 
  */
 void
-Engine::runForward() {
+Engine::runForward(bool eval) {
 
     // Make sure all nodes start running the forward-prop phase.
     NodeManager::barrier();
@@ -196,6 +248,7 @@ Engine::runForward() {
     currId = 0;
     iteration = 0;
     halt = false;
+    evalute = eval;
 
     // Create buffer for first-layer aggregation.
     localVerticesDataBuf = new FeatType[layerConfig[0] * graph.getNumLocalVertices()];
@@ -417,9 +470,11 @@ Engine::forwardWorker(unsigned tid, void *args) {
                     gpuComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
                                                 graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1));
                 }else{
+                    // Run evaluation if it is an evaluation run and this is the last layer
+                    bool runEval = evaluate && iteration == numLayers-1;
                     // Start a new lambda communication context.
                     lambdaComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
-                                                    graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1));    
+                                                    graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1), evaluate);
                 }
                 
                 // Trigger a request towards the coordinate server. Wait until the request completes.
@@ -427,7 +482,7 @@ Engine::forwardWorker(unsigned tid, void *args) {
                     if(gpuEnabled==1)
                         gpuComm->requestForward(iteration);
                     else
-                        lambdaComm->requestLambdasForward(iteration);
+                        lambdaComm->requestLambdasForward(iteration, trainValBoundary, evaluate);
                 });
                 treq.join();
 
@@ -751,6 +806,8 @@ Engine::parseArgs(int argc, char *argv[]) {
 
         ("numlambdasforward", boost::program_options::value<unsigned>()->default_value(unsigned(1), "5"), "Number of lambdas to request at forward")
         ("numlambdasbackward", boost::program_options::value<unsigned>()->default_value(unsigned(1), "20"), "Number of lambdas to request at backward")
+        ("numEpochs", boost::program_options::value<unsigned>(), "Number of epochs to run")
+        ("validationFrequency", boost::program_options::value<unsigned>(), "Number of epochs to run before validation")
 
         ("GPU", boost::program_options::value<unsigned>(), "Enable GPU or not")
         ;
@@ -823,6 +880,12 @@ Engine::parseArgs(int argc, char *argv[]) {
 
     assert(vm.count("numlambdasbackward"));
     numLambdasBackward = vm["numlambdasbackward"].as<unsigned>();
+
+    assert(vm.count("numEpochs"));
+    numEpochs = vm["numEpochs"].as<unsigned>();
+
+    assert(vm.count("validationFrequency"));
+    valFreq = vm["validationFrequency"].as<unsigned>();
 
     assert(vm.count("GPU"));
     gpuEnabled = vm["GPU"].as<unsigned>();

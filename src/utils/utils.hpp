@@ -62,6 +62,8 @@ public:
     FeatType *getData() const { return data; }
     size_t getDataSize() const { return rows * cols * sizeof(FeatType); }
 
+    FeatType get(unsigned row, unsigned col) { return data[row * cols + col]; }
+
     void setRows(unsigned _rows) { rows = _rows; }
     void setCols(unsigned _cols) { cols = _cols; }
     void setDims(unsigned _rows, unsigned _cols) { rows = _rows; cols = _cols; }

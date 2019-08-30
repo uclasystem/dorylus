@@ -32,7 +32,8 @@ public:
 
     LambdaWorker(unsigned nodeId_, zmq::context_t& ctx_,
                  unsigned numLambdasForward_, unsigned numLambdasBackward_,
-                 unsigned& countForward_, unsigned& countBackward_);
+                 unsigned& countForward_, unsigned& countBackward_,
+                 std::vector<bool>& trainPartitions_);
 
     ~LambdaWorker();
 
@@ -55,6 +56,7 @@ protected:
 
     unsigned& countForward;     // Counting up until all lambdas have returned.
     unsigned& countBackward;
+
 
 private:
 
@@ -89,6 +91,10 @@ private:
     std::vector<Matrix> zMatrices;      // Matrices to send.
     std::vector<Matrix> actMatrices;
     Matrix targetMatrix;
+
+    // Whether or not to evaluate this epoch
+    bool evaluate;
+    std::vector<bool>& trainPartitions;
 };
 
 

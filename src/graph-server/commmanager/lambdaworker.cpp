@@ -12,10 +12,12 @@ extern std::condition_variable cv_forward, cv_backward;
  */
 LambdaWorker::LambdaWorker(unsigned nodeId_, zmq::context_t& ctx_,
                            unsigned numLambdasForward_, unsigned numLambdasBackward_,
-                           unsigned& countForward_, unsigned& countBackward_)
+                           unsigned& countForward_, unsigned& countBackward_,
+                           std::vector<bool>& trainPartitions_);
     : nodeId(nodeId_), ctx(ctx_), workersocket(ctx, ZMQ_DEALER),
       numLambdasForward(numLambdasForward_), numLambdasBackward(numLambdasBackward_),
-      countForward(countForward_), countBackward(countBackward_) {
+      countForward(countForward_), countBackward(countBackward_),
+      trainPartitions(trainPartitions_) {
     workersocket.setsockopt(ZMQ_LINGER, 0);
     workersocket.connect("inproc://backend");
 }
@@ -53,6 +55,10 @@ LambdaWorker::work() {
                 case (OP::PULL_BACKWARD):
                     sendBackpropChunks(identity, partId);
                     break;
+                case (OP::PULL_EVAL):
+                    break;
+                case (OP::PUSH_EVAL);
+                    break;
                 case (OP::PUSH_BACKWARD):
                     recvBackpropFinishMsg(identity);
                     break;
@@ -70,11 +76,12 @@ LambdaWorker::work() {
  * 
  */
 void
-LambdaWorker::refreshState(Matrix actMatrix_, FeatType *zData_, FeatType *actData_, unsigned numFeatsNext_) {           // For forward-prop.
+LambdaWorker::refreshState(Matrix actMatrix_, FeatType *zData_, FeatType *actData_, unsigned numFeatsNext_, bool eval) {           // For forward-prop.
     actMatrix = actMatrix_;
     zData = zData_;
     actData = actData_;
     numFeatsNext = numFeatsNext_;
+    evaluate = eval;
 }
 
 void
@@ -114,8 +121,11 @@ LambdaWorker::sendAggregatedChunk(zmq::message_t& client_id, unsigned partId) {
         unsigned bufSize = thisPartRows * actMatrix.getCols() * sizeof(FeatType);
         FeatType *partitionStart = actMatrix.getData() + (partId * partRows * actMatrix.getCols());
 
+        // Tell the lambda whether or not it should run evaluation
+        // If the engine has set evaluate to true and this is not a training partition
+        unsigned lambdaEval = evaluate && !trainPartitions[partId];
         zmq::message_t header(HEADER_SIZE);
-        populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, actMatrix.getCols());
+        populateHeader((char *) header.data(), 0, thisPartRows, actMatrix.getCols(), lambdaEval);
         workersocket.send(header, ZMQ_SNDMORE);
 
         zmq::message_t partitionData(bufSize);
