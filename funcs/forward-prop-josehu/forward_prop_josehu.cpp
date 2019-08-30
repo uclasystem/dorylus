@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <chrono>
 #include <ratio>
 #include <iostream>
@@ -24,6 +25,8 @@ using boost::property_tree::write_json;
 using namespace aws::lambda_runtime;
 using namespace std::chrono;
 
+bool evaluate = false;
+
 
 /**
  *
@@ -31,11 +34,11 @@ using namespace std::chrono;
  * 
  */
 static Matrix
-requestFeatsMatrix(zmq::socket_t& socket, unsigned id) {
+requestMatrix(zmq::socket_t& socket, OP op, unsigned id, bool data = false) {
     
     // Send pull request.
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::PULL_FORWARD, id);
+    populateHeader((char *) header.data(), op, id);
     socket.send(header);
 
     // Listen on respond.
@@ -48,6 +51,10 @@ requestFeatsMatrix(zmq::socket_t& socket, unsigned id) {
         std::cerr << "[ ERROR ] No corresponding matrix chunk!" << std::endl;
         return Matrix();
     } else {                    // Get matrix data.
+        if (data) {
+            unsigned eval = parse<unsigned>((char*) respHeader.data(), 4);
+            evaluate = bool(eval);
+        }
         unsigned rows = parse<unsigned>((char *) respHeader.data(), 2);
         unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
         zmq::message_t matxData(rows * cols * sizeof(FeatType));
@@ -160,6 +167,52 @@ activate(Matrix& mat) {
     return Matrix(mat.getRows(), mat.getCols(), activationData);
 }
 
+static unsigned
+checkAccuracy(Matrix& preds, Matrix& labels) {
+    assert(preds.getRows() == labels.getRows());
+    assert(preds.getCols() == labels.getCols());
+
+    unsigned max = 0, maxIndex = 0, totalCorrect = 0;
+    for (unsigned r = 0; r < preds.getRows(); ++r) {
+        unsigned length = preds.getCols();
+        for (unsigned c = 0; c < l; ++c) {
+            if (preds.get(r, c) > max) {
+                max = preds.get(r, c);
+                maxIndex = c;
+            }
+        }
+
+        if (labels.get(r, maxIndex) == 1)
+            ++totalCorrect;
+    }
+
+    return totalCorrect;
+}
+
+static unsigned
+checkLoss(Matrix& preds, Matrix& labels) {
+    assert(preds.getRows() == labels.getRows());
+    assert(preds.getCols() == labels.getCols());
+
+    
+}
+
+/**
+ *
+ * Evaluate the current state of the model using accuracy and loss
+ *
+ */
+static void
+evaluateModel(Matrix& predictions, zmq::socket_t& datasocket, unsigned partId) {
+    Matrix label = requestMatrix(datasocket, OP::PULL_EVAL, partId);
+
+    // Check if the label with the highest probability after softmax is equal to the
+    // target label
+    unsigned totalCorrect = checkAccuracy(predictions, labels);
+
+    // Sum the individual losses of each vertex for this validation partition
+    unsigned lossThisPart = checkLoss(predictions, labels);
+}
 
 /**
  *
@@ -170,6 +223,7 @@ activate(Matrix& mat) {
  *      3. Conduct the matrix multiplication to get Z matrix;
  *      4. Perform activation on Z to get Activated matrix;
  *      5. Send both matrices back to data server.
+ *      6. If evaluate is true, check the model precision
  * 
  */
 static invocation_response
@@ -213,7 +267,7 @@ forward_prop_layer(std::string dataserver, std::string weightserver, std::string
         std::thread t([&] {     // Weight requests run in a separate thread.
             std::cout << "< FORWARD > Asking weightserver..." << std::endl;
             getWeightsTimer.start();
-            weights = requestWeightsMatrix(weights_socket, layer);
+            weights = requestMatrix(weights_socket, OP::PULL_FORWARD, layer);
             getWeightsTimer.stop();
             std::cout << "< FORWARD > Got data from weightserver." << std::endl;
         });
@@ -221,7 +275,7 @@ forward_prop_layer(std::string dataserver, std::string weightserver, std::string
         // Request feature activation matrix of the current layer.
         std::cout << "< FORWARD > Asking dataserver..." << std::endl;
         getFeatsTimer.start();
-        feats = requestFeatsMatrix(data_socket, id);
+        feats = requestFeatsMatrix(data_socket, OP::PULL_FORWARD, id, true);
         getFeatsTimer.stop();
         std::cout << "< FORWARD > Got data from dataserver." << std::endl;
 
@@ -249,6 +303,10 @@ forward_prop_layer(std::string dataserver, std::string weightserver, std::string
         sendMatrices(z, activations, data_socket, id);
         std::cout << "< FORWARD > Results sent." << std::endl;
         sendResTimer.stop();
+
+        if (evaluate) {
+            evaluateModel(activations);
+        }
 
         // Delete malloced spaces.
         delete[] weights.getData();
