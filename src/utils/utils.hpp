@@ -62,7 +62,10 @@ public:
     FeatType *getData() const { return data; }
     size_t getDataSize() const { return rows * cols * sizeof(FeatType); }
 
+    // Get a specific element in the matrix
     FeatType get(unsigned row, unsigned col) { return data[row * cols + col]; }
+    // Get a full row in the matrix
+    FeatType* get(unsigned row) { return data[row * cols]; }
 
     void setRows(unsigned _rows) { rows = _rows; }
     void setCols(unsigned _cols) { cols = _cols; }

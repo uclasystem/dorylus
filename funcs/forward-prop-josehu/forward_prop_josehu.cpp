@@ -51,6 +51,7 @@ requestMatrix(zmq::socket_t& socket, OP op, unsigned id, bool data = false) {
         std::cerr << "[ ERROR ] No corresponding matrix chunk!" << std::endl;
         return Matrix();
     } else {                    // Get matrix data.
+        // If talking to the graph servers, tell us if this is training or validation
         if (data) {
             unsigned eval = parse<unsigned>((char*) respHeader.data(), 4);
             evaluate = bool(eval);
@@ -167,22 +168,62 @@ activate(Matrix& mat) {
     return Matrix(mat.getRows(), mat.getCols(), activationData);
 }
 
+/**
+ *
+ * Apply softmax to all rows of the input matrix (Currently overwrites the
+ * input matrix data)
+ *
+ */
+static Matrix
+softmax(Matrix& mat) {
+    FeatType* result = new FeatType[mat.getNumElemts()];
+
+    for (unsigned r = 0; r < mat.getRows(); ++r) {
+        unsigned length = mat.getCols();
+        FeatType* vecSrc = mat.getData() + r * length;
+        FeatTYpe* vecDst = res + r * length;
+
+        FeatType denom = 0.0;
+        for (unsigned c = 0; c < length; ++c) {
+            vecDst[c] = std::exp(vecSrc[c]);
+            denom += vecDstp[c];
+        }
+
+        for (unsigned c = 0; c < length; ++c) {
+            vecDst[c] /= denom;
+        }
+    }
+
+    return Matrix(mat.getRows(), mat.getCols(), result);
+}
+
+
+unsigned getLabelIndex(FeatType* row, unsigned length) {
+    for (unsigned col = 0; col < length; ++col) {
+        if (row[col] == 1)
+            return col;
+    }
+
+    // Should never get here
+    return -1;
+}
+
 static unsigned
-checkAccuracy(Matrix& preds, Matrix& labels) {
+checkAccuracy(Matrix& predictions, Matrix& labels) {
     assert(preds.getRows() == labels.getRows());
     assert(preds.getCols() == labels.getCols());
-
-    unsigned max = 0, maxIndex = 0, totalCorrect = 0;
-    for (unsigned r = 0; r < preds.getRows(); ++r) {
-        unsigned length = preds.getCols();
-        for (unsigned c = 0; c < l; ++c) {
-            if (preds.get(r, c) > max) {
-                max = preds.get(r, c);
+    unsigned totalCorrect = 0;
+    for (unsigned r = 0; r < predictions.getRows(); ++r) {
+        unsigned max = 0, maxIndex = 0;
+        unsigned length = predictions.getCols();
+        for (unsigned c = 0; c < length; ++c) {
+            if (predictions.get(r, c) > max) {
+                max = predictions.get(r, c);
                 maxIndex = c;
             }
         }
 
-        if (labels.get(r, maxIndex) == 1)
+        if (labels.get(r, maxIndex) == 1.0)
             ++totalCorrect;
     }
 
@@ -194,7 +235,14 @@ checkLoss(Matrix& preds, Matrix& labels) {
     assert(preds.getRows() == labels.getRows());
     assert(preds.getCols() == labels.getCols());
 
-    
+    unsigned totalLoss = 0;
+    for (unsigned r = 0; r < preds.getRows(); ++r) {
+        unsigned labelIndex = getLabelIndex(pred.get(r));
+        // loss = -log(class_prediction)
+        totalLoss -= std::log(preds.get(r, labelIndex));
+    }
+
+    return totalLoss;
 }
 
 /**
@@ -203,15 +251,25 @@ checkLoss(Matrix& preds, Matrix& labels) {
  *
  */
 static void
-evaluateModel(Matrix& predictions, zmq::socket_t& datasocket, unsigned partId) {
+evaluateModel(Matrix& activations, zmq::socket_t& datasocket, unsigned partId) {
     Matrix label = requestMatrix(datasocket, OP::PULL_EVAL, partId);
+    Matrix predictions = softmax(activations);
 
     // Check if the label with the highest probability after softmax is equal to the
     // target label
     unsigned totalCorrect = checkAccuracy(predictions, labels);
 
     // Sum the individual losses of each vertex for this validation partition
-    unsigned lossThisPart = checkLoss(predictions, labels);
+    float lossThisPart = checkLoss(predictions, labels);
+
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader(header.data(), OP::PUSH_EVAL, partId, totalCorrect, lossThisPart);
+
+    datasocket.send(header);
+
+    // Wait to recv ACK
+    zmq::message_t confirm;
+    datasocket.recv(&confirm);
 }
 
 /**

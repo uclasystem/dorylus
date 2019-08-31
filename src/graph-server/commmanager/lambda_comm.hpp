@@ -64,6 +64,9 @@ private:
     unsigned countForward;
     unsigned countBackward;
 
+    unsigned numCorrectPredictions;
+    float totalLoss;
+
     zmq::context_t ctx;
     zmq::socket_t frontend;
     zmq::socket_t backend;

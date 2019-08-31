@@ -33,6 +33,7 @@ public:
     LambdaWorker(unsigned nodeId_, zmq::context_t& ctx_,
                  unsigned numLambdasForward_, unsigned numLambdasBackward_,
                  unsigned& countForward_, unsigned& countBackward_,
+                 unsigned& numCorrectPredictions_, float& totalLoss_,
                  std::vector<bool>& trainPartitions_);
 
     ~LambdaWorker();
@@ -57,6 +58,12 @@ protected:
     unsigned& countForward;     // Counting up until all lambdas have returned.
     unsigned& countBackward;
 
+    unsigned& numCorrectPredictions;
+    float& totalLoss;
+
+    // Whether or not to evaluate this epoch
+    bool evaluate;
+    std::vector<bool>& trainPartitions;
 
 private:
 
@@ -88,13 +95,19 @@ private:
     // Accepts an incoming 'finished' message.
     void recvBackpropFinishMsg(zmq::message_t& client_id);
 
+    // Partitions the label matrix given a partition id and
+    // and send that partition to the lambda thread for validation
+    void sendTargetMatrix(zmq::message_t& client_id, unsigned partId);
+
+    // Receive the summed loss and total correct for this model
+    void recvValidationResults(zmq::message_t& client_id);
+
     std::vector<Matrix> zMatrices;      // Matrices to send.
     std::vector<Matrix> actMatrices;
     Matrix targetMatrix;
 
-    // Whether or not to evaluate this epoch
-    bool evaluate;
-    std::vector<bool>& trainPartitions;
+    unsigned evalLambdas;
+    unsigned evalPartitions;
 };
 
 

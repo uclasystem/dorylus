@@ -1,7 +1,7 @@
 #include "lambdaworker.hpp"
 
 
-extern std::mutex count_mutex;
+extern std::mutex count_mutex, eval_mutex;
 extern std::condition_variable cv_forward, cv_backward;
 
 
@@ -13,13 +13,23 @@ extern std::condition_variable cv_forward, cv_backward;
 LambdaWorker::LambdaWorker(unsigned nodeId_, zmq::context_t& ctx_,
                            unsigned numLambdasForward_, unsigned numLambdasBackward_,
                            unsigned& countForward_, unsigned& countBackward_,
+                           unsigned& numCorrectPredictions_, float& totalLoss_,
                            std::vector<bool>& trainPartitions_);
     : nodeId(nodeId_), ctx(ctx_), workersocket(ctx, ZMQ_DEALER),
       numLambdasForward(numLambdasForward_), numLambdasBackward(numLambdasBackward_),
       countForward(countForward_), countBackward(countBackward_),
-      trainPartitions(trainPartitions_) {
+      numCorrectPredictions(numCorrectPredictions_), totalLoss(totalLoss_),
+      trainPartitions(trainPartitions_), evalLambdas(0); {
     workersocket.setsockopt(ZMQ_LINGER, 0);
     workersocket.connect("inproc://backend");
+
+    // Find the number of evaluation partitions
+    // May be better to do in LambdaComm... Somewhat redundant here
+    evalPartitions = 0;
+    for (bool train : trainPartitions) {
+        if (!train)
+            ++evalPartition;
+    }
 }
 
 LambdaWorker::~LambdaWorker() {
@@ -56,8 +66,10 @@ LambdaWorker::work() {
                     sendBackpropChunks(identity, partId);
                     break;
                 case (OP::PULL_EVAL):
+                    sendTargetMatrix(identity, partId);
                     break;
                 case (OP::PUSH_EVAL);
+                    recvValidationResults(identity, header);
                     break;
                 case (OP::PUSH_BACKWARD):
                     recvBackpropFinishMsg(identity);
@@ -82,6 +94,10 @@ LambdaWorker::refreshState(Matrix actMatrix_, FeatType *zData_, FeatType *actDat
     actData = actData_;
     numFeatsNext = numFeatsNext_;
     evaluate = eval;
+
+    if (evaluate) {
+        evalLambdas = evalPartitions;
+    }
 }
 
 void
@@ -236,4 +252,31 @@ LambdaWorker::recvBackpropFinishMsg(zmq::message_t& client_id) {
     ++countBackward;
     if (countBackward == numLambdasBackward)
         cv_backward.notify_one();
+}
+
+void
+LambdaWorker::sendTargetMatrix(zmq::message_t& client_id, unsigned partId) {
+    // TODO:
+    //  Calculate row offset using partition ID (logic already in backprop)
+}
+
+void
+LambdaWorker::recvValidationResults(zmq::message_t& client_d, zmq::message_t& header) {
+    // Send empty ack message
+    zmq::message_t confirm;
+    workersocket.send(confirm);
+
+    unsigned totalCorrectThisPartition = parse<unsigned>(header.data(), 2);
+    float lossThisPartition = parse<float>(header.data(), 3);
+
+    std::lock_guard<std::mutex> lk(eval_mutex);
+    numCorrectPredictions += totalCorrectThisPartition;
+    totalLoss += lossThisPartition;
+
+    --evalLambdas;
+
+    if (evalLambdas == 0) {
+        // TODO:
+        //  Divide final sum by the number of validation vertices used
+    }
 }

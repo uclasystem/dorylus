@@ -2,7 +2,7 @@
 #include <thread>
 
 
-std::mutex count_mutex;
+std::mutex count_mutex, eval_mutex;
 std::condition_variable cv_forward, cv_backward;
 
 
@@ -20,7 +20,8 @@ LambdaComm::LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::strin
     : nodeIp(nodeIp_), dataserverPort(dataserverPort_), coordserverIp(coordserverIp_), coordserverPort(coordserverPort_), nodeId(nodeId_), trainPartitions(trainPartitions_),
       ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), coordsocket(ctx, ZMQ_REQ),
       numLambdasForward(numLambdasForward_), numLambdasBackward(numLambdasBackward_), numListeners(numLambdasBackward_),   // TODO: Decide numListeners.
-      countForward(0), countBackward(0) {
+      countForward(0), countBackward(0),
+      numCorrectPredictions(0), totalLoss(0.0) {
 
     // Bind the proxy sockets.
     char dhost_port[50];
