@@ -28,8 +28,9 @@ class GPUComm {
 
 public:
 
-    GPUComm(unsigned nodeId_,unsigned dataserverPort_):
+    GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_):
         nodeId(nodeId_),
+        numNodes(numNodes_),
         dPort(dataserverPort_),
         dataSocket(ctx,ZMQ_REQ){
 
@@ -48,23 +49,38 @@ public:
                               unsigned numLocalVertices, unsigned numFeats, unsigned numFeatsNext_);
     void requestForward(unsigned layer);
 
+
+    // For backward-prop.
+    void newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType *targetBuf,
+                            unsigned numLocalVertices, std::vector<unsigned> layerConfig);
+    void requestBackward(unsigned numLayers);
+    void sendBackpropChunks();
+
     // Send a message to the coordination server to shutdown.
     void sendShutdownMessage();
 
 
 private:
+    unsigned nodeId;
+    unsigned numNodes;
+
     //ntw related objs
     zmq::context_t ctx;
     zmq::socket_t dataSocket;
     unsigned dPort;
 
+    //forward
     //data related objs
     Matrix actMatrix;   // Current layer's feats.
     FeatType *zData;    // Places to store the results from lambda.
     FeatType *actData;
     unsigned numFeatsNext;
 
-    unsigned nodeId;
+    //backward 
+    std::vector<Matrix> zMatrices;
+    std::vector<Matrix> actMatrices;
+    Matrix targetMatrix;
+
 
 };
 

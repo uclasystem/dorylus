@@ -1,9 +1,10 @@
 #ifndef __CUMATIX_HPP__
 #define __CUMATIX_HPP__
+
 #include "cublas_v2.h"
-#include "../../../src/utils/utils.hpp"
 #include <cstring>
 #include <memory>
+#include "../../../src/utils/utils.hpp"
 
 using std::endl;
 using std::cout;
@@ -52,6 +53,18 @@ void CuMatrix::deviceSetMatrix(){
     FeatType * data=this->getData();
 	stat = cublasSetMatrix (rows,cols, sizeof(float), data, rows , devPtr, rows);
     if (stat != CUBLAS_STATUS_SUCCESS) {
+        switch (stat){
+            case CUBLAS_STATUS_NOT_INITIALIZED:
+            printf("CUBLAS_STATUS_NOT_INITIALIZED\n");
+            break;
+            case CUBLAS_STATUS_INVALID_VALUE:
+            printf("CUBLAS_STATUS_INVALID_VALUE\n");
+            break;
+            case CUBLAS_STATUS_MAPPING_ERROR:
+            printf("CUBLAS_STATUS_MAPPING_ERROR\n");
+            break;
+        }
+        
         printf ("data download failed\n");
         cudaFree (devPtr);
         cublasDestroy(handle);

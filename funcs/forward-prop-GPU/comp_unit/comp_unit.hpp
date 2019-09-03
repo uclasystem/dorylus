@@ -31,8 +31,7 @@ class ComputingUnit
 public:
 	ComputingUnit();
 	CuMatrix dot(Matrix& A,Matrix& B); 	// use cublas for speed
-	void activate(Matrix& A); 	//use thrust. Since its not a Linear Algebra op
-
+	void activate(CuMatrix& A); 	//use thrust. Since its not a Linear Algebra op
 	~ComputingUnit(){cublasDestroy(handle);}
 
 private:
@@ -40,9 +39,9 @@ private:
 	cublasStatus_t stat;
 };
 
-struct act_functor
+struct tan_functor
 {
-    act_functor(){}
+    tan_functor(){}
     __host__ __device__
         float operator()(const float& x) const { return tanhf(x);}
 };
@@ -63,13 +62,11 @@ CuMatrix ComputingUnit::dot(Matrix& A, Matrix& B){
     return devC;
 }
 
-void ComputingUnit::activate(Matrix& A){
-	CuMatrix devA(A,handle);
-	thrust::device_ptr<float> devA_ptr(devA.devPtr);
-  	thrust::transform(devA_ptr, devA_ptr+A.getRows()*A.getCols(),devA_ptr, act_functor());
-  	devA.updateMatrixFromGPU();
+void ComputingUnit::activate(CuMatrix& A){
+	thrust::device_ptr<float> devA_ptr(A.devPtr);
+  	thrust::transform(devA_ptr, devA_ptr+A.getRows()*A.getCols(),devA_ptr, tan_functor());
+  	A.updateMatrixFromGPU();
 }
-
 
 
 
