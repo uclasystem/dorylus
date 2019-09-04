@@ -15,7 +15,7 @@ public:
     CuMatrix( Matrix M, cublasHandle_t & handle_); 	
 	~CuMatrix(); //will run for a long time. It's better to collect memory
 	void updateMatrixFromGPU();
-	CuMatrix dot( CuMatrix& M);
+	CuMatrix dot( CuMatrix& M,float alpha=1.0f,float beta=0.0f,bool transA=0,bool transB=0);
 
 
 // private:
@@ -87,25 +87,26 @@ CuMatrix::~CuMatrix(){
 	cudaFree (devPtr);
 }
 
-CuMatrix CuMatrix::dot( CuMatrix& M){
+CuMatrix CuMatrix::dot( CuMatrix& M, float alpha,float beta,bool transA,bool transB){
     unsigned rows=this->getRows();
     unsigned cols=this->getCols();
     FeatType * data=this->getData();
 	if(handle!=M.handle){
-		std::cout<<"Handle don't match\n";
+		std::cout<<"Handles don't match\n";
 		exit(EXIT_FAILURE);
 	}
+    cublasOperation_t transa=transA?CUBLAS_OP_T:CUBLAS_OP_N;
+    cublasOperation_t transb=transB?CUBLAS_OP_T:CUBLAS_OP_N;
+
 	Matrix mat_C=Matrix(rows,M.getCols(),new float[rows*M.getCols()*sizeof(float)]);
 	CuMatrix C(mat_C,handle);
-	float alpha=1.0f;
-    float beta=0.0f;
     //1. cublas is using col-major
     //2. when cpy into/out device memory, it will do Transpose 
     //3. C=AB and C^T= (B^T*A^T)
     //This means just swap the order of multiplicaiton
     //Guide: https://peterwittek.com/cublas-matrix-c-style.html
 	cublasSgemm(handle,
-   		CUBLAS_OP_N,CUBLAS_OP_N,
+   		transb,transa,
     	M.getCols(),rows,cols,
     	&alpha,
     	M.devPtr,M.getCols(),

@@ -23,8 +23,15 @@ include_directories(${ZMQ_INC})
 # Include Threads.
 find_package(Threads REQUIRED)
 
+# Include BLAS.
+set(OBLIB /usr/local/blas/OpenBLAS/lib/libopenblas.a)
+set(CBLIB /usr/local/blas/CBLAS/lib/cblas_LINUX.a)
+set(CBINC /usr/local/blas/CBLAS/include)
+include_directories(${CBINC})
+
+
+
 add_subdirectory(comp_unit)
 add_subdirectory(comp_server)
 cuda_add_executable(forward_GPU forward_GPU.cu)
-#add_executable(forward_GPU forward_GPU.cpp)
-target_link_libraries(forward_GPU ComputingServer ComputingUnit)
+target_link_libraries(forward_GPU ${OBLIB} ${CBLIB}  ComputingUnit ComputingServer )

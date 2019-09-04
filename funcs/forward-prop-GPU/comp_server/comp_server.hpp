@@ -179,7 +179,7 @@ void ComputingServer::processBackward(zmq::message_t &header){
 std::vector<Matrix>
 ComputingServer::gradientComputation(GraphData& graphData, std::vector<Matrix>& weightsData) {
     
-    // std::vector<Matrix> gradients;
+    std::vector<Matrix> gradients;
     std::vector<Matrix> weightsUpdates;
 
     // Compute last layer's gradients.

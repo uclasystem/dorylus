@@ -30,6 +30,14 @@ struct tanh_functor
         float operator()(const float& x) const { return tanhf(x);}
 };
 
+struct activateDerivate_functor
+{
+    activateDerivate_functor(){}
+    __host__ __device__
+        float operator()(const float& x) const { 
+            return 1 - pow(tanh(x), 2);
+        }
+};
 
 struct exp_functor
 {
@@ -68,8 +76,10 @@ public:
     // Matrix softmaxRows(Matrix &mat);
     CuMatrix softmaxRows(CuMatrix &mat);
     CuMatrix hadamardSub(CuMatrix& matLeft, CuMatrix& matRight);
-
-
+    CuMatrix hadamardMul(CuMatrix& matLeft, CuMatrix& matRight);
+    CuMatrix activateDerivate(CuMatrix& mat);
+    CuMatrix dotGDwithWTrans(CuMatrix& matLeft, CuMatrix& matRight);
+    CuMatrix dotActTranswithGD(CuMatrix& matLeft, CuMatrix& matRight, float learning_rate);
 	~ComputingUnit(){cublasDestroy(handle);}
 
 // private:
@@ -106,6 +116,21 @@ CuMatrix ComputingUnit::hadamardSub(CuMatrix& matLeft, CuMatrix& matRight) {
     return res;
 }
 
+CuMatrix ComputingUnit::hadamardMul(CuMatrix& matLeft, CuMatrix& matRight) {
+
+    CuMatrix res(Matrix(matLeft.getRows(),matLeft.getCols(), new FeatType[matLeft.getNumElemts()]),handle);
+
+    thrust::device_ptr<float> cuLeft_ptr(matLeft.devPtr);
+    thrust::device_ptr<float> cuRight_ptr(matRight.devPtr);
+    thrust::device_ptr<float> res_ptr(res.devPtr);
+
+    thrust::transform(cuLeft_ptr,cuLeft_ptr+matLeft.getNumElemts(),
+                        cuRight_ptr,
+                        res_ptr,
+                        thrust::multiplies<float>());
+
+    return res;
+}
 
 // GPU is faster than CPU when SIZE>250000, Maybe CPU is faster in most cases 
 CuMatrix ComputingUnit::softmaxRows(CuMatrix &mat){
@@ -125,6 +150,28 @@ CuMatrix ComputingUnit::softmaxRows(CuMatrix &mat){
                         row_sums.begin());
     thrust::transform(indices.begin(), indices.end(),res_ptr,res_ptr, divide_functor(thrust::raw_pointer_cast(row_sums.data())));
 
+    return res;
+}
+
+CuMatrix ComputingUnit::activateDerivate(CuMatrix& mat) {
+    CuMatrix res(Matrix(mat.getRows(),mat.getCols(),new FeatType[mat.getNumElemts()]),handle);
+    thrust::device_ptr<float> res_ptr(res.devPtr);
+    CuMatrix z(Matrix(mat.getRows(),mat.getCols(),mat.getData()),handle);
+    thrust::device_ptr<float> z_ptr(z.devPtr);
+    thrust::transform(z_ptr, z_ptr+mat.getNumElemts(),res_ptr, activateDerivate_functor());
+    return res;
+}
+
+
+CuMatrix
+ComputingUnit::dotGDwithWTrans(CuMatrix& matLeft, CuMatrix& matRight) {
+    CuMatrix res=matLeft.dot(matRight,1.0f,0.f,false,true);
+    return res;
+}
+
+CuMatrix
+ComputingUnit::dotActTranswithGD(CuMatrix& matLeft, CuMatrix& matRight, float learning_rate) {
+    CuMatrix res=matLeft.dot(matRight,learning_rate,0,true,false);
     return res;
 }
 
