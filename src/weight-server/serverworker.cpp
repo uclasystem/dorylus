@@ -74,6 +74,7 @@ ServerWorker::work() {
                     terminateServer(identity);
                     break;
                 default:
+                    std::cout << "Unknown op" << std::endl;
                     break;  /** Not an op that I care about. */
             }
         }
@@ -88,6 +89,10 @@ ServerWorker::work() {
  */
 void
 ServerWorker::sendWeightsForwardLayer(zmq::message_t& client_id, unsigned layer) {
+    if (layer >= weightMats.size()) {
+        std::cerr << "[ERROR] No such weights corresponding to layer " << layer << std::endl;
+    }
+
     workersocket.send(client_id, ZMQ_SNDMORE);    // The identity message will be implicitly consumed to route to the correct client.
 
     zmq::message_t header(HEADER_SIZE);
