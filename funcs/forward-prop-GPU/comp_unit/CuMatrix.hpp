@@ -39,7 +39,6 @@ CuMatrix::CuMatrix( Matrix M, cublasHandle_t & handle_)
 void CuMatrix::deviceMalloc(){
     unsigned rows=this->getRows();
     unsigned cols=this->getCols();
-    FeatType * data=this->getData();
     cudaStat = cudaMalloc ((void**)&devPtr, rows*cols*sizeof(float));
     if (cudaStat != cudaSuccess) {
         printf ("device memory allocation failed\n");

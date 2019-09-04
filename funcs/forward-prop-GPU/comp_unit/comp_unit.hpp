@@ -13,12 +13,14 @@
 #include <cuda_runtime.h>
 #include "cublas_v2.h"
 #include "../../../src/utils/utils.hpp"
+
 #include "CuMatrix.hpp"
 
 #include <thrust/device_vector.h>
 #include <thrust/functional.h>
 #include <thrust/transform.h>
-
+#include <thrust/iterator/discard_iterator.h>
+#include <thrust/reduce.h>
 
 
 struct tanh_functor
@@ -28,12 +30,30 @@ struct tanh_functor
         float operator()(const float& x) const { return tanhf(x);}
 };
 
+
 struct exp_functor
 {
     exp_functor(){}
     __host__ __device__
         float operator()(const float& x) const { return expf(x);}
 };
+
+struct divide_functor
+{
+    divide_functor(float *denoms_):denoms(denoms_){}
+    __host__ __device__
+        float operator()(const int& i,const float& x) const { return x/denoms[i];}
+    float* denoms;
+};
+
+struct setRow_functor
+{
+    setRow_functor(unsigned col_):col(col_){}
+    unsigned col;
+    __host__ __device__
+        int operator()(const int& x) const { return x/col;}
+};
+
 
 //TODO: modify function return value and signatures to fit the real workload
 //		This is important because it can reduce memory copy from GPU and RAM
@@ -43,18 +63,19 @@ class ComputingUnit
 {
 public:
 	ComputingUnit();
-	CuMatrix dot(Matrix& A,Matrix& B); 	// use cublas for speed
-	void activate(CuMatrix& A); 	//use thrust. Since its not a Linear Algebra op
-    CuMatrix softmaxRows(Matrix &A);
+	CuMatrix dot(Matrix& A,Matrix& B); 	
+	void activate(CuMatrix& A); 	
+    // Matrix softmaxRows(Matrix &mat);
+    CuMatrix softmaxRows(CuMatrix &mat);
+    CuMatrix hadamardSub(CuMatrix& matLeft, CuMatrix& matRight);
+
+
 	~ComputingUnit(){cublasDestroy(handle);}
 
 // private:
 	cublasHandle_t handle;
 	cublasStatus_t stat;
 };
-
-
-
 
 
 
@@ -67,23 +88,47 @@ ComputingUnit::ComputingUnit(){
     cublasSetMathMode(handle,CUBLAS_TENSOR_OP_MATH);
 }
 
-CuMatrix ComputingUnit::softmaxRows(Matrix &mat){
-    CuMatrix devMat(mat,handle);
-    CuMatrix res(Matrix(mat.getRows(),mat.getCols(),new FeatType[mat.getNumElemts()]),handle);
-    thrust::device_ptr<float> devMat_ptr(devMat.devPtr);
+
+
+CuMatrix ComputingUnit::hadamardSub(CuMatrix& matLeft, CuMatrix& matRight) {
+
+    CuMatrix res(Matrix(matLeft.getRows(),matLeft.getCols(), new FeatType[matLeft.getNumElemts()]),handle);
+
+    thrust::device_ptr<float> cuLeft_ptr(matLeft.devPtr);
+    thrust::device_ptr<float> cuRight_ptr(matRight.devPtr);
     thrust::device_ptr<float> res_ptr(res.devPtr);
-    // thrust::transform(devMat_ptr, devMat_ptr+mat.getNumElemts(),res_ptr, exp_functor());
-    float* row_sums=new FeatType[mat.getCols()];
-    unsigned row_len=mat.getRows();
-    for(int i=0;i<mat.getCols();++i){
-        row_sums[i] =thrust::reduce(devMat_ptr+i*row_len,devMat_ptr+(i+1)*row_len);
-        printf("%f\n",row_sums[i] );
-    }
-    // thrust::device_ptr<float> row_sums_ptr(row_sums.devPtr);
-    printf("hi\n");
-    delete[] row_sums;
+
+    thrust::transform(cuLeft_ptr,cuLeft_ptr+matLeft.getNumElemts(),
+                        cuRight_ptr,
+                        res_ptr,
+                        thrust::minus<float>());
+
     return res;
 }
+
+
+// GPU is faster than CPU when SIZE>250000, Maybe CPU is faster in most cases 
+CuMatrix ComputingUnit::softmaxRows(CuMatrix &mat){
+    CuMatrix res(Matrix(mat.getRows(),mat.getCols(),new FeatType[mat.getNumElemts()]),handle);
+    thrust::device_ptr<float> devMat_ptr(mat.devPtr);
+    thrust::device_ptr<float> res_ptr(res.devPtr);
+    thrust::transform(devMat_ptr, devMat_ptr+mat.getNumElemts(),res_ptr, exp_functor());
+   
+    thrust::device_vector<int> indices(mat.getNumElemts());
+    thrust::counting_iterator<int> idxfirst(0);
+    thrust::counting_iterator<int> idxlast = idxfirst +mat.getNumElemts();
+    thrust::transform(idxfirst, idxlast, indices.begin(), setRow_functor(mat.getCols()));
+    thrust::device_vector<float> row_sums(mat.getRows());
+    thrust::reduce_by_key(indices.begin(), indices.end(),
+                        res_ptr,
+                        thrust::make_discard_iterator(),
+                        row_sums.begin());
+    thrust::transform(indices.begin(), indices.end(),res_ptr,res_ptr, divide_functor(thrust::raw_pointer_cast(row_sums.data())));
+
+    return res;
+}
+
+
 
 CuMatrix ComputingUnit::dot(Matrix& A, Matrix& B){
     CuMatrix devA(A,handle);

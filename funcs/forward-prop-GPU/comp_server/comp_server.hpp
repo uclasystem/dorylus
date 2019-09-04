@@ -47,7 +47,7 @@ public:
     std::vector<Matrix> requestWeightsMatrices(unsigned numLayers);
     void processBackward(zmq::message_t &header);
     void sendInfoMessage(zmq::socket_t& weightsocket, unsigned numLambdas);
-
+    std::vector<Matrix> gradientComputation(GraphData& graphData, std::vector<Matrix>& weightsData);
 private:
     //ntw related objs
     zmq::context_t dctx;
@@ -177,12 +177,12 @@ void ComputingServer::processBackward(zmq::message_t &header){
  * 
  */
 std::vector<Matrix>
-gradientComputation(GraphData& graphData, std::vector<Matrix>& weightsData) {
+ComputingServer::gradientComputation(GraphData& graphData, std::vector<Matrix>& weightsData) {
     
     // std::vector<Matrix> gradients;
     std::vector<Matrix> weightsUpdates;
 
-    // // Compute last layer's gradients.
+    // Compute last layer's gradients.
     // Matrix softmaxRes = cu.softmaxRows(graphData.actMatrices.back());
     // Matrix subRes = hadamardSub(softmaxRes, graphData.targetMatrix);
     // Matrix derivateRes = activateDerivate(graphData.zMatrices.back());
