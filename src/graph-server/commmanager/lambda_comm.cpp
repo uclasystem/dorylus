@@ -17,11 +17,11 @@ static std::vector<std::thread *> worker_threads;
  */
 LambdaComm::LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::string coordserverIp_, unsigned coordserverPort_, unsigned nodeId_,
            unsigned numLambdasForward_, unsigned numLambdasBackward_)
-    : nodeIp(nodeIp_), dataserverPort(dataserverPort_), coordserverIp(coordserverIp_), coordserverPort(coordserverPort_), nodeId(nodeId_), trainPartitions(trainPartitions_),
+    : nodeIp(nodeIp_), dataserverPort(dataserverPort_), coordserverIp(coordserverIp_), coordserverPort(coordserverPort_), nodeId(nodeId_),
       ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), coordsocket(ctx, ZMQ_REQ),
       numLambdasForward(numLambdasForward_), numLambdasBackward(numLambdasBackward_), numListeners(numLambdasBackward_),   // TODO: Decide numListeners.
       countForward(0), countBackward(0),
-      numCorrectPredictions(0), totalLoss(0.0) {
+      numCorrectPredictions(0), totalLoss(0.0), numValidationVertices(0) {
 
     // Bind the proxy sockets.
     char dhost_port[50];
@@ -35,7 +35,10 @@ LambdaComm::LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::strin
 
     // Create 'numListeners' workers and detach them.
     for (unsigned i = 0; i < numListeners; ++i) {
-        workers.push_back(new LambdaWorker(nodeId, ctx, numLambdasForward, numLambdasBackward, countForward, countBackward));
+        workers.push_back(new LambdaWorker(nodeId, ctx, numLambdasForward,
+                            numLambdasBackward, countForward, countBackward,
+                            numCorrectPredictions, totalLoss, numValidationVertices,
+                            trainPartitions));
         worker_threads.push_back(new std::thread(std::bind(&LambdaWorker::work, workers[i])));
         worker_threads[i]->detach();
     }
@@ -69,25 +72,40 @@ LambdaComm::~LambdaComm() {
  * float trainPortion must be between (0,1)
  *
  */
-void setTrainValidationSplit(float trainPortion) {
+void
+LambdaComm::setTrainValidationSplit(float trainPortion, unsigned numLocalVertices) {
     // forward propagation partitioning determined by the number of forward lambdas
     // so assign partitions based on the num of forward lambdas
     unsigned numTrainParts = std::ceil((float)numLambdasForward * trainPortion);
 
     // NOTE: could be optimized as a bit vector but probaly not that big a deal
     // Set the first 'numTrainParts' partitions to true
-    trainPartition = std::vector<bool>(numLambdasForward);
-    for (unsigned i = 0; i < trainPartition.size(); ++i) {
+    for (unsigned i = 0; i < numLambdasForward; ++i) {
         if (i < numTrainParts)
-            trainPartition.push_back(true);
+            trainPartitions.push_back(true);
         else
-            trainPartition.push_back(false);
+            trainPartitions.push_back(false);
     }
 
     // Randomize which partitions are the training ones so it is not always
     // the first 'numTrainParts'
     // COMMENTED OUT FOR DEBUGGING
 //    std::random_shuffle(trainPartition.begin(), trainPartition.end());
+
+    // Calculate the total number of validaiton vertices
+    // This member is passed by reference to the lambda workers so on update
+    // they will have the correct number
+    unsigned partVertices = std::ceil((float) numLocalVertices / (float) numLambdasForward);
+    for (unsigned i = 0; i < trainPartitions.size(); ++i) {
+        if (!trainPartitions[i]) {
+            unsigned thisPartVertices = partVertices;
+            if ((i * partVertices + partVertices) > numLocalVertices) {
+                thisPartVertices = partVertices - (i * partVertices + partVertices) + numLocalVertices;
+            }
+
+            numValidationVertices += thisPartVertices;
+        }
+    }
 }
 
 
@@ -99,7 +117,7 @@ void setTrainValidationSplit(float trainPortion) {
  */
 void
 LambdaComm::newContextForward(FeatType *dataBuf, FeatType *zData, FeatType *actData,
-                              unsigned numLocalVertices, unsigned numFeats, unsigned numFeatsNext, bool eval) {
+    unsigned numLocalVertices, unsigned numFeats, unsigned numFeatsNext, bool eval) {
     countForward = 0;
     evaluate = eval;
 

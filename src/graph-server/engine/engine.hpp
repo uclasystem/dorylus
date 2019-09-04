@@ -78,7 +78,7 @@ public:
     //  optimize this as ML might require things such as random sampling etc for training
     //  QUESTION: Is it beneficial to go beyond parition level for individual vertices
     //      as this will incur serialization overhead
-    static void setTrainValSplit(float trainPortion);
+    static void setTrainValidationSplit(float trainPortion);
 
 private:
 

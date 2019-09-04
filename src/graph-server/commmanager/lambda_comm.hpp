@@ -35,17 +35,19 @@ public:
                unsigned numLambdasForward_, unsigned numLambdasBackward_);
     ~LambdaComm();
 
-    void setTrainValidationSplit(float trainPortion);
+    void setTrainValidationSplit(float trainPortion, unsigned numLocalVertices);
     
     // For forward-prop.
-    void newContextForward(FeatType *dataBuf, FeatType *zData, FeatType *actData,
-                           unsigned numLocalVertices, unsigned numFeats, unsigned numFeatsNext,
-                           unsigned trainValBoundary, bool eval);
+    void newContextForward(FeatType *dataBuf, FeatType *zData,
+        FeatType *actData, unsigned numLocalVertices, unsigned numFeats,
+        unsigned numFeatsNext, bool eval);
+
     void requestLambdasForward(unsigned layer);
 
     // For backward-prop.
     void newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType *targetBuf,
                             unsigned numLocalVertices, std::vector<unsigned> layerConfig);
+
     void requestLambdasBackward(unsigned numLayers_);
 
     // Send a message to the coordination server to shutdown.
@@ -66,6 +68,7 @@ private:
 
     unsigned numCorrectPredictions;
     float totalLoss;
+    unsigned numValidationVertices;
 
     zmq::context_t ctx;
     zmq::socket_t frontend;

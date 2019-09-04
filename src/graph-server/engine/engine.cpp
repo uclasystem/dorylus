@@ -167,8 +167,8 @@ Engine::init(int argc, char *argv[]) {
  *
  */
 void
-setTrainValidationSplit(float trainPortion) {
-    lambdaComm->setTrainValidationSplit(trainPortion);
+Engine::setTrainValidationSplit(float trainPortion) {
+    lambdaComm->setTrainValidationSplit(trainPortion, graph.getNumLocalVertices());
 }
 
 
@@ -248,7 +248,7 @@ Engine::runForward(bool eval) {
     currId = 0;
     iteration = 0;
     halt = false;
-    evalute = eval;
+    evaluate = eval;
 
     // Create buffer for first-layer aggregation.
     localVerticesDataBuf = new FeatType[layerConfig[0] * graph.getNumLocalVertices()];
@@ -474,7 +474,7 @@ Engine::forwardWorker(unsigned tid, void *args) {
                     bool runEval = evaluate && iteration == numLayers-1;
                     // Start a new lambda communication context.
                     lambdaComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
-                                                    graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1), evaluate);
+                                                    graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1), runEval);
                 }
                 
                 // Trigger a request towards the coordinate server. Wait until the request completes.
@@ -482,7 +482,7 @@ Engine::forwardWorker(unsigned tid, void *args) {
                     if(gpuEnabled==1)
                         gpuComm->requestForward(iteration);
                     else
-                        lambdaComm->requestLambdasForward(iteration, trainValBoundary, evaluate);
+                        lambdaComm->requestLambdasForward(iteration);
                 });
                 treq.join();
 
@@ -882,10 +882,10 @@ Engine::parseArgs(int argc, char *argv[]) {
     numLambdasBackward = vm["numlambdasbackward"].as<unsigned>();
 
     assert(vm.count("numEpochs"));
-    numEpochs = vm["numEpochs"].as<unsigned>();
+//    numEpochs = vm["numEpochs"].as<unsigned>();
 
     assert(vm.count("validationFrequency"));
-    valFreq = vm["validationFrequency"].as<unsigned>();
+//    valFreq = vm["validationFrequency"].as<unsigned>();
 
     assert(vm.count("GPU"));
     gpuEnabled = vm["GPU"].as<unsigned>();

@@ -14,12 +14,14 @@ LambdaWorker::LambdaWorker(unsigned nodeId_, zmq::context_t& ctx_,
                            unsigned numLambdasForward_, unsigned numLambdasBackward_,
                            unsigned& countForward_, unsigned& countBackward_,
                            unsigned& numCorrectPredictions_, float& totalLoss_,
-                           std::vector<bool>& trainPartitions_);
+                           unsigned& numValidationVertices_,
+                           std::vector<bool>& trainPartitions_)
     : nodeId(nodeId_), ctx(ctx_), workersocket(ctx, ZMQ_DEALER),
       numLambdasForward(numLambdasForward_), numLambdasBackward(numLambdasBackward_),
       countForward(countForward_), countBackward(countBackward_),
       numCorrectPredictions(numCorrectPredictions_), totalLoss(totalLoss_),
-      trainPartitions(trainPartitions_), evalLambdas(0); {
+      numValidationVertices(numValidationVertices_),
+      trainPartitions(trainPartitions_), evalLambdas(0) {
     workersocket.setsockopt(ZMQ_LINGER, 0);
     workersocket.connect("inproc://backend");
 
@@ -28,7 +30,7 @@ LambdaWorker::LambdaWorker(unsigned nodeId_, zmq::context_t& ctx_,
     evalPartitions = 0;
     for (bool train : trainPartitions) {
         if (!train)
-            ++evalPartition;
+            ++evalPartitions;
     }
 }
 
@@ -68,7 +70,7 @@ LambdaWorker::work() {
                 case (OP::PULL_EVAL):
                     sendTargetMatrix(identity, partId);
                     break;
-                case (OP::PUSH_EVAL);
+                case (OP::PUSH_EVAL):
                     recvValidationResults(identity, header);
                     break;
                 case (OP::PUSH_BACKWARD):
@@ -123,6 +125,8 @@ LambdaWorker::sendAggregatedChunk(zmq::message_t& client_id, unsigned partId) {
         populateHeader((char *) header.data(), ERR_HEADER_FIELD, ERR_HEADER_FIELD, ERR_HEADER_FIELD, ERR_HEADER_FIELD);
         workersocket.send(header);
 
+        printLog(nodeId, "[ERROR] Got a request for partition %u, but number of lambdas is %u", partId, numLambdasForward);
+
     // Partition id is valid, so send the matrix segment.
     } else {
 
@@ -141,7 +145,7 @@ LambdaWorker::sendAggregatedChunk(zmq::message_t& client_id, unsigned partId) {
         // If the engine has set evaluate to true and this is not a training partition
         unsigned lambdaEval = evaluate && !trainPartitions[partId];
         zmq::message_t header(HEADER_SIZE);
-        populateHeader((char *) header.data(), 0, thisPartRows, actMatrix.getCols(), lambdaEval);
+        populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, actMatrix.getCols(), lambdaEval);
         workersocket.send(header, ZMQ_SNDMORE);
 
         zmq::message_t partitionData(bufSize);
@@ -256,8 +260,21 @@ LambdaWorker::recvBackpropFinishMsg(zmq::message_t& client_id) {
 
 void
 LambdaWorker::sendTargetMatrix(zmq::message_t& client_id, unsigned partId) {
-    // TODO:
-    //  Calculate row offset using partition ID (logic already in backprop)
+    unsigned partRows = std::ceil((float) targetMatrix.getRows() / (float) numLambdasForward);
+    unsigned thisPartRows = partRows;
+    if ((partId * partRows + partRows) > targetMatrix.getRows())
+        thisPartRows = partRows - (partId * partRows + partRows) + targetMatrix.getRows();
+
+    unsigned bufSize = thisPartRows * targetMatrix.getCols() * sizeof(FeatType);
+    FeatType* partitionStart = targetMatrix.getData() + (partId * partRows * targetMatrix.getCols());
+
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader((char*) header.data(), OP::RESP, 0, thisPartRows, targetMatrix.getCols());
+    workersocket.send(header, ZMQ_SNDMORE);
+
+    zmq::message_t partitionData(bufSize);
+    std::memcpy(partitionData.data(), partitionStart, bufSize);
+    workersocket.send(partitionData);
 }
 
 void
@@ -266,17 +283,22 @@ LambdaWorker::recvValidationResults(zmq::message_t& client_d, zmq::message_t& he
     zmq::message_t confirm;
     workersocket.send(confirm);
 
-    unsigned totalCorrectThisPartition = parse<unsigned>(header.data(), 2);
-    float lossThisPartition = parse<float>(header.data(), 3);
+    unsigned totalCorrectThisPartition = parse<unsigned>((char*)header.data(), 2);
+    float lossThisPartition = parse<float>((char*)header.data(), 3);
 
+    // atomically sum correct predictions and loss
     std::lock_guard<std::mutex> lk(eval_mutex);
     numCorrectPredictions += totalCorrectThisPartition;
     totalLoss += lossThisPartition;
 
     --evalLambdas;
 
+    // If we have received all validation results, calculate the actual loss
+    // and accuracy
+    // NOTE: Will only be acc/loss per node, not global acc/loss
     if (evalLambdas == 0) {
-        // TODO:
-        //  Divide final sum by the number of validation vertices used
+        printLog(nodeId, "Accuracy this epoch: %f\nLoss this epoch %f\n",
+                 (float) numCorrectPredictions / numValidationVertices,
+                 totalLoss / numValidationVertices);
     }
 }
