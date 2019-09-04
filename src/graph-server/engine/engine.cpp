@@ -143,7 +143,7 @@ Engine::init(int argc, char *argv[]) {
 
     if(gpuEnabled==1){
         // Create the GPU communication manager
-        gpuComm = new GPUComm(nodeId, dataserverPort);
+        gpuComm = new GPUComm(nodeId, numNodes, dataserverPort);
     }else{
         // Create the lambda communication manager.
         lambdaComm = new LambdaComm(NodeManager::getNode(nodeId).pubip, dataserverPort, coordserverIp, coordserverPort, nodeId,
@@ -168,7 +168,7 @@ Engine::master() {
 
 /**
  *
- * Whether I am the master mode or not.
+ * Whether GPU is enabled or not
  * 
  */
 bool
@@ -277,13 +277,13 @@ Engine::output() {
     //
     // The follwing are only-last-layer feature values outputing.
     //
-    // for (Vertex& v : graph.getVertices()) {
-    //     outStream << v.getGlobalId() << ": ";
-    //     FeatType *dataPtr = localVertexActivationDataPtr(v.getLocalId(), numLayers);
-    //     for (size_t j = 0; j < layerConfig[numLayers]; ++j)
-    //         outStream << dataPtr[j] << " ";
-    //     outStream << std::endl;
-    // }
+    for (Vertex& v : graph.getVertices()) {
+        outStream << v.getGlobalId() << ": ";
+        FeatType *dataPtr = localVertexActivationDataPtr(v.getLocalId(), numLayers);
+        for (size_t j = 0; j < layerConfig[numLayers]; ++j)
+            outStream << dataPtr[j] << " ";
+        outStream << std::endl;
+    }
 
     //
     // The following are labels outputing.
@@ -299,13 +299,13 @@ Engine::output() {
     //
     // The following are timing results outputing.
     //
-    outStream << "I: " << timeInit << std::endl;
-    for (unsigned i = 0; i < numLayers; ++i) {
-        outStream << "A: " << vecTimeAggregate[i] << std::endl
-                  << "L: " << vecTimeLambda[i] << std::endl
-                  << "G: " << vecTimeSendout[i] << std::endl;
-    }
-    outStream << "B: " << timeBackwardProcess << std::endl;
+    // outStream << "I: " << timeInit << std::endl;
+    // for (unsigned i = 0; i < numLayers; ++i) {
+    //     outStream << "A: " << vecTimeAggregate[i] << std::endl
+    //               << "L: " << vecTimeLambda[i] << std::endl
+    //               << "G: " << vecTimeSendout[i] << std::endl;
+    // }
+    // outStream << "B: " << timeBackwardProcess << std::endl;
 
     // Write benchmarking results to log file.
     if (master()) {
@@ -579,15 +579,28 @@ void
 Engine::backwardWorker(unsigned tid, void *args) {
     if (tid == 0) {     // Only master thread does the actual work.
 
-        // Start a new lambda communication context.
-        lambdaComm->newContextBackward(localVerticesZData, localVerticesActivationData, localVerticesLabels,
-                                       graph.getNumLocalVertices(), layerConfig);
+        if(isGPUEnabled()==0){
+            // Start a new lambda communication context.
+            lambdaComm->newContextBackward(localVerticesZData, localVerticesActivationData, localVerticesLabels,
+                                           graph.getNumLocalVertices(), layerConfig);
+             // Trigger a request towards the coordicate server. Wait until the request completes.
+            std::thread treq([&] {
+                lambdaComm->requestLambdasBackward(numLayers);
+            });
+            treq.join();
 
-        // Trigger a request towards the coordicate server. Wait until the request completes.
-        std::thread treq([&] {
-            lambdaComm->requestLambdasBackward(numLayers);
-        });
-        treq.join();
+        }else{
+            // Start a new lambda communication context.
+            gpuComm->newContextBackward(localVerticesZData, localVerticesActivationData, localVerticesLabels,
+                                           graph.getNumLocalVertices(), layerConfig);
+             // Trigger a request towards the coordicate server. Wait until the request completes.
+            std::thread treq([&] {
+                gpuComm->requestBackward(numLayers);
+            });
+            treq.join();
+        }
+        
+       
     }
 }
 

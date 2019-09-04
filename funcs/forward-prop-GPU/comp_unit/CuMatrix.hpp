@@ -12,12 +12,11 @@ class CuMatrix : public Matrix
 {
 public:
 	CuMatrix(){};
-	CuMatrix( Matrix& M, cublasHandle_t & handle_);	
+    CuMatrix( Matrix M, cublasHandle_t & handle_); 	
 	~CuMatrix(); //will run for a long time. It's better to collect memory
 	void updateMatrixFromGPU();
 	CuMatrix dot( CuMatrix& M);
 
-	// friend class ComputingUnit; 
 
 // private:
 	void deviceMalloc();
@@ -29,7 +28,7 @@ public:
 	float * devPtr;
 };
 
-CuMatrix::CuMatrix( Matrix& M, cublasHandle_t & handle_)
+CuMatrix::CuMatrix( Matrix M, cublasHandle_t & handle_)
 	:Matrix(M.getRows(),M.getCols(),M.getData())
 {
 	handle=handle_;
@@ -114,6 +113,7 @@ CuMatrix CuMatrix::dot( CuMatrix& M){
     	devPtr,cols,
     	&beta,
     	C.devPtr,M.getCols());
+
 	return C;
 }
 

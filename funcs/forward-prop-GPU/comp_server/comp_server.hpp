@@ -151,10 +151,66 @@ void ComputingServer::processBackward(zmq::message_t &header){
                 count+=1;
         sendInfoMessage(weightSocket, count);
     }
-        
-    requestForwardMatrices(layer);
-
+    
+    std::vector<Matrix> weightsData;
+    // Request weights matrices.
+    std::thread t([&] {     // Weight requests run in a separate thread.
+        std::cout << "< BACKWARD > Asking weightserver..." << std::endl;
+        weightsData =  requestWeightsMatrices(layer);
+        std::cout << "< BACKWARD > Got data from weightserver." << std::endl;
+    });
+    GraphData graphData=requestForwardMatrices(layer);
+    t.join();
+    std::cout << "< BACKWARD > Doing the gradient descent computation..." << std::endl;
+    // weightsUpdates = gradientComputation(graphData, weightsData);
 }
+
+
+/**
+ *
+ * Main logic of gradient computation and a naive gradient descent to get weight updates.
+ *
+ * Attention:
+ *   zMatrices   vec contains z1   -> zout;
+ *   actMatrices vec contains act0 -> actout;
+ *   weightData  vec contains w2   -> wout.
+ * 
+ */
+std::vector<Matrix>
+gradientComputation(GraphData& graphData, std::vector<Matrix>& weightsData) {
+    
+    // std::vector<Matrix> gradients;
+    std::vector<Matrix> weightsUpdates;
+
+    // // Compute last layer's gradients.
+    // Matrix softmaxRes = cu.softmaxRows(graphData.actMatrices.back());
+    // Matrix subRes = hadamardSub(softmaxRes, graphData.targetMatrix);
+    // Matrix derivateRes = activateDerivate(graphData.zMatrices.back());
+    // gradients.push_back(hadamardMul(subRes, derivateRes));
+    // delete[] softmaxRes.getData();
+    // delete[] subRes.getData();
+    // delete[] derivateRes.getData();
+
+    // // Compute previous layers gradients.
+    // for (unsigned i = weightsData.size(); i > 0; --i) {
+    //     Matrix dotRes = dotGDwithWTrans(gradients.back(), weightsData[i - 1]);
+    //     Matrix derivateRes = activateDerivate(graphData.zMatrices[i - 1]);
+    //     gradients.push_back(hadamardMul(dotRes, derivateRes));
+    //     delete[] dotRes.getData();
+    //     delete[] derivateRes.getData();
+    // }
+
+    // std::reverse(gradients.begin(), gradients.end());
+
+    // // Compute weights updates.
+    // for (unsigned i = 0; i < gradients.size(); ++i) {
+    //     weightsUpdates.push_back(dotActTranswithGD(graphData.actMatrices[i], gradients[i], LEARNING_RATE));
+    //     delete[] gradients[i].getData();
+    // }
+
+    return weightsUpdates;
+}
+
 
 /**
  *
@@ -229,6 +285,37 @@ ComputingServer::requestForwardMatrices(unsigned numLayers) {
     return graphData;
 }
 
+std::vector<Matrix> 
+ComputingServer::requestWeightsMatrices(unsigned numLayers){
+    // Send pull request.
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader((char *) header.data(), OP::PULL_BACKWARD, 0);
+    weightSocket.send(header);
+
+    std::vector<Matrix> weightsData;
+
+    // Receive weight matrices, from layer 2 -> last.
+    for (size_t i = 2; i <= numLayers; ++i) {
+        zmq::message_t respHeader;
+        weightSocket.recv(&respHeader);
+        unsigned layerResp = parse<unsigned>((char *) respHeader.data(), 1);
+        if (layerResp == ERR_HEADER_FIELD) {    // Failed.
+            std::cerr << "[ ERROR ] No corresponding weight matrix!" << std::endl;
+            return weightsData;
+        } else {                    // Get matrices data.
+            unsigned rows = parse<unsigned>((char *) respHeader.data(), 2);
+            unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
+            zmq::message_t matxData(rows * cols * sizeof(FeatType));
+            weightSocket.recv(&matxData);
+
+            FeatType *matxBuffer = new FeatType[rows * cols];
+            std::memcpy(matxBuffer, matxData.data(), matxData.size());
+
+            weightsData.push_back(Matrix(rows, cols, matxBuffer));
+        }
+    }
+    return weightsData;
+}
 
 
 void ComputingServer::processForward(zmq::message_t &header){
