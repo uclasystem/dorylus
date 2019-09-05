@@ -77,12 +77,7 @@ void GPUComm::requestBackward(unsigned numLayers){
         populateHeader((char *) header.data(), OP::REQ_BACKWARD, numLayers, numNodes);
         dataSocket.send(header);
         dataSocket.recv(&confirm);
-
         sendBackpropChunks();
-        
-       
-        
-
     }
     catch(std::exception& ex){
         std::cerr << "[ERROR] " << ex.what() << std::endl;

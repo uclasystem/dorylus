@@ -49,7 +49,6 @@ void CuMatrix::deviceMalloc(){
     unsigned rows=this->getRows();
     unsigned cols=this->getCols();
    
-    printf("cudaMalloc %u bytes\n", rows*cols*sizeof(FeatType));
     cudaStat = cudaMalloc ((void**)&devPtr, rows*cols*sizeof(FeatType));
     if (cudaStat != cudaSuccess) {
         printf("%u\n", cudaStat);

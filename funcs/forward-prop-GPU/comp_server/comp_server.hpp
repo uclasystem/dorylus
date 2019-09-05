@@ -32,6 +32,8 @@ public:
 
     //read weight file 
     void loadWeightServers(std::vector<char *>& addresses, const std::string& wServersFile);
+    void terminateWeightServers();
+    void sendShutdownMessage(zmq::socket_t& weightsocket);
 
     // Keep listening to computing requests
     void run();
@@ -48,6 +50,10 @@ public:
     void processBackward(zmq::message_t &header);
     void sendInfoMessage(zmq::socket_t& weightsocket, unsigned numLambdas);
     std::vector<Matrix> gradientComputation(GraphData& graphData, std::vector<Matrix>& weightsData);
+    void sendWeightsUpdates(std::vector<Matrix> weightsUpdates);
+
+
+
 private:
     //ntw related objs
     zmq::context_t dctx;
@@ -98,7 +104,7 @@ void ComputingServer::run(){
     try {
         bool terminate=0;
         while (!terminate) {
-            printf("next op\n");
+            
             zmq::message_t header(HEADER_SIZE);
             dataSocket.recv(&header);
             unsigned op = parse<unsigned>((char *) header.data(), 0);
@@ -108,6 +114,7 @@ void ComputingServer::run(){
                 case OP::TERM:
                 printf("Terminating\n");
                 terminate=1;
+                terminateWeightServers();
                 break;
                 case OP::REQ_FORWARD:
                 processForward(header);
@@ -135,7 +142,6 @@ void ComputingServer::sendInfoMessage(zmq::socket_t& weightsocket, unsigned numL
     weightsocket.recv(&confirm);
 }
 
-
 void ComputingServer::processBackward(zmq::message_t &header){
     
     zmq::message_t confirm(5);
@@ -162,8 +168,37 @@ void ComputingServer::processBackward(zmq::message_t &header){
     GraphData graphData=requestForwardMatrices(layer);
     t.join();
     std::cout << "< BACKWARD > Doing the gradient descent computation..." << std::endl;
+    double t1=getTimer();
     std::vector<Matrix> weightsUpdates;
     weightsUpdates = gradientComputation(graphData, weightsData);
+    printf("Total*: %lf\n", getTimer()-t1);
+
+    sendWeightsUpdates(weightsUpdates);
+}
+
+void
+ComputingServer::sendWeightsUpdates(std::vector<Matrix> weightsUpdates) {
+    
+    // Send push header.
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader((char *) header.data(), OP::PUSH_BACKWARD, 0);
+    weightSocket.send(header, ZMQ_SNDMORE);
+
+    // Send updates to all weight matrices given by my chunk.
+    for (unsigned i = 0; i < weightsUpdates.size(); ++i) {
+        Matrix& updateMat = weightsUpdates[i];
+
+        zmq::message_t updateData(updateMat.getDataSize());
+        std::memcpy(updateData.data(), updateMat.getData(), updateMat.getDataSize());
+        if (i == weightsUpdates.size() - 1)
+            weightSocket.send(updateData);
+        else
+            weightSocket.send(updateData, ZMQ_SNDMORE);
+    }
+
+    // Wait for updates settled reply.
+    zmq::message_t confirm;
+    weightSocket.recv(&confirm);
 }
 
 
@@ -185,19 +220,14 @@ ComputingServer::gradientComputation(GraphData& graphData, std::vector<Matrix>& 
 
     // Compute last layer's gradients.
     CuMatrix softmaxRes = cu.softmaxRows(cu.wrapMatrix(graphData.actMatrices.back()));
-
     CuMatrix subRes = cu.hadamardSub(softmaxRes, cu.wrapMatrix(graphData.targetMatrix));
-
     CuMatrix derivateRes = cu.activateDerivate(cu.wrapMatrix(graphData.zMatrices.back()));
-
     gradients.push_back(cu.hadamardMul(subRes, derivateRes));
 
     // Compute previous layers gradients.
     for (unsigned i = weightsData.size(); i > 0; --i) {
-        printf("dotGDwithWTrans for\n");
         CuMatrix cuWeights=cu.wrapMatrix(weightsData[i - 1]);
         CuMatrix dotRes = cu.dotGDwithWTrans(*gradients.back(),cuWeights);
-        
         CuMatrix cuZ= cu.wrapMatrix(graphData.zMatrices[i - 1]);
         CuMatrix derivateRes = cu.activateDerivate(cuZ);
         gradients.push_back(cu.hadamardMul(dotRes, derivateRes));
@@ -205,12 +235,15 @@ ComputingServer::gradientComputation(GraphData& graphData, std::vector<Matrix>& 
 
     std::reverse(gradients.begin(), gradients.end());
 
-    printf("Compute weights updates.\n");
     // Compute weights updates.
     for (unsigned i = 0; i < gradients.size(); ++i){
         Matrix update=cu.dotActTranswithGD(cu.wrapMatrix(graphData.actMatrices[i]), *gradients[i], LEARNING_RATE).getMatrix();
         weightsUpdates.push_back(update);
     }
+
+    for(auto g:gradients)
+        delete g;
+
     return weightsUpdates;
 }
 
@@ -226,9 +259,6 @@ ComputingServer::requestForwardMatrices(unsigned numLayers) {
     // Send pull request.
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char *) header.data(), OP::PULL_BACKWARD, 0);
-    // printf("Send to h \n");
-    // dataSocket.send(header);
-    // printf("1\n");
     GraphData graphData;
 
     // Receive z matrices chunks, from layer 1 -> last.
@@ -451,7 +481,41 @@ ComputingServer::requestWeightsMatrix( unsigned layer) {
     }
 }
 
+void 
+ComputingServer::terminateWeightServers(){
+    if(nodeId!=0)
+        return; 
+    
+    std::cout <<"Node 0 is terminating all weightservers\n";
 
+    for (unsigned i = 0; i < weightServerAddrs.size(); ++i) {
+        zmq::socket_t ws=zmq::socket_t(wctx, ZMQ_DEALER);
+        char identity[] = "coord";
+        ws.setsockopt(ZMQ_IDENTITY, identity, strlen(identity) + 1);
+        char whost_port[50];
+        sprintf(whost_port, "tcp://%s:%u", weightServerAddrs[i], wPort);
+        std::cout << "  found weightserver " << whost_port << std::endl;
+        ws.connect(whost_port);
+        sendShutdownMessage(ws);
+        ws.close();
+    }
+
+}
+
+void
+ComputingServer::sendShutdownMessage(zmq::socket_t& weightsocket) {
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader((char *) header.data(), OP::TERM);
+    weightsocket.send(header);
+
+    // Set receive timeou 1s property on this weightsocket, in case that a weightserver is dying too quickly that it's
+    // confirm message it not sent from buffer yet. Using timeout here because shutdown is not a big deal.
+    weightsocket.setsockopt(ZMQ_RCVTIMEO, 500);
+
+    // Wait for termination confirmed reply.
+    zmq::message_t confirm;
+    weightsocket.recv(&confirm);
+}
 
 
 

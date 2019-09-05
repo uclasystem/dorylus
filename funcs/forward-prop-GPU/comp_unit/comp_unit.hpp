@@ -101,7 +101,6 @@ ComputingUnit::ComputingUnit(){
 }
 
 CuMatrix ComputingUnit::wrapMatrix(Matrix m){
-    printf("Wrapping\n");
     return CuMatrix(m,handle);
 }
 
@@ -127,7 +126,6 @@ CuMatrix ComputingUnit::hadamardSub(const CuMatrix& matLeft,const CuMatrix& matR
 CuMatrix* ComputingUnit::hadamardMul(const CuMatrix& matLeft,const CuMatrix& matRight) {
     assert(matLeft.getRows() == matRight.getRows());
     assert(matLeft.getCols() == matRight.getCols());
-    // CuMatrix res(Matrix(matLeft.getRows(),matLeft.getCols(), new FeatType[matLeft.getNumElemts()]),handle);
     CuMatrix* res=new CuMatrix(Matrix(matLeft.getRows(),matLeft.getCols(), (FeatType *)NULL),handle);
 
     thrust::device_ptr<float> cuLeft_ptr(matLeft.devPtr);
@@ -144,7 +142,6 @@ CuMatrix* ComputingUnit::hadamardMul(const CuMatrix& matLeft,const CuMatrix& mat
 
 // GPU is faster than CPU when SIZE>~250000, Maybe CPU is faster in most cases 
 CuMatrix ComputingUnit::softmaxRows(const CuMatrix &mat){
-    // CuMatrix res(Matrix(mat.getRows(),mat.getCols(),new FeatType[mat.getNumElemts()]),handle);
     CuMatrix res(Matrix(mat.getRows(),mat.getCols(),(FeatType *)NULL),handle);
     thrust::device_ptr<float> devMat_ptr(mat.devPtr);
     thrust::device_ptr<float> res_ptr(res.devPtr);
@@ -164,8 +161,6 @@ CuMatrix ComputingUnit::softmaxRows(const CuMatrix &mat){
 }
 
 CuMatrix ComputingUnit::activateDerivate(const CuMatrix& mat) {
-    // printf("activateDerivate function\n");
-    // CuMatrix res(Matrix(mat.getRows(),mat.getCols(),new FeatType[mat.getNumElemts()]),handle);
     CuMatrix res(Matrix(mat.getRows(),mat.getCols(),(FeatType *)NULL),handle);
     thrust::device_ptr<float> res_ptr(res.devPtr);
     CuMatrix z(Matrix(mat.getRows(),mat.getCols(),mat.getData()),handle);

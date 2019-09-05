@@ -128,7 +128,7 @@ int main(int argc, char *argv[])
 // 	double t1;
 	
 	// printf("GEMM\n");
-	// float a[]={1,1,1,2,2,2};
+	// float a[]={1,1,1,0,0,0};
 	// float b[]={10,10,10,10,10,10,10,10,10,10,10,10};
 	// Matrix A(2,3,a);
 	// Matrix B(3,4,b);
@@ -146,7 +146,7 @@ int main(int argc, char *argv[])
  //    t1=getTimer();
 	// cu.activate(cuD);
  //    printf("tanf gpu*: %lf\n", getTimer()-t1);
-	// // std::cout<<cuD.str();
+	// std::cout<<cuD.str();
 
 	// t1=getTimer();
 	// for(int i= 0 ; i < SIZE;++i){
@@ -155,29 +155,29 @@ int main(int argc, char *argv[])
  //    printf("tanf cpu*: %lf\n", getTimer()-t1);
  //   	compare(cuD.getData(),d,SIZE);
 
- //   	//softmax
- //   	printf("softmax:  \n");
- //   	float e[SIZE];
- //   	for(int i=0;i<SIZE;++i)
-	// 	e[i]=i/10;
- //   	Matrix E(ROW,COL,e);
- //   	CuMatrix cuE(E,cu.handle);
- //   	t1=getTimer();
- //   	CuMatrix  cuF=cu.softmaxRows(cuE);
- //   	printf("softmax gpu*: %lf\n", getTimer()-t1);
- //   	cuF.updateMatrixFromGPU();
- //   	t1=getTimer();
- //   	Matrix F=softmaxRows(E);
- //   	printf("softmax cpu*: %lf\n", getTimer()-t1);
- //   	compare(cuF.getData(),F.getData(),F.getNumElemts());
+  //  	//softmax
+  //  	printf("softmax:  \n");
+  //  	float e[SIZE];
+  //  	for(int i=0;i<SIZE;++i)
+		// e[i]=i/10;
+  //  	Matrix E(ROW,COL,e);
+  //  	CuMatrix cuE(E,cu.handle);
+  //  	t1=getTimer();
+  //  	CuMatrix  cuF=cu.softmaxRows(cuE);
+  //  	printf("softmax gpu*: %lf\n", getTimer()-t1);
+  //  	cuF.updateMatrixFromGPU();
+  //  	t1=getTimer();
+  //  	Matrix F=softmaxRows(E);
+  //  	printf("softmax cpu*: %lf\n", getTimer()-t1);
+  //  	compare(cuF.getData(),F.getData(),F.getNumElemts());
 
 
  //   	printf("hadamardSub:  \n");
  //   	float j[SIZE];
 	// float g[SIZE];
 	// for(unsigned i=0;i<SIZE;++i){
-	// 	g[i]=sin(i);
-	// 	j[i]=cos(i);
+	// 	g[i]=2*(i);
+	// 	j[i]=3*(i);
 	// }
 	// Matrix J(ROW,COL,j);
 	// Matrix G(ROW,COL,g);
@@ -196,27 +196,27 @@ int main(int argc, char *argv[])
  //   	float j[SIZE];
 	// float g[SIZE];
 	// for(unsigned i=0;i<SIZE;++i){
-	// 	g[i]=sin(i);
-	// 	j[i]=cos(i);
+	// 	g[i]=2.*(i);
+	// 	j[i]=1.5*(i);
 	// }
 	// Matrix J(ROW,COL,j);
 	// Matrix G(ROW,COL,g);
 	// CuMatrix cuJ(J,cu.handle);
 	// CuMatrix cuG(G,cu.handle);
  //   	t1=getTimer();
- //   	CuMatrix  cuH=cu.hadamardMul(cuJ,cuG);
+ //   	CuMatrix*  cuH=cu.hadamardMul(cuJ,cuG);
  //   	printf("hadamardMul gpu*: %lf\n", getTimer()-t1);
  //   	t1=getTimer();
  //   	Matrix H=hadamardMul(J,G);
  //   	printf("hadamardMul cpu*: %lf\n", getTimer()-t1);
- //   	cuH.updateMatrixFromGPU();
- //   	compare(cuH.getData(),H.getData(),SIZE);
+ //   	cuH->updateMatrixFromGPU();
+ //   	compare(cuH->getData(),H.getData(),SIZE);
 
 
 	// printf("activateDerivate:  \n");
  //   	float j[SIZE];
 	// for(unsigned i=0;i<SIZE;++i)
-	// 	j[i]=sin(i);
+	// 	j[i]=std::exp(i);
 	// Matrix J(ROW,COL,j);
 	// CuMatrix cuJ(J,cu.handle);
  //   	t1=getTimer();
