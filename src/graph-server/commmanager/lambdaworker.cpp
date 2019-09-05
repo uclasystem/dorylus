@@ -3,6 +3,7 @@
 
 extern std::mutex count_mutex, eval_mutex;
 extern std::condition_variable cv_forward, cv_backward;
+extern unsigned evalLambdas;
 
 
 /**
@@ -14,24 +15,17 @@ LambdaWorker::LambdaWorker(unsigned nodeId_, zmq::context_t& ctx_,
                            unsigned numLambdasForward_, unsigned numLambdasBackward_,
                            unsigned& countForward_, unsigned& countBackward_,
                            unsigned& numCorrectPredictions_, float& totalLoss_,
-                           unsigned& numValidationVertices_,
+                           unsigned& numValidationVertices_, unsigned& evalPartitions_,
                            std::vector<bool>& trainPartitions_)
     : nodeId(nodeId_), ctx(ctx_), workersocket(ctx, ZMQ_DEALER),
       numLambdasForward(numLambdasForward_), numLambdasBackward(numLambdasBackward_),
       countForward(countForward_), countBackward(countBackward_),
       numCorrectPredictions(numCorrectPredictions_), totalLoss(totalLoss_),
-      numValidationVertices(numValidationVertices_),
-      trainPartitions(trainPartitions_), evalLambdas(0) {
+      numValidationVertices(numValidationVertices_), evalPartitions(evalPartitions_),
+      trainPartitions(trainPartitions_) {
+
     workersocket.setsockopt(ZMQ_LINGER, 0);
     workersocket.connect("inproc://backend");
-
-    // Find the number of evaluation partitions
-    // May be better to do in LambdaComm... Somewhat redundant here
-    evalPartitions = 0;
-    for (bool train : trainPartitions) {
-        if (!train)
-            ++evalPartitions;
-    }
 }
 
 LambdaWorker::~LambdaWorker() {
@@ -270,6 +264,8 @@ LambdaWorker::sendTargetMatrix(zmq::message_t& client_id, unsigned partId) {
 
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char*) header.data(), OP::RESP, 0, thisPartRows, targetMatrix.getCols());
+
+    workersocket.send(client_id, ZMQ_SNDMORE);
     workersocket.send(header, ZMQ_SNDMORE);
 
     zmq::message_t partitionData(bufSize);
@@ -278,9 +274,10 @@ LambdaWorker::sendTargetMatrix(zmq::message_t& client_id, unsigned partId) {
 }
 
 void
-LambdaWorker::recvValidationResults(zmq::message_t& client_d, zmq::message_t& header) {
+LambdaWorker::recvValidationResults(zmq::message_t& client_id, zmq::message_t& header) {
     // Send empty ack message
     zmq::message_t confirm;
+    workersocket.send(client_id, ZMQ_SNDMORE);
     workersocket.send(confirm);
 
     unsigned totalCorrectThisPartition = parse<unsigned>((char*)header.data(), 2);
@@ -297,8 +294,9 @@ LambdaWorker::recvValidationResults(zmq::message_t& client_d, zmq::message_t& he
     // and accuracy
     // NOTE: Will only be acc/loss per node, not global acc/loss
     if (evalLambdas == 0) {
-        printLog(nodeId, "Accuracy this epoch: %f\nLoss this epoch %f\n",
-                 (float) numCorrectPredictions / numValidationVertices,
-                 totalLoss / numValidationVertices);
+        printLog(nodeId, "Accuracy this epoch: %f",
+             (float) numCorrectPredictions / (float) numValidationVertices);
+        printLog(nodeId, "Loss this epoch %f",
+             totalLoss / (float) numValidationVertices);
     }
 }

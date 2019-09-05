@@ -34,7 +34,7 @@ public:
                  unsigned numLambdasForward_, unsigned numLambdasBackward_,
                  unsigned& countForward_, unsigned& countBackward_,
                  unsigned& numCorrectPredictions_, float& totalLoss_,
-                 unsigned& numValidationVertices_,
+                 unsigned& numValidationVertices_, unsigned& evalPartitions_,
                  std::vector<bool>& trainPartitions_);
 
     ~LambdaWorker();
@@ -61,7 +61,8 @@ protected:
 
     unsigned& numCorrectPredictions;
     float& totalLoss;
-    unsigned numValidationVertices;
+    unsigned& numValidationVertices;
+    unsigned& evalPartitions;
 
     // Whether or not to evaluate this epoch
     bool evaluate;
@@ -107,9 +108,6 @@ private:
     std::vector<Matrix> zMatrices;      // Matrices to send.
     std::vector<Matrix> actMatrices;
     Matrix targetMatrix;
-
-    unsigned evalLambdas;
-    unsigned evalPartitions;
 };
 
 

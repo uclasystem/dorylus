@@ -4,6 +4,7 @@
 
 std::mutex count_mutex, eval_mutex;
 std::condition_variable cv_forward, cv_backward;
+unsigned evalLambdas = 0;
 
 
 static std::vector<LambdaWorker *> workers;
@@ -21,7 +22,7 @@ LambdaComm::LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::strin
       ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), coordsocket(ctx, ZMQ_REQ),
       numLambdasForward(numLambdasForward_), numLambdasBackward(numLambdasBackward_), numListeners(numLambdasBackward_),   // TODO: Decide numListeners.
       countForward(0), countBackward(0),
-      numCorrectPredictions(0), totalLoss(0.0), numValidationVertices(0) {
+      numCorrectPredictions(0), totalLoss(0.0), numValidationVertices(0), evalPartitions(0) {
 
     // Bind the proxy sockets.
     char dhost_port[50];
@@ -38,7 +39,7 @@ LambdaComm::LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::strin
         workers.push_back(new LambdaWorker(nodeId, ctx, numLambdasForward,
                             numLambdasBackward, countForward, countBackward,
                             numCorrectPredictions, totalLoss, numValidationVertices,
-                            trainPartitions));
+                            evalPartitions, trainPartitions));
         worker_threads.push_back(new std::thread(std::bind(&LambdaWorker::work, workers[i])));
         worker_threads[i]->detach();
     }
@@ -95,6 +96,7 @@ LambdaComm::setTrainValidationSplit(float trainPortion, unsigned numLocalVertice
     // Calculate the total number of validaiton vertices
     // This member is passed by reference to the lambda workers so on update
     // they will have the correct number
+
     unsigned partVertices = std::ceil((float) numLocalVertices / (float) numLambdasForward);
     for (unsigned i = 0; i < trainPartitions.size(); ++i) {
         if (!trainPartitions[i]) {
@@ -104,6 +106,7 @@ LambdaComm::setTrainValidationSplit(float trainPortion, unsigned numLocalVertice
             }
 
             numValidationVertices += thisPartVertices;
+            ++evalPartitions;
         }
     }
 }

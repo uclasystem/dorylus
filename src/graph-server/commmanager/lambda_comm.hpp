@@ -69,6 +69,7 @@ private:
     unsigned numCorrectPredictions;
     float totalLoss;
     unsigned numValidationVertices;
+    unsigned evalPartitions;
 
     zmq::context_t ctx;
     zmq::socket_t frontend;
