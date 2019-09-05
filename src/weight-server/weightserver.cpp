@@ -17,8 +17,8 @@ static std::ofstream outfile;
 /** Logging utility. */
 void
 WeightServer::serverLog(std::string info) {
-    std::string msgBase = master ? "[MASTER]" : "[WORKER]";
-    std::cout << msgBase << " " << info << std::endl;
+    std::string msgBase = master ? "[ MASTER ] " : "[ WORKER ] ";
+    std::cout << msgBase << info << std::endl;
 }
 
 
