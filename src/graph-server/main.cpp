@@ -18,13 +18,22 @@ main(int argc, char *argv[]) {
     // Initialize the engine.
     Engine::init(argc, argv);
 
+    float splitPortion = 1.0 / 3.0;
+    unsigned numEpochs = 31;
+    unsigned valFreq = 10;
+
+    if (Engine::master())
+        printLog(Engine::getNodeId(), "% Train Data: %f, \
+                    number of epochs: %u, validation frequency: %u",
+                    splitPortion, numEpochs, valFreq);
+
     // Use one third of partitions as training and 2/3 as validation
     Engine::setTrainValidationSplit(1.0 / 3.0);
 
     // Do a forward-prop phase.
-    for (unsigned epoch = 0; epoch < 21; ++epoch) {
+    for (unsigned epoch = 0; epoch < numEpochs; ++epoch) {
         printLog(Engine::getNodeId(), "Starting Epoch %u", epoch+1);
-        if (epoch != 0 && epoch % 10 == 0) {
+        if (epoch != 0 && (epoch % valFreq == 0 || epoch == 1)) {
             if (Engine::master())
                 printLog(Engine::getNodeId(), "Time for some validation");
 

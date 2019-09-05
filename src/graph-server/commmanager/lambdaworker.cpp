@@ -298,5 +298,8 @@ LambdaWorker::recvValidationResults(zmq::message_t& client_id, zmq::message_t& h
              (float) numCorrectPredictions / (float) numValidationVertices);
         printLog(nodeId, "Loss this epoch %f",
              totalLoss / (float) numValidationVertices);
+
+        numCorrectPredictions = 0;
+        totalLoss = 0;
     }
 }
