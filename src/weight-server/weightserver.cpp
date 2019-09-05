@@ -17,8 +17,8 @@ static std::ofstream outfile;
 /** Logging utility. */
 void
 WeightServer::serverLog(std::string info) {
-    std::string msgBase = master ? "[MASTER]" : "[WORKER]";
-    std::cout << msgBase << " " << info << std::endl;
+    std::string msgBase = master ? "[ MASTER ] " : "[ WORKER ] ";
+    std::cout << msgBase << info << std::endl;
 }
 
 
@@ -51,7 +51,7 @@ WeightServer::WeightServer(std::string& weightServersFile, std::string& myPrIpFi
 }
 
 WeightServer::~WeightServer() {
-    std::cout << "[SHUTDOWN] Deletin workers" << std::endl;
+    std::cout << "[SHUTDOWN] Deleting workers" << std::endl;
     // Delete allocated resources.
     for (int i = 0; i < NUM_LISTENERS; ++i) {
         delete workers[i];

@@ -48,7 +48,7 @@ struct LabelsHeaderType {
 
 /**
  *
- * Class of an ASPIRE engine executing on a node.
+ * Class of a GNN-LAMBDA engine executing on a node.
  * 
  */
 class Engine {
@@ -57,12 +57,28 @@ public:
 
     // Public APIs for benchmarks.
     static void init(int argc, char *argv[]);
-    static void runForward();
+    static void runForward(bool eval = false);
     static void runBackward();
     static void output();
     static void destroy();
     static bool master();
     static bool isGPUEnabled();
+
+    static void makeBarrier();
+
+    static unsigned getNumEpochs();
+    static unsigned getValFreq();
+    static unsigned getNodeId();
+
+    // For now, split is at a partition granularity
+    // For this node, will simply split the data into training data and validaiton data
+    // at the partition level (trainPortion = 1/3 means 1/3 of data will be training data
+    // and 2/3 will be validation
+    // TODO:
+    //  optimize this as ML might require things such as random sampling etc for training
+    //  QUESTION: Is it beneficial to go beyond parition level for individual vertices
+    //      as this will incur serialization overhead
+    static void setTrainValidationSplit(float trainPortion);
 
 private:
 
@@ -108,13 +124,20 @@ private:
 
     static unsigned numLambdasForward;
     static unsigned numLambdasBackward;
+    static unsigned numEpochs;
+    static unsigned valFreq;
+
+    // table representing whether the partition id is a training set or not
+    static std::vector<bool> trainPartition;
+
     static LambdaComm *lambdaComm;
     static unsigned gpuEnabled;
     static GPUComm *gpuComm;
     
-
     static unsigned nodeId;
     static unsigned numNodes;
+
+    static bool evaluate;
 
     static bool halt;
 

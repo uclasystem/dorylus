@@ -7,7 +7,7 @@ typedef float FeatType;
 
 
 static const size_t HEADER_SIZE = sizeof(unsigned) * 5;
-enum OP { REQ_FORWARD, PUSH_FORWARD, PULL_FORWARD, REQ_BACKWARD, PUSH_BACKWARD, PULL_BACKWARD, RESP, INFO, TERM };
+enum OP { REQ_FORWARD, PUSH_FORWARD, PULL_FORWARD, REQ_BACKWARD, PUSH_BACKWARD, PULL_BACKWARD, PULL_EVAL, PUSH_EVAL, RESP, INFO, TERM };
 
 
 #define ERR_HEADER_FIELD UINT_MAX
@@ -34,11 +34,12 @@ parse(const char *buf, unsigned offset) {
 
 // ID represents either layer or data partition, depending on server responding.
 static inline void
-populateHeader(char* header, unsigned op, unsigned field1 = 0, unsigned field2 = 0, unsigned field3 = 0) {
+populateHeader(char* header, unsigned op, unsigned field1 = 0, unsigned field2 = 0, unsigned field3 = 0, unsigned field4 = 0) {
 	serialize<unsigned>(header, 0, op);
 	serialize<unsigned>(header, 1, field1);
 	serialize<unsigned>(header, 2, field2);
 	serialize<unsigned>(header, 3, field3);
+	serialize<unsigned>(header, 4, field4);
 }
 
 
@@ -61,6 +62,12 @@ public:
     unsigned getNumElemts() const { return rows * cols; }
     FeatType *getData() const { return data; }
     size_t getDataSize() const { return rows * cols * sizeof(FeatType); }
+
+    // Get a specific element in the matrix
+    FeatType get(unsigned row, unsigned col) { return data[row * cols + col]; }
+    // Get a full row in the matrix
+    // Just returns a pointer to the start of the row (no size information etc)
+    FeatType* get(unsigned row) { return data + (row * cols); }
 
     void setRows(unsigned _rows) { rows = _rows; }
     void setCols(unsigned _cols) { cols = _cols; }
