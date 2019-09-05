@@ -175,7 +175,7 @@ CoordServer::run() {
                 // Issue a bunch of lambda threads to serve the request.
                 for (unsigned i = 0; i < nThreadsReq; ++i) {
                     char *weightserverIp = weightserverAddrs[req_count % weightserverAddrs.size()];
-                    invokeFunction("forward-prop-josehu", dataserverIpCopy, dataserverPort, weightserverIp, weightserverPort, layer, i);
+                    invokeFunction("new-forward-prop", dataserverIpCopy, dataserverPort, weightserverIp, weightserverPort, layer, i);
                     req_count++;
                 }
 
