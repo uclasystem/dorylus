@@ -162,7 +162,8 @@ void ComputingServer::processBackward(zmq::message_t &header){
     GraphData graphData=requestForwardMatrices(layer);
     t.join();
     std::cout << "< BACKWARD > Doing the gradient descent computation..." << std::endl;
-    // weightsUpdates = gradientComputation(graphData, weightsData);
+    std::vector<Matrix> weightsUpdates;
+    weightsUpdates = gradientComputation(graphData, weightsData);
 }
 
 
@@ -179,35 +180,37 @@ void ComputingServer::processBackward(zmq::message_t &header){
 std::vector<Matrix>
 ComputingServer::gradientComputation(GraphData& graphData, std::vector<Matrix>& weightsData) {
     
-    std::vector<Matrix> gradients;
+    std::vector<CuMatrix*> gradients;
     std::vector<Matrix> weightsUpdates;
 
     // Compute last layer's gradients.
-    // Matrix softmaxRes = cu.softmaxRows(graphData.actMatrices.back());
-    // Matrix subRes = hadamardSub(softmaxRes, graphData.targetMatrix);
-    // Matrix derivateRes = activateDerivate(graphData.zMatrices.back());
-    // gradients.push_back(hadamardMul(subRes, derivateRes));
-    // delete[] softmaxRes.getData();
-    // delete[] subRes.getData();
-    // delete[] derivateRes.getData();
+    CuMatrix softmaxRes = cu.softmaxRows(cu.wrapMatrix(graphData.actMatrices.back()));
 
-    // // Compute previous layers gradients.
-    // for (unsigned i = weightsData.size(); i > 0; --i) {
-    //     Matrix dotRes = dotGDwithWTrans(gradients.back(), weightsData[i - 1]);
-    //     Matrix derivateRes = activateDerivate(graphData.zMatrices[i - 1]);
-    //     gradients.push_back(hadamardMul(dotRes, derivateRes));
-    //     delete[] dotRes.getData();
-    //     delete[] derivateRes.getData();
-    // }
+    CuMatrix subRes = cu.hadamardSub(softmaxRes, cu.wrapMatrix(graphData.targetMatrix));
 
-    // std::reverse(gradients.begin(), gradients.end());
+    CuMatrix derivateRes = cu.activateDerivate(cu.wrapMatrix(graphData.zMatrices.back()));
 
-    // // Compute weights updates.
-    // for (unsigned i = 0; i < gradients.size(); ++i) {
-    //     weightsUpdates.push_back(dotActTranswithGD(graphData.actMatrices[i], gradients[i], LEARNING_RATE));
-    //     delete[] gradients[i].getData();
-    // }
+    gradients.push_back(cu.hadamardMul(subRes, derivateRes));
 
+    // Compute previous layers gradients.
+    for (unsigned i = weightsData.size(); i > 0; --i) {
+        printf("dotGDwithWTrans for\n");
+        CuMatrix cuWeights=cu.wrapMatrix(weightsData[i - 1]);
+        CuMatrix dotRes = cu.dotGDwithWTrans(*gradients.back(),cuWeights);
+        
+        CuMatrix cuZ= cu.wrapMatrix(graphData.zMatrices[i - 1]);
+        CuMatrix derivateRes = cu.activateDerivate(cuZ);
+        gradients.push_back(cu.hadamardMul(dotRes, derivateRes));
+    }
+
+    std::reverse(gradients.begin(), gradients.end());
+
+    printf("Compute weights updates.\n");
+    // Compute weights updates.
+    for (unsigned i = 0; i < gradients.size(); ++i){
+        Matrix update=cu.dotActTranswithGD(cu.wrapMatrix(graphData.actMatrices[i]), *gradients[i], LEARNING_RATE).getMatrix();
+        weightsUpdates.push_back(update);
+    }
     return weightsUpdates;
 }
 

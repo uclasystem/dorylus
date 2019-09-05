@@ -71,17 +71,18 @@ class ComputingUnit
 {
 public:
 	ComputingUnit();
-	CuMatrix dot(Matrix& A,Matrix& B); 	
-	void activate(CuMatrix& A); 	
-    // Matrix softmaxRows(Matrix &mat);
-    CuMatrix softmaxRows(CuMatrix &mat);
-    CuMatrix hadamardSub(CuMatrix& matLeft, CuMatrix& matRight);
-    CuMatrix hadamardMul(CuMatrix& matLeft, CuMatrix& matRight);
-    CuMatrix activateDerivate(CuMatrix& mat);
-    CuMatrix dotGDwithWTrans(CuMatrix& matLeft, CuMatrix& matRight);
-    CuMatrix dotActTranswithGD(CuMatrix& matLeft, CuMatrix& matRight, float learning_rate);
-	~ComputingUnit(){cublasDestroy(handle);}
 
+    CuMatrix wrapMatrix(Matrix m);
+
+	CuMatrix dot(const Matrix& A,const Matrix& B); 	
+	void activate(CuMatrix& A); 	
+    CuMatrix softmaxRows(const CuMatrix &mat);
+    CuMatrix hadamardSub(const CuMatrix& matLeft,const CuMatrix& matRight);
+    CuMatrix* hadamardMul(const CuMatrix& matLeft,const CuMatrix& matRight);
+    CuMatrix activateDerivate(const CuMatrix& mat);
+    CuMatrix dotGDwithWTrans(const CuMatrix& matLeft,const CuMatrix& matRight);
+    CuMatrix dotActTranswithGD(const CuMatrix& matLeft, const CuMatrix& matRight, const float learning_rate);
+	~ComputingUnit(){cublasDestroy(handle);}
 // private:
 	cublasHandle_t handle;
 	cublasStatus_t stat;
@@ -90,6 +91,7 @@ public:
 
 
 ComputingUnit::ComputingUnit(){
+
     stat = cublasCreate(&handle);
     if (stat != CUBLAS_STATUS_SUCCESS) {
         printf ("CUBLAS initialization failed\n");
@@ -98,11 +100,17 @@ ComputingUnit::ComputingUnit(){
     cublasSetMathMode(handle,CUBLAS_TENSOR_OP_MATH);
 }
 
+CuMatrix ComputingUnit::wrapMatrix(Matrix m){
+    printf("Wrapping\n");
+    return CuMatrix(m,handle);
+}
 
 
-CuMatrix ComputingUnit::hadamardSub(CuMatrix& matLeft, CuMatrix& matRight) {
-
-    CuMatrix res(Matrix(matLeft.getRows(),matLeft.getCols(), new FeatType[matLeft.getNumElemts()]),handle);
+CuMatrix ComputingUnit::hadamardSub(const CuMatrix& matLeft,const CuMatrix& matRight) {
+    assert(matLeft.getRows() == matRight.getRows());
+    assert(matLeft.getCols() == matRight.getCols());
+    // CuMatrix res(Matrix(matLeft.getRows(),matLeft.getCols(), new FeatType[matLeft.getNumElemts()]),handle);
+    CuMatrix res(Matrix(matLeft.getRows(),matLeft.getCols(), (FeatType *)NULL),handle);
 
     thrust::device_ptr<float> cuLeft_ptr(matLeft.devPtr);
     thrust::device_ptr<float> cuRight_ptr(matRight.devPtr);
@@ -116,13 +124,15 @@ CuMatrix ComputingUnit::hadamardSub(CuMatrix& matLeft, CuMatrix& matRight) {
     return res;
 }
 
-CuMatrix ComputingUnit::hadamardMul(CuMatrix& matLeft, CuMatrix& matRight) {
-
-    CuMatrix res(Matrix(matLeft.getRows(),matLeft.getCols(), new FeatType[matLeft.getNumElemts()]),handle);
+CuMatrix* ComputingUnit::hadamardMul(const CuMatrix& matLeft,const CuMatrix& matRight) {
+    assert(matLeft.getRows() == matRight.getRows());
+    assert(matLeft.getCols() == matRight.getCols());
+    // CuMatrix res(Matrix(matLeft.getRows(),matLeft.getCols(), new FeatType[matLeft.getNumElemts()]),handle);
+    CuMatrix* res=new CuMatrix(Matrix(matLeft.getRows(),matLeft.getCols(), (FeatType *)NULL),handle);
 
     thrust::device_ptr<float> cuLeft_ptr(matLeft.devPtr);
     thrust::device_ptr<float> cuRight_ptr(matRight.devPtr);
-    thrust::device_ptr<float> res_ptr(res.devPtr);
+    thrust::device_ptr<float> res_ptr(res->devPtr);
 
     thrust::transform(cuLeft_ptr,cuLeft_ptr+matLeft.getNumElemts(),
                         cuRight_ptr,
@@ -132,9 +142,10 @@ CuMatrix ComputingUnit::hadamardMul(CuMatrix& matLeft, CuMatrix& matRight) {
     return res;
 }
 
-// GPU is faster than CPU when SIZE>250000, Maybe CPU is faster in most cases 
-CuMatrix ComputingUnit::softmaxRows(CuMatrix &mat){
-    CuMatrix res(Matrix(mat.getRows(),mat.getCols(),new FeatType[mat.getNumElemts()]),handle);
+// GPU is faster than CPU when SIZE>~250000, Maybe CPU is faster in most cases 
+CuMatrix ComputingUnit::softmaxRows(const CuMatrix &mat){
+    // CuMatrix res(Matrix(mat.getRows(),mat.getCols(),new FeatType[mat.getNumElemts()]),handle);
+    CuMatrix res(Matrix(mat.getRows(),mat.getCols(),(FeatType *)NULL),handle);
     thrust::device_ptr<float> devMat_ptr(mat.devPtr);
     thrust::device_ptr<float> res_ptr(res.devPtr);
     thrust::transform(devMat_ptr, devMat_ptr+mat.getNumElemts(),res_ptr, exp_functor());
@@ -149,12 +160,13 @@ CuMatrix ComputingUnit::softmaxRows(CuMatrix &mat){
                         thrust::make_discard_iterator(),
                         row_sums.begin());
     thrust::transform(indices.begin(), indices.end(),res_ptr,res_ptr, divide_functor(thrust::raw_pointer_cast(row_sums.data())));
-
     return res;
 }
 
-CuMatrix ComputingUnit::activateDerivate(CuMatrix& mat) {
-    CuMatrix res(Matrix(mat.getRows(),mat.getCols(),new FeatType[mat.getNumElemts()]),handle);
+CuMatrix ComputingUnit::activateDerivate(const CuMatrix& mat) {
+    // printf("activateDerivate function\n");
+    // CuMatrix res(Matrix(mat.getRows(),mat.getCols(),new FeatType[mat.getNumElemts()]),handle);
+    CuMatrix res(Matrix(mat.getRows(),mat.getCols(),(FeatType *)NULL),handle);
     thrust::device_ptr<float> res_ptr(res.devPtr);
     CuMatrix z(Matrix(mat.getRows(),mat.getCols(),mat.getData()),handle);
     thrust::device_ptr<float> z_ptr(z.devPtr);
@@ -164,20 +176,22 @@ CuMatrix ComputingUnit::activateDerivate(CuMatrix& mat) {
 
 
 CuMatrix
-ComputingUnit::dotGDwithWTrans(CuMatrix& matLeft, CuMatrix& matRight) {
-    CuMatrix res=matLeft.dot(matRight,1.0f,0.f,false,true);
+ComputingUnit::dotGDwithWTrans(const CuMatrix& matLeft,const CuMatrix& matRight) {
+    CuMatrix matRightTrans = matRight.transpose();
+    CuMatrix res = matLeft.dot(matRightTrans);
     return res;
 }
 
 CuMatrix
-ComputingUnit::dotActTranswithGD(CuMatrix& matLeft, CuMatrix& matRight, float learning_rate) {
-    CuMatrix res=matLeft.dot(matRight,learning_rate,0,true,false);
+ComputingUnit::dotActTranswithGD(const CuMatrix& matLeft,const CuMatrix& matRight, float learning_rate) {
+    CuMatrix matLeftTrans = matLeft.transpose();
+    CuMatrix res=matLeftTrans.dot(matRight,learning_rate);
     return res;
 }
 
 
 
-CuMatrix ComputingUnit::dot(Matrix& A, Matrix& B){
+CuMatrix ComputingUnit::dot(const Matrix& A, const Matrix& B){
     CuMatrix devA(A,handle);
     CuMatrix devB(B,handle);
     CuMatrix devC=devA.dot(devB);

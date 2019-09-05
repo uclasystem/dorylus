@@ -56,9 +56,9 @@ public:
     Matrix(unsigned _rows, unsigned _cols, FeatType *_data) { rows = _rows; cols = _cols; data = _data; }
     Matrix(unsigned _rows, unsigned _cols, char *_data) { rows = _rows; cols = _cols; data = (FeatType *) _data; }
 
-    unsigned getRows() { return rows; }
-    unsigned getCols() { return cols; }
-    unsigned getNumElemts() { return rows * cols; }
+    unsigned getRows() const { return rows; }
+    unsigned getCols() const { return cols; }
+    unsigned getNumElemts() const { return rows * cols; }
     FeatType *getData() const { return data; }
     size_t getDataSize() const { return rows * cols * sizeof(FeatType); }
 

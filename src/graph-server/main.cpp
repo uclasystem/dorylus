@@ -20,8 +20,7 @@ main(int argc, char *argv[]) {
     Engine::runForward();
 
     // Do a backward-prop phase.
-    if(Engine::isGPUEnabled()==0)
-        Engine::runBackward();
+    Engine::runBackward();
 
     // Procude the output files.
     Engine::output();
