@@ -1,27 +1,4 @@
-#ifndef __COMP_UNIT_HPP__
-#define __COMP_UNIT_HPP__
-
-#include <cstring>
-#include <chrono>
-#include <iostream>
-#include <memory>
-#include <sstream>
-#include <string>
-#include <thread>
-#include <cstdlib>
-#include <cmath>
-#include <cuda_runtime.h>
-#include "cublas_v2.h"
-#include "../../../src/utils/utils.hpp"
-
-#include "CuMatrix.hpp"
-
-#include <thrust/device_vector.h>
-#include <thrust/functional.h>
-#include <thrust/transform.h>
-#include <thrust/iterator/discard_iterator.h>
-#include <thrust/reduce.h>
-
+#include "comp_unit.cuh"
 
 struct tanh_functor
 {
@@ -61,33 +38,6 @@ struct setRow_functor
     __host__ __device__
         int operator()(const int& x) const { return x/col;}
 };
-
-
-//TODO: modify function return value and signatures to fit the real workload
-//		This is important because it can reduce memory copy from GPU and RAM
-//AWARE: to free Matrix.data in long run
-//It maintains a GPU context
-class ComputingUnit
-{
-public:
-	ComputingUnit();
-
-    CuMatrix wrapMatrix(Matrix m);
-
-	CuMatrix dot(const Matrix& A,const Matrix& B); 	
-	void activate(CuMatrix& A); 	
-    CuMatrix softmaxRows(const CuMatrix &mat);
-    CuMatrix hadamardSub(const CuMatrix& matLeft,const CuMatrix& matRight);
-    CuMatrix* hadamardMul(const CuMatrix& matLeft,const CuMatrix& matRight);
-    CuMatrix activateDerivate(const CuMatrix& mat);
-    CuMatrix dotGDwithWTrans(const CuMatrix& matLeft,const CuMatrix& matRight);
-    CuMatrix dotActTranswithGD(const CuMatrix& matLeft, const CuMatrix& matRight, const float learning_rate);
-	~ComputingUnit(){cublasDestroy(handle);}
-// private:
-	cublasHandle_t handle;
-	cublasStatus_t stat;
-};
-
 
 
 ComputingUnit::ComputingUnit(){
@@ -195,12 +145,7 @@ CuMatrix ComputingUnit::dot(const Matrix& A, const Matrix& B){
 }
 
 void ComputingUnit::activate(CuMatrix& A){
-	thrust::device_ptr<float> devA_ptr(A.devPtr);
-  	thrust::transform(devA_ptr, devA_ptr+A.getNumElemts(),devA_ptr, tanh_functor());
-  	A.updateMatrixFromGPU();
+    thrust::device_ptr<float> devA_ptr(A.devPtr);
+    thrust::transform(devA_ptr, devA_ptr+A.getNumElemts(),devA_ptr, tanh_functor());
+    A.updateMatrixFromGPU();
 }
-
-
-
-
-#endif

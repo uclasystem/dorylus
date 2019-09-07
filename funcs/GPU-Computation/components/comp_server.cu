@@ -1,76 +1,4 @@
-#ifndef __COMP_SERVER_HPP__
-#define __COMP_SERVER_HPP__
-
-#include <zmq.hpp>
-#include <chrono>
-#include <iostream>
-#include <fstream>
-#include <string>
-#include <cstring>
-#include <sstream>
-#include <boost/algorithm/string/trim.hpp>
-#include <vector>
-#include <thread>
-#include "../comp_unit/comp_unit.hpp"
-#include "../../../src/utils/utils.hpp"
-#include "../../../src/graph-server/utils/utils.cpp"
-
-
-const float LEARNING_RATE=0.1;
-
-/** Struct for wrapping over the returned matrices. */
-typedef struct {
-    std::vector<Matrix> zMatrices;          // Layer 1 -> last.
-    std::vector<Matrix> actMatrices;        // Layer 0 -> last.
-    Matrix targetMatrix;
-} GraphData;
-
-
-class ComputingServer {
-public:
-    ComputingServer(unsigned dPort_,const std::string& wServersFile,unsigned wPort_);
-
-    //read weight file 
-    void loadWeightServers(std::vector<char *>& addresses, const std::string& wServersFile);
-    void terminateWeightServers();
-    void sendShutdownMessage(zmq::socket_t& weightsocket);
-
-    // Keep listening to computing requests
-    void run();
-
-    // Sending and Requesting functions
-    Matrix requestWeightsMatrix( unsigned layer);
-    Matrix requestFeatsMatrix(unsigned rows,unsigned cols);
-    void sendMatrices(Matrix& zResult, Matrix& actResult);
-    void processForward(zmq::message_t &header);
-
-    //for backward
-    GraphData requestForwardMatrices(unsigned numLayers);
-    std::vector<Matrix> requestWeightsMatrices(unsigned numLayers);
-    void processBackward(zmq::message_t &header);
-    void sendInfoMessage(zmq::socket_t& weightsocket, unsigned numLambdas);
-    std::vector<Matrix> gradientComputation(GraphData& graphData, std::vector<Matrix>& weightsData);
-    void sendWeightsUpdates(std::vector<Matrix> weightsUpdates);
-
-
-
-private:
-    //ntw related objs
-    zmq::context_t dctx;
-    zmq::context_t wctx;
-    zmq::socket_t dataSocket;
-    zmq::socket_t weightSocket;
-
-    std::vector<char*> weightServerAddrs;
-    unsigned dPort;
-    unsigned wPort;
-    unsigned nodeId;
-
-    char ipc_addr[50];
-
-    //GPU part
-    ComputingUnit cu;
-};
+#include "comp_server.cuh"
 
 void doNotFreeBuffer(void *data, void *hint){
     // printf("Buffer is not freed :)\n");
@@ -112,18 +40,17 @@ void ComputingServer::run(){
 
             switch (op){
                 case OP::TERM:
-                printf("Terminating\n");
-                terminate=1;
-                terminateWeightServers();
-                break;
+                    terminate=1;
+                    terminateWeightServers();
+                    break;
                 case OP::REQ_FORWARD:
-                processForward(header);
-                break;
+                    processForward(header);
+                    break;
                 case OP::REQ_BACKWARD:
-                processBackward(header);
-                break;
+                    processBackward(header);
+                    break;
                 default:
-                printf("unknown OP\n");
+                    printf("Unknown OP\n");
             }
         }
     } catch (std::exception& ex) {
@@ -149,7 +76,6 @@ void ComputingServer::processBackward(zmq::message_t &header){
     unsigned numNode = parse<unsigned>((char *) header.data(), 2);
 
     //send INFO to weight server
-    printf("Send to weight \n");
     if(nodeId<weightServerAddrs.size()){
         unsigned count = 0; 
         for (size_t i=0;i<numNode;++i)
@@ -377,17 +303,13 @@ void ComputingServer::processForward(zmq::message_t &header){
     
     Matrix feats=requestFeatsMatrix(rows,cols);
     wThread.join();
-    printf("Finish receiving all data\n");
-    printf("Start Feat .* Weight\n");
     double t1=getTimer();
     CuMatrix z = cu.dot(feats, weights);
-    printf("Start Act(Z)\n");
     FeatType* z_buffer=new FeatType[z.getRows()*z.getCols()];
     memcpy(z_buffer,z.getData(),z.getDataSize());
     Matrix z_send(z.getRows(),z.getCols(),z_buffer);            
     cu.activate(z);//z data get activated ...
-    printf("Total*: %lf\n", getTimer()-t1);
-    printf("Sending Z and Act Z\n");
+    printf("BACKWARD Computation Time: %lf\n", getTimer()-t1);
     sendMatrices(z_send,z);
 
     delete[] (feats.getData());
@@ -494,7 +416,7 @@ ComputingServer::terminateWeightServers(){
         ws.setsockopt(ZMQ_IDENTITY, identity, strlen(identity) + 1);
         char whost_port[50];
         sprintf(whost_port, "tcp://%s:%u", weightServerAddrs[i], wPort);
-        std::cout << "  found weightserver " << whost_port << std::endl;
+        std::cout << "  Shutting Down Weightserver " << whost_port << std::endl;
         ws.connect(whost_port);
         sendShutdownMessage(ws);
         ws.close();
@@ -516,8 +438,3 @@ ComputingServer::sendShutdownMessage(zmq::socket_t& weightsocket) {
     zmq::message_t confirm;
     weightsocket.recv(&confirm);
 }
-
-
-
-
-#endif 

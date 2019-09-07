@@ -7,7 +7,7 @@ set(CUDA_64_BIT_DEVICE_CODE ON)
 
 
 # Project name.
-project(forward-GPU LANGUAGES CXX CUDA)
+project(GPU-Computation LANGUAGES CXX CUDA)
 
 FIND_PACKAGE(CUDA REQUIRED)
 
@@ -29,9 +29,7 @@ set(CBLIB /usr/local/blas/CBLAS/lib/cblas_LINUX.a)
 set(CBINC /usr/local/blas/CBLAS/include)
 include_directories(${CBINC})
 
+add_subdirectory(components)
 
-
-add_subdirectory(comp_unit)
-add_subdirectory(comp_server)
-cuda_add_executable(forward_GPU forward_GPU.cu)
-target_link_libraries(forward_GPU ${OBLIB} ${CBLIB}  ComputingUnit ComputingServer )
+cuda_add_executable(GPU-Computation GPU-Computation.cu)
+target_link_libraries(GPU-Computation ComputingServer)

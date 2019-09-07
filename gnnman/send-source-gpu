@@ -9,7 +9,9 @@ machineList=$( < ~/dshmachines )
 for machine in $machineList
 do 
 	scp  -r ./src $machine:~/gnn-lambda/
-	scp  -r ./funcs/forward-prop-GPU $machine:~/gnn-lambda/funcs/
+	scp  -r ./funcs/GPU-Computation $machine:~/gnn-lambda/funcs/
 	scp  ./run/run-gpu-graph-server $machine:~/gnn-lambda/run/run-gpu-graph-server
 
 done
+
+#python3 -m ec2man weight all rsync --exclude ".git*" --exclude "wiki" --exclude "README.md" --exclude "data" ../gnn-lambda 

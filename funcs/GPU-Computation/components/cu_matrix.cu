@@ -1,43 +1,13 @@
-#ifndef __CUMATIX_HPP__
-#define __CUMATIX_HPP__
-
-#include "cublas_v2.h"
-#include <cstring>
-#include <memory>
-#include "../../../src/utils/utils.hpp"
-
-using std::endl;
-using std::cout;
-class CuMatrix : public Matrix
-{
-public:
-	CuMatrix(){};
-    CuMatrix( Matrix M, const cublasHandle_t & handle_); 	
-	~CuMatrix(); 
-
-    Matrix getMatrix();
-	void updateMatrixFromGPU();
-    
-	CuMatrix dot(const CuMatrix& M,float alpha=1.,float beta=0.) const ;
-    CuMatrix transpose() const;
-// private:
-	void deviceMalloc();
-	void deviceSetMatrix();
-
-	cublasHandle_t handle;
-	cudaError_t cudaStat;
-	cublasStatus_t stat;
-	float * devPtr;
-};
+#include "cu_matrix.cuh"
 
 CuMatrix::CuMatrix( Matrix M, const cublasHandle_t & handle_)
-	:Matrix(M.getRows(),M.getCols(),M.getData())
+    :Matrix(M.getRows(),M.getCols(),M.getData())
 {   
     cudaStat=cudaError_t();
-	handle=handle_;
-	deviceMalloc();
+    handle=handle_;
+    deviceMalloc();
     if(getData()!=NULL)
-	   deviceSetMatrix();
+       deviceSetMatrix();
 }
 
 Matrix CuMatrix::getMatrix(){
@@ -60,7 +30,7 @@ void CuMatrix::deviceSetMatrix(){
     unsigned rows=this->getRows();
     unsigned cols=this->getCols();
     FeatType * data=this->getData();
-	stat = cublasSetMatrix (rows,cols, sizeof(float), data, rows , devPtr, rows);
+    stat = cublasSetMatrix (rows,cols, sizeof(float), data, rows , devPtr, rows);
     if (stat != CUBLAS_STATUS_SUCCESS) {
         switch (stat){
             case CUBLAS_STATUS_NOT_INITIALIZED:
@@ -88,7 +58,7 @@ void CuMatrix::updateMatrixFromGPU(){
     if(getData()==NULL)
         setData(new FeatType[getNumElemts()]);
     FeatType * data=this->getData();
-	stat = cublasGetMatrix (rows, cols, sizeof(float), devPtr, rows, data, rows );
+    stat = cublasGetMatrix (rows, cols, sizeof(float), devPtr, rows, data, rows );
     if (stat != CUBLAS_STATUS_SUCCESS) {
         printf ("data upload failed\n");
         cudaFree (devPtr);
@@ -98,7 +68,7 @@ void CuMatrix::updateMatrixFromGPU(){
 }
 
 CuMatrix::~CuMatrix(){
-	cudaFree (devPtr);
+    cudaFree (devPtr);
 }
 
 CuMatrix CuMatrix::dot( const CuMatrix& M,float alpha,float beta) const{
@@ -137,5 +107,3 @@ CuMatrix CuMatrix::transpose() const{
         res.devPtr,getRows());
     return res;
 }
-
-#endif
