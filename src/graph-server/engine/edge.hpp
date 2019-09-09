@@ -55,7 +55,7 @@ public:
 
 /**
  *
- * Class of an outcoming edge.
+ * Class of an outgoing edge.
  * 
  */
 class OutEdge: public Edge {
