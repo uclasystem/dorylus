@@ -379,16 +379,12 @@ WeightServer::initializeWeightMatrices(std::string& configFileName) {
     if (master) {
         auto seed = 8888;
         std::default_random_engine dre(seed);
-        std::uniform_real_distribution<float> dist(-1.5, 1.5);
+        std::uniform_real_distribution<float> dist(-1, 1);
 
         for (unsigned u = 0; u < dims.size() - 1; ++u) {
-            unsigned dataSize = dims[u] * dims[u + 1];
-            float *dptr = new float[dataSize];
-            
-            for (unsigned ui = 0; ui < dataSize; ++ui)
-                dptr[ui] = dist(dre);
+            Matrix w = xavierInitialization(dims[u], dims[u+1]);
 
-            weightMats.push_back(Matrix(dims[u], dims[u + 1], dptr));
+            weightMats.push_back(w);
         }
 
         for (unsigned u = 0; u < weightMats.size(); ++u)
@@ -405,6 +401,34 @@ WeightServer::initializeWeightMatrices(std::string& configFileName) {
 
         updateMats.push_back(Matrix(dims[u], dims[u + 1], dptr));
     }
+}
+
+Matrix
+xavierInitialization(unsigned dim1, unsigned dim2) {
+    std::default_random_engine dre(8888);
+    std::normal_distribution<float> dist(0, 1);
+
+    unsigned dataSize = dim1 * dim2;
+    float *dptr = new float[dataSize];
+
+    for (unsigned ui = 0; ui < dataSize; ++ui)
+        dptr[ui] = dist(dre);
+
+    return Matrix(dim1, dim2, dptr);
+}
+
+Matrix
+xavierInitialization(unsigned dim1, unsigned dim2) {
+    std::default_random_engine dre(8888);
+    std::uniform_real_distribution<float> dist(-1, 1);
+
+    unsigned dataSize = dim1 * dim2;
+    float *dptr = new float[dataSize];
+
+    for (unsigned ui = 0; ui < dataSize; ++ui)
+        dptr[ui] = dist(dre);
+
+    return Matrix(dim1, dim2, dptr);
 }
 
 void
