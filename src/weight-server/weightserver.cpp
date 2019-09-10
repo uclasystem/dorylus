@@ -381,18 +381,12 @@ WeightServer::initializeWeightMatrices(std::string& configFileName) {
 
     // If master node, initialize the weight matrices according to the layer config.
     if (master) {
-        auto seed = 8888;
-        std::default_random_engine dre(seed);
-        std::uniform_real_distribution<float> dist(-1.5, 1.5);
-
         for (unsigned u = 0; u < dims.size() - 1; ++u) {
-            unsigned dataSize = dims[u] * dims[u + 1];
-            float *dptr = new float[dataSize];
+            // Hardcoding this to xavier init for now. Eventually need to make it
+            // configurable
+            Matrix w = xavierInitialization(dims[u], dims[u+1]);
 
-            for (unsigned ui = 0; ui < dataSize; ++ui)
-                dptr[ui] = dist(dre);
-
-            weightMats.push_back(Matrix(dims[u], dims[u + 1], dptr));
+            weightMats.push_back(w);
         }
 
         for (unsigned u = 0; u < weightMats.size(); ++u)
@@ -416,6 +410,54 @@ WeightServer::initializeWeightMatrices(std::string& configFileName) {
 
         updateMats.push_back(Matrix(dims[u], dims[u + 1], dptr));
     }
+}
+
+/**
+ *
+ * Used for weights init when tanh or some other symmetric
+ * activation is being used
+ *
+ */
+Matrix
+WeightServer::xavierInitialization(unsigned dim1, unsigned dim2) {
+    std::default_random_engine dre(8888);
+    std::uniform_real_distribution<float> dist(-1, 1);
+
+    unsigned dataSize = dim1 * dim2;
+    float *dptr = new float[dataSize];
+
+    for (unsigned ui = 0; ui < dataSize; ++ui)
+        dptr[ui] = dist(dre);
+
+    float normFactor = std::sqrt(6.0 / (float (dim1 + dim2)));
+    for (unsigned ui = 0; ui < dataSize; ++ui)
+        dptr[ui] *= normFactor;
+
+    return Matrix(dim1, dim2, dptr);
+}
+
+/**
+ *
+ * Used for weights init when the ReLU or some other asymmetric
+ * activation function is used
+ *
+ */
+Matrix
+WeightServer::kaimingInitialization(unsigned dim1, unsigned dim2) {
+    std::default_random_engine dre(8888);
+    std::normal_distribution<float> dist(0, 1);
+
+    unsigned dataSize = dim1 * dim2;
+    float *dptr = new float[dataSize];
+
+    for (unsigned ui = 0; ui < dataSize; ++ui)
+        dptr[ui] = dist(dre);
+
+    float normFactor = std::sqrt(2.0 / (float(dim1)));
+    for (unsigned ui = 0; ui < dataSize; ++ui)
+        dptr[ui] *= normFactor;
+
+    return Matrix(dim1, dim2, dptr);
 }
 
 void

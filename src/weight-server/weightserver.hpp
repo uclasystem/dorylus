@@ -6,6 +6,7 @@
 #include <cassert>
 #include <chrono>
 #include <condition_variable>
+#include <cmath>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -56,10 +57,19 @@ private:
     // Read in layer configurations. The master constructs the weight matrices and then sends them
     // to the workers.
     void initializeWeightMatrices(std::string& configFileName);
+
+    // Variations of weight matrix initialization
+    Matrix xavierInitialization(unsigned dim1, unsigned dim2);
+    Matrix kaimingInitialization(unsigned dim1, unsigned dim2);
+
     void distributeWeightMatrices();
 
     std::vector<unsigned> dims;
     std::vector<Matrix> weightMats;
+    std::vector<Matrix> biases;
+
+    // Placeholder for implementing Adam 
+    std::vector<Matrix> momentum;
 
     // List of Matrices for holding updates until they are ready to be applied.
     std::vector<Matrix> updateMats;
