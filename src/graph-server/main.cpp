@@ -10,7 +10,7 @@
 /**
  *
  * Main entrance of the aggregate benchmark.
- * 
+ *
  */
 int
 main(int argc, char *argv[]) {
@@ -47,7 +47,7 @@ main(int argc, char *argv[]) {
             Engine::runForward();
 
             // Do a backward-prop phase.
-            if(Engine::isGPUEnabled()==0)
+            if (Engine::isGPUEnabled() == 0)
                 Engine::runBackward();
         }
     }
