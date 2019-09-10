@@ -168,7 +168,11 @@ Engine::init(int argc, char *argv[]) {
  */
 void
 Engine::setTrainValidationSplit(float trainPortion) {
-    lambdaComm->setTrainValidationSplit(trainPortion, graph.getNumLocalVertices());
+    if(Engine::gpuEnabled)
+        lambdaComm->setTrainValidationSplit(trainPortion, graph.getNumLocalVertices());
+    else
+        gpuComm->setTrainValidationSplit(trainPortion, graph.getNumLocalVertices());
+
 }
 
 
@@ -284,7 +288,7 @@ Engine::runBackward() {
     NodeManager::barrier();
     printLog(nodeId, "Engine starts running BACKWARD...");
 
-    timeBackwardProcess = -getTimer();
+    timeBackwardProcess = getTimer();
 
     // Start backward-prop workers. Backward-prop is only a single-threaded task for dataservers, thus actually one a master
     // thread is doing the work.
@@ -293,7 +297,7 @@ Engine::runBackward() {
     // Join all backward-prop workers.
     computePool->sync();
 
-    timeBackwardProcess += getTimer();
+    timeBackwardProcess = getTimer() - timeBackwardProcess;
 
     printLog(nodeId, "Engine completes BACKWARD propagation.");
 }
@@ -465,13 +469,12 @@ Engine::forwardWorker(unsigned tid, void *args) {
                 timeWorker = getTimer();
                 // printLog(nodeId, "Iteration %u finishes. Invoking lambda...", iteration);
 
+                // Run evaluation if it is an evaluation run and this is the last layer
+                bool runEval = evaluate && iteration == numLayers-1;
                 if(gpuEnabled==1){
-                    printLog(nodeId, "Iteration %u finishes. Invoking GPU...", iteration);
                     gpuComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
-                                                graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1));
+                                                graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1),runEval);
                 }else{
-                    // Run evaluation if it is an evaluation run and this is the last layer
-                    bool runEval = evaluate && iteration == numLayers-1;
                     // Start a new lambda communication context.
                     lambdaComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
                                                     graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1), runEval);

@@ -46,7 +46,7 @@ public:
     }
     // For forward-prop.
     void newContextForward(FeatType *dataBuf, FeatType *zData_, FeatType *actData_,
-                              unsigned numLocalVertices, unsigned numFeats, unsigned numFeatsNext_);
+                              unsigned numLocalVertices, unsigned numFeats, unsigned numFeatsNext_, bool eval_);
     void requestForward(unsigned layer);
 
 
@@ -56,6 +56,7 @@ public:
     void requestBackward(unsigned numLayers);
     void sendBackpropChunks();
 
+    void setTrainValidationSplit(float trainPortion, unsigned numLocalVertices){};
     // Send a message to the coordination server to shutdown.
     void sendShutdownMessage();
 
@@ -75,6 +76,8 @@ private:
     FeatType *zData;    // Places to store the results from lambda.
     FeatType *actData;
     unsigned numFeatsNext;
+
+    bool evaluate;
 
     //backward 
     std::vector<Matrix> zMatrices;

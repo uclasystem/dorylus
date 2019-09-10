@@ -5,7 +5,7 @@ void doNotFreeBuffer(void *data, void *hint){
 }
 
 void GPUComm::newContextForward(FeatType *dataBuf, FeatType *zData_, FeatType *actData_,
-                              unsigned numLocalVertices, unsigned numFeats, unsigned numFeatsNext_){
+                              unsigned numLocalVertices, unsigned numFeats, unsigned numFeatsNext_, bool eval_){
     // Create a new matrix object for workers to access.
     actMatrix=Matrix(numLocalVertices, numFeats, dataBuf);
     zData = zData_;
@@ -123,7 +123,49 @@ void GPUComm::sendBackpropChunks(){
     dataSocket.recv(&confirm);
 }
 
+/**
+ *
+ * Set the training validation split based on the partitions
+ * float trainPortion must be between (0,1)
+ *
+ */
+// void
+// GPUComm::setTrainValidationSplit(float trainPortion, unsigned numLocalVertices) {
+//     // forward propagation partitioning determined by the number of forward lambdas
+//     // so assign partitions based on the num of forward lambdas
+//     unsigned numTrainParts = std::ceil((float)numLambdasForward * trainPortion);
 
+//     // NOTE: could be optimized as a bit vector but probaly not that big a deal
+//     // Set the first 'numTrainParts' partitions to true
+//     for (unsigned i = 0; i < numLambdasForward; ++i) {
+//         if (i < numTrainParts)
+//             trainPartitions.push_back(true);
+//         else
+//             trainPartitions.push_back(false);
+//     }
+
+//     // Randomize which partitions are the training ones so it is not always
+//     // the first 'numTrainParts'
+//     // COMMENTED OUT FOR DEBUGGING
+// //    std::random_shuffle(trainPartition.begin(), trainPartition.end());
+
+//     // Calculate the total number of validaiton vertices
+//     // This member is passed by reference to the lambda workers so on update
+//     // they will have the correct number
+
+//     unsigned partVertices = std::ceil((float) numLocalVertices / (float) numLambdasForward);
+//     for (unsigned i = 0; i < trainPartitions.size(); ++i) {
+//         if (!trainPartitions[i]) {
+//             unsigned thisPartVertices = partVertices;
+//             if ((i * partVertices + partVertices) > numLocalVertices) {
+//                 thisPartVertices = partVertices - (i * partVertices + partVertices) + numLocalVertices;
+//             }
+
+//             numValidationVertices += thisPartVertices;
+//             ++evalPartitions;
+//         }
+//     }
+// }
 
 void GPUComm::sendShutdownMessage(){
     printLog(nodeId, "Send Shutdown Message\n");

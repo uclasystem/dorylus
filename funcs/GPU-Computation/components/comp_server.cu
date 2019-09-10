@@ -32,7 +32,7 @@ void ComputingServer::run(){
     try {
         bool terminate=0;
         while (!terminate) {
-            
+            printf("Receiving Next OP\n");
             zmq::message_t header(HEADER_SIZE);
             dataSocket.recv(&header);
             unsigned op = parse<unsigned>((char *) header.data(), 0);
@@ -40,6 +40,7 @@ void ComputingServer::run(){
 
             switch (op){
                 case OP::TERM:
+                    printf("Receiving terminating OP\n");
                     terminate=1;
                     terminateWeightServers();
                     break;
@@ -75,6 +76,7 @@ void ComputingServer::processBackward(zmq::message_t &header){
     unsigned layer= parse<unsigned>((char *) header.data(), 1);
     unsigned numNode = parse<unsigned>((char *) header.data(), 2);
 
+    double t1=getTimer();
     //send INFO to weight server
     if(nodeId<weightServerAddrs.size()){
         unsigned count = 0; 
@@ -83,21 +85,26 @@ void ComputingServer::processBackward(zmq::message_t &header){
                 count+=1;
         sendInfoMessage(weightSocket, count);
     }
-    
+
     std::vector<Matrix> weightsData;
     // Request weights matrices.
     std::thread t([&] {     // Weight requests run in a separate thread.
+        double t2=getTimer();
         std::cout << "< BACKWARD > Asking weightserver..." << std::endl;
         weightsData =  requestWeightsMatrices(layer);
         std::cout << "< BACKWARD > Got data from weightserver." << std::endl;
+        printf("BACKWARD Weight Fetch Time*: %lf\n", getTimer()-t2);
+
     });
+    double t3=getTimer();
     GraphData graphData=requestForwardMatrices(layer);
+    printf("BACKWARD Features Fetch Time*: %lf\n", getTimer()-t3);
     t.join();
     std::cout << "< BACKWARD > Doing the gradient descent computation..." << std::endl;
-    double t1=getTimer();
+    
     std::vector<Matrix> weightsUpdates;
     weightsUpdates = gradientComputation(graphData, weightsData);
-    printf("Total*: %lf\n", getTimer()-t1);
+    printf("BACKWARD Computation Time*: %lf\n", getTimer()-t1);
 
     sendWeightsUpdates(weightsUpdates);
 }
@@ -108,14 +115,14 @@ ComputingServer::sendWeightsUpdates(std::vector<Matrix> weightsUpdates) {
     // Send push header.
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char *) header.data(), OP::PUSH_BACKWARD, 0);
+    printf("Sending updates\n");
     weightSocket.send(header, ZMQ_SNDMORE);
 
     // Send updates to all weight matrices given by my chunk.
     for (unsigned i = 0; i < weightsUpdates.size(); ++i) {
         Matrix& updateMat = weightsUpdates[i];
 
-        zmq::message_t updateData(updateMat.getDataSize());
-        std::memcpy(updateData.data(), updateMat.getData(), updateMat.getDataSize());
+        zmq::message_t updateData(updateMat.getData(),updateMat.getDataSize(),doNotFreeBuffer,NULL);
         if (i == weightsUpdates.size() - 1)
             weightSocket.send(updateData);
         else
@@ -124,7 +131,10 @@ ComputingServer::sendWeightsUpdates(std::vector<Matrix> weightsUpdates) {
 
     // Wait for updates settled reply.
     zmq::message_t confirm;
+    printf("Waiting updates confirm\n");
     weightSocket.recv(&confirm);
+    printf("Finish updates confirm\n");
+
 }
 
 
@@ -282,7 +292,9 @@ void ComputingServer::processForward(zmq::message_t &header){
     unsigned rows = parse<unsigned>((char *) header.data(), 2);
     unsigned cols = parse<unsigned>((char *) header.data(), 3);
 
+    double t1=getTimer();
     Matrix weights;
+
     std::thread wThread=std::thread([&]{
         unsigned ipc_addr_len=strlen(ipc_addr);
         size_t identity_len = sizeof(unsigned) + ipc_addr_len;
@@ -298,18 +310,20 @@ void ComputingServer::processForward(zmq::message_t &header){
         weightSocket.connect(whost_port);
 
         weights=requestWeightsMatrix(layer);
+        printf("FORWARD Weight Fetch Time: %lf\n", getTimer()-t1);
         std::cout << "<  GPU SERVER FORWARD > Got data from weightserver." << std::endl;
     });
-    
+    double t3=getTimer();
     Matrix feats=requestFeatsMatrix(rows,cols);
+    printf("FORWARD Features Fetch Time: %lf\n", getTimer()-t3);
     wThread.join();
-    double t1=getTimer();
+    
     CuMatrix z = cu.dot(feats, weights);
     FeatType* z_buffer=new FeatType[z.getRows()*z.getCols()];
     memcpy(z_buffer,z.getData(),z.getDataSize());
     Matrix z_send(z.getRows(),z.getCols(),z_buffer);            
     cu.activate(z);//z data get activated ...
-    printf("BACKWARD Computation Time: %lf\n", getTimer()-t1);
+    printf("FORWARD Computation Time: %lf\n", getTimer()-t1);
     sendMatrices(z_send,z);
 
     delete[] (feats.getData());
