@@ -6,6 +6,7 @@
 #include <cassert>
 #include <chrono>
 #include <condition_variable>
+#include <cmath>
 #include <fstream>
 #include <functional>
 #include <iostream>
