@@ -10,7 +10,7 @@
 /**
  *
  * Main entrance of the aggregate benchmark.
- * 
+ *
  */
 int
 main(int argc, char *argv[]) {
