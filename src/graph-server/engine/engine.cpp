@@ -401,7 +401,8 @@ Engine::destroy() {
         delete gpuComm;
     } else {
         lambdaComm->sendShutdownMessage();
-        delete lambdaComm;
+        // comment delete lambdaComm to prevent process hanging. ctx.close() in ~lamdComm() will make whole process stuck
+        // delete lambdaComm;
     }
 
     delete[] ghostVCnts;
@@ -411,7 +412,6 @@ Engine::destroy() {
         }
     }
     delete[] batchMsgBuf;
-
 
     for (size_t i = 0; i <= numLayers; ++i) {
         delete[] localVerticesZData[i];
@@ -440,9 +440,27 @@ Engine::destroy() {
  */
 void
 Engine::forwardWorker(unsigned tid, void *args) {
-
     // A Stopwatch for composing steps of run().
     double timeWorker = getTimer();
+
+    const unsigned graphLocalVertices = graph.getNumLocalVertices();
+    const unsigned lambdaVChunk = (graphLocalVertices + numLambdasForward - 1) / numLambdasForward;
+    unsigned availLambdaId = 0;
+    unsigned readyVertices = lambdaVChunk;
+
+    if (tid == 0) {
+        if (gpuEnabled == 1) {
+            gpuComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
+                                        graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1));
+        } else {
+            printLog(nodeId, "Iteration %u starts. Invoking lambda...", iteration);
+            // Run evaluation if it is an evaluation run and this is the last layer
+            bool runEval = evaluate && iteration == numLayers-1;
+            // Start a new lambda communication context.
+            lambdaComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
+                                            graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1), runEval);
+        };
+    }
 
     // Outer while loop. Looping infinitely, looking for a new task to handle.
     while (1) {
@@ -452,128 +470,98 @@ Engine::forwardWorker(unsigned tid, void *args) {
         unsigned lvid = currId++;
         lockCurrId.unlock();
 
-        // All local vertices have been processed. Hit the barrier and wait for next iteration / decide to halt.
-        if (lvid >= graph.getNumLocalVertices()) {
-
+        if (lvid >= readyVertices) { // may invoke lambdas or proceed to next iteration
             // Non-master threads.
             if (tid != 0) {
+                // All local vertices have been processed. Hit the barrier and wait for next iteration / decide to halt.
+                if (lvid >= graphLocalVertices) {
+                    //## Worker barrier 1: Everyone reach to this point, then only master will work. ##//
+                    barComp.wait();
+                    //## Worker barrier 2: Master has finished its checking work. ##//
+                    barComp.wait();
 
-                //## Worker barrier 1: Everyone reach to this point, then only master will work. ##//
-                barComp.wait();
-
-                //## Worker barrier 2: Master has finished its checking work. ##//
-                barComp.wait();
-
-                // If master says halt then go to death; else continue for the new iteration.
-                if (halt)
-                    return;
-                else
-                    continue;
-
-            // Master thread (tid == 0).
-            } else {
-
-                //## Worker barrier 1: Everyone reach to this point, then only master will work. ##//
-                barComp.wait();
-
-                vecTimeAggregate.push_back(getTimer() - timeWorker);
-                timeWorker = getTimer();
-
-                if (gpuEnabled == 1) {
-                    printLog(nodeId, "Iteration %u finishes. Invoking GPU...", iteration);
-                    gpuComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
-                                                graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1));
-                } else {
-                    printLog(nodeId, "Iteration %u finishes. Invoking lambda...", iteration);
-                    // Run evaluation if it is an evaluation run and this is the last layer
-                    bool runEval = evaluate && iteration == numLayers-1;
-                    // Start a new lambda communication context.
-                    lambdaComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
-                                                    graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1), runEval);
-                }
-
-                // Trigger a request towards the coordicate server. Wait until the request completes.
-                std::thread treq([&] {
-                    if (gpuEnabled == 1) {
-                        gpuComm->requestForward(iteration);
+                    // If master says halt then go to death; else continue for the new iteration.
+                    if (halt) {
+                        return;
                     } else {
-                        lambdaComm->requestLambdasForward(iteration);
-                    }
-                });
-                treq.join();
-
-                vecTimeLambda.push_back(getTimer() - timeWorker);
-                timeWorker = getTimer();
-                printLog(nodeId, "All lambda requests finished. Results received.");
-
-                // Loop through all local vertices and do the data send out work. If there are any remote edges for a vertex, should send this vid to
-                // other nodes for their ghost's update.
-
-                // TODO: (YIFAN) process crashes when return if BATCH_SIZE is too large. Weird, to be fixed.
-                // Please decrease BATCH_SIZE if porcess crashed.
-                bool batchFlag = false;
-                unsigned BATCH_SIZE = ((batchFlag ? MAX_MSG_SIZE : 4096) - DATA_HEADER_SIZE) /
-                                      (sizeof(unsigned) + sizeof(FeatType) * getNumFeats(iteration + 1));
-                BATCH_SIZE = (BATCH_SIZE < 1) ? 1 : BATCH_SIZE; // at least send one vertex
-                for (unsigned nid = 0; nid < numNodes; ++nid) {
-                    if (nid == nodeId) {
                         continue;
                     }
-                    unsigned ghostVCnt = ghostVCnts[nid];
-                    for (unsigned ib = 0; ib < ghostVCnt; ib += BATCH_SIZE) {
-                        unsigned remainCnt = (ghostVCnt - ib) < BATCH_SIZE ? (ghostVCnt - ib) : BATCH_SIZE;
+                }
+            // Master thread
+            } else {
+                // invoke all available lambda threads
+                while (lvid >= readyVertices && availLambdaId < numLambdasForward) {
+                    lambdaComm->invokeLambdaForward(iteration, availLambdaId);
+                    availLambdaId++;
+                    readyVertices = std::min(readyVertices + lambdaVChunk, graphLocalVertices);
+                }
 
-                        verticesPushOut(nid, nodeId, remainCnt, batchMsgBuf[nid] + ib);
-                        lockRecvCnt.lock();
-                        recvCnt++;
-                        lockRecvCnt.unlock();
+                // All local vertices have been processed. Hit the barrier and wait for next iteration / decide to halt.
+                if (lvid >= graphLocalVertices) {
+                    //## Worker barrier 1: Everyone reach to this point, then only master will work. ##//
+                    barComp.wait();
+                    // Only master works now
+                    vecTimeAggregate.push_back(getTimer() - timeWorker);
+                    timeWorker = getTimer();
+
+                    lambdaComm->waitLambdaForward();
+
+                    vecTimeLambda.push_back(getTimer() - timeWorker);
+                    timeWorker = getTimer();
+                    printLog(nodeId, "All lambda requests finished. Results received.");
+
+                    sendGhostUpdates();
+                    vecTimeSendout.push_back(getTimer() - timeWorker);
+
+                    //## Global Iteration barrier. ##//
+                    NodeManager::barrier();
+
+                    timeWorker = getTimer();
+                    printLog(nodeId, "Global barrier after ghost data exchange crossed.");
+
+                    // There is a new layer ahead, please start a new iteration.
+                    if (++iteration < numLayers) {
+                        printLog(nodeId, "Starting a new iteration %u...", iteration);
+
+                        // Reset data buffer area's size.
+                        delete[] localVerticesDataBuf;
+                        localVerticesDataBuf = new FeatType[layerConfig[iteration] * graph.getNumLocalVertices()];
+                        // Reset current id.
+                        currId = 0;       // This is unprotected by lockCurrId because only master executes.
+                        // Reset new lambda communication context.
+                        availLambdaId = 0;
+                        readyVertices = lambdaVChunk;
+                        if (gpuEnabled == 1) {
+                            gpuComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
+                                                        graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1));
+                        } else {
+                            // Run evaluation if it is an evaluation run and this is the last layer
+                            bool runEval = evaluate && iteration == numLayers-1;
+                            // Start a new lambda communication context.
+                            lambdaComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
+                                                        graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1), runEval);
+                        }
+
+                        //## Worker barrier 2: Starting a new iteration. ##//
+                        barComp.wait();
+
+                        continue;
+
+                    // No more, so deciding to halt. But still needs the communicator to check if there will be further scheduling invoked by ghost
+                    // vertices. If so we are stilling going to the next iteration.
+                    } else {
+                        printLog(nodeId, "Deciding to halt at iteration %u...", iteration);
+
+                        // Set this to signal data communicator to end its life.
+                        lockHalt.lock();
+                        halt = true;
+                        lockHalt.unlock();
+
+                        //## Worker barrier 2: Going to die. ##//
+                        barComp.wait();
+
+                        return;
                     }
-                }
-
-                // Wait for all remote schedulings sent by me to be handled.
-                lockRecvCnt.lock();
-                if (recvCnt > 0) {
-                    condRecvCnt.wait();
-                }
-                lockRecvCnt.unlock();
-
-                vecTimeSendout.push_back(getTimer() - timeWorker);
-                //## Global Iteration barrier. ##//
-                NodeManager::barrier();
-
-                timeWorker = getTimer();
-                printLog(nodeId, "Global barrier after ghost data exchange crossed.");
-
-                // There is a new layer ahead, please start a new iteration.
-                if (++iteration < numLayers) {
-                    printLog(nodeId, "Starting a new iteration %u...", iteration);
-
-                    // Reset data buffer area's size.
-                    delete[] localVerticesDataBuf;
-                    localVerticesDataBuf = new FeatType[layerConfig[iteration] * graph.getNumLocalVertices()];
-
-                    // Reset current id.
-                    currId = 0;       // This is unprotected by lockCurrId because only master executes.
-
-                    //## Worker barrier 2: Starting a new iteration. ##//
-                    barComp.wait();
-
-                    continue;
-
-                // No more, so deciding to halt. But still needs the communicator to check if there will be further scheduling invoked by ghost
-                // vertices. If so we are stilling going to the next iteration.
-                } else {
-                    printLog(nodeId, "Deciding to halt at iteration %u...", iteration);
-
-                    // Set this to signal data communicator to end its life.
-                    lockHalt.lock();
-                    halt = true;
-                    lockHalt.unlock();
-
-                    //## Worker barrier 2: Going to die. ##//
-                    barComp.wait();
-
-                    return;
                 }
             }
         }
@@ -729,6 +717,38 @@ Engine::localVertexDataBufPtr(unsigned lvid, unsigned layer) {
 FeatType *
 Engine::localVertexLabelsPtr(unsigned lvid) {
     return (FeatType *) localVerticesLabels + lvid * getNumFeats(numLayers);
+}
+
+
+void
+Engine::sendGhostUpdates() {
+    // Loop through all local vertices and do the data send out work. If there are any remote edges for a vertex, should send this vid to
+    // other nodes for their ghost's update.
+    // TODO: (YIFAN) process crashes when return if BATCH_SIZE is too large. Weird, to be fixed.
+    // Please decrease BATCH_SIZE if porcess crashed.
+    bool batchFlag = false;
+    unsigned BATCH_SIZE = std::max(((batchFlag ? MAX_MSG_SIZE : 4096) - DATA_HEADER_SIZE) /
+                        (sizeof(unsigned) + sizeof(FeatType) * getNumFeats(iteration + 1)), 1ul); // at least send one vertex
+    for (unsigned nid = 0; nid < numNodes; ++nid) {
+        if (nid == nodeId) {
+            continue;
+        }
+        unsigned ghostVCnt = ghostVCnts[nid];
+        for (unsigned ib = 0; ib < ghostVCnt; ib += BATCH_SIZE) {
+            unsigned remainCnt = (ghostVCnt - ib) < BATCH_SIZE ? (ghostVCnt - ib) : BATCH_SIZE;
+
+            verticesPushOut(nid, nodeId, remainCnt, batchMsgBuf[nid] + ib);
+            lockRecvCnt.lock();
+            recvCnt++;
+            lockRecvCnt.unlock();
+        }
+    }
+    // Wait for all remote schedulings sent by me to be handled.
+    lockRecvCnt.lock();
+    if (recvCnt > 0) {
+        condRecvCnt.wait();
+    }
+    lockRecvCnt.unlock();
 }
 
 

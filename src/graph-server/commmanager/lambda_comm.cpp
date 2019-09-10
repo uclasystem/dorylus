@@ -14,7 +14,7 @@ static std::vector<std::thread *> worker_threads;
 /**
  *
  * Lambda communication manager constructor & destructor.
- * 
+ *
  */
 LambdaComm::LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::string coordserverIp_, unsigned coordserverPort_, unsigned nodeId_,
            unsigned numLambdasForward_, unsigned numLambdasBackward_)
@@ -116,7 +116,7 @@ LambdaComm::setTrainValidationSplit(float trainPortion, unsigned numLocalVertice
  *
  * Call 'newContext()' before the lambda invokation to refresh the parameters, then call `requestLambdas()` to tell the coordserver to
  * trigger lambda threads.
- * 
+ *
  */
 void
 LambdaComm::newContextForward(FeatType *dataBuf, FeatType *zData, FeatType *actData,
@@ -146,7 +146,7 @@ LambdaComm::requestLambdasForward(unsigned layer) {
     zmq::message_t ip_msg(nodeIp.size());
     std::memcpy(ip_msg.data(), nodeIp.c_str(), nodeIp.size());
     coordsocket.send(ip_msg);
-    
+
     // Wait for a confirm ACK message.
     zmq::message_t confirm;
     coordsocket.recv(&confirm);
@@ -157,11 +157,35 @@ LambdaComm::requestLambdasForward(unsigned layer) {
 }
 
 
+void
+LambdaComm::invokeLambdaForward(unsigned layer, unsigned lambdaId) { // another option is to keep status in coordserver
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader((char *) header.data(), OP::REQ_FORWARD, layer, lambdaId);
+    coordsocket.send(header, ZMQ_SNDMORE);
+
+    zmq::message_t ip_msg(nodeIp.size());
+    std::memcpy(ip_msg.data(), nodeIp.c_str(), nodeIp.size());
+    coordsocket.send(ip_msg);
+
+    // Wait for a confirm ACK message.
+    zmq::message_t confirm;
+    coordsocket.recv(&confirm);
+}
+
+
+void
+LambdaComm::waitLambdaForward() {
+    // Block until all parts have been handled.
+    std::unique_lock<std::mutex> lk(count_mutex);
+    cv_forward.wait(lk, [&]{ return countForward == numLambdasForward; });
+}
+
+
 /**
  *
  * Call 'newContext()' before the lambda invokation to refresh the parameters, then call `requestLambdas()` to tell the coordserver to
  * trigger lambda threads.
- * 
+ *
  */
 void
 LambdaComm::newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType *targetBuf,
@@ -198,7 +222,7 @@ LambdaComm::requestLambdasBackward(unsigned numLayers_) {
     zmq::message_t ip_msg(nodeIp.size());
     std::memcpy(ip_msg.data(), nodeIp.c_str(), nodeIp.size());
     coordsocket.send(ip_msg);
-    
+
     // Wait for a confirm ACK message.
     zmq::message_t confirm;
     coordsocket.recv(&confirm);
@@ -210,9 +234,9 @@ LambdaComm::requestLambdasBackward(unsigned numLayers_) {
 
 
 /**
- * 
+ *
  * Send message to the coordination server to shutdown.
- * 
+ *
  */
 void
 LambdaComm::sendShutdownMessage() {
@@ -225,4 +249,8 @@ LambdaComm::sendShutdownMessage() {
     // Send dummy message since coordination server expects an IP as well.
     zmq::message_t dummyIP;
     coordsocket.send(dummyIP);
+
+    zmq::message_t confirm;
+    coordsocket.setsockopt(ZMQ_RCVTIMEO, 500);
+    coordsocket.recv(&confirm);
 }
