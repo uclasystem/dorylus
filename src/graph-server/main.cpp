@@ -19,7 +19,7 @@ main(int argc, char *argv[]) {
     Engine::init(argc, argv);
 
     float splitPortion = 1.0 / 3.0;
-    unsigned numEpochs = 31;
+    unsigned numEpochs = 2;
     unsigned valFreq = 10;
 
     if (Engine::master())

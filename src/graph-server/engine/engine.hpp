@@ -176,6 +176,7 @@ private:
     static FeatType *localVertexLabelsPtr(unsigned lvid);
 
 
+    static void sendGhostUpdates();
     // Ghost update operation, send vertices to other nodes
     static void verticesPushOut(unsigned receiver, unsigned sender, unsigned totCnt, unsigned *lvids);
 
