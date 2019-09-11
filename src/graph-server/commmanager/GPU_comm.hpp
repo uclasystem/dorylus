@@ -46,7 +46,7 @@ public:
     }
     // For forward-prop.
     void newContextForward(FeatType *dataBuf, FeatType *zData_, FeatType *actData_,
-                              unsigned numLocalVertices, unsigned numFeats, unsigned numFeatsNext_, bool eval_);
+                              unsigned numLocalVertices_, unsigned numFeats, unsigned numFeatsNext_, bool eval_);
     void requestForward(unsigned layer);
 
 
@@ -56,7 +56,11 @@ public:
     void requestBackward(unsigned numLayers);
     void sendBackpropChunks();
 
-    void setTrainValidationSplit(float trainPortion, unsigned numLocalVertices){};
+    //for validation
+    void setTrainValidationSplit(float trainPortion, unsigned numLocalVertices);
+    //cannot be called if newContextBackward is never called due to the assignment of targetmatrix
+    void sendTargetMatrix();
+
     // Send a message to the coordination server to shutdown.
     void sendShutdownMessage();
 
@@ -64,6 +68,7 @@ public:
 private:
     unsigned nodeId;
     unsigned numNodes;
+    unsigned numLocalVertices;
 
     //ntw related objs
     zmq::context_t ctx;
@@ -77,7 +82,9 @@ private:
     FeatType *actData;
     unsigned numFeatsNext;
 
-    bool evaluate;
+    bool eval;
+    float split;
+
 
     //backward 
     std::vector<Matrix> zMatrices;

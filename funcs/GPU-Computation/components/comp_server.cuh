@@ -37,13 +37,19 @@ public:
     // Keep listening to computing requests
     void run();
 
-    // Sending and Requesting functions
+    //For forward
     Matrix requestWeightsMatrix( unsigned layer);
     Matrix requestFeatsMatrix(unsigned rows,unsigned cols);
     void sendMatrices(Matrix& zResult, Matrix& actResult);
     void processForward(zmq::message_t &header);
 
-    //for backward
+    //For validation
+    void evaluateModel(Matrix& activations);
+    Matrix requestTargetMatrix();
+    unsigned checkAccuracy(Matrix& predictions, Matrix& labels);
+    float checkLoss(Matrix& preds, Matrix& labels);
+
+    //For backward
     GraphData requestForwardMatrices(unsigned numLayers);
     std::vector<Matrix> requestWeightsMatrices(unsigned numLayers);
     void processBackward(zmq::message_t &header);

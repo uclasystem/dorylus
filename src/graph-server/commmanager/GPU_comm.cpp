@@ -5,9 +5,11 @@ void doNotFreeBuffer(void *data, void *hint){
 }
 
 void GPUComm::newContextForward(FeatType *dataBuf, FeatType *zData_, FeatType *actData_,
-                              unsigned numLocalVertices, unsigned numFeats, unsigned numFeatsNext_, bool eval_){
+                              unsigned numLocalVertices_, unsigned numFeats, unsigned numFeatsNext_, bool eval_){
     // Create a new matrix object for workers to access.
-    actMatrix=Matrix(numLocalVertices, numFeats, dataBuf);
+    eval=eval_;
+    numLocalVertices=numLocalVertices_;
+    actMatrix=Matrix(numLocalVertices_, numFeats, dataBuf);
     zData = zData_;
     actData = actData_;
     numFeatsNext = numFeatsNext_;
@@ -23,9 +25,17 @@ void GPUComm::requestForward(unsigned layer){
 
         unsigned actRows=actMatrix.getRows();
         unsigned actCols=actMatrix.getCols();
-
-
+        float split_data=split;
+        if(!eval){
+            printLog(nodeId,"Not Evaling");
+            split_data=0;
+        }
+        else{
+            printLog(nodeId,"Evaling");
+        }
         populateHeader((char *) header.data(), OP::REQ_FORWARD, layer,actRows,actCols);
+        serialize<float>((char*)header.data(), 4, split_data);
+
         dataSocket.send(header);
         dataSocket.recv(&confirm);
 
@@ -47,11 +57,40 @@ void GPUComm::requestForward(unsigned layer){
         dataSocket.send(confirm);
         dataSocket.recv(&confirm);
 
+
+        if(eval){
+            unsigned numValidationVertices=std::ceil(split*numLocalVertices);
+            sendTargetMatrix();
+            zmq::message_t result(HEADER_SIZE);
+            dataSocket.recv(&result);
+            unsigned totalCorrect = parse<unsigned>((char*)result.data(), 2);
+            float loss = parse<float>((char*)result.data(), 3);
+            
+            printLog(nodeId, "Accuracy this epoch: %f",(float) totalCorrect / (float) numValidationVertices);
+            printLog(nodeId, "Loss this epoch %f",loss / (float) numValidationVertices);
+        }
     }
     catch(std::exception& ex){
         std::cerr << "[ERROR] " << ex.what() << std::endl;
     }
 }
+
+
+void GPUComm::setTrainValidationSplit(float trainPortion, unsigned numLocalVertices){
+    split=trainPortion;
+};
+
+
+void GPUComm::sendTargetMatrix() {
+    // Send target label matrix.
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader((char *) header.data(), OP::RESP, 0, targetMatrix.getRows(), targetMatrix.getCols());
+    dataSocket.send(header, ZMQ_SNDMORE);
+    unsigned bufSize = targetMatrix.getRows() * targetMatrix.getCols() * sizeof(FeatType);
+    zmq::message_t labelMsg( targetMatrix.getData(), bufSize,doNotFreeBuffer,NULL);
+    dataSocket.send(labelMsg);
+}
+
 
 // For backward-prop.
 void GPUComm::newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType *targetBuf,
@@ -123,49 +162,6 @@ void GPUComm::sendBackpropChunks(){
     dataSocket.recv(&confirm);
 }
 
-/**
- *
- * Set the training validation split based on the partitions
- * float trainPortion must be between (0,1)
- *
- */
-// void
-// GPUComm::setTrainValidationSplit(float trainPortion, unsigned numLocalVertices) {
-//     // forward propagation partitioning determined by the number of forward lambdas
-//     // so assign partitions based on the num of forward lambdas
-//     unsigned numTrainParts = std::ceil((float)numLambdasForward * trainPortion);
-
-//     // NOTE: could be optimized as a bit vector but probaly not that big a deal
-//     // Set the first 'numTrainParts' partitions to true
-//     for (unsigned i = 0; i < numLambdasForward; ++i) {
-//         if (i < numTrainParts)
-//             trainPartitions.push_back(true);
-//         else
-//             trainPartitions.push_back(false);
-//     }
-
-//     // Randomize which partitions are the training ones so it is not always
-//     // the first 'numTrainParts'
-//     // COMMENTED OUT FOR DEBUGGING
-// //    std::random_shuffle(trainPartition.begin(), trainPartition.end());
-
-//     // Calculate the total number of validaiton vertices
-//     // This member is passed by reference to the lambda workers so on update
-//     // they will have the correct number
-
-//     unsigned partVertices = std::ceil((float) numLocalVertices / (float) numLambdasForward);
-//     for (unsigned i = 0; i < trainPartitions.size(); ++i) {
-//         if (!trainPartitions[i]) {
-//             unsigned thisPartVertices = partVertices;
-//             if ((i * partVertices + partVertices) > numLocalVertices) {
-//                 thisPartVertices = partVertices - (i * partVertices + partVertices) + numLocalVertices;
-//             }
-
-//             numValidationVertices += thisPartVertices;
-//             ++evalPartitions;
-//         }
-//     }
-// }
 
 void GPUComm::sendShutdownMessage(){
     printLog(nodeId, "Send Shutdown Message\n");

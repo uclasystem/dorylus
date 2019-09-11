@@ -175,7 +175,7 @@ Engine::init(int argc, char *argv[]) {
  */
 void
 Engine::setTrainValidationSplit(float trainPortion) {
-    if(Engine::gpuEnabled)
+    if(!Engine::gpuEnabled)
         lambdaComm->setTrainValidationSplit(trainPortion, graph.getNumLocalVertices());
     else
         gpuComm->setTrainValidationSplit(trainPortion, graph.getNumLocalVertices());

@@ -1,5 +1,28 @@
 #include "comp_server.cuh"
 
+
+unsigned getMaxIndex(FeatType* row, unsigned length) {
+    float max = 0.0;
+    unsigned maxIndex = 0;
+    for (unsigned col = 0; col < length; ++col) {
+        if (row[col] > max) {
+            max = row[col];
+            maxIndex = col;
+        }
+    }
+
+    return maxIndex;
+}
+unsigned getLabelIndex(FeatType* row, unsigned length) {
+    for (unsigned col = 0; col < length; ++col) {
+        if (row[col] == 1)
+            return col;
+    }
+
+    // Should never get here
+    return (unsigned)-1;
+}
+
 void doNotFreeBuffer(void *data, void *hint){
     // printf("Buffer is not freed :)\n");
 }
@@ -15,6 +38,76 @@ ComputingServer::ComputingServer(unsigned dPort_,const std::string& wServersFile
         sprintf(ipc_addr, "ipc:///tmp/GPU_COMM:%u", dPort); 
         std::cout << "Binding computing server to " << ipc_addr << "..." << std::endl;
         dataSocket.bind(ipc_addr);
+
+}
+
+void ComputingServer::evaluateModel(Matrix& activations){
+    Matrix labels = requestTargetMatrix();
+    CuMatrix cuPredictions = cu.softmaxRows(cu.wrapMatrix(labels));
+    cuPredictions.updateMatrixFromGPU();//if GPU for next ops, can be deleted
+
+    // Check if the label with the highest probability after softmax is equal to the
+    // target label
+    unsigned totalCorrect = checkAccuracy(cuPredictions, labels);
+
+    // Sum the individual losses of each vertex for this validation partition
+    float lossThisPart = checkLoss(cuPredictions, labels);
+
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader((char*)header.data(), OP::PUSH_EVAL, 0, totalCorrect);
+    serialize<float>((char*)header.data(), 3, lossThisPart);
+    dataSocket.send(header);
+
+}
+
+Matrix ComputingServer::requestTargetMatrix(){
+    // zmq::message_t header(HEADER_SIZE);
+    // populateHeader((char *) header.data(), OP::PULL_EVAL, 0);
+    // dataSocket.send(header);
+    zmq::message_t respHeader;
+    dataSocket.recv(&respHeader);
+
+
+    unsigned layerResp = parse<unsigned>((char *) respHeader.data(), 1);
+    unsigned rows = parse<unsigned>((char *) respHeader.data(), 2);
+    unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
+    zmq::message_t matxData;
+    dataSocket.recv(&matxData);
+    FeatType *matxBuffer = new FeatType[rows * cols];
+    std::memcpy(matxBuffer, matxData.data(), matxData.size());
+;
+
+    Matrix m(rows, cols, matxBuffer);
+    return m;
+}
+
+
+unsigned ComputingServer::checkAccuracy(Matrix& predictions, Matrix& labels){
+    unsigned totalCorrect = 0;
+    unsigned length = predictions.getCols();
+    for (unsigned r = 0; r < predictions.getRows(); ++r) {
+        unsigned maxIndex = getMaxIndex(predictions.get(r), length);
+        if (labels.get(r, maxIndex) == 1.0)
+            ++totalCorrect;
+    }
+
+    return totalCorrect;
+
+}
+
+float ComputingServer::checkLoss(Matrix& preds, Matrix& labels){
+    assert(preds.getRows() == labels.getRows());
+    assert(preds.getCols() == labels.getCols());
+
+    float totalLoss = 0;
+    unsigned length = preds.getCols();
+    for (unsigned r = 0; r < preds.getRows(); ++r) {
+        unsigned labelIndex = getLabelIndex(labels.get(r), length);
+        float lossThisRow = -(std::log(preds.get(r, labelIndex)));
+        totalLoss += lossThisRow;
+    }
+
+    return totalLoss;
 
 }
 
@@ -40,7 +133,6 @@ void ComputingServer::run(){
 
             switch (op){
                 case OP::TERM:
-                    printf("Receiving terminating OP\n");
                     terminate=1;
                     terminateWeightServers();
                     break;
@@ -131,10 +223,7 @@ ComputingServer::sendWeightsUpdates(std::vector<Matrix> weightsUpdates) {
 
     // Wait for updates settled reply.
     zmq::message_t confirm;
-    printf("Waiting updates confirm\n");
     weightSocket.recv(&confirm);
-    printf("Finish updates confirm\n");
-
 }
 
 
@@ -291,6 +380,7 @@ void ComputingServer::processForward(zmq::message_t &header){
     unsigned layer = parse<unsigned>((char *) header.data(), 1);
     unsigned rows = parse<unsigned>((char *) header.data(), 2);
     unsigned cols = parse<unsigned>((char *) header.data(), 3);
+    float split= parse<float>((char *) header.data(), 4);
 
     double t1=getTimer();
     Matrix weights;
@@ -326,8 +416,16 @@ void ComputingServer::processForward(zmq::message_t &header){
     printf("FORWARD Computation Time: %lf\n", getTimer()-t1);
     sendMatrices(z_send,z);
 
+    printf("Split %f\n", split);
+    
+    if(split!=0){
+        evaluateModel(z);
+    }
+    printf("Deleting feats\n");
     delete[] (feats.getData());
+    printf("Deleting z_buffer\n");
     delete[] (z_buffer);
+    printf("Finishing deleting\n");
 }
 
 //Send multiplied matrix result back to dataserver.
@@ -369,7 +467,7 @@ void ComputingServer::loadWeightServers(std::vector<char *>& addresses, const st
     }
 }
 
-
+//For forward
 Matrix
 ComputingServer::requestFeatsMatrix(unsigned rows,unsigned cols) {
     zmq::message_t confirm(5);
