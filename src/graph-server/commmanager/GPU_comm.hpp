@@ -21,7 +21,7 @@
 
 /**
  *
- * Communicate with local GPU process using IPC
+ * Communicate with local GPU process using IPC 
  * 
  */
 class GPUComm {

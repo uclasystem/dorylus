@@ -453,13 +453,14 @@ Engine::forwardWorker(unsigned tid, void *args) {
     unsigned readyVertices = lambdaVChunk;
 
     if (tid == 0) {
+        printLog(nodeId, "Iteration %u starts. Invoking lambda...", iteration);
+        // Run evaluation if it is an evaluation run and this is the last layer
+        bool runEval = evaluate && iteration == numLayers-1;
+        
         if (gpuEnabled == 1) {
             gpuComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
-                                        graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1));
+                                        graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1), runEval);
         } else {
-            printLog(nodeId, "Iteration %u starts. Invoking lambda...", iteration);
-            // Run evaluation if it is an evaluation run and this is the last layer
-            bool runEval = evaluate && iteration == numLayers-1;
             // Start a new lambda communication context.
             lambdaComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
                                             graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1), runEval);
@@ -493,8 +494,8 @@ Engine::forwardWorker(unsigned tid, void *args) {
                 }
             // Master thread
             } else {
-                // invoke all available lambda threads
                 if (!gpuEnabled) {
+                    // invoke all available lambda threads
                     while (lvid >= readyVertices && availLambdaId < numLambdasForward) {
                         lambdaComm->invokeLambdaForward(iteration, availLambdaId);
                         availLambdaId++;
@@ -542,12 +543,12 @@ Engine::forwardWorker(unsigned tid, void *args) {
                         // Reset new lambda communication context.
                         availLambdaId = 0;
                         readyVertices = lambdaVChunk;
+                        // Run evaluation if it is an evaluation run and this is the last layer
+                        bool runEval = evaluate && iteration == numLayers-1;
                         if (gpuEnabled == 1) {
                             gpuComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
-                                                        graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1));
+                                                        graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1), runEval);
                         } else {
-                            // Run evaluation if it is an evaluation run and this is the last layer
-                            bool runEval = evaluate && iteration == numLayers-1;
                             // Start a new lambda communication context.
                             lambdaComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
                                                         graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1), runEval);
