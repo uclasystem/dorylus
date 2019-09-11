@@ -22,6 +22,8 @@
 #include "lambdaworker.hpp"
 
 
+class LambdaWorker;
+
 /**
  *
  * Class of a lambda threads communication handler.
@@ -55,6 +57,9 @@ public:
 
     // Send a message to the coordination server to shutdown.
     void sendShutdownMessage();
+
+    // simple LambdaWorker initialization
+    friend LambdaWorker::LambdaWorker(LambdaComm *manager);
 
 private:
 

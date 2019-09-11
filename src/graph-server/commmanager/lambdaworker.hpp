@@ -21,21 +21,18 @@
 #include "../../utils/utils.hpp"
 
 
+class LambdaComm;
+
 /**
  *
  * Base class for a lambda communication worker.
- * 
+ *
  */
 class LambdaWorker {
 
 public:
 
-    LambdaWorker(unsigned nodeId_, zmq::context_t& ctx_,
-                 unsigned numLambdasForward_, unsigned numLambdasBackward_,
-                 unsigned& countForward_, unsigned& countBackward_,
-                 unsigned& numCorrectPredictions_, float& totalLoss_,
-                 unsigned& numValidationVertices_, unsigned& evalPartitions_,
-                 std::vector<bool>& trainPartitions_);
+    LambdaWorker(LambdaComm *manager);
 
     ~LambdaWorker();
 

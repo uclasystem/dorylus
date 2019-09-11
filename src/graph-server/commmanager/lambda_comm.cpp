@@ -36,10 +36,7 @@ LambdaComm::LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::strin
 
     // Create 'numListeners' workers and detach them.
     for (unsigned i = 0; i < numListeners; ++i) {
-        workers.push_back(new LambdaWorker(nodeId, ctx, numLambdasForward,
-                            numLambdasBackward, countForward, countBackward,
-                            numCorrectPredictions, totalLoss, numValidationVertices,
-                            evalPartitions, trainPartitions));
+        workers.push_back(new LambdaWorker(this));
         worker_threads.push_back(new std::thread(std::bind(&LambdaWorker::work, workers[i])));
         worker_threads[i]->detach();
     }
