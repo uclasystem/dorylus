@@ -1,5 +1,5 @@
 #include "lambdaworker.hpp"
-
+#include "lambda_comm.hpp"
 
 extern std::mutex count_mutex, eval_mutex;
 extern std::condition_variable cv_forward, cv_backward;
@@ -9,21 +9,15 @@ extern unsigned evalLambdas;
 /**
  *
  * LambdaWorker constructor & destructor.
- * 
+ *
  */
-LambdaWorker::LambdaWorker(unsigned nodeId_, zmq::context_t& ctx_,
-                           unsigned numLambdasForward_, unsigned numLambdasBackward_,
-                           unsigned& countForward_, unsigned& countBackward_,
-                           unsigned& numCorrectPredictions_, float& totalLoss_,
-                           unsigned& numValidationVertices_, unsigned& evalPartitions_,
-                           std::vector<bool>& trainPartitions_)
-    : nodeId(nodeId_), ctx(ctx_), workersocket(ctx, ZMQ_DEALER),
-      numLambdasForward(numLambdasForward_), numLambdasBackward(numLambdasBackward_),
-      countForward(countForward_), countBackward(countBackward_),
-      numCorrectPredictions(numCorrectPredictions_), totalLoss(totalLoss_),
-      numValidationVertices(numValidationVertices_), evalPartitions(evalPartitions_),
-      trainPartitions(trainPartitions_) {
-
+LambdaWorker::LambdaWorker(LambdaComm *manager)
+    : nodeId(manager->nodeId), ctx(manager->ctx), workersocket(ctx, ZMQ_DEALER),
+      numLambdasForward(manager->numLambdasForward), numLambdasBackward(manager->numLambdasBackward),
+      countForward(manager->countForward), countBackward(manager->countBackward),
+      numCorrectPredictions(manager->numCorrectPredictions), totalLoss(manager->totalLoss),
+      numValidationVertices(manager->numValidationVertices), evalPartitions(manager->evalPartitions),
+      trainPartitions(manager->trainPartitions) {
     workersocket.setsockopt(ZMQ_LINGER, 0);
     workersocket.connect("inproc://backend");
 }
@@ -36,7 +30,7 @@ LambdaWorker::~LambdaWorker() {
 /**
  *
  * Lambdaworker is a wrapper over the sender & receiver thread.
- * 
+ *
  */
 void
 LambdaWorker::work() {
@@ -81,7 +75,7 @@ LambdaWorker::work() {
 /**
  *
  * Reset the member values for the next round of communication.
- * 
+ *
  */
 void
 LambdaWorker::refreshState(Matrix actMatrix_, FeatType *zData_, FeatType *actData_, unsigned numFeatsNext_, bool eval) {           // For forward-prop.
@@ -107,7 +101,7 @@ LambdaWorker::refreshState(std::vector<Matrix> zMatrices_, std::vector<Matrix> a
 /**
  *
  * Sending & receiving messages to / from lambda threads.
- * 
+ *
  */
 void
 LambdaWorker::sendAggregatedChunk(zmq::message_t& client_id, unsigned partId) {
