@@ -406,7 +406,7 @@ Engine::destroy() {
     } else {
         lambdaComm->sendShutdownMessage();
         // comment delete lambdaComm to prevent process hanging. ctx.close() in ~lamdComm() will make whole process stuck
-        // delete lambdaComm;
+        delete lambdaComm;
     }
 
     delete[] ghostVCnts;
@@ -494,10 +494,12 @@ Engine::forwardWorker(unsigned tid, void *args) {
             // Master thread
             } else {
                 // invoke all available lambda threads
-                while (lvid >= readyVertices && availLambdaId < numLambdasForward) {
-                    lambdaComm->invokeLambdaForward(iteration, availLambdaId);
-                    availLambdaId++;
-                    readyVertices = std::min(readyVertices + lambdaVChunk, graphLocalVertices);
+                if (!gpuEnabled) {
+                    while (lvid >= readyVertices && availLambdaId < numLambdasForward) {
+                        lambdaComm->invokeLambdaForward(iteration, availLambdaId);
+                        availLambdaId++;
+                        readyVertices = std::min(readyVertices + lambdaVChunk, graphLocalVertices);
+                    }
                 }
 
                 // All local vertices have been processed. Hit the barrier and wait for next iteration / decide to halt.
@@ -508,7 +510,12 @@ Engine::forwardWorker(unsigned tid, void *args) {
                     vecTimeAggregate.push_back(getTimer() - timeWorker);
                     timeWorker = getTimer();
 
-                    lambdaComm->waitLambdaForward();
+                    // if in GPU mode we launch gpu computation here and wait the results
+                    if (gpuEnabled) {
+                        gpuComm->requestForward(iteration);
+                    } else {
+                        lambdaComm->waitLambdaForward();
+                    }
 
                     vecTimeLambda.push_back(getTimer() - timeWorker);
                     timeWorker = getTimer();
