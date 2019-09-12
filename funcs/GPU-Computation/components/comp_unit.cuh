@@ -13,12 +13,16 @@
 #include <cuda_runtime.h>
 #include "cublas_v2.h"
 #include "cu_matrix.cuh"
+#include "../../../src/graph-server/utils/utils.hpp"
 
 #include <thrust/device_vector.h>
 #include <thrust/functional.h>
 #include <thrust/transform.h>
 #include <thrust/iterator/discard_iterator.h>
 #include <thrust/reduce.h>
+#include <thrust/extrema.h>
+#include <thrust/iterator/counting_iterator.h>
+
 
 
 //TODO: modify function return value and signatures to fit the real workload
@@ -40,7 +44,12 @@ public:
     CuMatrix activateDerivate(const CuMatrix& mat);
     CuMatrix dotGDwithWTrans(const CuMatrix& matLeft,const CuMatrix& matRight);
     CuMatrix dotActTranswithGD(const CuMatrix& matLeft, const CuMatrix& matRight, const float learning_rate);
-	~ComputingUnit(){cublasDestroy(handle);}
+
+    unsigned checkAccuracy(CuMatrix& predictions, CuMatrix& labels);
+	
+    ~ComputingUnit(){cublasDestroy(handle);}
+
+
 // private:
 	cublasHandle_t handle;
 	cublasStatus_t stat;

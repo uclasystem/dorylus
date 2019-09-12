@@ -418,14 +418,11 @@ void ComputingServer::processForward(zmq::message_t &header){
 
     printf("Split %f\n", split);
     
-    if(split!=0){
+    if(split!=0)
         evaluateModel(z);
-    }
-    printf("Deleting feats\n");
+
     delete[] (feats.getData());
-    printf("Deleting z_buffer\n");
     delete[] (z_buffer);
-    printf("Finishing deleting\n");
 }
 
 //Send multiplied matrix result back to dataserver.

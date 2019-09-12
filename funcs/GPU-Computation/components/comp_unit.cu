@@ -1,43 +1,5 @@
 #include "comp_unit.cuh"
-
-struct tanh_functor
-{
-    tanh_functor(){}
-    __host__ __device__
-        float operator()(const float& x) const { return tanhf(x);}
-};
-
-struct activateDerivate_functor
-{
-    activateDerivate_functor(){}
-    __host__ __device__
-        float operator()(const float& x) const { 
-            return 1 - pow(tanh(x), 2);
-        }
-};
-
-struct exp_functor
-{
-    exp_functor(){}
-    __host__ __device__
-        float operator()(const float& x) const { return expf(x);}
-};
-
-struct divide_functor
-{
-    divide_functor(float *denoms_):denoms(denoms_){}
-    __host__ __device__
-        float operator()(const int& i,const float& x) const { return x/denoms[i];}
-    float* denoms;
-};
-
-struct setRow_functor
-{
-    setRow_functor(unsigned col_):col(col_){}
-    unsigned col;
-    __host__ __device__
-        int operator()(const int& x) const { return x/col;}
-};
+#include "cuda_ops.cuh"
 
 
 ComputingUnit::ComputingUnit(){
@@ -148,4 +110,30 @@ void ComputingUnit::activate(CuMatrix& A){
     thrust::device_ptr<float> devA_ptr(A.devPtr);
     thrust::transform(devA_ptr, devA_ptr+A.getNumElemts(),devA_ptr, tanh_functor());
     A.updateMatrixFromGPU();
+}
+
+
+//much slower than CPU only if Input Matrices are not loaded in GPU beforehand
+unsigned ComputingUnit::checkAccuracy(CuMatrix& predictions, CuMatrix& labels){
+    
+    unsigned rowSize = predictions.getCols();
+
+    thrust::device_vector<FeatType*> row_starts(predictions.getRows());
+    thrust::counting_iterator<int> idxfirst(0);
+
+    thrust::transform(idxfirst,idxfirst+predictions.getRows(),row_starts.begin(),
+        setRowStarts(predictions.devPtr,rowSize));
+    thrust::device_vector<unsigned> pred_results(predictions.getRows());
+    thrust::transform(row_starts.begin(),row_starts.end(),pred_results.begin(),
+        findRowMaximum(rowSize));
+
+    thrust::device_vector<unsigned> true_results(predictions.getRows());
+    thrust::transform(idxfirst,idxfirst+predictions.getRows(),row_starts.begin(),
+        setRowStarts(labels.devPtr,rowSize));
+    thrust::transform(row_starts.begin(),row_starts.end(),true_results.begin(),
+        findTrueLabel(rowSize));
+
+    thrust::transform(pred_results.begin(),pred_results.end(),true_results.begin(),true_results.begin(),isEqual());
+    unsigned totalCorrect = thrust::reduce(true_results.begin(), true_results.end(), (unsigned) 0, thrust::plus<unsigned>());
+    return totalCorrect;
 }
