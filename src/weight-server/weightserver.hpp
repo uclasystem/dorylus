@@ -7,6 +7,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cmath>
+#include <cstring>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -61,6 +62,13 @@ private:
     // Variations of weight matrix initialization
     Matrix xavierInitialization(unsigned dim1, unsigned dim2);
     Matrix kaimingInitialization(unsigned dim1, unsigned dim2);
+    Matrix randomInitialization(unsigned dim1, unsigned dim2,
+                                float lowerBound, float upperBound);
+
+    // Initialize bias vectors
+    Matrix initBias(unsigned dim, float initVal = 0);
+
+    void initializeAdamVariables();
 
     void distributeWeightMatrices();
 
@@ -68,8 +76,15 @@ private:
     std::vector<Matrix> weightMats;
     std::vector<Matrix> biases;
 
-    // Placeholder for implementing Adam 
+    // Adam descent variables
+    bool adam;  // whether to use standard SGD or Adam Opt
     std::vector<Matrix> momentum;
+    std::vector<Matrix> decay;
+
+    float beta1;
+    float beta2;
+    float epsilon;
+    float alpha;
 
     // List of Matrices for holding updates until they are ready to be applied.
     std::vector<Matrix> updateMats;

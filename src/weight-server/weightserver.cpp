@@ -36,6 +36,8 @@ WeightServer::WeightServer(std::string& weightServersFile, std::string& myPrIpFi
       listenerPort(_listenerPort), numLambdas(0), count(0),
       dataCtx(1), publisher(dataCtx, ZMQ_PUB), subscriber(dataCtx, ZMQ_SUB),
       serverPort(_serverPort) {
+    // Hardcoding adam to false for right now
+    adam = false;
 
     // Read the dsh file to get info about all weight server nodes.
     initializeWeightServerComms(weightServersFile, myPrIpFile);
@@ -47,6 +49,10 @@ WeightServer::WeightServer(std::string& weightServersFile, std::string& myPrIpFi
 
     // Read in layer configurations and initialize weight matrices.
     initializeWeightMatrices(configFileName);
+
+    if (adam) {
+        initializeAdamVariables();
+    }
 
     // Send weight matrix info to all servers and wait for ack.
     distributeWeightMatrices();
@@ -76,7 +82,8 @@ WeightServer::~WeightServer() {
 
 /**
  *
- * Runs the weightserver, start a bunch of worker threads and create a proxy through frontend to backend.
+ * Runs the weightserver, start a bunch of worker threads and create a proxy through frontend
+ * to backend.
  *
  */
 void
@@ -126,17 +133,23 @@ void WeightServer::applyUpdates() {
                 zmq::message_t updateMsg;
                 subscriber.recv(&updateMsg);
 
-                float *updateSum = updateMats[l].getData();
-                float *updateNew = (float *) updateMsg.data();
+                FeatType *updateSum = updateMats[l].getData();
+                FeatType *updateNew = (FeatType *) updateMsg.data();
                 for (unsigned u = 0; u < updateMats[l].getNumElemts(); ++u)
                     updateSum[u] += updateNew[u];
             }
         }
 
+        // If adam is enabled, apply the momentum and decay computation
+        if (adam) {
+            for (unsigned i = 0; i < updateMats.size(); ++i) {
+            }
+        }
+
         // Once all updates have been aggregated, apply to the weights matrices.
         for (unsigned l = 0; l < weightMats.size(); ++l) {
-            float *weightData = weightMats[l].getData();
-            float *updateSum = updateMats[l].getData();
+            FeatType *weightData = weightMats[l].getData();
+            FeatType *updateSum = updateMats[l].getData();
             for (unsigned u = 0; u < weightMats[l].getNumElemts(); ++u)
                 weightData[u] -= updateSum[u];
         }
@@ -385,8 +398,14 @@ WeightServer::initializeWeightMatrices(std::string& configFileName) {
             // Hardcoding this to xavier init for now. Eventually need to make it
             // configurable
             Matrix w = xavierInitialization(dims[u], dims[u+1]);
-
             weightMats.push_back(w);
+
+            // Initialize layer biases
+            // TODO:
+            //  Make this configurable based on whether or not a bias matrix is requested
+            //  for a NN module
+            Matrix b = initBias(dims[u+1]);
+            biases.push_back(b);
         }
 
         for (unsigned u = 0; u < weightMats.size(); ++u)
@@ -448,7 +467,7 @@ WeightServer::kaimingInitialization(unsigned dim1, unsigned dim2) {
     std::normal_distribution<float> dist(0, 1);
 
     unsigned dataSize = dim1 * dim2;
-    float *dptr = new float[dataSize];
+    FeatType *dptr = new FeatType[dataSize];
 
     for (unsigned ui = 0; ui < dataSize; ++ui)
         dptr[ui] = dist(dre);
@@ -460,6 +479,76 @@ WeightServer::kaimingInitialization(unsigned dim1, unsigned dim2) {
     return Matrix(dim1, dim2, dptr);
 }
 
+/**
+ *
+ * Randomly initialize weights
+ *
+ */
+Matrix
+WeightServer::randomInitialization(unsigned dim1, unsigned dim2,
+                                   float lowerBound, float upperBound) {
+    assert(lowerBoud < upperBound);
+    std::default_random_engine dre(8888);
+    std::uniform_real_distribution<float> dist(lowerBound, upperBound);
+
+    unsigned dataSize = dim1 * dim2;
+    FeatType *dptr = new FeatType[dataSize];
+
+    for (unsigned ui = 0; ui < dataSize; ++ui)
+        dptr[ui] = dist(dre);
+
+    return Matrix(dim1, dim2, dptr);
+}
+
+/**
+ *
+ * Initialize bias vectors to output size of layer
+ *
+ */
+Matrix
+WeightServer::initBias(unsigned dim, float initVal) {
+    // TODO:
+    //  Generalize implementation of tensors/matrices to include 3-D matrices and vectors
+    FeatType* dptr = new FeatType[dim];
+
+    for (unsigned ui = 0; ui < dim; ++ui)
+        dptr[ui] = initVal;
+
+    return Matrix(dim, 1, dptr);
+}
+
+/**
+ *
+ * Initialize the variables for Adam Optimziation
+ *
+ */
+void
+WeightServer::initializeAdamVariables() {
+    // Initialize momentum and decay parameters
+    beta1 = .9;
+    beta2 = .999;
+    epsilon = 1e-8;
+    alpha = 1e-2;
+
+    // Momentum and decay matrices match shape of weight matrices and have init to zero
+    for (unsigned ui = 0; ui < dims.size(); ++ui) {
+        unsigned dataSize = dims[ui] * dims[ui+1];
+        FeatType* momentumptr = new FeatType[dataSize];
+        FeatType* decayptr = new FeatType[dataSize];
+
+        std::memset(momentumptr, 0, dataSize * sizeof(FeatType));
+        std::memset(decayptr, 0, dataSize * sizeof(FeatType));
+
+        momentum.push_back(Matrix(dims[ui], dims[ui+1], momentumptr));
+        decay.push_back(Matrix(dims[ui], dims[ui+1], decayptr));
+    }
+}
+
+/**
+ *
+ * Distribute the weight matrices from the master to the other weight servers
+ *
+ */
 void
 WeightServer::distributeWeightMatrices() {
 
