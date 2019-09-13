@@ -46,7 +46,8 @@ public:
     CuMatrix dotActTranswithGD(const CuMatrix& matLeft, const CuMatrix& matRight, const float learning_rate);
 
     unsigned checkAccuracy(CuMatrix& predictions, CuMatrix& labels);
-	
+	float checkLoss(CuMatrix& preds, CuMatrix& labels);
+    
     ~ComputingUnit(){cublasDestroy(handle);}
 
 

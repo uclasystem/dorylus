@@ -113,7 +113,7 @@ void ComputingUnit::activate(CuMatrix& A){
 }
 
 
-//much slower than CPU only if Input Matrices are not loaded in GPU beforehand
+//** much slower than CPU only if Input Matrices are not loaded in GPU beforehand
 unsigned ComputingUnit::checkAccuracy(CuMatrix& predictions, CuMatrix& labels){
     
     unsigned rowSize = predictions.getCols();
@@ -127,13 +127,32 @@ unsigned ComputingUnit::checkAccuracy(CuMatrix& predictions, CuMatrix& labels){
     thrust::transform(row_starts.begin(),row_starts.end(),pred_results.begin(),
         findRowMaximum(rowSize));
 
-    thrust::device_vector<unsigned> true_results(predictions.getRows());
     thrust::transform(idxfirst,idxfirst+predictions.getRows(),row_starts.begin(),
         setRowStarts(labels.devPtr,rowSize));
-    thrust::transform(row_starts.begin(),row_starts.end(),true_results.begin(),
-        findTrueLabel(rowSize));
+    thrust::device_vector<unsigned> true_results(predictions.getRows());
+    thrust::transform(pred_results.begin(),pred_results.end(),row_starts.begin(),true_results.begin(),isPredictCorrect(rowSize));
 
-    thrust::transform(pred_results.begin(),pred_results.end(),true_results.begin(),true_results.begin(),isEqual());
     unsigned totalCorrect = thrust::reduce(true_results.begin(), true_results.end(), (unsigned) 0, thrust::plus<unsigned>());
     return totalCorrect;
+}
+
+//** much slower than CPU only if Input Matrices are not loaded in GPU beforehand
+float ComputingUnit::checkLoss(CuMatrix& preds, CuMatrix& labels){
+    unsigned rowSize=preds.getCols();
+    
+    thrust::counting_iterator<int> idxfirst(0);
+    thrust::device_vector<FeatType*> row_starts(preds.getRows());
+    thrust::transform(idxfirst,idxfirst+preds.getRows(),row_starts.begin(),
+        setRowStarts(labels.devPtr,rowSize));
+
+    thrust::device_vector<unsigned> true_labels(preds.getRows());
+    thrust::transform(row_starts.begin(),row_starts.end(),true_labels.begin(),findTrueLabel(rowSize));
+
+    thrust::transform(idxfirst,idxfirst+preds.getRows(),row_starts.begin(),
+        setRowStarts(preds.devPtr,rowSize));
+    thrust::device_vector<FeatType> losses(preds.getRows());
+    thrust::transform(true_labels.begin(),true_labels.end(),row_starts.begin(),losses.begin(),getLoss(rowSize));
+    float totalLoss = thrust::reduce(losses.begin(), losses.end(), (float) 0, thrust::plus<float>());
+
+    return totalLoss;
 }

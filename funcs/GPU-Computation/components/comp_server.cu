@@ -42,16 +42,15 @@ ComputingServer::ComputingServer(unsigned dPort_,const std::string& wServersFile
 }
 
 void ComputingServer::evaluateModel(Matrix& activations){
-    Matrix labels = requestTargetMatrix();
+    CuMatrix labels = cu.wrapMatrix(requestTargetMatrix());
     CuMatrix cuPredictions = cu.softmaxRows(cu.wrapMatrix(labels));
-    cuPredictions.updateMatrixFromGPU();//if GPU for next ops, can be deleted
 
     // Check if the label with the highest probability after softmax is equal to the
     // target label
-    unsigned totalCorrect = checkAccuracy(cuPredictions, labels);
+    unsigned totalCorrect = cu.checkAccuracy(cuPredictions, labels);
 
     // Sum the individual losses of each vertex for this validation partition
-    float lossThisPart = checkLoss(cuPredictions, labels);
+    float lossThisPart = cu.checkLoss(cuPredictions, labels);
 
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char*)header.data(), OP::PUSH_EVAL, 0, totalCorrect);
@@ -416,7 +415,6 @@ void ComputingServer::processForward(zmq::message_t &header){
     printf("FORWARD Computation Time: %lf\n", getTimer()-t1);
     sendMatrices(z_send,z);
 
-    printf("Split %f\n", split);
     
     if(split!=0)
         evaluateModel(z);
