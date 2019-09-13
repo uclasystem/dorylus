@@ -18,8 +18,10 @@
 #include <vector>
 #include <zmq.hpp>
 #include <boost/algorithm/string/trim.hpp>
-#include "../utils/utils.hpp"
+
 #include "serverworker.hpp"
+#include "../common/matrix.hpp"
+#include "../common/utils.hpp"
 
 
 enum CTRL_MSG { MASTERUP, WORKERUP, INITDONE, ACK };
