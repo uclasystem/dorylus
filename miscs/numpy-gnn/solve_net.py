@@ -7,6 +7,7 @@ def train_net(model, loss, config, input_feats, labels, train_mask, label_kind):
 
     # forward net
     output = model.forward(input_feats)
+    print("output", output)
     # set mask
     output[~train_mask] = target[~train_mask]
     # calculate loss
@@ -22,7 +23,6 @@ def train_net(model, loss, config, input_feats, labels, train_mask, label_kind):
 
     msg = '  Training batch loss %.4f, batch acc %.4f' % (
         loss_value, acc_value)
-
     LOG_INFO(msg)
 
 

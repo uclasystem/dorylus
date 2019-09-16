@@ -8,7 +8,7 @@ from solve_net import train_net, test_net
 from load_data import load_data, load_weights
 
 
-# As an example of 3 layer GCN
+# As an example of 3 layers GCN
 def example_GCN(name, adj, weights, layer_config):
     model = Network()
     model.add(Aggregate('A1', adj))
@@ -28,8 +28,39 @@ def example_GCN(name, adj, weights, layer_config):
     print(':\t' + repr(loss))
 
     print('Forward Computation: ', model.str_forward('X'))
-    print('Backward Computation:', model.str_backward('Z-Y'))
+    print('Backward Computation:', model.str_backward('Z-Y'), '\n')
+    print('\n')
     model.str_update()
+    print('\n')
+
+    return model, loss
+
+
+def MLP(name, weights, layer_config):
+    num_layer = len(layer_config)
+
+    model = Network()
+    for i in range(num_layer - 2):
+        model.add(Linear('W{}'.format(i),
+                         layer_config[i], layer_config[i + 1]))
+        model.add(Relu('Relu{}'.format(i)))
+
+    model.add(Linear('W{}'.format(num_layer - 2),
+                     layer_config[-2], layer_config[-1]))
+
+    loss = SoftmaxCrossEntropyLoss(name='loss')
+
+    print("Model "+name)
+    for layer in model.layer_list:
+        print(":\t" + repr(layer))
+    print(':\t' + repr(loss))
+    print('\n')
+
+    print('Forward Computation: ', model.str_forward('X'))
+    print('Backward Computation:', model.str_backward('Z-Y'))
+    print('\n')
+    model.str_update()
+    print('\n')
 
     return model, loss
 
@@ -46,9 +77,10 @@ def GCN(name, adj, weights, layer_config):
 
     model.add(Aggregate('A{}'.format(num_layer - 2), adj))
     model.add(Linear('W{}'.format(num_layer - 2),
-                     layer_config[num_layer - 2], layer_config[num_layer - 1]))
+                     layer_config[-2], layer_config[-1]))
 
     loss = SoftmaxCrossEntropyLoss(name='loss')
+    # loss = EuclideanLoss(name='loss')
 
     print("Model "+name)
     for layer in model.layer_list:
@@ -58,7 +90,9 @@ def GCN(name, adj, weights, layer_config):
 
     print('Forward Computation: ', model.str_forward('X'))
     print('Backward Computation:', model.str_backward('Z-Y'))
+    print('\n')
     model.str_update()
+    print('\n')
 
     return model, loss
 
@@ -70,9 +104,10 @@ def train(adj, input_feats, target_labels, config, weights=None):
     layer_config = (feat_dim, config['hidden_dim'], label_kind)
 
     model, loss = GCN("GCN", adj, weights, layer_config)
+    # model, loss = MLP("MLP", weights, layer_config)
 
     # Construct masks for training and testing
-    train_size = int(num_vertices * 0.8)
+    train_size = int(num_vertices * config['train_portion'])
     train_mask = np.zeros(target_labels.shape, dtype=bool)
     train_mask[:train_size] = True
     np.random.shuffle(train_mask)
@@ -88,9 +123,12 @@ def train(adj, input_feats, target_labels, config, weights=None):
             test_net(model, loss, input_feats,
                      target_labels, test_mask, label_kind)
 
+        if (epoch + 1) % 50 == 0:
+            config['learning_rate'] *= 0.5
 
 def main():
     config = {
+        'train_portion': 0.8,
         'hidden_dim': 16,
         'learning_rate': 0.01,
         'weight_decay': 5e-4,
