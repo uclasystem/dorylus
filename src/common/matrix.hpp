@@ -2,6 +2,7 @@
 #define __MATRIX_HPP__
 
 #include <cassert>
+#include <cmath>
 
 #include "utils.hpp"
 
