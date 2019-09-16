@@ -21,7 +21,7 @@ def load_data(base_dir):
     # Construct Adjacent Matrix with self-loop
     adj_mat = np.identity(num_vertices)
     for edge in edge_list:
-        adj_mat[edge[0]][edge[1]] = 1
+        adj_mat[edge[1]][edge[0]] = 1
 
     normed_deg_vec = 1 / np.sqrt(np.sum(adj_mat, axis=0, keepdims=True))
     # Normalized A_hat matrix

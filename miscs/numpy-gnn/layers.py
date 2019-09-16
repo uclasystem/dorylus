@@ -7,7 +7,7 @@ class Layer(object):
         self.trainable = trainable
         self._saved_tensor = None
 
-    def forward(self, input):
+    def forward(self, input_feat):
         pass
 
     def backward(self, grad_output):
@@ -37,13 +37,13 @@ class Relu(Layer):
     def __init__(self, name):
         super(Relu, self).__init__(name)
 
-    def forward(self, input):
-        self._saved_for_backward(input)
-        return np.maximum(0, input)
+    def forward(self, input_feat):
+        self._saved_for_backward(input_feat)
+        return np.maximum(0, input_feat)
 
     def backward(self, grad_output):
-        input = self._saved_tensor
-        return grad_output * (input > 0)
+        input_feat = self._saved_tensor
+        return grad_output * (input_feat > 0)
 
     def str_forward(self, str_input):
         return 'Relu({})'.format(str_input)
@@ -59,8 +59,8 @@ class Tanh(Layer):
     def __init__(self, name):
         super(Tanh, self).__init__(name)
 
-    def forward(self, input):
-        output = np.tanh(input)
+    def forward(self, input_feat):
+        output = np.tanh(input_feat)
         self._saved_for_backward(output)
         return output
 
@@ -76,8 +76,8 @@ class Sigmoid(Layer):
     def __init__(self, name):
         super(Sigmoid, self).__init__(name)
 
-    def forward(self, input):
-        output = 1 / (1 + np.exp(-input))
+    def forward(self, input_feat):
+        output = 1 / (1 + np.exp(-input_feat))
         self._saved_for_backward(output)
         return output
 
@@ -103,7 +103,7 @@ class Linear(Layer):
         # disabled bias to suit our GCN model
         self.bias = False
         self.xarvier = True
-        self.random_noise = False
+        self.random_noise = True
 
         self.in_num = in_num
         self.out_num = out_num
@@ -136,16 +136,16 @@ class Linear(Layer):
     def get_W(self):
         return self.W
 
-    def forward(self, input):
-        self._saved_for_backward(input)
-        output = input @ self.W
+    def forward(self, input_feat):
+        self._saved_for_backward(input_feat)
+        output = input_feat @ self.W
         if self.bias:
             output += self.b
         return output
 
     def backward(self, grad_output):
-        input = self._saved_tensor
-        self.grad_W = input.T @ grad_output
+        input_feat = self._saved_tensor
+        self.grad_W = input_feat.T @ grad_output
         if self.bias:
             self.grad_b = np.sum(grad_output, axis=0)
         return grad_output @ self.W.T
@@ -189,8 +189,8 @@ class Aggregate(Layer):
         super(Aggregate, self).__init__(name)
         self.adj = adj
 
-    def forward(self, input):
-        return self.adj @ input
+    def forward(self, input_feat):
+        return self.adj @ input_feat
 
     def backward(self, grad_output):
         return self.adj.T @ grad_output
@@ -210,10 +210,10 @@ class Reshape(Layer):
         super(Reshape, self).__init__(name)
         self.new_shape = new_shape
 
-    def forward(self, input):
-        self._saved_for_backward(input)
-        return input.reshape(*self.new_shape)
+    def forward(self, input_feat):
+        self._saved_for_backward(input_feat)
+        return input_feat.reshape(*self.new_shape)
 
     def backward(self, grad_output):
-        input = self._saved_tensor
-        return grad_output.reshape(*input.shape)
+        input_feat = self._saved_tensor
+        return grad_output.reshape(*input_feat.shape)
