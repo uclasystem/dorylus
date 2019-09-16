@@ -123,7 +123,25 @@ Matrix Matrix::operator-(float rhs) {
 }
 
 void Matrix::operator-=(float rhs) {
-    for (unsigned ui = 0; ui < getNumElemts(); ++ui) { data[ui] -= rhs;
+    for (unsigned ui = 0; ui < getNumElemts(); ++ui) {
+        data[ui] -= rhs;
+    }
+}
+
+Matrix Matrix::operator^(float rhs) {
+    FeatType* result = new FeatType[getNumElemts()];
+
+    for (unsigned ui = 0; ui < getNumElemts(); ++ui) {
+        result[ui] = std::pow(data[ui], rhs);
+    }
+
+    return Matrix(rows, cols, result);
+
+}
+
+void Matrix::operator^=(float rhs) {
+    for (unsigned ui = 0; ui < getNumElemts(); ++ui) {
+        data[ui] = std::pow(data[ui], rhs);
     }
 }
 

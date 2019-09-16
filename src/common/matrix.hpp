@@ -57,6 +57,9 @@ public:
     Matrix operator-(float rhs);
     void operator-=(float rhs);
 
+    Matrix operator^(float rhs);
+    void operator^=(float rhs);
+
     // Elementwise operations on matrices
     Matrix operator*(Matrix& M);
     Matrix operator/(Matrix& M);
