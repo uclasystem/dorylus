@@ -12,8 +12,9 @@
 #include <cblas.h>
 #include <zmq.hpp>
 #include <aws/lambda-runtime/runtime.h>
-#include "../../src/utils/utils.hpp"
 
+#include "../../src/common/matrix.hpp"
+#include "../../src/common/utils.hpp"
 
 #define LEARNING_RATE (0.1)
 

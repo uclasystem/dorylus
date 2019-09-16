@@ -37,7 +37,7 @@ find_package(aws-lambda-runtime REQUIRED)
 
 # Create the executable target.
 aux_source_directory(. FUNC_SRC)
-add_executable(${PROJECT_NAME} ${FUNC_SRC})
+add_executable(${PROJECT_NAME} ${FUNC_SRC} "../../src/common/matrix.cpp")
 target_link_libraries(${PROJECT_NAME} PUBLIC ${Boost_LIBRARIES} Threads::Threads AWS::aws-lambda-runtime ${OBLIB} ${CBLIB} ${ZMQ_LIB})
 
 

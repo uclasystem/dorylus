@@ -406,7 +406,7 @@ Engine::destroy() {
     } else {
         lambdaComm->sendShutdownMessage();
         // comment delete lambdaComm to prevent process hanging. ctx.close() in ~lamdComm() will make whole process stuck
-        delete lambdaComm;
+        //delete lambdaComm;
     }
 
     delete[] ghostVCnts;

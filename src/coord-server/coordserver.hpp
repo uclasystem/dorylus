@@ -13,8 +13,9 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <zmq.hpp>
-#include "../utils/utils.hpp"
 #include <boost/algorithm/string/trim.hpp>
+
+#include "../common/utils.hpp"
 
 
 /**

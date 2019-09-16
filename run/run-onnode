@@ -101,7 +101,7 @@ case $1 in
             --numlambdasforward ${NUM_LAMBDAS_FORWARD} \
             --numlambdasbackward ${NUM_LAMBDAS_BACKWARD}\
             --GPU 0"
-        dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ${DSH_COMMAND}" 1> /dev/null 2>> ${LOGFILE}
+        dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ${DSH_COMMAND}" 2>&1 | tee ${LOGFILE}
 
         
         # Gather the output files.

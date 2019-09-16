@@ -12,7 +12,9 @@
 #include <cblas.h>
 #include <zmq.hpp>
 #include <aws/lambda-runtime/runtime.h>
-#include "../../src/utils/utils.hpp"
+
+#include "../../src/common/matrix.hpp"
+#include "../../src/common/utils.hpp"
 
 
 #define SND_MORE true
@@ -225,8 +227,8 @@ getLabelIndex(FeatType* row, unsigned length) {
 
 static unsigned
 checkAccuracy(Matrix& predictions, Matrix& labels) {
-    assert(preds.getRows() == labels.getRows());
-    assert(preds.getCols() == labels.getCols());
+    assert(predictions.getRows() == labels.getRows());
+    assert(predictions.getCols() == labels.getCols());
     unsigned totalCorrect = 0;
     unsigned length = predictions.getCols();
     for (unsigned r = 0; r < predictions.getRows(); ++r) {

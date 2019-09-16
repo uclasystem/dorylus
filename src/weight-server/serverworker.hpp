@@ -16,8 +16,10 @@
 #include <vector>
 #include <zmq.hpp>
 #include <boost/algorithm/string/trim.hpp>
-#include "../utils/utils.hpp"
+
 #include "weightserver.hpp"
+#include "../common/matrix.hpp"
+#include "../common/utils.hpp"
 
 
 class WeightServer;
