@@ -7,7 +7,6 @@ def train_net(model, loss, config, input_feats, labels, train_mask, label_kind):
 
     # forward net
     output = model.forward(input_feats)
-    print("output", output)
     # set mask
     output[~train_mask] = target[~train_mask]
     # calculate loss

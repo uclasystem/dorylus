@@ -12,13 +12,13 @@ from load_data import load_data, load_weights
 def example_GCN(name, adj, weights, layer_config):
     model = Network()
     model.add(Aggregate('A1', adj))
-    model.add(Linear('W1', layer_config[0], layer_config[1]))
+    model.add(Linear('W1', layer_config[0], layer_config[1], 'kaiming'))
     model.add(Relu('Relu1'))
     model.add(Aggregate('A2', adj))
-    model.add(Linear('W2', layer_config[1], layer_config[1]))
+    model.add(Linear('W2', layer_config[1], layer_config[1], 'kaiming'))
     model.add(Relu('Relu2'))
     model.add(Aggregate('A3', adj))
-    model.add(Linear('W3', layer_config[1], layer_config[2]))
+    model.add(Linear('W3', layer_config[1], layer_config[2], 'kaiming'))
 
     loss = SoftmaxCrossEntropyLoss(name='loss')
 
@@ -42,11 +42,11 @@ def MLP(name, weights, layer_config):
     model = Network()
     for i in range(num_layer - 2):
         model.add(Linear('W{}'.format(i),
-                         layer_config[i], layer_config[i + 1]))
+                         layer_config[i], layer_config[i + 1], 'kaiming'))
         model.add(Relu('Relu{}'.format(i)))
 
     model.add(Linear('W{}'.format(num_layer - 2),
-                     layer_config[-2], layer_config[-1]))
+                     layer_config[-2], layer_config[-1], 'kaiming'))
 
     loss = SoftmaxCrossEntropyLoss(name='loss')
 
@@ -72,12 +72,12 @@ def GCN(name, adj, weights, layer_config):
     for i in range(num_layer - 2):
         model.add(Aggregate('A{}'.format(i), adj))
         model.add(Linear('W{}'.format(i),
-                         layer_config[i], layer_config[i + 1]))
+                         layer_config[i], layer_config[i + 1], 'kaiming'))
         model.add(Relu('Relu{}'.format(i)))
 
     model.add(Aggregate('A{}'.format(num_layer - 2), adj))
     model.add(Linear('W{}'.format(num_layer - 2),
-                     layer_config[-2], layer_config[-1]))
+                     layer_config[-2], layer_config[-1], 'kaiming'))
 
     loss = SoftmaxCrossEntropyLoss(name='loss')
     # loss = EuclideanLoss(name='loss')

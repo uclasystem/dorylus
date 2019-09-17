@@ -98,22 +98,24 @@ class Sigmoid(Layer):
 class Linear(Layer):
     ''' full connection layer '''
 
-    def __init__(self, name, in_num, out_num, init_std=0.5):
+    def __init__(self, name, in_num, out_num, init_method, init_std=0.5):
         super(Linear, self).__init__(name, trainable=True)
         # disabled bias to suit our GCN model
         self.bias = False
-        self.xarvier = True
         self.random_noise = True
 
         self.in_num = in_num
         self.out_num = out_num
 
-        if self.xarvier:
+        if init_method == 'xavier':
             # init_range = np.sqrt(6.0/(in_num + out_num))
             # self.W = np.random.uniform(
             #     size=(in_num, out_num), low=-init_range, high=init_range)
-            self.W = np.random.uniform(-np.sqrt(1./out_num),
-                                       np.sqrt(1./out_num), (in_num, out_num))
+            # self.W = np.random.uniform(-np.sqrt(1./out_num),
+            #                            np.sqrt(1./out_num), (in_num, out_num))
+            self.W = np.random.randn(in_num, out_num) / np.sqrt(in_num)
+        elif init_method == 'kaiming':
+            self.W = np.random.randn(in_num, out_num) / np.sqrt(in_num / 2)
         else:  # uniform
             self.W = np.random.randn(in_num, out_num) * init_std
         self.grad_W = np.zeros((in_num, out_num))
