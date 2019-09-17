@@ -1,0 +1,34 @@
+#!/bin/bash
+
+##
+## Install requried dependencies on a graph server. TO be invoked on the remote machine.
+##
+
+
+cd ${HOME}
+
+
+
+# OpenBLAS. 
+if [[ ! -d /usr/local/blas/OpenBLAS ]]; then 
+    git clone https://github.com/xianyi/OpenBLAS.git 
+    cd OpenBLAS 
+    make 
+    sudo mkdir -p /usr/local/blas/OpenBLAS 
+    sudo make PREFIX=/usr/local/blas/OpenBLAS install 
+    cd .. 
+    rm -rf OpenBLAS 
+fi
+
+# CBLAS.
+if [[ ! -d /usr/local/blas/CBLAS ]]; then     # Only install if not installed yet.
+    wget http://www.netlib.org/blas/blast-forum/cblas.tgz
+    tar xf cblas.tgz
+    rm cblas.tgz
+    cd CBLAS
+    sed -i 's/BLLIB\ =\ \/Users\/julie\/Documents\/Boulot\/lapack-dev\/lapack\/trunk\/blas_LINUX.a/BLLIB\ =\ \/usr\/local\/blas\/OpenBLAS\/lib\/libopenblas.a/g' Makefile.in
+    make
+    cd ..
+    sudo mkdir -p /usr/local/blas
+    sudo mv CBLAS /usr/local/blas/
+fi
