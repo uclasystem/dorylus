@@ -241,6 +241,17 @@ void Matrix::operator-=(Matrix& M) {
     }
 }
 
+Matrix Matrix::dot(Matrix& M) {
+    unsigned m = getRows(), k = getCols(), n = M.getCols();
+    assert(k == M.getRows());
+
+    FeatType* result = new FeatType[m * n];
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, 1.0,
+                getData(), k, M.getData(), n, 0.0, result, n);
+
+    return Matrix(m, n, result);
+}
+
 // Print functions for info / debugging
 std::string Matrix::shape() { return "(" + std::to_string(rows) + ", " + std::to_string(cols) + ")"; }
 
