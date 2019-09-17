@@ -24,5 +24,6 @@ aux_source_directory(. GRAPH_SRCS)
 add_executable(graphserver ${GRAPH_SRCS})
 
 target_link_libraries(graphserver PRIVATE commmanager lambda_comm gpu_comm edge vertex graph engine nodemanager threadpool utils matrix
-                                  PUBLIC  ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES})
+                                  PUBLIC ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES}
+                                        ${OBLIB} ${CBLIB})
 target_compile_options(graphserver PRIVATE "-Wall" "-Werror" "-Wno-reorder" "-MMD")

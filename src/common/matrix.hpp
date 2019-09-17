@@ -4,6 +4,8 @@
 #include <cassert>
 #include <cmath>
 
+#include "cblas.h"
+
 #include "utils.hpp"
 
 /**
@@ -72,8 +74,10 @@ public:
     void operator+=(Matrix& M);
     void operator-=(Matrix& M);
 
-    // Ideally add some sort of numpy style operator for Matmul such
-    // as '@' (A @ B equivalent to np.dot(A, B))
+    // Matrix multiplication
+    // If using this make sure to assign it to a new matrix as overwriting the current matrix
+    // will cause a dangling pointer
+    Matrix dot(Matrix& M);
 
     std::string shape();
 

@@ -13,5 +13,5 @@ endif()
 aux_source_directory(. WEIGHT_SRCS)
 add_executable(weightserver ${WEIGHT_SRCS})
 target_link_libraries(weightserver PRIVATE matrix
-                    PUBLIC ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES})
+                    PUBLIC ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES} ${OBLIB} ${CBLIB})
 target_compile_options(weightserver PRIVATE "-Wall" "-Werror" "-Wno-reorder")
