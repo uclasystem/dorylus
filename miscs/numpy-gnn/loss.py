@@ -31,7 +31,6 @@ class SoftmaxCrossEntropyLoss(object):
     def backward(self, input, target):
         exp_input = np.exp(input - np.max(input, axis=1, keepdims=True))
         prob = exp_input / (np.sum(exp_input, axis=1, keepdims=True) + 1e-20)
-        print("prob", prob)
         return (prob - target)
 
     def str_backward(self):
