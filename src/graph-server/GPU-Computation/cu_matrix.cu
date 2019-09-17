@@ -71,7 +71,7 @@ CuMatrix::~CuMatrix(){
     cudaFree (devPtr);
 }
 
-CuMatrix CuMatrix::dot( const CuMatrix& M,float alpha,float beta) const{
+CuMatrix CuMatrix::dot(CuMatrix& M,float alpha,float beta){
     if(handle!=M.handle){
         std::cout<<"Handle don't match\n";
         exit(EXIT_FAILURE);
@@ -94,7 +94,7 @@ CuMatrix CuMatrix::dot( const CuMatrix& M,float alpha,float beta) const{
     return C;
 }
 
-CuMatrix CuMatrix::transpose() const{
+CuMatrix CuMatrix::transpose(){
     float alpha=1.0;
     float beta=0.;
     CuMatrix res(Matrix(getCols(),getRows(),(FeatType*) NULL),handle);

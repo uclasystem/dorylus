@@ -10,8 +10,7 @@
 #include <cstdio>
 #include "graph.hpp"
 #include "../commmanager/commmanager.hpp"
-#include "../commmanager/lambda_comm.hpp"
-#include "../commmanager/GPU_comm.hpp"
+#include "../commmanager/resource_comm.hpp"
 #include "../nodemanager/nodemanager.hpp"
 #include "../parallel/threadpool.hpp"
 #include "../parallel/lock.hpp"
@@ -125,6 +124,8 @@ private:
     static std::string myPubIpFile;
 
     static unsigned dataserverPort;
+    static unsigned weightserverPort;
+    static std::string weightserverIPFile;
     static std::string coordserverIp;
     static unsigned coordserverPort;
 
@@ -136,9 +137,9 @@ private:
     // table representing whether the partition id is a training set or not
     static std::vector<bool> trainPartition;
 
-    static LambdaComm *lambdaComm;
     static unsigned gpuEnabled;
-    static GPUComm *gpuComm;
+    static ResourceComm *resComm;
+    static CommInfo commInfo;
     static unsigned nodeId;
     static unsigned numNodes;
 
@@ -193,6 +194,7 @@ private:
     static void findGhostDegrees(std::string& fileName);
     static void setEdgeNormalizations();
     static void readGraphBS(std::string& fileName, std::set<unsigned>& inTopics, std::vector<unsigned>& outTopics);
+    static void setUpCommInfo();
 
     // Metric printing.
     static void printGraphMetrics();

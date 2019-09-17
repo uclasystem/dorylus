@@ -17,7 +17,7 @@ CuMatrix ComputingUnit::wrapMatrix(Matrix m){
 }
 
 
-CuMatrix ComputingUnit::hadamardSub(const CuMatrix& matLeft,const CuMatrix& matRight) {
+CuMatrix ComputingUnit::hadamardSub(CuMatrix& matLeft, CuMatrix& matRight) {
     assert(matLeft.getRows() == matRight.getRows());
     assert(matLeft.getCols() == matRight.getCols());
     // CuMatrix res(Matrix(matLeft.getRows(),matLeft.getCols(), new FeatType[matLeft.getNumElemts()]),handle);
@@ -35,7 +35,7 @@ CuMatrix ComputingUnit::hadamardSub(const CuMatrix& matLeft,const CuMatrix& matR
     return res;
 }
 
-CuMatrix* ComputingUnit::hadamardMul(const CuMatrix& matLeft,const CuMatrix& matRight) {
+CuMatrix* ComputingUnit::hadamardMul( CuMatrix& matLeft, CuMatrix& matRight) {
     assert(matLeft.getRows() == matRight.getRows());
     assert(matLeft.getCols() == matRight.getCols());
     CuMatrix* res=new CuMatrix(Matrix(matLeft.getRows(),matLeft.getCols(), (FeatType *)NULL),handle);
@@ -53,7 +53,7 @@ CuMatrix* ComputingUnit::hadamardMul(const CuMatrix& matLeft,const CuMatrix& mat
 }
 
 // GPU is faster than CPU when SIZE>~250000, Maybe CPU is faster in most cases 
-CuMatrix ComputingUnit::softmaxRows(const CuMatrix &mat){
+CuMatrix ComputingUnit::softmaxRows( CuMatrix &mat){
     CuMatrix res(Matrix(mat.getRows(),mat.getCols(),(FeatType *)NULL),handle);
     thrust::device_ptr<float> devMat_ptr(mat.devPtr);
     thrust::device_ptr<float> res_ptr(res.devPtr);
@@ -72,7 +72,7 @@ CuMatrix ComputingUnit::softmaxRows(const CuMatrix &mat){
     return res;
 }
 
-CuMatrix ComputingUnit::activateDerivate(const CuMatrix& mat) {
+CuMatrix ComputingUnit::activateDerivate( CuMatrix& mat) {
     CuMatrix res(Matrix(mat.getRows(),mat.getCols(),(FeatType *)NULL),handle);
     thrust::device_ptr<float> res_ptr(res.devPtr);
     CuMatrix z(Matrix(mat.getRows(),mat.getCols(),mat.getData()),handle);
@@ -83,14 +83,14 @@ CuMatrix ComputingUnit::activateDerivate(const CuMatrix& mat) {
 
 
 CuMatrix
-ComputingUnit::dotGDwithWTrans(const CuMatrix& matLeft,const CuMatrix& matRight) {
+ComputingUnit::dotGDwithWTrans( CuMatrix& matLeft, CuMatrix& matRight) {
     CuMatrix matRightTrans = matRight.transpose();
     CuMatrix res = matLeft.dot(matRightTrans);
     return res;
 }
 
 CuMatrix
-ComputingUnit::dotActTranswithGD(const CuMatrix& matLeft,const CuMatrix& matRight, float learning_rate) {
+ComputingUnit::dotActTranswithGD( CuMatrix& matLeft, CuMatrix& matRight, float learning_rate) {
     CuMatrix matLeftTrans = matLeft.transpose();
     CuMatrix res=matLeftTrans.dot(matRight,learning_rate);
     return res;
@@ -98,7 +98,7 @@ ComputingUnit::dotActTranswithGD(const CuMatrix& matLeft,const CuMatrix& matRigh
 
 
 
-CuMatrix ComputingUnit::dot(const Matrix& A, const Matrix& B){
+CuMatrix ComputingUnit::dot( Matrix& A, Matrix& B){
     CuMatrix devA(A,handle);
     CuMatrix devB(B,handle);
     CuMatrix devC=devA.dot(devB);

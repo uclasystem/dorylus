@@ -6,8 +6,8 @@
 #include <chrono>
 #include <cstring>
 #include <iostream>
-#include "../../../src/utils/utils.hpp"
-
+#include "../../common/matrix.hpp"
+#include "../../common/utils.hpp"
 
 class CuMatrix : public Matrix
 {
@@ -19,8 +19,8 @@ public:
     Matrix getMatrix();
 	void updateMatrixFromGPU();
     
-	CuMatrix dot(const CuMatrix& M,float alpha=1.,float beta=0.) const ;
-    CuMatrix transpose() const;
+	CuMatrix dot(CuMatrix& M,float alpha=1.,float beta=0.) ;
+    CuMatrix transpose();
 // private:
 	void deviceMalloc();
 	void deviceSetMatrix();

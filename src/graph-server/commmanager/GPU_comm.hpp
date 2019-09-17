@@ -16,28 +16,36 @@
 #include <vector>
 #include <zmq.hpp>
 
+#include "resource_comm.hpp"
+#include "../GPU-Computation/comp_server.cuh"
 #include "../utils/utils.hpp"
 #include "../../common/matrix.hpp"
 #include "../../common/utils.hpp"
-
 
 /**
  *
  * Communicate with local GPU process using IPC 
  * 
  */
-class GPUComm {
+class GPUComm : public ResourceComm{
 
 public:
 
-    GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_):
+    GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,const std::string& wServersFile,unsigned wPort_):
+        ResourceComm(),
         nodeId(nodeId_),
         numNodes(numNodes_),
         dPort(dataserverPort_),
         dataSocket(ctx,ZMQ_REQ){
 
+        std::thread t([&](){
+            ComputingServer* comp_server=
+            new ComputingServer(dPort,wServersFile.c_str(),wPort_);
+            comp_server->run();    
+        });
+        
         char ipc_addr[50];
-        sprintf(ipc_addr, "ipc:///tmp/GPU_COMM:%u", dPort);
+        sprintf(ipc_addr, "inproc://%u", dPort);
         dataSocket.connect(ipc_addr);
 
         zmq::message_t confirm(5);
@@ -46,11 +54,13 @@ public:
         dataSocket.send(init_header);
         dataSocket.recv(&confirm);
     }
+
     // For forward-prop.
     void newContextForward(FeatType *dataBuf, FeatType *zData_, FeatType *actData_,
                               unsigned numLocalVertices_, unsigned numFeats, unsigned numFeatsNext_, bool eval_);
     void requestForward(unsigned layer);
-
+    void waitLambdaForward(){};
+    void invokeLambdaForward(unsigned layer, unsigned lambdaId){};
 
     // For backward-prop.
     void newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType *targetBuf,
@@ -92,7 +102,6 @@ private:
     std::vector<Matrix> zMatrices;
     std::vector<Matrix> actMatrices;
     Matrix targetMatrix;
-
 
 };
 

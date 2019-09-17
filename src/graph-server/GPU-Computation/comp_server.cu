@@ -23,7 +23,7 @@ unsigned getLabelIndex(FeatType* row, unsigned length) {
     return (unsigned)-1;
 }
 
-void doNotFreeBuffer(void *data, void *hint){
+static void doNotFreeBuffer(void *data, void *hint){
     // printf("Buffer is not freed :)\n");
 }
 
@@ -35,7 +35,7 @@ ComputingServer::ComputingServer(unsigned dPort_,const std::string& wServersFile
         loadWeightServers(weightServerAddrs,wServersFile);
 
         //use port as ipc addresss
-        sprintf(ipc_addr, "ipc:///tmp/GPU_COMM:%u", dPort); 
+        sprintf(ipc_addr, "ipc://%u", dPort); 
         std::cout << "Binding computing server to " << ipc_addr << "..." << std::endl;
         dataSocket.bind(ipc_addr);
 
@@ -43,7 +43,7 @@ ComputingServer::ComputingServer(unsigned dPort_,const std::string& wServersFile
 
 void ComputingServer::evaluateModel(Matrix& activations){
     CuMatrix labels = cu.wrapMatrix(requestTargetMatrix());
-    CuMatrix cuPredictions = cu.softmaxRows(cu.wrapMatrix(labels));
+    CuMatrix cuPredictions = cu.softmaxRows(labels);
 
     // Check if the label with the highest probability after softmax is equal to the
     // target label
@@ -243,9 +243,14 @@ ComputingServer::gradientComputation(GraphData& graphData, std::vector<Matrix>& 
     std::vector<Matrix> weightsUpdates;
 
     // Compute last layer's gradients.
-    CuMatrix softmaxRes = cu.softmaxRows(cu.wrapMatrix(graphData.actMatrices.back()));
-    CuMatrix subRes = cu.hadamardSub(softmaxRes, cu.wrapMatrix(graphData.targetMatrix));
-    CuMatrix derivateRes = cu.activateDerivate(cu.wrapMatrix(graphData.zMatrices.back()));
+    CuMatrix cuAct=cu.wrapMatrix(graphData.actMatrices.back());
+    CuMatrix softmaxRes = cu.softmaxRows(cuAct);
+
+    CuMatrix cuTarget=cu.wrapMatrix(graphData.targetMatrix);
+    CuMatrix subRes = cu.hadamardSub(softmaxRes, cuTarget);
+
+    CuMatrix cuZ=cu.wrapMatrix(graphData.zMatrices.back());
+    CuMatrix derivateRes = cu.activateDerivate(cuZ);
     gradients.push_back(cu.hadamardMul(subRes, derivateRes));
 
     // Compute previous layers gradients.
@@ -261,7 +266,8 @@ ComputingServer::gradientComputation(GraphData& graphData, std::vector<Matrix>& 
 
     // Compute weights updates.
     for (unsigned i = 0; i < gradients.size(); ++i){
-        Matrix update=cu.dotActTranswithGD(cu.wrapMatrix(graphData.actMatrices[i]), *gradients[i], LEARNING_RATE).getMatrix();
+        CuMatrix cuAct_=cu.wrapMatrix(graphData.actMatrices[i]);
+        Matrix update=cu.dotActTranswithGD(cuAct_, *gradients[i], LEARNING_RATE).getMatrix();
         weightsUpdates.push_back(update);
     }
 

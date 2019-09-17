@@ -1,11 +1,16 @@
 #include "GPU_comm.hpp"
 
-void doNotFreeBuffer(void *data, void *hint){
+static void doNotFreeBuffer(void *data, void *hint){
     printf("Buffer is not freed :)\n");
 }
 
+extern "C" ResourceComm* createComm(CommInfo& commInfo){
+    return new GPUComm(commInfo.nodeId,commInfo.numNodes,commInfo.dataserverPort,
+                        commInfo.wServersFile,commInfo.weightserverPort);
+}
+
 void GPUComm::newContextForward(FeatType *dataBuf, FeatType *zData_, FeatType *actData_,
-                              unsigned numLocalVertices_, unsigned numFeats, unsigned numFeatsNext_, bool eval_){
+                            unsigned numLocalVertices_, unsigned numFeats, unsigned numFeatsNext_, bool eval_){
     // Create a new matrix object for workers to access.
     eval=eval_;
     numLocalVertices=numLocalVertices_;

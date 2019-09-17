@@ -12,7 +12,7 @@
 #include <vector>
 #include <thread>
 #include "comp_unit.cuh"
-#include "../../../src/graph-server/utils/utils.hpp"
+#include "../utils/utils.hpp"
 
 
 const float LEARNING_RATE=0.1;

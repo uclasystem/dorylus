@@ -13,7 +13,7 @@
 #include <cuda_runtime.h>
 #include "cublas_v2.h"
 #include "cu_matrix.cuh"
-#include "../../../src/graph-server/utils/utils.hpp"
+#include "../utils/utils.hpp"
 
 #include <thrust/device_vector.h>
 #include <thrust/functional.h>
@@ -36,14 +36,14 @@ public:
 
     CuMatrix wrapMatrix(Matrix m);
 
-	CuMatrix dot(const Matrix& A,const Matrix& B); 	
+	CuMatrix dot(Matrix& A,Matrix& B); 	
 	void activate(CuMatrix& A); 	
-    CuMatrix softmaxRows(const CuMatrix &mat);
-    CuMatrix hadamardSub(const CuMatrix& matLeft,const CuMatrix& matRight);
-    CuMatrix* hadamardMul(const CuMatrix& matLeft,const CuMatrix& matRight);
-    CuMatrix activateDerivate(const CuMatrix& mat);
-    CuMatrix dotGDwithWTrans(const CuMatrix& matLeft,const CuMatrix& matRight);
-    CuMatrix dotActTranswithGD(const CuMatrix& matLeft, const CuMatrix& matRight, const float learning_rate);
+    CuMatrix softmaxRows(CuMatrix &mat);
+    CuMatrix hadamardSub(CuMatrix& matLeft, CuMatrix& matRight);
+    CuMatrix* hadamardMul(CuMatrix& matLeft, CuMatrix& matRight);
+    CuMatrix activateDerivate(CuMatrix& mat);
+    CuMatrix dotGDwithWTrans(CuMatrix& matLeft, CuMatrix& matRight);
+    CuMatrix dotActTranswithGD(CuMatrix& matLeft, CuMatrix& matRight, const float learning_rate);
 
     unsigned checkAccuracy(CuMatrix& predictions, CuMatrix& labels);
 	float checkLoss(CuMatrix& preds, CuMatrix& labels);

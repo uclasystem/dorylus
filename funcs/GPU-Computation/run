@@ -1,5 +1,0 @@
-#/bin/bash
-dPort=$( < ~/gserverport)
-wPort=$( < ~/wserverport)
-
-./GPU-Computation $dPort ~/wserverip $wPort 

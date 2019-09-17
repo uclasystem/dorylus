@@ -18,6 +18,7 @@
 #include <vector>
 #include <zmq.hpp>
 
+#include "resource_comm.hpp"
 #include "lambdaworker.hpp"
 #include "../utils/utils.hpp"
 #include "../../common/matrix.hpp"
@@ -31,7 +32,7 @@ class LambdaWorker;
  * Class of a lambda threads communication handler.
  *
  */
-class LambdaComm {
+class LambdaComm : public ResourceComm {
 
 public:
 
@@ -46,7 +47,7 @@ public:
         FeatType *actData, unsigned numLocalVertices, unsigned numFeats,
         unsigned numFeatsNext, bool eval);
 
-    void requestLambdasForward(unsigned layer);
+    void requestForward(unsigned layer);
 
     void invokeLambdaForward(unsigned layer, unsigned lambdaId);
     void waitLambdaForward();
@@ -55,7 +56,7 @@ public:
     void newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType *targetBuf,
                             unsigned numLocalVertices, std::vector<unsigned> layerConfig);
 
-    void requestLambdasBackward(unsigned numLayers_);
+    void requestBackward(unsigned numLayers_);
 
     // Send a message to the coordination server to shutdown.
     void sendShutdownMessage();

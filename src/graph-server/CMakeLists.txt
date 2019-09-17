@@ -8,6 +8,7 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
+include_directories(/opt/cuda/include/)
 
 # Subdirectories, each needs a CMakeLists.txt.
 add_subdirectory(commmanager)
@@ -15,11 +16,13 @@ add_subdirectory(nodemanager)
 add_subdirectory(engine)
 add_subdirectory(parallel)
 add_subdirectory(utils)
+add_subdirectory(GPU-Computation)
 
 
 # Add the executable.
 aux_source_directory(. GRAPH_SRCS)
 add_executable(graphserver ${GRAPH_SRCS})
+
 target_link_libraries(graphserver PRIVATE commmanager lambda_comm gpu_comm edge vertex graph engine nodemanager threadpool utils matrix
                                   PUBLIC  ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES})
 target_compile_options(graphserver PRIVATE "-Wall" "-Werror" "-Wno-reorder" "-MMD")
