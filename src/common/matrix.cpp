@@ -241,15 +241,83 @@ void Matrix::operator-=(Matrix& M) {
     }
 }
 
-Matrix Matrix::dot(Matrix& M) {
-    unsigned m = getRows(), k = getCols(), n = M.getCols();
-    assert(k == M.getRows());
+Matrix Matrix::dot(Matrix& M, bool transpose1, bool transpose2, float scale) {
+    unsigned m = 0, k = 0, n = 0;
+    CBLAS_TRANSPOSE cblasTrans1 = CblasNoTrans, cblasTrans2 = CblasNoTrans;
+    FeatType* result;
 
-    FeatType* result = new FeatType[m * n];
-    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, 1.0,
-                getData(), k, M.getData(), n, 0.0, result, n);
+    // Depending on transposed matrices, check dimension alignment and assign
+    // correct values
+    // NOTE: Annoying I have to make a separate call to cblas per case becuase the
+    //  inputs vary slightly... there is probably a better way to do this
+
+    // Case 1 - Neither transposed
+    if (!transpose1 && !transpose2) {
+        m = getRows(), k = getCols(), n = M.getCols();
+        assert(k == M.getRows());
+
+        result = new FeatType[m * n];
+        cblas_sgemm(CblasRowMajor, cblasTrans1, cblasTrans2, m, n, k, scale,
+                    getData(), k, M.getData(), n, 0.0, result, n);
+
+    // Case 2 - Both transposed
+    } else if (transpose1 && transpose2) {
+        m = getCols(), k = getRows(), n = M.getRows();
+        assert(k == M.getCols());
+        cblasTrans1 = CblasTrans;
+        cblasTrans2 = CblasTrans;
+
+        result = new FeatType[m * n];
+        cblas_sgemm(CblasRowMajor, cblasTrans1, cblasTrans2, m, n, k, scale,
+                    getData(), m, M.getData(), k, 0.0, result, n);
+
+    // Case 3 - Left Matrix transposed
+    } else if (transpose1) {
+        m = getCols(), k = getRows(), n = M.getCols();
+        assert(k == M.getRows());
+        cblasTrans1 = CblasTrans;
+
+        result = new FeatType[m * n];
+        cblas_sgemm(CblasRowMajor, cblasTrans1, cblasTrans2, m, n, k, scale,
+                    getData(), m, M.getData(), n, 0.0, result, n);
+
+    // Case 4 - Right Matrix transposed
+    } else if (transpose2) {
+        m = getRows(), k = getCols(), n = M.getRows();
+        assert(k == M.getCols());
+        cblasTrans2 = CblasTrans;
+
+        result = new FeatType[m * n];
+        cblas_sgemm(CblasRowMajor, cblasTrans1, cblasTrans2, m, n, k, scale,
+                    getData(), k, M.getData(), k, 0.0, result, n);
+    }
 
     return Matrix(m, n, result);
+}
+
+Matrix Matrix::dotT(Matrix& M) {
+    assert(getRows() == M.getRows());
+
+    unsigned colsThis = getCols();
+    unsigned colsM = M.getCols();
+    FeatType* result = new FeatType[colsThis * colsM];
+
+    // For the number of rows in the matrices
+    for (unsigned r = 0; r < getRows(); ++r) {
+        FeatType* rowThis = get(r);
+        FeatType* rowM = M.get(r);
+
+        // For each number in the first row
+        for (unsigned cThis = 0; cThis < colsThis; ++cThis) {
+            // For each number in the second row
+            for (unsigned cM = 0; cM < colsM; ++cM) {
+                // Sum the product of the number at index cThis,cM
+                result[cThis * colsM + cM] += get(r, cThis) * M.get(r, cM);
+            }
+        }
+    }
+
+    return Matrix(colsThis, colsM, result);
 }
 
 // Print functions for info / debugging
