@@ -1,0 +1,22 @@
+#!/bin/bash
+
+##
+## Send a folder to all the nodes specified in `~/dshmachines`. TO be invoked on the remote machine.
+## Must have achieved passwd-less ssh among friend machines.
+##
+## File path should be specified relative to `gnn-lambda/` directory.
+##
+
+
+cd ${HOME}/gnn-lambda/
+
+EC2MAN_CMD="python3 -m ec2man"
+
+
+FILE=$( pwd )/$1
+
+for MACH in $( cat ~/dshmachines ); do
+    ssh ${MACH} "mkdir -p  ${FILE}"
+    scp -r ${FILE} ${MACH}:$( pwd )
+done
+

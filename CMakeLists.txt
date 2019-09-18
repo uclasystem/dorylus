@@ -15,7 +15,7 @@ project(gnn-lambda LANGUAGES CXX)
 
 # Include ZeroMQ.
 set(ZMQ_INC /usr/local/include)
-set(ZMQ_LIB /usr/local/lib/libzmq.a)
+set(ZMQ_LIB /usr/local/lib/libzmq.so)
 include_directories(${ZMQ_INC})
 
 # Include BLAS/CBLAS
