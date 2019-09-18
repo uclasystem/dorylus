@@ -183,15 +183,10 @@ void WeightServer::applyUpdates() {
         //
         // Uncomment below to write updated weights results to `output_0` for correctness checking.
         //
-<<<<<<< Updated upstream
         if (checkCorrectnessFlag) {
             for (Matrix& mat : weightMats)
                 outfile << mat.str() << std::endl;
         }
-=======
-        // for (Matrix& mat : weightMats)
-            // outfile << mat.str() << std::endl;
->>>>>>> Stashed changes
 
     // Worker code.
     } else {

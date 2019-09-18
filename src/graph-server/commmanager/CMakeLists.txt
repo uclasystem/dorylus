@@ -17,9 +17,11 @@ target_link_libraries(lambda_comm PRIVATE utils resource_comm
                                   PUBLIC  ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES})
 target_compile_options(lambda_comm PRIVATE "-Wall" "-Werror" "-Wno-reorder" "-MMD")
 
-
-add_library(gpu_comm SHARED "GPU_comm.cpp" )
-set_property(TARGET gpu_comm PROPERTY POSITION_INDEPENDENT_CODE ON)
-target_link_libraries(gpu_comm PRIVATE utils resource_comm ComputingServer
-                              PUBLIC  ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES})
-target_compile_options(gpu_comm PRIVATE "-Wall" "-Werror" "-Wno-reorder" "-MMD")
+if(BUILD_GPU)
+	include_directories(/opt/cuda/include/)
+	add_library(gpu_comm SHARED "GPU_comm.cpp" )
+	set_property(TARGET gpu_comm PROPERTY POSITION_INDEPENDENT_CODE ON)
+	target_link_libraries(gpu_comm PRIVATE utils resource_comm ComputingServer
+	                              PUBLIC  ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES})
+	target_compile_options(gpu_comm PRIVATE "-Wall" "-Werror" "-Wno-reorder" "-MMD")
+endif()

@@ -31,29 +31,7 @@ class GPUComm : public ResourceComm{
 
 public:
 
-    GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,const std::string& wServersFile,unsigned wPort_):
-        ResourceComm(),
-        nodeId(nodeId_),
-        numNodes(numNodes_),
-        dPort(dataserverPort_),
-        dataSocket(ctx,ZMQ_REQ){
-
-        std::thread t([&](){
-            ComputingServer* comp_server=
-            new ComputingServer(dPort,wServersFile.c_str(),wPort_);
-            comp_server->run();    
-        });
-        
-        char ipc_addr[50];
-        sprintf(ipc_addr, "inproc://%u", dPort);
-        dataSocket.connect(ipc_addr);
-
-        zmq::message_t confirm(5);
-        zmq::message_t init_header(HEADER_SIZE);
-        populateHeader((char*)init_header.data(),nodeId);
-        dataSocket.send(init_header);
-        dataSocket.recv(&confirm);
-    }
+    GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,const std::string& wServersFile,unsigned wPort_);
 
     // For forward-prop.
     void newContextForward(FeatType *dataBuf, FeatType *zData_, FeatType *actData_,

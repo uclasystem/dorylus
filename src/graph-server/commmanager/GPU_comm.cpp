@@ -1,7 +1,7 @@
 #include "GPU_comm.hpp"
 
 static void doNotFreeBuffer(void *data, void *hint){
-    printf("Buffer is not freed :)\n");
+    // printf("Buffer is not freed :)\n");
 }
 
 extern "C" ResourceComm* createComm(CommInfo& commInfo){
@@ -9,8 +9,39 @@ extern "C" ResourceComm* createComm(CommInfo& commInfo){
                         commInfo.wServersFile,commInfo.weightserverPort);
 }
 
+GPUComm::GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,const std::string& wServersFile,unsigned wPort_):
+        ResourceComm(),
+        nodeId(nodeId_),
+        numNodes(numNodes_),
+        dPort(dataserverPort_),
+        dataSocket(ctx,ZMQ_REQ){
+        
+
+        std::thread t([&](){
+            ComputingServer* comp_server=
+            new ComputingServer(ctx,dPort,wServersFile.c_str(),wPort_);
+            comp_server->run();
+        });
+        t.detach();
+
+        char ipc_addr[50];
+        sprintf(ipc_addr, "inproc://%u", dPort);
+        dataSocket.connect(ipc_addr);
+        printLog(nodeId,"Connecting to %s\n", ipc_addr);
+
+        zmq::message_t confirm(5);
+        zmq::message_t init_header(HEADER_SIZE);
+        populateHeader((char*)init_header.data(),nodeId);
+        dataSocket.send(init_header);
+        printLog(nodeId,"Recving\n");
+        dataSocket.recv(&confirm);
+        printLog(nodeId,"Recved\n");
+}
+
+
 void GPUComm::newContextForward(FeatType *dataBuf, FeatType *zData_, FeatType *actData_,
                             unsigned numLocalVertices_, unsigned numFeats, unsigned numFeatsNext_, bool eval_){
+    
     // Create a new matrix object for workers to access.
     eval=eval_;
     numLocalVertices=numLocalVertices_;
@@ -23,7 +54,7 @@ void GPUComm::newContextForward(FeatType *dataBuf, FeatType *zData_, FeatType *a
 }
 
 void GPUComm::requestForward(unsigned layer){
-    printf("requestForward \n");    
+     
     try {
         zmq::message_t confirm(5);
         zmq::message_t header(HEADER_SIZE);

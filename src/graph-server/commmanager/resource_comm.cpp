@@ -1,20 +1,20 @@
 #include "resource_comm.hpp"
 #include <iostream>
 
+
 ResourceComm* createResourceComm(const std::string& type, CommInfo& commInfo){
 	void *hndl=NULL; 
-	system("pwd");
 	if(type=="GPU")
-		hndl= dlopen("", RTLD_NOW);
+		hndl= dlopen("./build/graph-server/commmanager/libgpu_comm.so", RTLD_NOW);
 	if(type=="Lambda")
-		hndl= dlopen("", RTLD_NOW);
+		hndl= dlopen("./build/graph-server/commmanager/liblambda_comm.so", RTLD_NOW);
 
 	if(hndl == NULL){
 	   std::cerr << dlerror() << std::endl;
 	   exit(-1);
 	}
 	void * creator= dlsym(hndl, "createComm");
-	ResourceComm *resComm = ((ResourceComm* (*)()) creator)();
+	ResourceComm *resComm = ((ResourceComm* (*)(CommInfo&)) creator)(commInfo);
 
 	return resComm;
 }

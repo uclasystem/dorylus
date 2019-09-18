@@ -945,7 +945,7 @@ Engine::parseArgs(int argc, char *argv[]) {
 
     assert(vm.count("wserveripfile"));
     weightserverIPFile = vm["wserveripfile"].as<std::string>();
-
+    
     assert(vm.count("coordserverip"));
     coordserverIp = vm["coordserverip"].as<std::string>();
 

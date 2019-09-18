@@ -10,7 +10,7 @@
 #include <sstream>
 #include <boost/algorithm/string/trim.hpp>
 #include <vector>
-#include <thread>
+#include <condition_variable>
 #include "comp_unit.cuh"
 #include "../utils/utils.hpp"
 
@@ -27,7 +27,7 @@ typedef struct {
 
 class ComputingServer {
 public:
-    ComputingServer(unsigned dPort_,const std::string& wServersFile,unsigned wPort_);
+    ComputingServer(zmq::context_t& dctx,unsigned dPort_,const std::string& wServersFile,unsigned wPort_);
 
     //read weight file 
     void loadWeightServers(std::vector<char *>& addresses, const std::string& wServersFile);

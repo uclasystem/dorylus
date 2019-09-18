@@ -1,6 +1,5 @@
 #include "comp_server.cuh"
 
-
 unsigned getMaxIndex(FeatType* row, unsigned length) {
     float max = 0.0;
     unsigned maxIndex = 0;
@@ -27,7 +26,7 @@ static void doNotFreeBuffer(void *data, void *hint){
     // printf("Buffer is not freed :)\n");
 }
 
-ComputingServer::ComputingServer(unsigned dPort_,const std::string& wServersFile,unsigned wPort_):
+ComputingServer::ComputingServer(zmq::context_t& dctx,unsigned dPort_,const std::string& wServersFile,unsigned wPort_):
     dPort(dPort_),
     wPort(wPort_),
     dataSocket(dctx, ZMQ_REP),
@@ -35,10 +34,11 @@ ComputingServer::ComputingServer(unsigned dPort_,const std::string& wServersFile
         loadWeightServers(weightServerAddrs,wServersFile);
 
         //use port as ipc addresss
-        sprintf(ipc_addr, "ipc://%u", dPort); 
-        std::cout << "Binding computing server to " << ipc_addr << "..." << std::endl;
+        sprintf(ipc_addr, "inproc://%u", dPort); 
+        printLog(nodeId,"Binding computing server to %s...\n" ,ipc_addr);
         dataSocket.bind(ipc_addr);
-
+        // server_ready=1;
+        // cv.notify_one();
 }
 
 void ComputingServer::evaluateModel(Matrix& activations){
@@ -113,11 +113,12 @@ float ComputingServer::checkLoss(Matrix& preds, Matrix& labels){
 void ComputingServer::run(){
     
     // Keeps listening on coord's requests.
-    std::cout << "[GPU] Starts listening for GPU requests from DATASERVER..." << std::endl;
+    printLog(1,"[GPU] Starts listening for GPU requests from DATASERVER...\n");
 
     zmq::message_t confirm(5);
     zmq::message_t init_header(HEADER_SIZE);
     dataSocket.recv(&init_header);
+    printLog(1,"[GPU] Receved...\n");    
     nodeId = parse<unsigned>((char *) init_header.data(), 0);
     dataSocket.send(confirm);
 
@@ -521,20 +522,20 @@ ComputingServer::terminateWeightServers(){
     if(nodeId!=0)
         return; 
     
-    std::cout <<"Node 0 is terminating all weightservers\n";
+    printLog(nodeId,"Node 0 is terminating all weightservers\n");
 
     for (unsigned i = 0; i < weightServerAddrs.size(); ++i) {
-        zmq::socket_t ws=zmq::socket_t(wctx, ZMQ_DEALER);
+        zmq::context_t shutdown_ctx;
+        zmq::socket_t ws=zmq::socket_t(shutdown_ctx, ZMQ_DEALER);
         char identity[] = "coord";
         ws.setsockopt(ZMQ_IDENTITY, identity, strlen(identity) + 1);
         char whost_port[50];
         sprintf(whost_port, "tcp://%s:%u", weightServerAddrs[i], wPort);
-        std::cout << "  Shutting Down Weightserver " << whost_port << std::endl;
+        printLog(nodeId,"[GPU]Shutting Down Weightserver %s \n", whost_port);
         ws.connect(whost_port);
         sendShutdownMessage(ws);
         ws.close();
     }
-
 }
 
 void
