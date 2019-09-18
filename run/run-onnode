@@ -89,6 +89,8 @@ case $1 in
             --pubipfile ${MYPUBIPFILE} \
             --pripfile ${MYPRIPFILE} \
             --dataserverport ${GPORT} \
+            --weightserverport 0 \
+            --wserveripfile "placeholder" \
             --coordserverip ${CSERVERIP} \
             --coordserverport ${CPORT} \
             --undirected ${UNDIRECTED} \
