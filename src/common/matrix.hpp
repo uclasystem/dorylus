@@ -3,10 +3,12 @@
 
 #include <cassert>
 #include <cmath>
+#include <memory>
 
 #include "cblas.h"
 
 #include "utils.hpp"
+
 
 /**
  *
@@ -77,7 +79,12 @@ public:
     // Matrix multiplication
     // If using this make sure to assign it to a new matrix as overwriting the current matrix
     // will cause a dangling pointer
-    Matrix dot(Matrix& M);
+    Matrix dot(Matrix& M, bool transpose1 = false, bool transpose2 = false, float scale = 1.0);
+
+    // Special case of matrix multiplication designed specifically for data parallelism
+    // when operating on very large transposed matrices that cannot fit into memory of a
+    // lambda
+    Matrix dotT(Matrix& M);
 
     std::string shape();
 
