@@ -144,15 +144,12 @@ float ComputingUnit::checkLoss(CuMatrix& preds, CuMatrix& labels){
     thrust::device_vector<FeatType*> row_starts(preds.getRows());
     thrust::transform(idxfirst,idxfirst+preds.getRows(),row_starts.begin(),
         setRowStarts(labels.devPtr,rowSize));
-
     thrust::device_vector<unsigned> true_labels(preds.getRows());
     thrust::transform(row_starts.begin(),row_starts.end(),true_labels.begin(),findTrueLabel(rowSize));
-
     thrust::transform(idxfirst,idxfirst+preds.getRows(),row_starts.begin(),
         setRowStarts(preds.devPtr,rowSize));
     thrust::device_vector<FeatType> losses(preds.getRows());
     thrust::transform(true_labels.begin(),true_labels.end(),row_starts.begin(),losses.begin(),getLoss(rowSize));
     float totalLoss = thrust::reduce(losses.begin(), losses.end(), (float) 0, thrust::plus<float>());
-
     return totalLoss;
 }

@@ -17,12 +17,11 @@ GPUComm::GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,
         dataSocket(ctx,ZMQ_REQ){
         
 
-        std::thread t([&](){
+        comp_server_thread=std::thread([&](){
             ComputingServer* comp_server=
             new ComputingServer(ctx,dPort,wServersFile.c_str(),wPort_);
             comp_server->run();
         });
-        t.detach();
 
         char ipc_addr[50];
         sprintf(ipc_addr, "inproc://%u", dPort);
@@ -33,9 +32,8 @@ GPUComm::GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,
         zmq::message_t init_header(HEADER_SIZE);
         populateHeader((char*)init_header.data(),nodeId);
         dataSocket.send(init_header);
-        printLog(nodeId,"Recving\n");
         dataSocket.recv(&confirm);
-        printLog(nodeId,"Recved\n");
+    
 }
 
 
@@ -208,4 +206,8 @@ void GPUComm::sendShutdownMessage(){
     populateHeader((char *) header.data(), OP::TERM);
     dataSocket.send(header);
     dataSocket.recv(&confirm);
+    
+    comp_server_thread.join();
+    printLog(nodeId, "Joined\n");
+
 }

@@ -60,6 +60,8 @@ private:
     unsigned numNodes;
     unsigned numLocalVertices;
 
+    std::thread comp_server_thread;
+
     //ntw related objs
     zmq::context_t ctx;
     zmq::socket_t dataSocket;

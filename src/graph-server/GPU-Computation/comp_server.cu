@@ -125,7 +125,7 @@ void ComputingServer::run(){
     try {
         bool terminate=0;
         while (!terminate) {
-            printf("Receiving Next OP\n");
+            printLog(nodeId,"Receiving Next OP\n");
             zmq::message_t header(HEADER_SIZE);
             dataSocket.recv(&header);
             unsigned op = parse<unsigned>((char *) header.data(), 0);
@@ -143,7 +143,7 @@ void ComputingServer::run(){
                     processBackward(header);
                     break;
                 default:
-                    printf("Unknown OP\n");
+                    printLog(nodeId,"Unknown OP\n");
             }
         }
     } catch (std::exception& ex) {
@@ -525,9 +525,8 @@ ComputingServer::terminateWeightServers(){
     printLog(nodeId,"Node 0 is terminating all weightservers\n");
 
     for (unsigned i = 0; i < weightServerAddrs.size(); ++i) {
-        zmq::context_t shutdown_ctx;
-        zmq::socket_t ws=zmq::socket_t(shutdown_ctx, ZMQ_DEALER);
-        char identity[] = "coord";
+        zmq::socket_t ws=zmq::socket_t(wctx, ZMQ_DEALER);
+        char identity[] = "coordx";
         ws.setsockopt(ZMQ_IDENTITY, identity, strlen(identity) + 1);
         char whost_port[50];
         sprintf(whost_port, "tcp://%s:%u", weightServerAddrs[i], wPort);
@@ -543,10 +542,10 @@ ComputingServer::sendShutdownMessage(zmq::socket_t& weightsocket) {
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char *) header.data(), OP::TERM);
     weightsocket.send(header);
-
+    
     // Set receive timeou 1s property on this weightsocket, in case that a weightserver is dying too quickly that it's
     // confirm message it not sent from buffer yet. Using timeout here because shutdown is not a big deal.
-    weightsocket.setsockopt(ZMQ_RCVTIMEO, 500);
+    weightsocket.setsockopt(ZMQ_RCVTIMEO, 1000);
 
     // Wait for termination confirmed reply.
     zmq::message_t confirm;
