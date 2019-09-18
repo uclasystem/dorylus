@@ -13,7 +13,7 @@ target_compile_options(resource_comm PRIVATE "-Wall" "-Werror" "-Wno-unused-but-
 
 add_library(lambda_comm SHARED "lambda_comm.cpp" "lambdaworker.cpp")
 set_property(TARGET lambda_comm PROPERTY POSITION_INDEPENDENT_CODE ON)
-target_link_libraries(lambda_comm PRIVATE utils resource_comm
+target_link_libraries(lambda_comm PRIVATE utils resource_comm matrix
                                   PUBLIC  ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES})
 target_compile_options(lambda_comm PRIVATE "-Wall" "-Werror" "-Wno-reorder" "-MMD")
 
