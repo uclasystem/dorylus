@@ -7,9 +7,8 @@ fi
 pwd
 machineList=$( < ~/dshmachines )
 for machine in $machineList
-do 
+do
 	scp  -r ./src $machine:~/gnn-lambda/
-	scp  -r ./funcs/forward-prop-GPU $machine:~/gnn-lambda/funcs/
 	scp  ./run/run-gpu-graph-server $machine:~/gnn-lambda/run/run-gpu-graph-server
 
 done

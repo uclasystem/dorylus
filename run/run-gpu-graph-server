@@ -4,6 +4,8 @@
 cd ${HOME}/gnn-lambda/
 
 CPORT=$( < ../cserverport )
+WPORT=$( < ../wserverport)
+WSERVERIP=${HOME}/wserverip
 GPORT=$( < ../gserverport )
 CSERVERIP=$( < ../cserverip )
 
@@ -72,6 +74,8 @@ dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ./build/graphserver \
     --pubipfile ${MYPUBIPFILE} \
     --pripfile ${MYPRIPFILE} \
     --dataserverport ${GPORT} \
+    --weightserverport ${WPORT} \
+    --wserveripfile ${WSERVERIP} \
     --coordserverip ${CSERVERIP} \
     --coordserverport ${CPORT} \
     --undirected ${UNDIRECTED} \

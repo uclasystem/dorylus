@@ -11,6 +11,11 @@ static std::vector<LambdaWorker *> workers;
 static std::vector<std::thread *> worker_threads;
 
 
+extern "C" ResourceComm* createComm(CommInfo& commInfo){
+    return new LambdaComm(commInfo.nodeIp,commInfo.dataserverPort,commInfo.coordserverIp,
+                        commInfo.coordserverPort,commInfo.nodeId,commInfo.numLambdasForward,commInfo.numLambdasBackward);
+}
+
 /**
  *
  * Lambda communication manager constructor & destructor.
@@ -18,7 +23,7 @@ static std::vector<std::thread *> worker_threads;
  */
 LambdaComm::LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::string coordserverIp_, unsigned coordserverPort_, unsigned nodeId_,
            unsigned numLambdasForward_, unsigned numLambdasBackward_)
-    : nodeIp(nodeIp_), dataserverPort(dataserverPort_), coordserverIp(coordserverIp_), coordserverPort(coordserverPort_), nodeId(nodeId_),
+     :ResourceComm(),nodeIp(nodeIp_), dataserverPort(dataserverPort_), coordserverIp(coordserverIp_), coordserverPort(coordserverPort_), nodeId(nodeId_),
       ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), coordsocket(ctx, ZMQ_REQ),
       numLambdasForward(numLambdasForward_), numLambdasBackward(numLambdasBackward_), numListeners(numLambdasBackward_),   // TODO: Decide numListeners.
       countForward(0), countBackward(0),
@@ -132,7 +137,7 @@ LambdaComm::newContextForward(FeatType *dataBuf, FeatType *zData, FeatType *actD
 }
 
 void
-LambdaComm::requestLambdasForward(unsigned layer) {
+LambdaComm::requestForward(unsigned layer) {
 
     // Send header info to tell the coordserver to trigger how many lambdas in which forward layer.
     zmq::message_t header(HEADER_SIZE);
@@ -208,7 +213,7 @@ LambdaComm::newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType *t
 }
 
 void
-LambdaComm::requestLambdasBackward(unsigned numLayers_) {
+LambdaComm::requestBackward(unsigned numLayers_) {
 
     // Send header info to tell the coordserver to trigger how many lambdas to trigger.
     zmq::message_t header(HEADER_SIZE);

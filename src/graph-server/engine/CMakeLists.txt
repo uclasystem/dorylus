@@ -15,6 +15,6 @@ target_link_libraries(graph PRIVATE utils
                             PUBLIC ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES})
 target_compile_options(graph PRIVATE "-Wall" "-Werror" "-Wno-sign-compare" "-Wno-reorder" "-MMD")
 add_library(engine "engine.cpp")
-target_link_libraries(engine PRIVATE edge vertex graph commmanager nodemanager lambda_comm gpu_comm threadpool utils
+target_link_libraries(engine PRIVATE edge vertex graph commmanager resource_comm nodemanager threadpool utils
                              PUBLIC  ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES})
 target_compile_options(engine PRIVATE "-Wall" "-Werror" "-Wno-sign-compare" "-Wno-reorder" "-MMD")

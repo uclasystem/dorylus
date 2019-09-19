@@ -30,15 +30,17 @@ std::string Engine::dshMachinesFile;
 std::string Engine::myPrIpFile;
 std::string Engine::myPubIpFile;
 unsigned Engine::dataserverPort;
+unsigned Engine::weightserverPort;
 std::string Engine::coordserverIp;
+std::string Engine::weightserverIPFile;
 unsigned Engine::coordserverPort;
-LambdaComm *Engine::lambdaComm = NULL;
+ResourceComm *Engine::resComm = NULL;
+CommInfo Engine::commInfo;
 unsigned Engine::numLambdasForward = 0;
 unsigned Engine::numLambdasBackward = 0;
 unsigned Engine::numEpochs = 0;
 unsigned Engine::valFreq = 0;
 std::vector<bool> Engine::trainPartition;
-GPUComm *Engine::gpuComm = NULL;
 unsigned Engine::gpuEnabled = 0;
 unsigned Engine::currId = 0;
 Lock Engine::lockCurrId;
@@ -153,17 +155,35 @@ Engine::init(int argc, char *argv[]) {
     // Compact the graph.
     graph.compactGraph();
 
-    if (gpuEnabled == 1) {
-        // Create the GPU communication manager
-        gpuComm = new GPUComm(nodeId, dataserverPort);
-    } else {
-        // Create the lambda communication manager.
-        lambdaComm = new LambdaComm(NodeManager::getNode(nodeId).pubip, dataserverPort, coordserverIp, coordserverPort, nodeId,
-                                    numLambdasForward, numLambdasBackward);
-    }
+    setUpCommInfo();
+
+    if (gpuEnabled == 1)
+        resComm=createResourceComm("GPU",commInfo);
+    else
+        resComm=createResourceComm("Lambda",commInfo);
 
     timeInit += getTimer();
     printLog(nodeId, "Engine initialization complete.");
+}
+
+
+/**
+*
+* Initialize the CommInfo struct for lambdaComm and GPUComm
+*
+*/
+void
+Engine::setUpCommInfo(){
+    commInfo.nodeIp=NodeManager::getNode(nodeId).pubip;
+    commInfo.nodeId=nodeId;
+    commInfo.dataserverPort=dataserverPort;
+    commInfo.coordserverIp=coordserverIp;
+    commInfo.coordserverPort=coordserverPort;
+    commInfo.numLambdasForward=numLambdasForward;
+    commInfo.numLambdasBackward=numLambdasBackward;
+    commInfo.numNodes=numNodes;
+    commInfo.wServersFile=weightserverIPFile;
+    commInfo.weightserverPort=weightserverPort;
 }
 
 
@@ -175,7 +195,7 @@ Engine::init(int argc, char *argv[]) {
  */
 void
 Engine::setTrainValidationSplit(float trainPortion) {
-    lambdaComm->setTrainValidationSplit(trainPortion, graph.getNumLocalVertices());
+        resComm->setTrainValidationSplit(trainPortion, graph.getNumLocalVertices());
 }
 
 
@@ -192,8 +212,8 @@ Engine::master() {
 
 /**
  *
- * Whether I am the master mode or not.
- *
+ * Whether GPU is enabled or not
+ * 
  */
 bool
 Engine::isGPUEnabled() {
@@ -291,7 +311,7 @@ Engine::runBackward() {
     NodeManager::barrier();
     printLog(nodeId, "Engine starts running BACKWARD...");
 
-    timeBackwardProcess = -getTimer();
+    timeBackwardProcess = getTimer();
 
     // Start backward-prop workers. Backward-prop is only a single-threaded task for dataservers, thus actually one a master
     // thread is doing the work.
@@ -300,7 +320,7 @@ Engine::runBackward() {
     // Join all backward-prop workers.
     computePool->sync();
 
-    timeBackwardProcess += getTimer();
+    timeBackwardProcess = getTimer() - timeBackwardProcess;
 
     printLog(nodeId, "Engine completes BACKWARD propagation.");
 }
@@ -337,13 +357,13 @@ Engine::output() {
     //
     // The follwing are only-last-layer feature values outputing.
     //
-    // for (Vertex& v : graph.getVertices()) {
-    //     outStream << v.getGlobalId() << ": ";
-    //     FeatType *dataPtr = localVertexActivationDataPtr(v.getLocalId(), numLayers);
-    //     for (size_t j = 0; j < layerConfig[numLayers]; ++j)
-    //         outStream << dataPtr[j] << " ";
-    //     outStream << std::endl;
-    // }
+    for (Vertex& v : graph.getVertices()) {
+        outStream << v.getGlobalId() << ": ";
+        FeatType *dataPtr = localVertexActivationDataPtr(v.getLocalId(), numLayers);
+        for (size_t j = 0; j < layerConfig[numLayers]; ++j)
+            outStream << dataPtr[j] << " ";
+        outStream << std::endl;
+    }
 
     //
     // The following are labels outputing.
@@ -359,13 +379,13 @@ Engine::output() {
     //
     // The following are timing results outputing.
     //
-    outStream << "I: " << timeInit << std::endl;
-    for (unsigned i = 0; i < numLayers; ++i) {
-        outStream << "A: " << vecTimeAggregate[i] << std::endl
-                  << "L: " << vecTimeLambda[i] << std::endl
-                  << "G: " << vecTimeSendout[i] << std::endl;
-    }
-    outStream << "B: " << timeBackwardProcess << std::endl;
+    // outStream << "I: " << timeInit << std::endl;
+    // for (unsigned i = 0; i < numLayers; ++i) {
+    //     outStream << "A: " << vecTimeAggregate[i] << std::endl
+    //               << "L: " << vecTimeLambda[i] << std::endl
+    //               << "G: " << vecTimeSendout[i] << std::endl;
+    // }
+    // outStream << "B: " << timeBackwardProcess << std::endl;
 
     // Write benchmarking results to log file.
     if (master()) {
@@ -396,14 +416,7 @@ Engine::destroy() {
     condRecvCnt.destroy();
     lockHalt.destroy();
 
-    if (gpuEnabled == 1) {
-        gpuComm->sendShutdownMessage();
-        delete gpuComm;
-    } else {
-        lambdaComm->sendShutdownMessage();
-        // comment delete lambdaComm to prevent process hanging. ctx.close() in ~lamdComm() will make whole process stuck
-        //delete lambdaComm;
-    }
+    resComm->sendShutdownMessage();
 
     delete[] ghostVCnts;
     for (size_t i = 0; i < numNodes; ++i) {
@@ -449,17 +462,14 @@ Engine::forwardWorker(unsigned tid, void *args) {
     unsigned readyVertices = lambdaVChunk;
 
     if (tid == 0) {
-        if (gpuEnabled == 1) {
-            gpuComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
-                                        graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1));
-        } else {
-            printLog(nodeId, "Iteration %u starts. Invoking lambda...", iteration);
-            // Run evaluation if it is an evaluation run and this is the last layer
-            bool runEval = evaluate && iteration == numLayers-1;
-            // Start a new lambda communication context.
-            lambdaComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
-                                            graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1), runEval);
-        };
+        printLog(nodeId, "Iteration %u starts. Invoking lambda...", iteration);
+        // Run evaluation if it is an evaluation run and this is the last layer
+        bool runEval = evaluate && iteration == numLayers-1;
+        
+        // Start a new lambda communication context.
+        resComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
+                                    graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1), runEval);
+        
     }
 
     // Outer while loop. Looping infinitely, looking for a new task to handle.
@@ -489,10 +499,10 @@ Engine::forwardWorker(unsigned tid, void *args) {
                 }
             // Master thread
             } else {
-                // invoke all available lambda threads
                 if (!gpuEnabled) {
+                    // invoke all available lambda threads
                     while (lvid >= readyVertices && availLambdaId < numLambdasForward) {
-                        lambdaComm->invokeLambdaForward(iteration, availLambdaId);
+                        resComm->invokeLambdaForward(iteration, availLambdaId);
                         availLambdaId++;
                         readyVertices = std::min(readyVertices + lambdaVChunk, graphLocalVertices);
                     }
@@ -508,9 +518,9 @@ Engine::forwardWorker(unsigned tid, void *args) {
 
                     // if in GPU mode we launch gpu computation here and wait the results
                     if (gpuEnabled) {
-                        gpuComm->requestForward(iteration);
+                        resComm->requestForward(iteration);
                     } else {
-                        lambdaComm->waitLambdaForward();
+                        resComm->waitLambdaForward();
                     }
 
                     vecTimeLambda.push_back(getTimer() - timeWorker);
@@ -538,16 +548,11 @@ Engine::forwardWorker(unsigned tid, void *args) {
                         // Reset new lambda communication context.
                         availLambdaId = 0;
                         readyVertices = lambdaVChunk;
-                        if (gpuEnabled == 1) {
-                            gpuComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
-                                                        graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1));
-                        } else {
-                            // Run evaluation if it is an evaluation run and this is the last layer
-                            bool runEval = evaluate && iteration == numLayers-1;
-                            // Start a new lambda communication context.
-                            lambdaComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
-                                                        graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1), runEval);
-                        }
+                        // Run evaluation if it is an evaluation run and this is the last layer
+                        bool runEval = evaluate && iteration == numLayers-1;
+                        // Start a new lambda communication context.
+                        resComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
+                                                graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1), runEval);
 
                         //## Worker barrier 2: Starting a new iteration. ##//
                         barComp.wait();
@@ -661,14 +666,14 @@ Engine::backwardWorker(unsigned tid, void *args) {
     if (tid == 0) {     // Only master thread does the actual work.
 
         // Start a new lambda communication context.
-        lambdaComm->newContextBackward(localVerticesZData, localVerticesActivationData, localVerticesLabels,
+        resComm->newContextBackward(localVerticesZData, localVerticesActivationData, localVerticesLabels,
                                        graph.getNumLocalVertices(), layerConfig);
-
-        // Trigger a request towards the coordicate server. Wait until the request completes.
+         // Trigger a request towards the coordicate server. Wait until the request completes.
         std::thread treq([&] {
-            lambdaComm->requestLambdasBackward(numLayers);
+            resComm->requestBackward(numLayers);
         });
         treq.join();
+       
     }
 }
 
@@ -870,6 +875,8 @@ Engine::parseArgs(int argc, char *argv[]) {
         ("tmpdir", boost::program_options::value<std::string>(), "Temporary directory")
 
         ("dataserverport", boost::program_options::value<unsigned>(), "The port exposing to the coordination server")
+        ("weightserverport", boost::program_options::value<unsigned>(), "The port of the listener on the coordination server")
+        ("wserveripfile", boost::program_options::value<std::string>(), "The file contains the public IP addresses of the weight server")
         ("coordserverip", boost::program_options::value<std::string>(), "The private IP address of the coordination server")
         ("coordserverport", boost::program_options::value<unsigned>(), "The port of the listener on the coordination server")
 
@@ -933,6 +940,12 @@ Engine::parseArgs(int argc, char *argv[]) {
     assert(vm.count("dataserverport"));
     dataserverPort = vm["dataserverport"].as<unsigned>();
 
+    assert(vm.count("weightserverport"));
+    weightserverPort = vm["weightserverport"].as<unsigned>();
+
+    assert(vm.count("wserveripfile"));
+    weightserverIPFile = vm["wserveripfile"].as<std::string>();
+    
     assert(vm.count("coordserverip"));
     coordserverIp = vm["coordserverip"].as<std::string>();
 

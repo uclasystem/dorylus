@@ -19,7 +19,7 @@ if [ ! -f $dshfile ] ; then
 fi
 # Start all machines...
 ${EC2MAN_CMD} weight all start
-
+${EC2MAN_CMD} setup
 rm -f ~/wserverip
 ${EC2MAN_CMD} weight all pubip > wserverip
 
