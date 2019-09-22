@@ -13,10 +13,12 @@
 #include <condition_variable>
 #include "comp_unit.cuh"
 #include "../utils/utils.hpp"
+#include "../commmanager/GPU_comm.hpp"
 
+class GPUComm;
 
 const float LEARNING_RATE=0.1;
-
+unsigned nodeId;
 /** Struct for wrapping over the returned matrices. */
 typedef struct {
     std::vector<Matrix> zMatrices;          // Layer 1 -> last.
@@ -25,59 +27,62 @@ typedef struct {
 } GraphData;
 
 
+
+class MessageService{
+public:
+    MessageService(zmq::context_t& dctx,unsigned dPort_,unsigned wPort_);
+
+    //weight server related
+    void setUpWeightSocket(char* addr);
+    Matrix requestWeightsMatrix(unsigned layer);
+    void sendInfoMessage(unsigned numLambdas);
+    std::vector<Matrix> requestWeightsMatrices(unsigned numLayers);
+    void sendWeightsUpdates(std::vector<Matrix>& weightsUpdates);
+    void terminateWeightServers(std::vector<char*>& weightServerAddrs);
+    void sendShutdownMessage(zmq::socket_t& weightsocket);
+
+    //data server related
+    template <class T>
+    T requestFourBytes();
+    Matrix requestMatrix();
+    FeatType* requestResultPtr();
+    void sendFourBytes(char* data);
+    GraphData requestForwardMatrices(unsigned numLayers);
+
+private:
+    zmq::context_t wctx;
+    zmq::socket_t* dataSocket;
+    zmq::socket_t* weightSocket;
+    zmq::message_t confirm;
+    zmq::message_t header;
+    unsigned wPort;
+    bool wsocktReady;
+};
+
 class ComputingServer {
 public:
-    ComputingServer(zmq::context_t& dctx,unsigned dPort_,const std::string& wServersFile,unsigned wPort_);
 
-    //read weight file 
-    void loadWeightServers(std::vector<char *>& addresses, const std::string& wServersFile);
-    void terminateWeightServers();
-    void sendShutdownMessage(zmq::socket_t& weightsocket);
+    ComputingServer(GPUComm* gpu_comm);
 
     // Keep listening to computing requests
     void run();
 
     //For forward
-    Matrix requestWeightsMatrix( unsigned layer);
-    Matrix requestFeatsMatrix(unsigned rows,unsigned cols);
-    void sendMatrices(Matrix& zResult, Matrix& actResult);
-    void processForward(zmq::message_t &header);
+    void processForward();
 
     //For validation
     void evaluateModel(Matrix& activations);
-    Matrix requestTargetMatrix();
-    unsigned checkAccuracy(Matrix& predictions, Matrix& labels);
-    float checkLoss(Matrix& preds, Matrix& labels);
 
     //For backward
-    GraphData requestForwardMatrices(unsigned numLayers);
-    std::vector<Matrix> requestWeightsMatrices(unsigned numLayers);
-    void processBackward(zmq::message_t &header);
-    void sendInfoMessage(zmq::socket_t& weightsocket, unsigned numLambdas);
+    void processBackward();
     std::vector<Matrix> gradientComputation(GraphData& graphData, std::vector<Matrix>& weightsData);
-    void sendWeightsUpdates(std::vector<Matrix> weightsUpdates);
-
-
 
 private:
-    //ntw related objs
-    zmq::context_t dctx;
-    zmq::context_t wctx;
-    zmq::socket_t dataSocket;
-    zmq::socket_t weightSocket;
 
     std::vector<char*> weightServerAddrs;
-    unsigned dPort;
-    unsigned wPort;
-    unsigned nodeId;
-
-    char ipc_addr[50];
-
-    //GPU part
+    MessageService msgService;
     ComputingUnit cu;
 };
-
-
 
 
 #endif 

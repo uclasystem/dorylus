@@ -16,7 +16,7 @@ if(BUILD_GPU)
 
 	cuda_add_library(ComputingServer SHARED "comp_server.cu")
 	set_property(TARGET ComputingServer PROPERTY POSITION_INDEPENDENT_CODE ON)
-	target_link_libraries(ComputingServer 
+	target_link_libraries(ComputingServer
 						${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES}
 						ComputingUnit CuMatrix utils)
 endif()

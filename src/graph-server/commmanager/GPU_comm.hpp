@@ -22,6 +22,7 @@
 #include "../../common/matrix.hpp"
 #include "../../common/utils.hpp"
 
+
 /**
  *
  * Communicate with local GPU process using IPC 
@@ -54,11 +55,19 @@ public:
     // Send a message to the coordination server to shutdown.
     void sendShutdownMessage();
 
+    template <class T>
+    T requestFourBytes();
+    void sendFourBytes(char* data);
+    void sendMatrix(Matrix& m);
+    void sendResultPtr(FeatType* ptr);
+    friend class ComputingServer;
 
 private:
     unsigned nodeId;
     unsigned numNodes;
     unsigned numLocalVertices;
+
+    std::string wServersFile;
 
     std::thread comp_server_thread;
 
@@ -66,6 +75,7 @@ private:
     zmq::context_t ctx;
     zmq::socket_t dataSocket;
     unsigned dPort;
+    unsigned wPort;
 
     //forward
     //data related objs
@@ -77,11 +87,12 @@ private:
     bool eval;
     float split;
 
-
     //backward 
     std::vector<Matrix> zMatrices;
     std::vector<Matrix> actMatrices;
     Matrix targetMatrix;
+
+    zmq::message_t confirm;
 
 };
 
