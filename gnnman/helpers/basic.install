@@ -1,0 +1,22 @@
+#!/bin/bash
+
+##
+## Install requried basic dependencies. TO be invoked on the remote machine.
+##
+
+
+cd ${HOME}
+
+
+# Basic packages.
+APT_INSTALL_LIST="build-essential awscli libtool pkg-config autoconf libboost-all-dev cmake git libssl-dev libcurl4-openssl-dev zlib1g-dev dsh gfortran"
+
+OS_DISTRO=$( awk -F= '/^NAME/{print $2}' /etc/os-release | sed -e 's/^"//' -e 's/"$//' )
+if [[ ${OS_DISTRO} == "Ubuntu" ]]; then
+    sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test     # Adding 'gfortran' source.
+    sudo apt-get -y update
+    sudo apt-get -y install ${APT_INSTALL_LIST}
+else
+    echo "Unrecognized OS distro version. This script currently only supports 'Ubuntu'."
+    echo "Basic packages not installed."
+fi

@@ -16,7 +16,7 @@ include_directories(${ZMQ_INC})
 
 
 # Include BLAS.
-set(OBLIB /usr/lib64/libopenblas.so.0)
+set(OBLIB /usr/local/blas/OpenBLAS/lib/libopenblas.a)
 set(CBLIB /usr/local/blas/CBLAS/lib/cblas_LINUX.a)
 set(CBINC /usr/local/blas/CBLAS/include)
 include_directories(${CBINC})
