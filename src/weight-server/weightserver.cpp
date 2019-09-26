@@ -10,6 +10,8 @@ static std::vector<ServerWorker *> workers;
 static std::vector<std::thread *> worker_threads;
 static std::ofstream outfile;
 
+// set true to write weights to `output_0` for correctness checking.
+static bool checkCorrectnessFlag = false;
 
 #define NUM_LISTENERS 5
 
@@ -17,15 +19,15 @@ static std::ofstream outfile;
 /** Logging utility. */
 void
 WeightServer::serverLog(std::string info) {
-    std::string msgBase = master ? "[MASTER]" : "[WORKER]";
-    std::cout << msgBase << " " << info << std::endl;
+    std::string msgBase = master ? "[ MASTER ] " : "[ WORKER ] ";
+    std::cout << msgBase << info << std::endl;
 }
 
 
 /**
  *
  * Weightserver constructor & destructor.
- * 
+ *
  */
 WeightServer::WeightServer(std::string& weightServersFile, std::string& myPrIpFile,
                            unsigned _listenerPort, std::string& configFileName,
@@ -34,38 +36,55 @@ WeightServer::WeightServer(std::string& weightServersFile, std::string& myPrIpFi
       listenerPort(_listenerPort), numLambdas(0), count(0),
       dataCtx(1), publisher(dataCtx, ZMQ_PUB), subscriber(dataCtx, ZMQ_SUB),
       serverPort(_serverPort) {
+    // Hardcoding adam to false for right now
+    adam = false;
 
     // Read the dsh file to get info about all weight server nodes.
     initializeWeightServerComms(weightServersFile, myPrIpFile);
-
-    // Read in layer configurations and initialize weight matrices.
-    initializeWeightMatrices(configFileName);
-
-    // Send weight matrix info to all servers and wait for ack.
-    distributeWeightMatrices();
 
     // Set output file name.
     tmpFileName += std::to_string(nodeId);
     outfile.open(tmpFileName, std::fstream::out);
     assert(outfile.good());
+
+    // Read in layer configurations and initialize weight matrices.
+    initializeWeightMatrices(configFileName);
+
+    if (adam) {
+        initializeAdamVariables();
+    }
+
+    // Send weight matrix info to all servers and wait for ack.
+    distributeWeightMatrices();
 }
 
 WeightServer::~WeightServer() {
-
+    std::cout << "[SHUTDOWN] Deleting workers" << std::endl;
     // Delete allocated resources.
     for (int i = 0; i < NUM_LISTENERS; ++i) {
         delete workers[i];
         delete worker_threads[i];
     }
+
     for (Matrix& mat : weightMats)
         delete[] mat.getData();
+
+    std::cout << "[SHUTDOWN] Closing ZMQ" << std::endl;
+    frontend.close();
+    backend.close();
+    ctx.close();
+
+    publisher.close();
+    subscriber.close();
+    dataCtx.close();
 }
 
 
 /**
  *
- * Runs the weightserver, start a bunch of worker threads and create a proxy through frontend to backend.
- * 
+ * Runs the weightserver, start a bunch of worker threads and create a proxy through frontend
+ * to backend.
+ *
  */
 void
 WeightServer::run() {
@@ -94,7 +113,7 @@ WeightServer::run() {
 /**
  *
  * Apply the updates in queue.
- * 
+ *
  */
 void WeightServer::applyUpdates() {
 
@@ -110,21 +129,27 @@ void WeightServer::applyUpdates() {
             // For all layers.
             for (unsigned l = 0; l < updateMats.size(); ++l) {
 
-                // Recv update info from other weight servesr and aggregate.
+                // Recv update info from other weight servers and aggregate.
                 zmq::message_t updateMsg;
                 subscriber.recv(&updateMsg);
 
-                float *updateSum = updateMats[l].getData();
-                float *updateNew = (float *) updateMsg.data();
+                FeatType *updateSum = updateMats[l].getData();
+                FeatType *updateNew = (FeatType *) updateMsg.data();
                 for (unsigned u = 0; u < updateMats[l].getNumElemts(); ++u)
                     updateSum[u] += updateNew[u];
             }
         }
 
+        // If adam is enabled, apply the momentum and decay computation
+        if (adam) {
+            for (unsigned i = 0; i < updateMats.size(); ++i) {
+            }
+        }
+
         // Once all updates have been aggregated, apply to the weights matrices.
         for (unsigned l = 0; l < weightMats.size(); ++l) {
-            float *weightData = weightMats[l].getData();
-            float *updateSum = updateMats[l].getData();
+            FeatType *weightData = weightMats[l].getData();
+            FeatType *updateSum = updateMats[l].getData();
             for (unsigned u = 0; u < weightMats[l].getNumElemts(); ++u)
                 weightData[u] -= updateSum[u];
         }
@@ -158,8 +183,10 @@ void WeightServer::applyUpdates() {
         //
         // Uncomment below to write updated weights results to `output_0` for correctness checking.
         //
-        // for (Matrix& mat : weightMats)
-        //     outfile << mat.str() << std::endl;
+        if (checkCorrectnessFlag) {
+            for (Matrix& mat : weightMats)
+                outfile << mat.str() << std::endl;
+        }
 
     // Worker code.
     } else {
@@ -283,7 +310,7 @@ WeightServer::initializeWeightServerComms(std::string& weightServersFile, std::s
             unsigned msgType;
             std::memcpy(&msgType, inMsg.data(), inMsg.size());
 
-            if (msgType == CTRL_MSG::MASTERUP) 
+            if (msgType == CTRL_MSG::MASTERUP)
                 break;
         }
 
@@ -340,7 +367,7 @@ WeightServer::parseNodeConfig(std::string& weightServersFile, std::string& myPrI
 /**
  *
  * Read in layer configurations.
- * 
+ *
  */
 void
 WeightServer::initializeWeightMatrices(std::string& configFileName) {
@@ -367,29 +394,36 @@ WeightServer::initializeWeightMatrices(std::string& configFileName) {
 
     // If master node, initialize the weight matrices according to the layer config.
     if (master) {
-        auto seed = 8888;
-        std::default_random_engine dre(seed);
-        std::uniform_real_distribution<float> dist(-1.5, 1.5);
-
         for (unsigned u = 0; u < dims.size() - 1; ++u) {
-            unsigned dataSize = dims[u] * dims[u + 1];
-            float *dptr = new float[dataSize];
-            
-            for (unsigned ui = 0; ui < dataSize; ++ui)
-                dptr[ui] = dist(dre);
+            // Hardcoding this to xavier init for now. Eventually need to make it
+            // configurable
+            Matrix w = xavierInitialization(dims[u], dims[u+1]);
+            weightMats.push_back(w);
 
-            weightMats.push_back(Matrix(dims[u], dims[u + 1], dptr));
+            // Initialize layer biases
+            // TODO:
+            //  Make this configurable based on whether or not a bias matrix is requested
+            //  for a NN module
+            Matrix b = initBias(dims[u+1]);
+            biases.push_back(b);
         }
 
         for (unsigned u = 0; u < weightMats.size(); ++u)
             serverLog("Layer " + std::to_string(u) + " - Weights: " + weightMats[u].shape());
+
+        // for checking correctness
+        if (checkCorrectnessFlag) {
+            for (Matrix& mat : weightMats) {
+                outfile << mat.str() << std::endl;
+            }
+        }
     }
 
     // For all nodes, initialize empty update matrices buffers.
     for (unsigned u = 0; u < dims.size() - 1; ++u) {
         unsigned dataSize = dims[u] * dims[u + 1];
         float *dptr = new float[dataSize];
-        
+
         for (unsigned ui = 0; ui < dataSize; ++ui)
             dptr[ui] = 0.;
 
@@ -397,6 +431,124 @@ WeightServer::initializeWeightMatrices(std::string& configFileName) {
     }
 }
 
+/**
+ *
+ * Used for weights init when tanh or some other symmetric
+ * activation is being used
+ *
+ */
+Matrix
+WeightServer::xavierInitialization(unsigned dim1, unsigned dim2) {
+    std::default_random_engine dre(8888);
+    std::uniform_real_distribution<float> dist(-1, 1);
+
+    unsigned dataSize = dim1 * dim2;
+    float *dptr = new float[dataSize];
+
+    for (unsigned ui = 0; ui < dataSize; ++ui)
+        dptr[ui] = dist(dre);
+
+    float normFactor = std::sqrt(6.0 / (float (dim1 + dim2)));
+    for (unsigned ui = 0; ui < dataSize; ++ui)
+        dptr[ui] *= normFactor;
+
+    return Matrix(dim1, dim2, dptr);
+}
+
+/**
+ *
+ * Used for weights init when the ReLU or some other asymmetric
+ * activation function is used
+ *
+ */
+Matrix
+WeightServer::kaimingInitialization(unsigned dim1, unsigned dim2) {
+    std::default_random_engine dre(8888);
+    std::normal_distribution<float> dist(0, 1);
+
+    unsigned dataSize = dim1 * dim2;
+    FeatType *dptr = new FeatType[dataSize];
+
+    for (unsigned ui = 0; ui < dataSize; ++ui)
+        dptr[ui] = dist(dre);
+
+    float normFactor = std::sqrt(2.0 / (float(dim1)));
+    for (unsigned ui = 0; ui < dataSize; ++ui)
+        dptr[ui] *= normFactor;
+
+    return Matrix(dim1, dim2, dptr);
+}
+
+/**
+ *
+ * Randomly initialize weights
+ *
+ */
+Matrix
+WeightServer::randomInitialization(unsigned dim1, unsigned dim2,
+                                   float lowerBound, float upperBound) {
+    assert(lowerBoud < upperBound);
+    std::default_random_engine dre(8888);
+    std::uniform_real_distribution<float> dist(lowerBound, upperBound);
+
+    unsigned dataSize = dim1 * dim2;
+    FeatType *dptr = new FeatType[dataSize];
+
+    for (unsigned ui = 0; ui < dataSize; ++ui)
+        dptr[ui] = dist(dre);
+
+    return Matrix(dim1, dim2, dptr);
+}
+
+/**
+ *
+ * Initialize bias vectors to output size of layer
+ *
+ */
+Matrix
+WeightServer::initBias(unsigned dim, float initVal) {
+    // TODO:
+    //  Generalize implementation of tensors/matrices to include 3-D matrices and vectors
+    FeatType* dptr = new FeatType[dim];
+
+    for (unsigned ui = 0; ui < dim; ++ui)
+        dptr[ui] = initVal;
+
+    return Matrix(dim, 1, dptr);
+}
+
+/**
+ *
+ * Initialize the variables for Adam Optimziation
+ *
+ */
+void
+WeightServer::initializeAdamVariables() {
+    // Initialize momentum and decay parameters
+    beta1 = .9;
+    beta2 = .999;
+    epsilon = 1e-8;
+    alpha = 1e-2;
+
+    // Momentum and decay matrices match shape of weight matrices and have init to zero
+    for (unsigned ui = 0; ui < dims.size(); ++ui) {
+        unsigned dataSize = dims[ui] * dims[ui+1];
+        FeatType* momentumptr = new FeatType[dataSize];
+        FeatType* decayptr = new FeatType[dataSize];
+
+        std::memset(momentumptr, 0, dataSize * sizeof(FeatType));
+        std::memset(decayptr, 0, dataSize * sizeof(FeatType));
+
+        momentum.push_back(Matrix(dims[ui], dims[ui+1], momentumptr));
+        decay.push_back(Matrix(dims[ui], dims[ui+1], decayptr));
+    }
+}
+
+/**
+ *
+ * Distribute the weight matrices from the master to the other weight servers
+ *
+ */
 void
 WeightServer::distributeWeightMatrices() {
 
@@ -471,12 +623,12 @@ main(int argc, char *argv[]) {
     unsigned serverPort = std::atoi(argv[3]);
     unsigned listenerPort = std::atoi(argv[4]);
     std::string configFileName = argv[5];
-    
+
     // Set output file location. Still needs to append nodeId.
     std::string tmpFileName = std::string(argv[6]) + "/output_";
 
     WeightServer ws(weightServersFile, myPrIpFile, listenerPort, configFileName, serverPort, tmpFileName);
-    
+
     // Run in a detached thread because so that we can wait
     // on a condition variable.
     std::thread t([&]{
@@ -488,6 +640,7 @@ main(int argc, char *argv[]) {
     // then end the main thread.
     std::unique_lock<std::mutex> lk(term_mutex);
     cv.wait(lk, [&]{ return finished; });
-    
+    std::cerr << "We are terminating the weight server" << std::endl;
+
     return 0;
 }

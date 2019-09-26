@@ -15,8 +15,14 @@ project(gnn-lambda LANGUAGES CXX)
 
 # Include ZeroMQ.
 set(ZMQ_INC /usr/local/include)
-set(ZMQ_LIB /usr/local/lib/libzmq.a)
+set(ZMQ_LIB /usr/local/lib/libzmq.so)
 include_directories(${ZMQ_INC})
+
+# Include BLAS/CBLAS
+set(OBLIB /usr/local/blas/OpenBLAS/lib/libopenblas.a)
+set(CBLIB /usr/local/blas/CBLAS/lib/cblas_LINUX.a)
+set(CBINC /usr/local/blas/CBLAS/include)
+include_directories(${CBINC})
 
 
 # Include Boost lib.
@@ -31,6 +37,7 @@ find_package(Threads REQUIRED)
 # Graph server (Data server).
 if(BUILD_GRAPH)
     message("Graph server:  YES")
+    add_subdirectory(src/common)
     add_subdirectory(src/graph-server ${PROJECT_SOURCE_DIR}/build/graph-server)
 else()
     message("Graph server:  NO")
@@ -49,6 +56,7 @@ endif()
 # Weight server.
 if(BUILD_WEIGHT)
     message("Weight server: YES")
+    add_subdirectory(src/common)
     add_subdirectory(src/weight-server ${PROJECT_SOURCE_DIR}/build/weight-server)
 else()
     message("Weight server: NO")

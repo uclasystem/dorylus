@@ -21,12 +21,12 @@ static std::ofstream outfile;
 /**
  *
  * Callback function to be called after receiving the respond from lambda threads.
- * 
+ *
  */
 static void
 callback(const Aws::Lambda::LambdaClient *client, const Aws::Lambda::Model::InvokeRequest &invReq, const Aws::Lambda::Model::InvokeOutcome &outcome,
          const std::shared_ptr<const Aws::Client::AsyncCallerContext> &context) {
-    
+
     // Lambda returns success
     if (outcome.IsSuccess()) {
         Aws::Lambda::Model::InvokeResult& result = const_cast<Aws::Lambda::Model::InvokeResult&>(outcome.GetResult());
@@ -40,7 +40,7 @@ callback(const Aws::Lambda::LambdaClient *client, const Aws::Lambda::Model::Invo
         if (functionResult.find("error") == std::string::npos) {
             std::cout << "\033[1;32m[SUCCESS]\033[0m\t" << functionResult << std::endl;
             outfile << functionResult << std::endl;
-            
+
         // There is error in the results.
         } else
             std::cout << "\033[1;31m[ ERROR ]\033[0m\t" << functionResult << std::endl;
@@ -60,7 +60,7 @@ callback(const Aws::Lambda::LambdaClient *client, const Aws::Lambda::Model::Invo
 /**
  *
  * Invoke a lambda function of the given named (previously registered on lambda cloud).
- * 
+ *
  */
 static void
 invokeFunction(Aws::String funcName, char *dataserver, char *dport, char *weightserver, char *wport,
@@ -86,7 +86,7 @@ invokeFunction(Aws::String funcName, char *dataserver, char *dport, char *weight
 /**
  *
  * CoordServer constructor.
- * 
+ *
  */
 CoordServer::CoordServer(char *coordserverPort_, char *weightserverFile_, char *weightserverPort_, char *dataserverPort_)
     : coordserverPort(coordserverPort_), weightserverFile(weightserverFile_),
@@ -98,7 +98,7 @@ CoordServer::CoordServer(char *coordserverPort_, char *weightserverFile_, char *
 /**
  *
  * Runs the coordserver, keeps listening on dataserver's requests for lambda threads invocation.
- * 
+ *
  */
 void
 CoordServer::run() {
@@ -127,11 +127,11 @@ CoordServer::run() {
     // Setup lambda client.
     Aws::Client::ClientConfiguration clientConfig;
     clientConfig.requestTimeoutMs = 900000;
-    clientConfig.region = "us-east-1";
+    clientConfig.region = "us-east-2";
     m_client = Aws::MakeShared<Aws::Lambda::LambdaClient>(ALLOCATION_TAG, clientConfig);
 
     // Keeps listening on dataserver's requests.
-    std::cout << "[Coord] Starts listening for dataserver's requests..." << std::endl;  
+    std::cout << "[Coord] Starts listening for dataserver's requests..." << std::endl;
     try {
         bool terminate = false;
         size_t req_count = 0;
@@ -153,7 +153,7 @@ CoordServer::run() {
             unsigned nThreadsReq = parse<unsigned>((char *) header.data(), 2);
 
             // Append a terminating null char to ensure this is a valid C string.
-            char dataserverIpCopy[dataserverIp.size() + 1];
+            char* dataserverIpCopy = new char[dataserverIp.size() + 1];
             memcpy(dataserverIpCopy, (char *) dataserverIp.data(), dataserverIp.size());
             dataserverIpCopy[dataserverIp.size()] = '\0';
 
@@ -168,16 +168,15 @@ CoordServer::run() {
 
             // Else is a request for lambda threads. Handle that. This is forward.
             } else if (op == OP::REQ_FORWARD) {
-                std::string accMsg = "[ACCEPTED] Req for FORWARD " + std::to_string(nThreadsReq)
-                                   + " lambdas for layer " + std::to_string(layer) + ".";
+                std::string accMsg = "[ACCEPTED] Req for FORWARD, lambda " + std::to_string(nThreadsReq)
+                                     + " is invoked for layer " + std::to_string(layer) + ".";
                 std::cout << accMsg << std::endl;
 
-                // Issue a bunch of lambda threads to serve the request.
-                for (unsigned i = 0; i < nThreadsReq; ++i) {
-                    char *weightserverIp = weightserverAddrs[req_count % weightserverAddrs.size()];
-                    invokeFunction("forward-prop-josehu", dataserverIpCopy, dataserverPort, weightserverIp, weightserverPort, layer, i);
-                    req_count++;
-                }
+                unsigned lambdaId = nThreadsReq;
+                // Issue the lambda thread to serve the request.
+                char *weightserverIp = weightserverAddrs[req_count % weightserverAddrs.size()];
+                invokeFunction("new-forward-prop", dataserverIpCopy, dataserverPort, weightserverIp, weightserverPort, layer, lambdaId);
+                req_count++;
 
             // This is backward.
             } else if (op == OP::REQ_BACKWARD) {
@@ -207,6 +206,8 @@ CoordServer::run() {
             } else {
                 std::cerr << "[ ERROR ] Unknown OP code (" << op << ") received." << std::endl;
             }
+
+            delete[] dataserverIpCopy;
         }
     } catch (std::exception& ex) { /** Context Termintated. */ }
 }
@@ -215,7 +216,7 @@ CoordServer::run() {
 /**
  *
  * Load the weightservers configuration file.
- * 
+ *
  */
 void
 CoordServer::loadWeightServers(std::vector<char *>& addresses, const std::string& wServersFile){
@@ -231,8 +232,8 @@ CoordServer::loadWeightServers(std::vector<char *>& addresses, const std::string
         boost::algorithm::trim(line);
 
         if (line.length() == 0)
-            continue;   
-        
+            continue;
+
         char *addr = strdup(line.c_str());
         addresses.push_back(addr);
     }
@@ -242,7 +243,7 @@ CoordServer::loadWeightServers(std::vector<char *>& addresses, const std::string
 /**
  *
  * Send info message (of number of lambdas assigned to it) to a weightserver.
- * 
+ *
  */
 void
 CoordServer::sendInfoMessage(zmq::socket_t& weightsocket, unsigned numLambdas) {
@@ -259,7 +260,7 @@ CoordServer::sendInfoMessage(zmq::socket_t& weightsocket, unsigned numLambdas) {
 /**
  *
  * Sends a shutdown message to all the weightservers.
- * 
+ *
  */
 void
 CoordServer::sendShutdownMessage(zmq::socket_t& weightsocket) {
@@ -280,7 +281,9 @@ CoordServer::sendShutdownMessage(zmq::socket_t& weightsocket) {
 /** Main entrance: Starts a coordserver instance and run a single listener, until termination msg received. */
 int
 main(int argc, char *argv[]) {
+
     assert(argc == 6);
+
     char *coordserverPort = argv[1];
     char *weightserverFile = argv[2];
     char *weightserverPort = argv[3];

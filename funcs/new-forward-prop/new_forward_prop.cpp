@@ -200,8 +200,22 @@ softmax(Matrix& mat) {
     return Matrix(mat.getRows(), mat.getCols(), result);
 }
 
+static unsigned
+getMaxIndex(FeatType* row, unsigned length) {
+    float max = 0.0;
+    unsigned maxIndex = 0;
+    for (unsigned col = 0; col < length; ++col) {
+        if (row[col] > max) {
+            max = row[col];
+            maxIndex = col;
+        }
+    }
 
-unsigned getLabelIndex(FeatType* row, unsigned length) {
+    return maxIndex;
+}
+
+static unsigned
+getLabelIndex(FeatType* row, unsigned length) {
     for (unsigned col = 0; col < length; ++col) {
         if (row[col] == 1)
             return col;
@@ -213,18 +227,12 @@ unsigned getLabelIndex(FeatType* row, unsigned length) {
 
 static unsigned
 checkAccuracy(Matrix& predictions, Matrix& labels) {
-    assert(preds.getRows() == labels.getRows());
-    assert(preds.getCols() == labels.getCols());
+    assert(predictions.getRows() == labels.getRows());
+    assert(predictions.getCols() == labels.getCols());
     unsigned totalCorrect = 0;
+    unsigned length = predictions.getCols();
     for (unsigned r = 0; r < predictions.getRows(); ++r) {
-        unsigned max = 0, maxIndex = 0;
-        unsigned length = predictions.getCols();
-        for (unsigned c = 0; c < length; ++c) {
-            if (predictions.get(r, c) > max) {
-                max = predictions.get(r, c);
-                maxIndex = c;
-            }
-        }
+        unsigned maxIndex = getMaxIndex(predictions.get(r), length);
 
         if (labels.get(r, maxIndex) == 1.0)
             ++totalCorrect;
@@ -233,17 +241,18 @@ checkAccuracy(Matrix& predictions, Matrix& labels) {
     return totalCorrect;
 }
 
-static unsigned
+static float
 checkLoss(Matrix& preds, Matrix& labels) {
     assert(preds.getRows() == labels.getRows());
     assert(preds.getCols() == labels.getCols());
 
-    unsigned totalLoss = 0;
+    float totalLoss = 0;
 	unsigned length = preds.getCols();
     for (unsigned r = 0; r < preds.getRows(); ++r) {
-        unsigned labelIndex = getLabelIndex(preds.get(r), length);
+        unsigned labelIndex = getLabelIndex(labels.get(r), length);
         // loss = -log(class_prediction)
-        totalLoss -= std::log(preds.get(r, labelIndex));
+        float lossThisRow = -(std::log(preds.get(r, labelIndex)));
+        totalLoss += lossThisRow;
     }
 
     return totalLoss;
@@ -267,7 +276,8 @@ evaluateModel(Matrix& activations, zmq::socket_t& datasocket, unsigned partId) {
     float lossThisPart = checkLoss(predictions, labels);
 
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char*)header.data(), OP::PUSH_EVAL, partId, totalCorrect, lossThisPart);
+    populateHeader((char*)header.data(), OP::PUSH_EVAL, partId, totalCorrect);
+    serialize<float>((char*)header.data(), 3, lossThisPart);
 
     datasocket.send(header);
 
@@ -327,19 +337,19 @@ forward_prop_layer(std::string dataserver, std::string weightserver, std::string
         
         // Request weights matrix of the current layer.
         std::thread t([&] {     // Weight requests run in a separate thread.
-            std::cout << "< FORWARD > Asking weightserver..." << std::endl;
+            //std::cout << "< FORWARD > Asking weightserver..." << std::endl;
             getWeightsTimer.start();
             weights = requestMatrix(weights_socket, OP::PULL_FORWARD, layer);
             getWeightsTimer.stop();
-            std::cout << "< FORWARD > Got data from weightserver." << std::endl;
+            //std::cout << "< FORWARD > Got data from weightserver." << std::endl;
         });
 
         // Request feature activation matrix of the current layer.
-        std::cout << "< FORWARD > Asking dataserver..." << std::endl;
+        //std::cout << "< FORWARD > Asking dataserver..." << std::endl;
         getFeatsTimer.start();
         feats = requestMatrix(data_socket, OP::PULL_FORWARD, id, true);
         getFeatsTimer.stop();
-        std::cout << "< FORWARD > Got data from dataserver." << std::endl;
+        //std::cout << "< FORWARD > Got data from dataserver." << std::endl;
 
         t.join();
 
@@ -351,19 +361,19 @@ forward_prop_layer(std::string dataserver, std::string weightserver, std::string
 
         // Multiplication.
         computationTimer.start();
-        std::cout << "< FORWARD > Doing the dot multiplication..." << std::endl;
+        //std::cout << "< FORWARD > Doing the dot multiplication..." << std::endl;
         z = dot(feats, weights);
 
         // Activation.
-        std::cout << "< FORWARD > Doing the activation..." << std::endl;
+        //std::cout << "< FORWARD > Doing the activation..." << std::endl;
         activations = activate(z);
         computationTimer.stop();
 
         // Send back to dataserver.
         sendResTimer.start();
-        std::cout << "< FORWARD > Sending results back..." << std::endl;
+        //std::cout << "< FORWARD > Sending results back..." << std::endl;
         sendMatrices(z, activations, data_socket, id);
-        std::cout << "< FORWARD > Results sent." << std::endl;
+        //std::cout << "< FORWARD > Results sent." << std::endl;
         sendResTimer.stop();
 
         if (evaluate) {

@@ -17,46 +17,70 @@
 #include <thread>
 #include <vector>
 #include <zmq.hpp>
-#include "../utils/utils.hpp"
-#include "../../utils/utils.hpp"
-#include "lambdaworker.hpp"
 
+#include "resource_comm.hpp"
+#include "lambdaworker.hpp"
+#include "../utils/utils.hpp"
+#include "../../common/matrix.hpp"
+#include "../../common/utils.hpp"
+
+
+class LambdaWorker;
 
 /**
  *
  * Class of a lambda threads communication handler.
- * 
+ *
  */
-class LambdaComm {
+class LambdaComm : public ResourceComm {
 
 public:
 
     LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::string coordserverIp_, unsigned coordserverPort_, unsigned nodeId_,
                unsigned numLambdasForward_, unsigned numLambdasBackward_);
     ~LambdaComm();
-    
+
+    void setTrainValidationSplit(float trainPortion, unsigned numLocalVertices);
+
     // For forward-prop.
-    void newContextForward(FeatType *dataBuf, FeatType *zData, FeatType *actData,
-                           unsigned numLocalVertices, unsigned numFeats, unsigned numFeatsNext);
-    void requestLambdasForward(unsigned layer);
+    void newContextForward(FeatType *dataBuf, FeatType *zData,
+        FeatType *actData, unsigned numLocalVertices, unsigned numFeats,
+        unsigned numFeatsNext, bool eval);
+
+    void requestForward(unsigned layer);
+
+    void invokeLambdaForward(unsigned layer, unsigned lambdaId);
+    void waitLambdaForward();
 
     // For backward-prop.
     void newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType *targetBuf,
                             unsigned numLocalVertices, std::vector<unsigned> layerConfig);
-    void requestLambdasBackward(unsigned numLayers_);
+
+    void requestBackward(unsigned numLayers_);
 
     // Send a message to the coordination server to shutdown.
     void sendShutdownMessage();
+
+    // simple LambdaWorker initialization
+    friend LambdaWorker::LambdaWorker(LambdaComm *manager);
 
 private:
 
     unsigned numLambdasForward;
     unsigned numLambdasBackward;
 
+    bool evaluate;
+    std::vector<bool> trainPartitions;
+
     unsigned numListeners;
 
     unsigned countForward;
     unsigned countBackward;
+
+    unsigned numCorrectPredictions;
+    float totalLoss;
+    unsigned numValidationVertices;
+    unsigned evalPartitions;
 
     zmq::context_t ctx;
     zmq::socket_t frontend;

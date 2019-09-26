@@ -17,28 +17,32 @@
 #include <thread>
 #include <vector>
 #include <zmq.hpp>
-#include "../utils/utils.hpp"
-#include "../../utils/utils.hpp"
 
+#include "../utils/utils.hpp"
+#include "../../common/matrix.hpp"
+#include "../../common/utils.hpp"
+
+
+class LambdaComm;
 
 /**
  *
  * Base class for a lambda communication worker.
- * 
+ *
  */
 class LambdaWorker {
 
 public:
 
-    LambdaWorker(unsigned nodeId_, zmq::context_t& ctx_,
-                 unsigned numLambdasForward_, unsigned numLambdasBackward_,
-                 unsigned& countForward_, unsigned& countBackward_);
+    LambdaWorker(LambdaComm *manager);
+
+    ~LambdaWorker();
 
     // Continuously listens for incoming lambda connections.
     void work();
 
     // Used at context creation / destruction.
-    void refreshState(Matrix actMatrix_, FeatType *zData_, FeatType *actData_, unsigned numFeatsNext_);
+    void refreshState(Matrix actMatrix_, FeatType *zData_, FeatType *actData_, unsigned numFeatsNext_, bool eval);
     void refreshState(std::vector<Matrix> zMatrices_, std::vector<Matrix> actMatrices_, Matrix targetMatrix_);
 
 protected:
@@ -53,6 +57,15 @@ protected:
 
     unsigned& countForward;     // Counting up until all lambdas have returned.
     unsigned& countBackward;
+
+    unsigned& numCorrectPredictions;
+    float& totalLoss;
+    unsigned& numValidationVertices;
+    unsigned& evalPartitions;
+
+    // Whether or not to evaluate this epoch
+    bool evaluate;
+    std::vector<bool>& trainPartitions;
 
 private:
 
@@ -83,6 +96,13 @@ private:
 
     // Accepts an incoming 'finished' message.
     void recvBackpropFinishMsg(zmq::message_t& client_id);
+
+    // Partitions the label matrix given a partition id and
+    // and send that partition to the lambda thread for validation
+    void sendTargetMatrix(zmq::message_t& client_id, unsigned partId);
+
+    // Receive the summed loss and total correct for this model
+    void recvValidationResults(zmq::message_t& client_id, zmq::message_t& header);
 
     std::vector<Matrix> zMatrices;      // Matrices to send.
     std::vector<Matrix> actMatrices;

@@ -6,6 +6,8 @@
 #include <cassert>
 #include <chrono>
 #include <condition_variable>
+#include <cmath>
+#include <cstring>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -16,8 +18,10 @@
 #include <vector>
 #include <zmq.hpp>
 #include <boost/algorithm/string/trim.hpp>
-#include "../utils/utils.hpp"
+
 #include "serverworker.hpp"
+#include "../common/matrix.hpp"
+#include "../common/utils.hpp"
 
 
 enum CTRL_MSG { MASTERUP, WORKERUP, INITDONE, ACK };
@@ -56,10 +60,33 @@ private:
     // Read in layer configurations. The master constructs the weight matrices and then sends them
     // to the workers.
     void initializeWeightMatrices(std::string& configFileName);
+
+    // Variations of weight matrix initialization
+    Matrix xavierInitialization(unsigned dim1, unsigned dim2);
+    Matrix kaimingInitialization(unsigned dim1, unsigned dim2);
+    Matrix randomInitialization(unsigned dim1, unsigned dim2,
+                                float lowerBound, float upperBound);
+
+    // Initialize bias vectors
+    Matrix initBias(unsigned dim, float initVal = 0);
+
+    void initializeAdamVariables();
+
     void distributeWeightMatrices();
 
     std::vector<unsigned> dims;
     std::vector<Matrix> weightMats;
+    std::vector<Matrix> biases;
+
+    // Adam descent variables
+    bool adam;  // whether to use standard SGD or Adam Opt
+    std::vector<Matrix> momentum;
+    std::vector<Matrix> decay;
+
+    float beta1;
+    float beta2;
+    float epsilon;
+    float alpha;
 
     // List of Matrices for holding updates until they are ready to be applied.
     std::vector<Matrix> updateMats;

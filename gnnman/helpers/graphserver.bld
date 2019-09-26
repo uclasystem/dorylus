@@ -6,14 +6,18 @@
 
 
 cd ${HOME}/gnn-lambda/
+build_GPU='no'
 
+if [[ $1 == "GPU" || $1 == "gpu" ]]; then
+	build_GPU='yes'
+fi
 
 if [ ! -d build ]; then
     mkdir build
 fi
 
 cd build
-cmake .. -DBUILD_GRAPH=yes
+cmake .. -DBUILD_GRAPH=yes -DBUILD_GPU=$build_GPU
 make
 
 mv graph-server/graphserver .

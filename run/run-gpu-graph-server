@@ -1,0 +1,106 @@
+#!/bin/bash
+## This script is used for running GPU graph server only
+
+cd ${HOME}/gnn-lambda/
+
+CPORT=$( < ../cserverport )
+WPORT=$( < ../wserverport)
+WSERVERIP=${HOME}/wserverip
+GPORT=$( < ../gserverport )
+CSERVERIP=$( < ../cserverip )
+
+DATAPORT=$( < ../dataport )
+CTRLPORT=$( < ../ctrlport )
+NODEPORT=$( < ../nodeport )
+
+NUM_LAMBDAS_FORWARD=1
+NUM_LAMBDAS_BACKWARD=1
+
+MYPRIPFILE=${HOME}/myprip
+MYPUBIPFILE=${HOME}/mypubip
+DSHMACHINESFILE=${HOME}/dshmachines
+
+# Kill running graphservers.
+echo -e "\e[33;1mKilling existing 'graphserver' processes...\e[0m"
+dsh -f ${DSHMACHINESFILE} -c "killall -u $( whoami ) graphserver"
+
+# Count the machines.
+NDS=$( wc -l ${DSHMACHINESFILE} | cut -d" " -f1 )
+for i in $( seq 1 ${NDS} ); do
+  DSHNODES[$i]=$( head -n $i ${DSHMACHINESFILE} | tail -n 1 )
+done
+
+# Choosing the dataset.
+if [[ -z $1 ]] || [[ ! -d ${HOME}/$1 ]]; then
+    echo "Dataset '$1' is empty or not found under '/filepool' (at least on master node)."
+    echo "Please prepare the dataset correctly."
+    exit 1
+fi
+
+DATASET=${HOME}/$1
+
+LAYERFILE=${HOME}/layerconfig
+
+# Minor options.
+UNDIRECTED=0    # Currently are all directed graphs.
+COMP_THREADS=3  # Default values.
+COMM_THREADS=1
+
+# Increment the running mark.
+if [[ ! -f run/run-mark ]]; then
+    touch run/run-mark
+fi
+RUN_MARK=$(( $( cat run/run-mark ) + 1 ))
+echo ${RUN_MARK} > run/run-mark
+echo -e "\e[33;1mRunning GRAPH servers with: [ MARK # ${RUN_MARK} ]...\e[0m"
+
+# Set logging file.
+LOGFILEDIR=${HOME}/logfiles
+mkdir -p ${LOGFILEDIR}
+LOGFILE=${LOGFILEDIR}/${RUN_MARK}.$1.log
+
+# Set temporary directory.
+TMPFILEDIR=${HOME}/tmpfiles
+rm -rf ${TMPFILEDIR} && mkdir -p ${TMPFILEDIR}
+
+# Run the command on all dsh machines.
+echo "DSH command: ./build/graphserver --graphfile ${DATASET}/parts_${NDS}/graph.bsnap --featuresfile ${DATASET}/features.bsnap --labelsfile ${DATASET}/labels.bsnap --dshmachinesfile ${DSHMACHINESFILE} --layerfile ${LAYERFILE} --pubipfile ${MYPUBIPFILE} --pripfile ${MYPRIPFILE} --dataserverport ${GPORT} --coordserverip ${CSERVERIP} --coordserverport ${CPORT} --undirected ${UNDIRECTED} --tmpdir=${TMPFILEDIR} --cthreads ${COMP_THREADS} --dthreads ${COMM_THREADS} --dataport ${DATAPORT} --ctrlport ${CTRLPORT} --nodeport ${NODEPORT} --numlambdasforward ${NUM_LAMBDAS_FORWARD} --numlambdasbackward ${NUM_LAMBDAS_BACKWARD} --GPU 1"
+dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ./build/graphserver \
+    --graphfile ${DATASET}/parts_${NDS}/graph.bsnap \
+    --featuresfile ${DATASET}/features.bsnap \
+    --labelsfile ${DATASET}/labels.bsnap \
+    --dshmachinesfile ${DSHMACHINESFILE} \
+    --layerfile ${LAYERFILE} \
+    --pubipfile ${MYPUBIPFILE} \
+    --pripfile ${MYPRIPFILE} \
+    --dataserverport ${GPORT} \
+    --weightserverport ${WPORT} \
+    --wserveripfile ${WSERVERIP} \
+    --coordserverip ${CSERVERIP} \
+    --coordserverport ${CPORT} \
+    --undirected ${UNDIRECTED} \
+    --tmpdir=${TMPFILEDIR} \
+    --cthreads ${COMP_THREADS} \
+    --dthreads ${COMM_THREADS} \
+    --dataport ${DATAPORT} \
+    --ctrlport ${CTRLPORT} \
+    --nodeport ${NODEPORT} \
+    --numlambdasforward ${NUM_LAMBDAS_FORWARD} \
+    --numlambdasbackward ${NUM_LAMBDAS_BACKWARD} \
+    --GPU 1" 1> /dev/null 2>> ${LOGFILE}
+
+# Gather the output files.
+OUTFILEDIR=${HOME}/outfiles/${RUN_MARK}.$2
+mkdir -p ${OUTFILEDIR}
+for i in $( seq 1 ${NDS} ); do
+    scp -q ${DSHNODES[$i]}:${TMPFILEDIR}/output_* ${OUTFILEDIR}/
+done
+
+echo "Check the output results in \"~/outfiles/\" folder."
+echo "Check the running log under \"~/logfiles/\" folder."
+
+if [ -e ${OUTFILEDIR}/output_0 ]; then
+  echo -e "\e[92;1mThis round of execution seems successful, congrats ;)\e[0m"
+else
+  echo -e "\e[91;1mExecution fails (at least on this node), check the log file!\e[0m"
+fi

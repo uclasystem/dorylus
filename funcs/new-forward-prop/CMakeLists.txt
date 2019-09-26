@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 11)
 
 
 # Project name.
-project(backward-prop-josehu LANGUAGES CXX)
+project(new-forward-prop LANGUAGES CXX)
 
 
 # Include ZeroMQ.
@@ -16,7 +16,7 @@ include_directories(${ZMQ_INC})
 
 
 # Include BLAS.
-set(OBLIB /usr/local/blas/OpenBLAS/lib/libopenblas.a)
+set(OBLIB /usr/lib64/libopenblas.so.0)
 set(CBLIB /usr/local/blas/CBLAS/lib/cblas_LINUX.a)
 set(CBINC /usr/local/blas/CBLAS/include)
 include_directories(${CBINC})
