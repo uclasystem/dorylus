@@ -1,22 +1,22 @@
 import numpy as np
 
 
-fcomp_results = {"fb":     np.empty(shape=(3, 15), dtype=float),
-                 "small":  np.empty(shape=(3, 15), dtype=float),
-                 "large":  np.empty(shape=(3, 15), dtype=float),
-                 "reddit": np.empty(shape=(3, 15), dtype=float)}
-fcomm_results = {"fb":     np.empty(shape=(3, 15), dtype=float),
-                 "small":  np.empty(shape=(3, 15), dtype=float),
-                 "large":  np.empty(shape=(3, 15), dtype=float),
-                 "reddit": np.empty(shape=(3, 15), dtype=float)}
-bcomp_results = {"fb":     np.empty(shape=(3, 15), dtype=float),
-                 "small":  np.empty(shape=(3, 15), dtype=float),
-                 "large":  np.empty(shape=(3, 15), dtype=float),
-                 "reddit": np.empty(shape=(3, 15), dtype=float)}
-bcomm_results = {"fb":     np.empty(shape=(3, 15), dtype=float),
-                 "small":  np.empty(shape=(3, 15), dtype=float),
-                 "large":  np.empty(shape=(3, 15), dtype=float),
-                 "reddit": np.empty(shape=(3, 15), dtype=float)}
+fcomp_results = {"fb":     np.zeros(shape=(3, 15), dtype=float),
+                 "small":  np.zeros(shape=(3, 15), dtype=float),
+                 "large":  np.zeros(shape=(3, 15), dtype=float),
+                 "reddit": np.zeros(shape=(3, 15), dtype=float)}
+fcomm_results = {"fb":     np.zeros(shape=(3, 15), dtype=float),
+                 "small":  np.zeros(shape=(3, 15), dtype=float),
+                 "large":  np.zeros(shape=(3, 15), dtype=float),
+                 "reddit": np.zeros(shape=(3, 15), dtype=float)}
+bcomp_results = {"fb":     np.zeros(shape=(3, 15), dtype=float),
+                 "small":  np.zeros(shape=(3, 15), dtype=float),
+                 "large":  np.zeros(shape=(3, 15), dtype=float),
+                 "reddit": np.zeros(shape=(3, 15), dtype=float)}
+bcomm_results = {"fb":     np.zeros(shape=(3, 15), dtype=float),
+                 "small":  np.zeros(shape=(3, 15), dtype=float),
+                 "large":  np.zeros(shape=(3, 15), dtype=float),
+                 "reddit": np.zeros(shape=(3, 15), dtype=float)}
 
 
 # Loop through all experiments.
