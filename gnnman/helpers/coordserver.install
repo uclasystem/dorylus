@@ -5,65 +5,16 @@
 ##
 
 
-cd ${HOME}
-
-
 # Basic packages.
-APT_INSTALL_LIST="build-essential awscli libtool pkg-config autoconf libboost-all-dev cmake git libssl-dev libcurl4-openssl-dev zlib1g-dev"
-YUM_GROUPINSTALL="'Development Tools'"; YUM_INSTALL_LIST="boost-devel cmake git openssl-devel libcurl-devel zlib-devel"
-
-OS_DISTRO=$( awk -F= '/^NAME/{print $2}' /etc/os-release | sed -e 's/^"//' -e 's/"$//' )
-if [[ ${OS_DISTRO} == "Ubuntu" ]]; then
-    sudo apt-get update
-    sudo apt-get -y install ${APT_INSTALL_LIST}
-elif [[ ${OS_DISTRO} == "Red Hat Enterprise Linux" ]]; then
-    sudo yum -y install ${YUM_INSTALL_LIST}
-    sudo yum -y groupinstall ${YUM_GROUPINSTALL}
-else
-    echo "Unrecognized OS distro version. This script currently only supports 'Ubuntu' or 'Red Hat Enterprise Linux'."
-    echo "Basic packages not installed."
-fi
+cd ${HOME}/gnn-lambda/gnnman/helpers/
+source basic.install
 
 
-# Install ZeroMQ.
-if [[ ! $( ldconfig -p | grep zmq ) ]]; then    # Only install if not installed yet.
-    wget https://github.com/zeromq/libzmq/releases/download/v4.3.2/zeromq-4.3.2.tar.gz
-    tar xf zeromq-4.3.2.tar.gz
-    rm zeromq-4.3.2.tar.gz
-    cd zeromq-4.3.2
-    ./configure --with-libsodium=no
-    make
-    sudo make install
-    sudo ldconfig
-    sudo mv ../gnn-lambda/src/utils/zmq.hpp /usr/local/include
-    cd ..
-    rm -rf zeromq-4.3.2
-fi
+# ZeroMQ stuff.
+cd ${HOME}/gnn-lambda/gnnman/helpers/
+source zmq.install
 
 
-# Install AWS-SDK.
-if [[ ! $( ldconfig -p | grep aws-cpp-sdk ) ]]; then    # Only install if not installed yet.
-    git clone https://github.com/aws/aws-sdk-cpp.git
-    cd aws-sdk-cpp
-    mkdir build
-    cd build
-    cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_ONLY=lambda
-    make
-    sudo make install
-    cd ../..
-    rm -rf aws-sdk-cpp
-fi
-
-
-# Install AWS-Lambda C++ runtime.
-if [[ ! -d /usr/local/include/aws/lambda-runtime ]]; then    # Only install if not installed yet.
-    git clone https://github.com/awslabs/aws-lambda-cpp.git
-    cd aws-lambda-cpp
-    mkdir build
-    cd build
-    cmake .. -DCMAKE_BUILD_TYPE=Release
-    make
-    sudo make install
-    cd ../..
-    rm -rf aws-lambda-cpp
-fi
+# AWS API stuff.
+cd ${HOME}/gnn-lambda/gnnman/helpers/
+source aws.install
