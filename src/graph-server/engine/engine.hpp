@@ -97,12 +97,15 @@ private:
 
     std::vector<unsigned> layerConfig;      // Config of number of features in each layer.
     unsigned numLayers = 0;
-
-    FeatType **localVerticesZData = NULL;   // Global contiguous array for all vertices' data (row-wise order).
-    FeatType **localVerticesActivationData = NULL;
-    FeatType **ghostVerticesActivationData = NULL;
-    unsigned *ghostVCnts = NULL;
-    unsigned **batchMsgBuf = NULL;
+    FeatType **localVerticesZData;       // Global contiguous array for all vertices' data (row-wise order).
+    FeatType **localVerticesActivationData;
+    FeatType *forwardGhostInitData;
+    FeatType *forwardGhostVerticesData;
+    FeatType *backwardGhostVerticesData;
+    unsigned *forwardGhostVCnts;
+    unsigned *backwardGhostVCnts;
+    unsigned **forwardBatchMsgBuf;
+    unsigned **backwardBatchMsgBuf;
 
     FeatType *localVerticesDataBuf = NULL;  // A smaller buffer storing current iter's data after aggregation.
 
@@ -167,25 +170,45 @@ private:
     // Worker and communicator thread function.
     void forwardWorker(unsigned tid, void *args);
     void backwardWorker(unsigned tid, void *args);
-    void ghostCommunicator(unsigned tid, void *args);
+    void forwardGhostCommunicator(unsigned tid, void *args);
+    void backwardGhostCommunicator(unsigned tid, void *args);
 
     // About the global data arrays.
-    unsigned getNumFeats(unsigned layer);
+    inline unsigned getNumFeats(unsigned layer) { return layerConfig[layer]; }
 
-    FeatType *localVertexZDataPtr(unsigned lvid, unsigned layer);
-    FeatType *localVertexActivationDataPtr(unsigned lvid, unsigned layer);
-    FeatType *ghostVertexActivationDataPtr(unsigned lvid, unsigned layer);
+    inline FeatType *localVertexZDataPtr(unsigned lvid, unsigned layer) {
+        return localVerticesZData[layer] + lvid * getNumFeats(layer);
+    }
+    inline FeatType *localVertexActivationDataPtr(unsigned lvid, unsigned layer) {
+        return localVerticesActivationData[layer] + lvid * getNumFeats(layer);
+    }
+    inline FeatType *forwardGhostInitDataPtr(unsigned lvid, unsigned layer) {
+        return forwardGhostInitData + lvid * getNumFeats(layer);
+    }
+    inline FeatType *forwardGhostVertexDataPtr(unsigned lvid, unsigned layer) {
+        return forwardGhostVerticesData + lvid * getNumFeats(layer);
+    }
+    inline FeatType *backwardGhostVertexDataPtr(unsigned lvid, unsigned layer) {
+        return backwardGhostVerticesData + lvid * getNumFeats(layer);
+    }
 
-    FeatType *localVertexDataBufPtr(unsigned lvid, unsigned layer);
-    FeatType *localVertexLabelsPtr(unsigned lvid);
+    inline FeatType *localVertexDataBufPtr(unsigned lvid, unsigned layer) {
+        return localVerticesDataBuf + lvid * getNumFeats(layer);
+    }
+    inline FeatType *localVertexLabelsPtr(unsigned lvid) {
+        return localVerticesLabels + lvid * getNumFeats(numLayers);
+    }
 
 
-    void sendGhostUpdates();
+    void sendForwardGhostUpdates();
+    void sendBackwardGhostGradients();
     // Ghost update operation, send vertices to other nodes
-    void verticesPushOut(unsigned receiver, unsigned sender, unsigned totCnt, unsigned *lvids);
+    void forwardVerticesPushOut(unsigned receiver, unsigned sender, unsigned totCnt, unsigned *lvids);
+    void backwardVerticesPushOut(unsigned receiver, unsigned sender, unsigned totCnt, unsigned *lvids);
 
     // Aggregation operation (along with normalization).
-    void aggregateFromNeighbors(unsigned lvid);
+    void forwardAggregateFromNeighbors(unsigned lvid);
+    void backwardAggregateFromNeighbors(unsigned lvid);
 
     // For initialization.
     void parseArgs(int argc, char* argv[]);
@@ -193,9 +216,7 @@ private:
     void readFeaturesFile(std::string& featuresFileName);
     void readLabelsFile(std::string& labelsFileName);
     void readPartsFile(std::string& partsFileName, Graph& lGraph);
-    void processEdge(unsigned& from, unsigned& to, Graph& lGraph,
-                     std::set<unsigned>* inTopics, std::set<unsigned>* oTopics,
-                     int **ghostVTables, unsigned *ghostVCnts);
+    void processEdge(unsigned& from, unsigned& to, Graph& lGraph, std::set<unsigned>* inTopics, std::set<unsigned>* oTopics, int **forwardGhostVTables, int **backwardGhostVTables);
     void findGhostDegrees(std::string& fileName);
     void setEdgeNormalizations();
     void readGraphBS(std::string& fileName, std::set<unsigned>& inTopics, std::vector<unsigned>& outTopics);

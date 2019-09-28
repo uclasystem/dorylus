@@ -20,14 +20,25 @@ Graph::containsVertex(unsigned gvid) {
 }
 
 GhostVertex&
-Graph::getGhostVertex(unsigned gvid) {
-    assert(ghostVertices.find(gvid) != ghostVertices.end());
-    return ghostVertices[gvid];
+Graph::getInEdgeGhostVertex(unsigned gvid) {
+    assert(inEdgeGhostVertices.find(gvid) != inEdgeGhostVertices.end());
+    return inEdgeGhostVertices[gvid];
+}
+
+GhostVertex&
+Graph::getOutEdgeGhostVertex(unsigned gvid) {
+    assert(outEdgeGhostVertices.find(gvid) != outEdgeGhostVertices.end());
+    return outEdgeGhostVertices[gvid];
 }
 
 bool
-Graph::containsGhostVertex(unsigned gvid) {
-    return ghostVertices.find(gvid) != ghostVertices.end();
+Graph::containsInEdgeGhostVertex(unsigned gvid) {
+    return inEdgeGhostVertices.find(gvid) != inEdgeGhostVertices.end();
+}
+
+bool
+Graph::containsOutEdgeGhostVertex(unsigned gvid) {
+    return outEdgeGhostVertices.find(gvid) != outEdgeGhostVertices.end();
 }
 
 
@@ -37,7 +48,7 @@ Graph::containsGhostVertex(unsigned gvid) {
  *     1. Shrink all the vertices' edges vector.
  *     2. Shrink all the ghost vertices' edges vector.
  *     3. Shrink the vertices and partitions vector.
- * 
+ *
  */
 void
 Graph::compactGraph() {
@@ -47,7 +58,10 @@ Graph::compactGraph() {
     for (unsigned i = 0; i < vertices.size(); ++i)
         vertices[i].compactVertex();
 
-    typename std::map<unsigned, GhostVertex>::iterator it;
-    for (it = ghostVertices.begin(); it != ghostVertices.end(); ++it)
-        it->second.compactVertex(); 
+    for (auto it = inEdgeGhostVertices.begin(); it != inEdgeGhostVertices.end(); ++it) {
+        it->second.compactVertex();
+    }
+    for (auto it = outEdgeGhostVertices.begin(); it != outEdgeGhostVertices.end(); ++it) {
+        it->second.compactVertex();
+    }
 }
