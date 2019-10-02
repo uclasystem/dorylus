@@ -13,10 +13,10 @@ cd ${HOME}/gnn-lambda/
 EC2MAN_CMD="python3 -m ec2man"
 
 
-FILE=$( pwd )/$1
+FOLDER=$( pwd )/$1
 
 for MACH in $( cat ~/dshmachines ); do
-    ssh ${MACH} "mkdir -p  ${FILE}"
-    scp -r ${FILE} ${MACH}:$( pwd )
+    ssh ${MACH} "mkdir -p ${FOLDER}"
+    scp -r ${FOLDER} ${MACH}:$( dirname ${FOLDER} )
 done
 

@@ -15,64 +15,6 @@
 #include "engine.hpp"
 
 
-/** Extern class-wide fields. */
-Graph Engine::graph;
-ThreadPool* Engine::dataPool = NULL;
-unsigned Engine::dThreads;
-ThreadPool* Engine::computePool = NULL;
-unsigned Engine::cThreads;
-std::string Engine::graphFile;
-std::string Engine::outFile;
-std::string Engine::featuresFile;
-std::string Engine::layerConfigFile;
-std::string Engine::labelsFile;
-std::string Engine::dshMachinesFile;
-std::string Engine::myPrIpFile;
-std::string Engine::myPubIpFile;
-unsigned Engine::dataserverPort;
-unsigned Engine::weightserverPort;
-std::string Engine::coordserverIp;
-std::string Engine::weightserverIPFile;
-unsigned Engine::coordserverPort;
-ResourceComm *Engine::resComm = NULL;
-CommInfo Engine::commInfo;
-unsigned Engine::numLambdasForward = 0;
-unsigned Engine::numLambdasBackward = 0;
-unsigned Engine::numEpochs = 0;
-unsigned Engine::valFreq = 0;
-std::vector<bool> Engine::trainPartition;
-unsigned Engine::gpuEnabled = 0;
-unsigned Engine::currId = 0;
-Lock Engine::lockCurrId;
-int Engine::recvCnt = 0;
-Lock Engine::lockRecvCnt;
-Cond Engine::condRecvCnt;
-Lock Engine::lockHalt;
-unsigned Engine::nodeId;
-unsigned Engine::numNodes;
-Barrier Engine::barComp;
-std::vector<unsigned> Engine::layerConfig;
-unsigned Engine::numLayers = 0;
-FeatType **Engine::localVerticesZData = NULL;
-FeatType **Engine::localVerticesActivationData = NULL;
-FeatType **Engine::ghostVerticesActivationData = NULL;
-unsigned *Engine::ghostVCnts;
-unsigned **Engine::batchMsgBuf = NULL;
-FeatType *Engine::localVerticesDataBuf = NULL;
-FeatType *Engine::localVerticesLabels = NULL;
-unsigned Engine::iteration = 0;
-bool Engine::undirected = false;
-bool Engine::evaluate = false;
-bool Engine::halt = false;
-double Engine::timeInit = 0.0;
-double Engine::timeForwardProcess = 0.0;
-std::vector<double> Engine::vecTimeAggregate;
-std::vector<double> Engine::vecTimeLambda;
-std::vector<double> Engine::vecTimeSendout;
-double Engine::timeBackwardProcess = 0.0;
-
-
-
 /**
  *
  * Initialize the engine with the given command line arguments.
@@ -86,13 +28,13 @@ Engine::init(int argc, char *argv[]) {
     parseArgs(argc, argv);
 
     // Initialize the node manager and communication manager.
-    NodeManager::init(dshMachinesFile, myPrIpFile, myPubIpFile);    // NodeManger should go first.
+    nodeManager.init(dshMachinesFile, myPrIpFile, myPubIpFile);    // NodeManger should go first.
 
-    nodeId = NodeManager::getMyNodeId();
-    numNodes = NodeManager::getNumNodes();
+    nodeId = nodeManager.getMyNodeId();
+    numNodes = nodeManager.getNumNodes();
     assert(numNodes <= 256);    // Cluster size limitation.
     outFile += std::to_string(nodeId);
-    CommManager::init();
+    commManager.init(nodeManager);
 
     // Set number of layers and number of features in each layer. Also store the prefix sum of config for offset querying use.
     readLayerConfigFile(layerConfigFile);
@@ -174,7 +116,7 @@ Engine::init(int argc, char *argv[]) {
 */
 void
 Engine::setUpCommInfo(){
-    commInfo.nodeIp=NodeManager::getNode(nodeId).pubip;
+    commInfo.nodeIp=nodeManager.getNode(nodeId).pubip;
     commInfo.nodeId=nodeId;
     commInfo.dataserverPort=dataserverPort;
     commInfo.coordserverIp=coordserverIp;
@@ -207,7 +149,7 @@ Engine::setTrainValidationSplit(float trainPortion) {
  */
 bool
 Engine::master() {
-    return NodeManager::amIMaster();
+    return nodeManager.amIMaster();
 }
 
 /**
@@ -222,7 +164,7 @@ Engine::isGPUEnabled() {
 
 void
 Engine::makeBarrier() {
-    NodeManager::barrier();
+    nodeManager.barrier();
 }
 
 /**
@@ -266,7 +208,7 @@ void
 Engine::runForward(bool eval) {
 
     // Make sure all nodes start running the forward-prop phase.
-    NodeManager::barrier();
+    nodeManager.barrier();
     printLog(nodeId, "Engine starts running FORWARD...");
 
     timeForwardProcess = -getTimer();
@@ -281,10 +223,12 @@ Engine::runForward(bool eval) {
     localVerticesDataBuf = new FeatType[layerConfig[0] * graph.getNumLocalVertices()];
 
     // Start data communicators.
-    dataPool->perform(ghostCommunicator);
+    auto gc_fp = std::bind(&Engine::ghostCommunicator, this, std::placeholders::_1, std::placeholders::_2);
+    dataPool->perform(gc_fp);
 
     // Start aggregation workers.
-    computePool->perform(forwardWorker);
+    auto fw_fp = std::bind(&Engine::forwardWorker, this, std::placeholders::_1, std::placeholders::_2);
+    computePool->perform(fw_fp);
 
     // Join all aggregation workers.
     computePool->sync();
@@ -308,14 +252,15 @@ void
 Engine::runBackward() {
 
     // Make sure all nodes start running the backward-prop phase.
-    NodeManager::barrier();
+    nodeManager.barrier();
     printLog(nodeId, "Engine starts running BACKWARD...");
 
     timeBackwardProcess = getTimer();
 
     // Start backward-prop workers. Backward-prop is only a single-threaded task for dataservers, thus actually one a master
     // thread is doing the work.
-    computePool->perform(backwardWorker);
+    auto bw_fp = std::bind(&Engine::backwardWorker, this, std::placeholders::_1, std::placeholders::_2);
+    computePool->perform(bw_fp);
 
     // Join all backward-prop workers.
     computePool->sync();
@@ -406,8 +351,8 @@ void
 Engine::destroy() {
     printLog(nodeId, "Destroying the engine...");
 
-    NodeManager::destroy();
-    CommManager::destroy();
+    nodeManager.destroy();
+    commManager.destroy();
     computePool->destroyPool();
     dataPool->destroyPool();
 
@@ -531,7 +476,7 @@ Engine::forwardWorker(unsigned tid, void *args) {
                     vecTimeSendout.push_back(getTimer() - timeWorker);
 
                     //## Global Iteration barrier. ##//
-                    NodeManager::barrier();
+                    nodeManager.barrier();
 
                     timeWorker = getTimer();
                     printLog(nodeId, "Global barrier after ghost data exchange crossed.");
@@ -603,7 +548,7 @@ Engine::ghostCommunicator(unsigned tid, void *args) {
     while (1) {
 
         // No message in queue.
-        if (!CommManager::dataPullIn(&sender, &topic, msgBuf, MAX_MSG_SIZE)) {
+        if (!commManager.dataPullIn(&sender, &topic, msgBuf, MAX_MSG_SIZE)) {
 
             // Computation workers done their work, so communicator goes to death as well.
             if (halt) {
@@ -623,7 +568,7 @@ Engine::ghostCommunicator(unsigned tid, void *args) {
             // A normal ghost value broadcast.
             if (topic < MAX_IDTYPE - 1) {
                 // Using MAX_IDTYPE - 1 as the receive signal.
-                CommManager::dataPushOut(sender, nodeId, MAX_IDTYPE - 1, NULL, 0);
+                commManager.dataPushOut(sender, nodeId, MAX_IDTYPE - 1, NULL, 0);
 
                 char *bufPtr = (char *)msgBuf;
                 unsigned ghostVCnt = topic;
@@ -782,7 +727,7 @@ Engine::verticesPushOut(unsigned receiver, unsigned sender, unsigned totCnt, uns
         memcpy(msgPtr, dataPtr, featSize);
         msgPtr += featSize;
     }
-    CommManager::rawMsgPushOut(msg);
+    commManager.rawMsgPushOut(msg);
 }
 
 /**
@@ -957,15 +902,15 @@ Engine::parseArgs(int argc, char *argv[]) {
 
     assert(vm.count("dataport"));
     unsigned data_port = vm["dataport"].as<unsigned>();
-    CommManager::setDataPort(data_port);
+    commManager.setDataPort(data_port);
 
     assert(vm.count("ctrlport"));
     unsigned ctrl_port = vm["ctrlport"].as<unsigned>();
-    CommManager::setControlPortStart(ctrl_port);
+    commManager.setControlPortStart(ctrl_port);
 
     assert(vm.count("nodeport"));
     unsigned node_port = vm["nodeport"].as<unsigned>();
-    NodeManager::setNodePort(node_port);
+    nodeManager.setNodePort(node_port);
 
     assert(vm.count("numlambdasforward"));
     numLambdasForward = vm["numlambdasforward"].as<unsigned>();

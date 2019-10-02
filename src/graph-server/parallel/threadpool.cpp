@@ -56,7 +56,7 @@ ThreadPool::destroyPool() {
  * 
  */
 void
-ThreadPool::perform(void (*func)(unsigned, void *)) {
+ThreadPool::perform(std::function<void(unsigned, void *)> func) {
     running = true;
     wFunc = func;
     pthread_barrier_wait(&bar);     // Wake up workers.

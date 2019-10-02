@@ -1,23 +1,5 @@
 #include <unistd.h>
-#include "../nodemanager/nodemanager.hpp"
 #include "commmanager.hpp"
-
-
-/** Extern class-wide fields. */
-unsigned CommManager::nodeId = 0;
-unsigned CommManager::numNodes = 0;
-zmq::context_t CommManager::dataContext;                    // Data sockets & locks.
-zmq::socket_t *CommManager::dataPublisher = NULL;
-zmq::socket_t *CommManager::dataSubscriber = NULL;
-Lock CommManager::lockDataPublisher;
-Lock CommManager::lockDataSubscriber;
-unsigned CommManager::dataPort;
-zmq::context_t CommManager::controlContext;                 // Control sockets & locks.
-zmq::socket_t **CommManager::controlPublishers = NULL;
-zmq::socket_t **CommManager::controlSubscribers = NULL;
-Lock *CommManager::lockControlPublishers = NULL;
-Lock *CommManager::lockControlSubscribers = NULL;
-unsigned CommManager::controlPortStart;
 
 
 /**
@@ -26,11 +8,11 @@ unsigned CommManager::controlPortStart;
  *
  */
 void
-CommManager::init() {
+CommManager::init(NodeManager& nodeManager) {
     printLog(nodeId, "CommManager starts initialization...");
-    numNodes = NodeManager::getNumNodes();
-    nodeId = NodeManager::getMyNodeId();
-    Node me = NodeManager::getNode(nodeId);
+    numNodes = nodeManager.getNumNodes();
+    nodeId = nodeManager.getMyNodeId();
+    Node me = nodeManager.getNode(nodeId);
 
     // Data publisher & subscriber.
     dataPublisher = new zmq::socket_t(dataContext, ZMQ_PUB);
@@ -48,7 +30,7 @@ CommManager::init() {
     dataSubscriber->setsockopt(ZMQ_SUBSCRIBE, filter, 8);
     dataSubscriber->setsockopt(ZMQ_SUBSCRIBE, "FFFFFFFF", 8);
     for (unsigned i = 0; i < numNodes; ++i) {
-        Node node = NodeManager::getNode(i);
+        Node node = nodeManager.getNode(i);
         char hostPort[50];
         sprintf(hostPort, "tcp://%s:%u", node.ip.c_str(), dataPort);
         dataSubscriber->connect(hostPort);
@@ -78,7 +60,7 @@ CommManager::init() {
         controlSubscribers[i] = new zmq::socket_t(controlContext, ZMQ_SUB);
         controlSubscribers[i]->setsockopt(ZMQ_SNDHWM, 0);
         controlSubscribers[i]->setsockopt(ZMQ_RCVHWM, 0);
-        Node node = NodeManager::getNode(i);
+        Node node = nodeManager.getNode(i);
         sprintf(hostPort, "tcp://%s:%d", node.ip.c_str(), controlPortStart + me.id);
         controlSubscribers[i]->connect(hostPort);
         char tpc = CONTROL_MESSAGE_TOPIC;

@@ -50,33 +50,33 @@ class NodeManager {
 
 public:
 
-    static void init(std::string dshMachinesFile, std::string myPrIpFile, std::string myPubIpFile);
-    static void destroy();
+    void init(std::string dshMachinesFile, std::string myPrIpFile, std::string myPubIpFile);
+    void destroy();
 
-    static void barrier();
+    void barrier();
     
-    static Node& getNode(unsigned i);
-    static unsigned getNumNodes();
-    static unsigned getMyNodeId();
-    static bool amIMaster();
+    Node& getNode(unsigned i);
+    unsigned getNumNodes();
+    unsigned getMyNodeId();
+    bool amIMaster();
 
-    static void setNodePort(unsigned nPort) { nodePort = nPort; }
+    void setNodePort(unsigned nPort) { nodePort = nPort; }
 
 private:
 
-    static Node me;
-    static unsigned masterId;
+    Node me;
+    unsigned masterId;
     
-    static std::vector<Node> allNodes;
+    std::vector<Node> allNodes;
 
-    static bool inBarrier;
+    bool inBarrier = false;
 
-    static zmq::context_t nodeContext;
-    static zmq::socket_t *nodePublisher;
-    static zmq::socket_t *nodeSubscriber;
-    static unsigned nodePort;
+    zmq::context_t nodeContext;
+    zmq::socket_t *nodePublisher = NULL;
+    zmq::socket_t *nodeSubscriber = NULL;
+    unsigned nodePort;
 
-    static void parseNodeConfig(const std::string dshMachinesFile);
+    void parseNodeConfig(const std::string dshMachinesFile);
 };
 
 

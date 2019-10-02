@@ -22,6 +22,7 @@
 #include "../../common/matrix.hpp"
 #include "../../common/utils.hpp"
 
+
 /**
  *
  * Communicate with local GPU process using IPC 
@@ -84,8 +85,6 @@ private:
     Matrix targetMatrix;
 
 };
-
-
 
 
 #endif // GPU_COMM_HPP
