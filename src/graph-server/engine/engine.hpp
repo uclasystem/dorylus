@@ -58,19 +58,19 @@ class Engine {
 public:
 
     // Public APIs for benchmarks.
-    static void init(int argc, char *argv[]);
-    static void runForward(bool eval = false);
-    static void runBackward();
-    static void output();
-    static void destroy();
-    static bool master();
-    static bool isGPUEnabled();
+    void init(int argc, char *argv[]);
+    void runForward(bool eval = false);
+    void runBackward();
+    void output();
+    void destroy();
+    bool master();
+    bool isGPUEnabled();
 
-    static void makeBarrier();
+    void makeBarrier();
 
-    static unsigned getNumEpochs();
-    static unsigned getValFreq();
-    static unsigned getNodeId();
+    unsigned getNumEpochs();
+    unsigned getValFreq();
+    unsigned getNodeId();
 
     // For now, split is at a partition granularity
     // For this node, will simply split the data into training data and validaiton data
@@ -80,125 +80,130 @@ public:
     //  optimize this as ML might require things such as random sampling etc for training
     //  QUESTION: Is it beneficial to go beyond parition level for individual vertices
     //      as this will incur serialization overhead
-    static void setTrainValidationSplit(float trainPortion);
+    void setTrainValidationSplit(float trainPortion);
 
 private:
 
-    static Graph graph;
+    NodeManager nodeManager;
+    CommManager commManager;
 
-    static unsigned dThreads;
-    static ThreadPool *dataPool;
+    Graph graph;
 
-    static unsigned cThreads;
-    static ThreadPool *computePool;
+    unsigned dThreads;
+    ThreadPool *dataPool = NULL;
 
-    static std::vector<unsigned> layerConfig;   // Config of number of features in each layer.
-    static unsigned numLayers;
+    unsigned cThreads;
+    ThreadPool *computePool = NULL;
 
-    static FeatType **localVerticesZData;       // Global contiguous array for all vertices' data (row-wise order).
-    static FeatType **localVerticesActivationData;
-    static FeatType **ghostVerticesActivationData;
-    static unsigned *ghostVCnts;
-    static unsigned **batchMsgBuf;
+    std::vector<unsigned> layerConfig;      // Config of number of features in each layer.
+    unsigned numLayers = 0;
 
-    static FeatType *localVerticesDataBuf;      // A smaller buffer storing current iter's data after aggregation.
+    FeatType **localVerticesZData = NULL;   // Global contiguous array for all vertices' data (row-wise order).
+    FeatType **localVerticesActivationData = NULL;
+    FeatType **ghostVerticesActivationData = NULL;
+    unsigned *ghostVCnts = NULL;
+    unsigned **batchMsgBuf = NULL;
 
-    static FeatType *localVerticesLabels;       // Labels one-hot storage array.
+    FeatType *localVerticesDataBuf = NULL;  // A smaller buffer storing current iter's data after aggregation.
 
-    static unsigned currId;
-    static Lock lockCurrId;
+    FeatType *localVerticesLabels = NULL;   // Labels one-hot storage array.
 
-    static int recvCnt;
-    static Lock lockRecvCnt;
-    static Cond condRecvCnt;
+    unsigned currId = 0;
+    Lock lockCurrId;
 
-    static Lock lockHalt;
+    int recvCnt = 0;
+    Lock lockRecvCnt;
+    Cond condRecvCnt;
 
-    static std::string graphFile;
-    static std::string outFile;
-    static std::string featuresFile;
-    static std::string layerConfigFile;
-    static std::string labelsFile;
-    static std::string dshMachinesFile;
-    static std::string myPrIpFile;
-    static std::string myPubIpFile;
+    Lock lockHalt;
 
-    static unsigned dataserverPort;
-    static unsigned weightserverPort;
-    static std::string weightserverIPFile;
-    static std::string coordserverIp;
-    static unsigned coordserverPort;
+    std::string graphFile;
+    std::string outFile;
+    std::string featuresFile;
+    std::string layerConfigFile;
+    std::string labelsFile;
+    std::string dshMachinesFile;
+    std::string myPrIpFile;
+    std::string myPubIpFile;
 
-    static unsigned numLambdasForward;
-    static unsigned numLambdasBackward;
-    static unsigned numEpochs;
-    static unsigned valFreq;
+    unsigned dataserverPort;
+    unsigned weightserverPort;
+    std::string weightserverIPFile;
+    std::string coordserverIp;
+    unsigned coordserverPort;
+
+    unsigned numLambdasForward = 0;
+    unsigned numLambdasBackward = 0;
+    unsigned numEpochs = 0;
+    unsigned valFreq = 0;
 
     // table representing whether the partition id is a training set or not
-    static std::vector<bool> trainPartition;
+    std::vector<bool> trainPartition;
 
-    static unsigned gpuEnabled;
-    static ResourceComm *resComm;
-    static CommInfo commInfo;
-    static unsigned nodeId;
-    static unsigned numNodes;
+    unsigned gpuEnabled = 0;
+    ResourceComm *resComm = NULL;
+    CommInfo commInfo;
+    unsigned nodeId;
+    unsigned numNodes;
 
-    static bool evaluate;
+    bool evaluate = false;
 
-    static bool halt;
+    bool halt = false;
 
-    static bool undirected;
+    bool undirected = false;
 
-    static unsigned iteration;
+    unsigned iteration = 0;
 
     // Timing stuff.
-    static double timeInit;
-    static double timeForwardProcess;
-    static std::vector<double> vecTimeAggregate;
-    static std::vector<double> vecTimeLambda;
-    static std::vector<double> vecTimeSendout;
-    static double timeBackwardProcess;
+    double timeInit = 0.0;
+    double timeForwardProcess = 0.0;
+    std::vector<double> vecTimeAggregate;
+    std::vector<double> vecTimeLambda;
+    std::vector<double> vecTimeSendout;
+    double timeBackwardProcess = 0.0;
 
-    static Barrier barComp;
+    Barrier barComp;
 
     // Worker and communicator thread function.
-    static void forwardWorker(unsigned tid, void *args);
-    static void backwardWorker(unsigned tid, void *args);
-    static void ghostCommunicator(unsigned tid, void *args);
+    void forwardWorker(unsigned tid, void *args);
+    void backwardWorker(unsigned tid, void *args);
+    void ghostCommunicator(unsigned tid, void *args);
 
     // About the global data arrays.
-    static unsigned getNumFeats(unsigned layer);
+    unsigned getNumFeats(unsigned layer);
 
-    static FeatType *localVertexZDataPtr(unsigned lvid, unsigned layer);
-    static FeatType *localVertexActivationDataPtr(unsigned lvid, unsigned layer);
-    static FeatType *ghostVertexActivationDataPtr(unsigned lvid, unsigned layer);
+    FeatType *localVertexZDataPtr(unsigned lvid, unsigned layer);
+    FeatType *localVertexActivationDataPtr(unsigned lvid, unsigned layer);
+    FeatType *ghostVertexActivationDataPtr(unsigned lvid, unsigned layer);
 
-    static FeatType *localVertexDataBufPtr(unsigned lvid, unsigned layer);
-    static FeatType *localVertexLabelsPtr(unsigned lvid);
+    FeatType *localVertexDataBufPtr(unsigned lvid, unsigned layer);
+    FeatType *localVertexLabelsPtr(unsigned lvid);
 
 
-    static void sendGhostUpdates();
+    void sendGhostUpdates();
     // Ghost update operation, send vertices to other nodes
-    static void verticesPushOut(unsigned receiver, unsigned sender, unsigned totCnt, unsigned *lvids);
+    void verticesPushOut(unsigned receiver, unsigned sender, unsigned totCnt, unsigned *lvids);
 
     // Aggregation operation (along with normalization).
-    static void aggregateFromNeighbors(unsigned lvid);
+    void aggregateFromNeighbors(unsigned lvid);
 
     // For initialization.
-    static void parseArgs(int argc, char* argv[]);
-    static void readLayerConfigFile(std::string& layerConfigFileName);
-    static void readFeaturesFile(std::string& featuresFileName);
-    static void readLabelsFile(std::string& labelsFileName);
-    static void readPartsFile(std::string& partsFileName, Graph& lGraph);
-    static void processEdge(unsigned& from, unsigned& to, Graph& lGraph, std::set<unsigned>* inTopics, std::set<unsigned>* oTopics, int **ghostVTables, unsigned *ghostVCnts);
-    static void findGhostDegrees(std::string& fileName);
-    static void setEdgeNormalizations();
-    static void readGraphBS(std::string& fileName, std::set<unsigned>& inTopics, std::vector<unsigned>& outTopics);
-    static void setUpCommInfo();
+    void parseArgs(int argc, char* argv[]);
+    void readLayerConfigFile(std::string& layerConfigFileName);
+    void readFeaturesFile(std::string& featuresFileName);
+    void readLabelsFile(std::string& labelsFileName);
+    void readPartsFile(std::string& partsFileName, Graph& lGraph);
+    void processEdge(unsigned& from, unsigned& to, Graph& lGraph,
+                     std::set<unsigned>* inTopics, std::set<unsigned>* oTopics,
+                     int **ghostVTables, unsigned *ghostVCnts);
+    void findGhostDegrees(std::string& fileName);
+    void setEdgeNormalizations();
+    void readGraphBS(std::string& fileName, std::set<unsigned>& inTopics, std::vector<unsigned>& outTopics);
+    void setUpCommInfo();
 
     // Metric printing.
-    static void printGraphMetrics();
-    static void printEngineMetrics();
+    void printGraphMetrics();
+    void printEngineMetrics();
 };
 
 

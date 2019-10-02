@@ -8,6 +8,7 @@
 #include <zmq.hpp>
 #include "../parallel/lock.hpp"
 #include "../utils/utils.hpp"
+#include "../nodemanager/nodemanager.hpp"
 
 
 #define NULL_CHAR MAX_IDTYPE
@@ -35,42 +36,41 @@ class CommManager {
 
 public:
 
-    static void init();
-    static void destroy();
+    void init(NodeManager& nodeManager);
+    void destroy();
 
-    static void rawMsgPushOut(zmq::message_t &msg);
-    static void dataPushOut(unsigned receiver, unsigned sender, unsigned topic, void* value, unsigned valSize);
-    static bool dataPullIn(unsigned *sender, unsigned *topic, void *value, unsigned maxValSize);
-    static void controlPushOut(unsigned to, void* value, unsigned valSize);
-    static bool controlPullIn(unsigned from, void *value, unsigned maxValSize);
+    void rawMsgPushOut(zmq::message_t &msg);
+    void dataPushOut(unsigned receiver, unsigned sender, unsigned topic, void* value, unsigned valSize);
+    bool dataPullIn(unsigned *sender, unsigned *topic, void *value, unsigned maxValSize);
+    void controlPushOut(unsigned to, void* value, unsigned valSize);
+    bool controlPullIn(unsigned from, void *value, unsigned maxValSize);
 
-    static void setDataPort(unsigned dPort) { dataPort = dPort; }
-    static void setControlPortStart(unsigned cPort) { controlPortStart = cPort; }
+    void setDataPort(unsigned dPort) { dataPort = dPort; }
+    void setControlPortStart(unsigned cPort) { controlPortStart = cPort; }
 
 private:
 
-    static unsigned numNodes;
-    static unsigned nodeId;
+    unsigned numNodes = 0;
+    unsigned nodeId = 0;
 
+    zmq::context_t dataContext;
+    zmq::socket_t *dataPublisher = NULL;
+    zmq::socket_t *dataSubscriber = NULL;
+    unsigned dataPort;
 
-    static zmq::context_t dataContext;
-    static zmq::socket_t *dataPublisher;
-    static zmq::socket_t *dataSubscriber;
-    static unsigned dataPort;
+    Lock lockDataPublisher;
+    Lock lockDataSubscriber;
 
-    static Lock lockDataPublisher;
-    static Lock lockDataSubscriber;
+    zmq::context_t controlContext;
+    zmq::socket_t **controlPublishers = NULL;
+    zmq::socket_t **controlSubscribers = NULL;
+    unsigned controlPortStart;
 
-    static zmq::context_t controlContext;
-    static zmq::socket_t **controlPublishers;
-    static zmq::socket_t **controlSubscribers;
-    static unsigned controlPortStart;
+    Lock *lockControlPublishers = NULL;
+    Lock *lockControlSubscribers = NULL;
 
-    static Lock *lockControlPublishers;
-    static Lock *lockControlSubscribers;
-
-    static void flushControl();
-    static void flushData();
+    void flushControl();
+    void flushData();
 };
 
 
