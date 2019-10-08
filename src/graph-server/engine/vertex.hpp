@@ -21,7 +21,7 @@ class Graph;
 /**
  *
  * Class for a local vertex.
- * 
+ *
  */
 class Vertex {
 
@@ -91,19 +91,19 @@ private:
 /**
  *
  * Class for a ghost vertex.
- * 
+ *
  */
 class GhostVertex {
 
 public:
-    
+
     GhostVertex() : degree(0) { lock.init(); }
     ~GhostVertex() { lock.destroy(); }
 
     unsigned getLocalId() { return localId; }
     void setLocalId(unsigned id) { localId = id; }
 
-    void addOutEdge(unsigned dId) { outEdges.push_back(dId); }
+    void addAssocEdge(unsigned dId) { edges.push_back(dId); }
 
     unsigned getDegree() { return degree; }
     void incrementDegree() { ++degree; }
@@ -118,7 +118,7 @@ private:
 
     unsigned localId;     // Added to serve as the index in the static values region.
 
-    std::vector<unsigned> outEdges;
+    std::vector<unsigned> edges;
     unsigned degree;
 
     RWLock lock;
