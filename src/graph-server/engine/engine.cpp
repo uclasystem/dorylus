@@ -1493,3 +1493,6 @@ Engine::readGraphBS(std::string& fileName, std::set<unsigned>& inTopics, std::ve
     for (it = oTopics.begin(); it != oTopics.end(); ++it)
         outTopics.push_back(*it);
 }
+
+// Substantiate an Engine object here for TF aggregators
+Engine engine;

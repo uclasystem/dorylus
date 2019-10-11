@@ -227,5 +227,7 @@ private:
     void printEngineMetrics();
 };
 
+// Every one includes this file can access the static engine object now. For TF integration.
+extern Engine engine;
 
 #endif //__ENGINE_HPP__

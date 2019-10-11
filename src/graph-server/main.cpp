@@ -16,7 +16,7 @@ int
 main(int argc, char *argv[]) {
 
     // Initialize the engine.
-    Engine engine;
+    // The engine object is static and has been substantiated in Engine.cpp.
     engine.init(argc, argv);
 
     float splitPortion = 1.0 / 3.0;
