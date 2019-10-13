@@ -174,31 +174,11 @@ private:
     void backwardGhostCommunicator(unsigned tid, void *args);
 
     // About the global data arrays.
-    inline unsigned getNumFeats(unsigned layer) { return layerConfig[layer]; }
+    inline unsigned getFeatDim(unsigned layer) { return layerConfig[layer]; }
 
-    inline FeatType *localVertexZDataPtr(unsigned lvid, unsigned layer) {
-        return localVerticesZData[layer] + lvid * getNumFeats(layer);
-    }
-    inline FeatType *localVertexActivationDataPtr(unsigned lvid, unsigned layer) {
-        return localVerticesActivationData[layer] + lvid * getNumFeats(layer);
-    }
-    inline FeatType *forwardGhostInitDataPtr(unsigned lvid, unsigned layer) {
-        return forwardGhostInitData + lvid * getNumFeats(layer);
-    }
-    inline FeatType *forwardGhostVertexDataPtr(unsigned lvid, unsigned layer) {
-        return forwardGhostVerticesData + lvid * getNumFeats(layer);
-    }
-    inline FeatType *backwardGhostVertexDataPtr(unsigned lvid, unsigned layer) {
-        return backwardGhostVerticesData + lvid * getNumFeats(layer);
-    }
-
-    inline FeatType *localVertexDataBufPtr(unsigned lvid, unsigned layer) {
-        return localVerticesDataBuf + lvid * getNumFeats(layer);
-    }
     inline FeatType *localVertexLabelsPtr(unsigned lvid) {
-        return localVerticesLabels + lvid * getNumFeats(numLayers);
+        return localVerticesLabels + lvid * getFeatDim(numLayers);
     }
-
 
     void sendForwardGhostUpdates();
     void sendBackwardGhostGradients();
@@ -226,6 +206,9 @@ private:
     void printGraphMetrics();
     void printEngineMetrics();
 };
+
+// Fetch vertex feature from vtx feats array
+#define getVtxFeat(dataBuf, lvid, featDim) ((dataBuf) + (lvid) * (featDim))
 
 // Every one includes this file can access the static engine object now. For TF integration.
 extern Engine engine;
