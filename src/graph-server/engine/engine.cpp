@@ -450,6 +450,7 @@ Engine::forwardWorker(unsigned tid, void *args) {
                                         graphLocalVerticesNum, getFeatDim(iteration), getFeatDim(iteration + 1), runEval);
         }
 
+        unsigned featDim = getFeatDim(iteration);
         unsigned lvid = 0;
         while (currId < graphLocalVerticesNum) {
             lockCurrId.lock();
@@ -466,7 +467,7 @@ Engine::forwardWorker(unsigned tid, void *args) {
             }
             if (lvid < graphLocalVerticesNum) {
                 // Forward Aggregation.
-                forwardAggregateFromNeighbors(lvid);
+                forwardAggregateFromNeighbors(lvid, localVerticesDataBuf, localVerticesActivationData[iteration], featDim);
             }
         }
         barComp.wait();
@@ -495,7 +496,7 @@ Engine::forwardWorker(unsigned tid, void *args) {
             }
             forwardGhostVerticesData = new FeatType[layerConfig[iteration + 1] * graph.getNumInEdgeGhostVertices()];
 
-            sendForwardGhostUpdates();
+            sendForwardGhostUpdates(localVerticesActivationData[iteration + 1], getFeatDim(iteration + 1));
             vecTimeSendout.push_back(getTimer() - timeWorker);
 
             //## Global Iteration barrier. ##//
@@ -535,13 +536,11 @@ Engine::forwardWorker(unsigned tid, void *args) {
  * data buffer area for serialization. The results are to be used for being sent to lambda threads.
  *
  */
-void
-Engine::forwardAggregateFromNeighbors(unsigned lvid) {
-    unsigned featDim = getFeatDim(iteration);
-
+inline void
+Engine::forwardAggregateFromNeighbors(unsigned lvid, FeatType *outputTensor, FeatType *inputTensor, unsigned featDim) {
     // Read out data of the current iteration of given vertex.
-    FeatType *currDataDst = getVtxFeat(localVerticesDataBuf, lvid, featDim);
-    FeatType *currDataPtr = getVtxFeat(localVerticesActivationData[iteration], lvid, featDim);
+    FeatType *currDataDst = getVtxFeat(outputTensor, lvid, featDim);
+    FeatType *currDataPtr = getVtxFeat(inputTensor, lvid, featDim);
     memcpy(currDataDst, currDataPtr, featDim * sizeof(FeatType));
 
     // Apply normalization factor on the current data.
@@ -556,7 +555,7 @@ Engine::forwardAggregateFromNeighbors(unsigned lvid) {
         EdgeType normFactor = v.getInEdge(i).getData();
 
         if (v.getInEdge(i).getEdgeLocation() == LOCAL_EDGE_TYPE) {    // Local vertex.
-            otherDataPtr = getVtxFeat(localVerticesActivationData[iteration], v.getSourceVertexLocalId(i), featDim);
+            otherDataPtr = getVtxFeat(inputTensor, v.getSourceVertexLocalId(i), featDim);
         } else {                                                      // Ghost vertex.
             otherDataPtr = getVtxFeat(forwardGhostVerticesData, v.getSourceVertexLocalId(i), featDim);
         }
@@ -568,24 +567,24 @@ Engine::forwardAggregateFromNeighbors(unsigned lvid) {
 }
 
 
-void
-Engine::sendForwardGhostUpdates() {
+inline void
+Engine::sendForwardGhostUpdates(FeatType *inputTensor, unsigned featDim) {
     // Loop through all local vertices and do the data send out work. If there are any remote edges for a vertex, should send this vid to
     // other nodes for their ghost's update.
     // TODO: (YIFAN) process crashes when return if BATCH_SIZE is too large. Weird, to be fixed.
     // Please decrease BATCH_SIZE if porcess crashed.
     bool batchFlag = false;
     unsigned BATCH_SIZE = std::max(((batchFlag ? MAX_MSG_SIZE : 4096) - DATA_HEADER_SIZE) /
-                        (sizeof(unsigned) + sizeof(FeatType) * getFeatDim(iteration + 1)), 1ul); // at least send one vertex
+                        (sizeof(unsigned) + sizeof(FeatType) * featDim), 1ul); // at least send one vertex
     for (unsigned nid = 0; nid < numNodes; ++nid) {
         if (nid == nodeId) {
             continue;
         }
         unsigned forwardGhostVCnt = forwardGhostVCnts[nid];
         for (unsigned ib = 0; ib < forwardGhostVCnt; ib += BATCH_SIZE) {
-            unsigned remainCnt = (forwardGhostVCnt - ib) < BATCH_SIZE ? (forwardGhostVCnt - ib) : BATCH_SIZE;
+            unsigned sendBatchSize = (forwardGhostVCnt - ib) < BATCH_SIZE ? (forwardGhostVCnt - ib) : BATCH_SIZE;
 
-            forwardVerticesPushOut(nid, nodeId, remainCnt, forwardBatchMsgBuf[nid] + ib);
+            forwardVerticesPushOut(nid, sendBatchSize, forwardBatchMsgBuf[nid] + ib, inputTensor, featDim);
             lockRecvCnt.lock();
             recvCnt++;
             lockRecvCnt.unlock();
@@ -600,20 +599,19 @@ Engine::sendForwardGhostUpdates() {
 }
 
 inline void
-Engine::forwardVerticesPushOut(unsigned receiver, unsigned sender, unsigned totCnt, unsigned *lvids) {
-    const unsigned featDim = getFeatDim(iteration + 1);
+Engine::forwardVerticesPushOut(unsigned receiver, unsigned totCnt, unsigned *lvids, FeatType *inputTensor, unsigned featDim) {
     zmq::message_t msg(DATA_HEADER_SIZE + (sizeof(unsigned) + sizeof(FeatType) * featDim) * totCnt);
     char *msgPtr = (char *)(msg.data());
     sprintf(msgPtr, NODE_ID_HEADER, receiver);
     msgPtr += NODE_ID_DIGITS;
-    *(unsigned *)msgPtr = sender;
+    *(unsigned *)msgPtr = nodeId; // set sender
     msgPtr += sizeof(unsigned);
     *(unsigned *)msgPtr = totCnt;
     msgPtr += sizeof(unsigned);
     for (unsigned i = 0; i < totCnt; ++i) {
         *(unsigned *)msgPtr = graph.localToGlobalId[lvids[i]];
         msgPtr += sizeof(unsigned);
-        FeatType *dataPtr = getVtxFeat(localVerticesActivationData[iteration + 1], lvids[i], featDim);
+        FeatType *dataPtr = getVtxFeat(inputTensor, lvids[i], featDim);
         memcpy(msgPtr, dataPtr, sizeof(FeatType) * featDim);
         msgPtr += sizeof(FeatType) * featDim;
     }
@@ -814,9 +812,9 @@ Engine::sendBackwardGhostGradients() {
         }
         unsigned recvGhostVCnt = backwardGhostVCnts[nid];
         for (unsigned ib = 0; ib < recvGhostVCnt; ib += BATCH_SIZE) {
-            unsigned remainCnt = (recvGhostVCnt - ib) < BATCH_SIZE ? (recvGhostVCnt - ib) : BATCH_SIZE;
+            unsigned sendBatchSize = (recvGhostVCnt - ib) < BATCH_SIZE ? (recvGhostVCnt - ib) : BATCH_SIZE;
 
-            backwardVerticesPushOut(nid, nodeId, remainCnt, backwardBatchMsgBuf[nid] + ib);
+            backwardVerticesPushOut(nid, nodeId, sendBatchSize, backwardBatchMsgBuf[nid] + ib);
             lockRecvCnt.lock();
             recvCnt++;
             lockRecvCnt.unlock();

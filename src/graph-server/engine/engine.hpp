@@ -66,6 +66,10 @@ public:
     bool master();
     bool isGPUEnabled();
 
+    FeatType* aggregate(FeatType *vtcsTensor, unsigned vtxCnt, unsigned featDim);
+    FeatType* invokeLambda(FeatType *vtcsTensor, unsigned vtxCnt, unsigned featDim);
+    FeatType* syncNodes(FeatType *vtcsTensor, unsigned vtxCnt, unsigned featDim);
+
     void makeBarrier();
 
     unsigned getNumEpochs();
@@ -173,6 +177,8 @@ private:
     void forwardGhostCommunicator(unsigned tid, void *args);
     void backwardGhostCommunicator(unsigned tid, void *args);
 
+    void aggregateCompute(unsigned tid, void *args);
+
     // About the global data arrays.
     inline unsigned getFeatDim(unsigned layer) { return layerConfig[layer]; }
 
@@ -180,14 +186,14 @@ private:
         return localVerticesLabels + lvid * getFeatDim(numLayers);
     }
 
-    void sendForwardGhostUpdates();
+    void sendForwardGhostUpdates(FeatType *inputTensor, unsigned featDim);
     void sendBackwardGhostGradients();
     // Ghost update operation, send vertices to other nodes
-    void forwardVerticesPushOut(unsigned receiver, unsigned sender, unsigned totCnt, unsigned *lvids);
+    void forwardVerticesPushOut(unsigned receiver, unsigned totCnt, unsigned *lvids, FeatType *inputTensor, unsigned featDim);
     void backwardVerticesPushOut(unsigned receiver, unsigned sender, unsigned totCnt, unsigned *lvids);
 
     // Aggregation operation (along with normalization).
-    void forwardAggregateFromNeighbors(unsigned lvid);
+    void forwardAggregateFromNeighbors(unsigned lvid, FeatType *outputTensor, FeatType *inputTensor, unsigned featDim);
     void backwardAggregateFromNeighbors(unsigned lvid);
 
     // For initialization.
