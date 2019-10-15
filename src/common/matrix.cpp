@@ -304,8 +304,9 @@ Matrix Matrix::dotT(Matrix& M) {
 
     // For the number of rows in the matrices
     for (unsigned r = 0; r < getRows(); ++r) {
-        FeatType* rowThis = get(r);
-        FeatType* rowM = M.get(r);
+        // comment these 2 lines to make compiler happy.
+        // FeatType* rowThis = get(r);
+        // FeatType* rowM = M.get(r);
 
         // For each number in the first row
         for (unsigned cThis = 0; cThis < colsThis; ++cThis) {
@@ -334,4 +335,3 @@ std::string Matrix::str() {
     }
     return output.str();
 }
-

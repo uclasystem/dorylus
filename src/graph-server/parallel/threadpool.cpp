@@ -2,10 +2,10 @@
 
 
 ThreadPool::ThreadPool(unsigned nThreads)
-    : numThreads(nThreads), threads(NULL), die(false), running(false) { 
+    : numThreads(nThreads), threads(NULL), die(false), running(false) {
 
     // Initialize a bunch of thread info blocks.
-    threads = new ThreadInfo[numThreads]; 
+    threads = new ThreadInfo[numThreads];
     for (unsigned i = 0; i < numThreads; ++i) {
         threads[i].threadId = i;
         threads[i].args = NULL;
@@ -23,11 +23,11 @@ ThreadPool::~ThreadPool() {
 /**
  *
  * Create actual running pthreads.
- * 
+ *
  */
 void
 ThreadPool::createPool() {
-    for (unsigned i = 0; i < numThreads; ++i) 
+    for (unsigned i = 0; i < numThreads; ++i)
         pthread_create(&threads[i].threadHandle, NULL, worker, (void *) &threads[i]);
 }
 
@@ -35,7 +35,7 @@ ThreadPool::createPool() {
 /**
  *
  * Destroy the thread pool.
- * 
+ *
  */
 void
 ThreadPool::destroyPool() {
@@ -53,7 +53,7 @@ ThreadPool::destroyPool() {
 /**
  *
  * Send all the workers in the pool to perform the task on the given function.
- * 
+ *
  */
 void
 ThreadPool::perform(std::function<void(unsigned, void *)> func) {
@@ -62,11 +62,20 @@ ThreadPool::perform(std::function<void(unsigned, void *)> func) {
     pthread_barrier_wait(&bar);     // Wake up workers.
 }
 
+void
+ThreadPool::perform(std::function<void(unsigned, void *)> func, void *args) {
+    for (unsigned i = 0; i < numThreads; ++i) {
+        threads[i].args = args;
+    }
+    running = true;
+    wFunc = func;
+    pthread_barrier_wait(&bar);
+}
 
 /**
  *
  * Join all the thread in the pool.
- * 
+ *
  */
 void
 ThreadPool::sync() {
@@ -81,7 +90,7 @@ ThreadPool::sync() {
  *
  * The worker function. Blocks on the first barrier when created, then wakes up on `perform()`
  * and blocks on the second barrier until all workers finish. A rather clever design.
- * 
+ *
  */
 void *
 ThreadPool::worker(void *args) {

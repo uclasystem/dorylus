@@ -190,6 +190,23 @@ LambdaComm::waitLambdaForward() {
  *
  */
 void
+LambdaComm::newContextBackward(FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
+                                unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim) {
+    countBackward = 0;
+
+    // Create new matrices object for workers to access.
+    Matrix oldGradMatrix(numLocalVertices, outFeatDim, oldGradBuf);
+    Matrix newGradMatrix(numLocalVertices, inFeatDim, newGradBuf);
+    Matrix targetMatrix(numLocalVertices, targetDim, targetBuf);
+
+    // Refresh workers' members, and connect their worker sockets to the backend.
+    for (auto&& worker : workers)
+        worker->refreshState(oldGradMatrix, newGradMatrix, targetMatrix, savedTensors);
+
+    printLog(nodeId, "Lambda BACKWARD context created.");
+}
+
+void
 LambdaComm::newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType *targetBuf,
                                unsigned numLocalVertices, std::vector<unsigned> layerConfig) {
     countBackward = 0;
