@@ -60,15 +60,12 @@ Engine::init(int argc, char *argv[]) {
 
     // Init it here for collecting data when reading files
     forwardGhostInitData = new FeatType[layerConfig[0] * graph.getNumInEdgeGhostVertices()];
-
     // Create data storage area for each layer.
-    for (size_t i = 0; i <= numLayers; ++i) {
-        localVerticesZData[i] = new FeatType[layerConfig[i] * graph.getNumLocalVertices()];
-        localVerticesActivationData[i] = new FeatType[layerConfig[i] * graph.getNumLocalVertices()];
-    }
-
+    localVerticesZData[0] = new FeatType [layerConfig[0] * graph.getNumLocalVertices()];
+    localVerticesActivationData[0] = new FeatType [layerConfig[0] * graph.getNumLocalVertices()];
     // Create labels storage area. Read in labels and store as one-hot format.
     localVerticesLabels = new FeatType[layerConfig[numLayers] * graph.getNumLocalVertices()];
+
     // Set a local index for all ghost vertices along the way. This index is used for indexing within the ghost data arrays.
     unsigned ghostCount = 0;
     for (auto it: graph.getInEdgeGhostVertices()) {
@@ -225,7 +222,9 @@ Engine::runForward(bool eval) {
     // Set initial conditions.
     currId = 0;
     iteration = 0;
+    evaluate = eval;
     halt = false;
+    commHalt = false;
 
     // Create buffer for first-layer aggregation.
     localVerticesDataBuf = new FeatType[layerConfig[0] * graph.getNumLocalVertices()];
@@ -269,29 +268,39 @@ Engine::runBackward() {
     currId = 0;
     iteration = numLayers;
     halt = false;
+    commHalt = false;
 
     bool disableBackward = true;
     if (disableBackward) {
         timeBackwardProcess = getTimer() - timeBackwardProcess;
+        // We have to set backward to tell the location of labels matrix to communicator for forward evaluation.
+        // TOD): (YIFAN) set localVerticesLabels in forward context so that we won't need this hack.
+        resComm->newContextBackward(localVerticesZData, localVerticesActivationData, localVerticesLabels,
+                                            graph.getNumLocalVertices(), layerConfig);
         printLog(nodeId, "Engine skips BACKWRAD propagation.");
-        return;
+    } else {
+        // Start data communicators.
+        auto bgc_fp = std::bind(&Engine::backwardGhostCommunicator, this, std::placeholders::_1, std::placeholders::_2);
+        dataPool->perform(bgc_fp);
+
+        // Start backward-prop workers.
+        auto bw_fp = std::bind(&Engine::backwardWorker, this, std::placeholders::_1, std::placeholders::_2);
+        computePool->perform(bw_fp);
+
+        // Join all backward-prop workers.
+        computePool->sync();
+
+        timeBackwardProcess = getTimer() - timeBackwardProcess;
+
+        // Join all data communicators.
+        dataPool->sync();
     }
 
-    // Start data communicators.
-    auto bgc_fp = std::bind(&Engine::backwardGhostCommunicator, this, std::placeholders::_1, std::placeholders::_2);
-    dataPool->perform(bgc_fp);
-
-    // Start backward-prop workers.
-    auto bw_fp = std::bind(&Engine::backwardWorker, this, std::placeholders::_1, std::placeholders::_2);
-    computePool->perform(bw_fp);
-
-    // Join all backward-prop workers.
-    computePool->sync();
-
-    timeBackwardProcess = getTimer() - timeBackwardProcess;
-
-    // Join all data communicators.
-    dataPool->sync();
+    // skip index 0. delete buffer[0] is inside destory()
+    for (size_t i = 1; i <= numLayers; ++i) {
+        delete[] localVerticesZData[i];
+        delete[] localVerticesActivationData[i];
+    }
 
     printLog(nodeId, "Engine completes BACKWARD propagation.");
 }
@@ -400,10 +409,10 @@ Engine::destroy() {
     delete[] forwardBatchMsgBuf;
     delete[] backwardBatchMsgBuf;
 
-    for (size_t i = 0; i <= numLayers; ++i) {
-        delete[] localVerticesZData[i];
-        delete[] localVerticesActivationData[i];
-    }
+    // corresponding to the new [] in init()
+    delete[] localVerticesZData[0];
+    delete[] localVerticesActivationData[0];
+
     delete[] localVerticesZData;
     delete[] localVerticesActivationData;
     delete[] forwardGhostInitData;
@@ -446,9 +455,12 @@ Engine::forwardWorker(unsigned tid, void *args) {
             // Run evaluation if it is an evaluation run and this is the last layer
             bool runEval = evaluate && iteration == numLayers-1;
             // Start a new lambda communication context.
+            localVerticesZData[iteration + 1] = new FeatType [getFeatDim(iteration + 1) * graphLocalVerticesNum];
+            localVerticesActivationData[iteration + 1] = new FeatType [getFeatDim(iteration + 1) * graphLocalVerticesNum];
             resComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
                                         graphLocalVerticesNum, getFeatDim(iteration), getFeatDim(iteration + 1), runEval);
         }
+        barComp.wait();
 
         unsigned featDim = getFeatDim(iteration);
         unsigned lvid = 0;
@@ -491,6 +503,7 @@ Engine::forwardWorker(unsigned tid, void *args) {
             printLog(nodeId, "All lambda requests finished. Results received.");
 
             // Skip first iteration to preserve the ghost vertices initial data
+            // TODO: (YIFAN) it is dangerous to alloc memory here for forward ghosts. Should in ghostCommunicator.
             if (iteration > 0) {
                 delete[] forwardGhostVerticesData;
             }
@@ -505,7 +518,6 @@ Engine::forwardWorker(unsigned tid, void *args) {
             printLog(nodeId, "Global barrier after ghost data exchange crossed.");
 
             // Reset for next iteration
-            // Run evaluation if it is an evaluation run and this is the last layer
             delete[] localVerticesDataBuf;
             localVerticesDataBuf = new FeatType[layerConfig[iteration + 1] * graphLocalVerticesNum];
 
@@ -525,6 +537,7 @@ Engine::forwardWorker(unsigned tid, void *args) {
         printLog(nodeId, "Deciding to halt at iteration %u...", numLayers);
         lockHalt.lock();
         halt = true;
+        commHalt = true;
         lockHalt.unlock();
     }
 }
@@ -635,13 +648,12 @@ Engine::forwardGhostCommunicator(unsigned tid, void *args) {
     FeatType *msgBuf = (FeatType *)new char[MAX_MSG_SIZE];
 
     // While loop, looping infinitely to get the next message.
-    while (1) {
+    while (!commHalt) {
         // No message in queue.
         if (!commManager.dataPullIn(&sender, &topic, msgBuf, MAX_MSG_SIZE)) {
             // Computation workers done their work, so communicator goes to death as well.
-            if (halt) {
-                delete[] msgBuf;
-                return;
+            if (commHalt) {
+                break;
             }
 
             usleep(SLEEP_PERIOD); // sleep a little and give up CPUs
@@ -685,6 +697,7 @@ Engine::forwardGhostCommunicator(unsigned tid, void *args) {
             failedTrials = 0;
         }
     }
+    delete[] msgBuf;
 }
 
 
@@ -710,6 +723,7 @@ Engine::backwardWorker(unsigned tid, void *args) {
             localVerticesDataBuf = new FeatType[layerConfig[iteration] * graphLocalVerticesNum];
 
             // Start a new lambda communication context.
+            // TODO: (YIFAN) currently set new context for backward once is enough. Change the newContextBackward interface
             resComm->newContextBackward(localVerticesZData, localVerticesActivationData, localVerticesLabels,
                                             graphLocalVerticesNum, layerConfig);
             // resComm->requestBackward(iteration);
@@ -753,6 +767,7 @@ Engine::backwardWorker(unsigned tid, void *args) {
         printLog(nodeId, "Deciding to halt at iteration %u...", 0);
         lockHalt.lock();
         halt = true;
+        commHalt = true;
         lockHalt.unlock();
     }
 }
@@ -867,13 +882,12 @@ Engine::backwardGhostCommunicator(unsigned tid, void *args) {
     FeatType *msgBuf = (FeatType *)new char[MAX_MSG_SIZE];
 
     // While loop, looping infinitely to get the next message.
-    while (1) {
+    while (!commHalt) {
         // No message in queue.
         if (!commManager.dataPullIn(&sender, &topic, msgBuf, MAX_MSG_SIZE)) {
             // Computation workers done their work, so communicator goes to death as well.
-            if (halt) {
-                delete[] msgBuf;
-                return;
+            if (commHalt) {
+                break;
             }
 
             usleep(SLEEP_PERIOD); // sleep a little and give up CPUs
@@ -917,6 +931,7 @@ Engine::backwardGhostCommunicator(unsigned tid, void *args) {
             failedTrials = 0;
         }
     }
+    delete[] msgBuf;
 }
 
 

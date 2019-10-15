@@ -66,9 +66,9 @@ public:
     bool master();
     bool isGPUEnabled();
 
-    FeatType* aggregate(FeatType *vtcsTensor, unsigned vtxCnt, unsigned featDim);
-    FeatType* invokeLambda(FeatType *vtcsTensor, unsigned vtxCnt, unsigned featDim);
-    FeatType* syncNodes(FeatType *vtcsTensor, unsigned vtxCnt, unsigned featDim);
+    FeatType* aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
+    FeatType* invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim);
+    FeatType* scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
 
     void makeBarrier();
 
@@ -156,6 +156,7 @@ private:
     bool evaluate = false;
 
     bool halt = false;
+    bool commHalt = false;
 
     bool undirected = false;
 
