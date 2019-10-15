@@ -20,7 +20,7 @@ typedef struct threadInfo {
 /**
  *
  * Class of a thread pool on a node.
- * 
+ *
  */
 class ThreadPool {
 
@@ -33,6 +33,7 @@ public:
     void destroyPool();
 
     void perform(std::function<void(unsigned, void *)> func);
+    void perform(std::function<void(unsigned, void *)> func, void *args);
     void sync();
 
 private:
@@ -41,7 +42,7 @@ private:
     ThreadInfo *threads;
 
     pthread_barrier_t bar;
-    
+
     bool die;
     bool running;
 
