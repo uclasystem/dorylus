@@ -101,8 +101,11 @@ private:
 
     std::vector<unsigned> layerConfig;      // Config of number of features in each layer.
     unsigned numLayers = 0;
+
+    std::vector<FeatType *> *savedTensors; // intermediate data for backward computation.
     FeatType **localVerticesZData;       // Global contiguous array for all vertices' data (row-wise order).
     FeatType **localVerticesActivationData;
+
     FeatType *forwardGhostInitData;
     FeatType *forwardGhostVerticesData;
     FeatType *backwardGhostVerticesData;

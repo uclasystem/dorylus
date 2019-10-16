@@ -57,6 +57,7 @@ Engine::init(int argc, char *argv[]) {
     // Create the global contiguous memory for ghost vertices' data similarly. Then read in initial features.
     localVerticesZData = new FeatType *[numLayers + 1];
     localVerticesActivationData = new FeatType *[numLayers + 1];
+    savedTensors = new std::vector<FeatType *> [numLayers];
 
     // Init it here for collecting data when reading files
     forwardGhostInitData = new FeatType[layerConfig[0] * graph.getNumInEdgeGhostVertices()];
@@ -483,8 +484,8 @@ Engine::invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     if (saveInput) {
         // localVerticesZData[iteration + 1] = vtcsTensor;
         savedTensor = vtcsTensor;
-        delete[] savedTensor; // TODO: (YIFAN) shouldn't delete it. Just to make compiler happy.
         vtcsTensor = NULL;
+        savedTensors[iteration].push_back(savedTensor);
     } else {
         delete[] vtcsTensor;
     }
@@ -495,6 +496,7 @@ Engine::invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
         // localVerticesActivationData[iteration + 1] = outputTensor;
         localVerticesActivationData[iteration + 1] = new FeatType [vtcsCnt * outFeatDim];
         memcpy(localVerticesActivationData[iteration + 1], outputTensor, vtcsCnt * outFeatDim);
+        savedTensors[iteration].push_back(localVerticesActivationData[iteration + 1]);
     }
 
     if (vecTimeLambda.size() < numLayers) {
