@@ -59,13 +59,13 @@ ServerWorker::work() {
 
             switch (op) {
                 case (OP::PULL_FORWARD):
-                    sendWeightsForwardLayer(identity, arg);
+                    sendWeights(identity, arg);
                     break;
                 case (OP::PULL_BACKWARD):
-                    sendWeightsBackward(identity);
+                    sendWeights(identity, arg);
                     break;
                 case (OP::PUSH_BACKWARD):
-                    recvUpdates(identity);
+                    recvUpdate(identity, arg);
                     break;
                 case (OP::INFO):    // Used to tell how many lambda threads it should expect for this round.
                     setBackpropNumLambdas(identity, arg);
@@ -88,7 +88,7 @@ ServerWorker::work() {
  * 
  */
 void
-ServerWorker::sendWeightsForwardLayer(zmq::message_t& client_id, unsigned layer) {
+ServerWorker::sendWeights(zmq::message_t& client_id, unsigned layer) {
     if (layer >= weightMats.size()) {
         std::cerr << "[ERROR] No such weights corresponding to layer " << layer << std::endl;
     }
@@ -130,10 +130,42 @@ ServerWorker::sendWeightsBackward(zmq::message_t& client_id) {
     }
 }
 
-
 /**
  *
  * Receive a given update from a worker. If all udpates have been received, alert the weight server that it is
+ * time to average and apply them.
+ * 
+ */
+void
+ServerWorker::recvUpdate(zmq::message_t& client_id, unsigned layer) {
+    zmq::message_t updateMsg;
+    workersocket.recv(&updateMsg);
+
+    float *updateSum = updateMats[layer].getData();
+    float *updateNew = (float *) updateMsg.data();
+
+    // Grab lock then sum the data received in this update matrix.
+    std::lock_guard<std::mutex> update_lock(update_mutex);
+    for (unsigned u = 0; u < updateMats[i].getNumElemts(); ++u)
+        updateSum[u] += updateNew[u];
+
+    if (layer == 0) {
+        numLambdas--;
+
+        // If this is the final update, begin global aggregation.
+        if (numLambdas == 0)
+            ws.applyUpdates();
+    }
+
+    // Send confirm ACK message.
+    zmq::message_t confirm;
+    workersocket.send(client_id, ZMQ_SNDMORE);
+    workersocket.send(confirm);
+}
+
+/**
+ *
+ * Receive all weight updates from a worker. If all udpates have been received, alert the weight server that it is
  * time to average and apply them.
  * 
  */
