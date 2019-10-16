@@ -27,7 +27,7 @@ using boost::property_tree::write_json;
 using namespace aws::lambda_runtime;
 using namespace std::chrono;
 
-bool evaluate = false;
+bool lastLayer = false;
 
 
 /**
@@ -55,11 +55,6 @@ requestMatrix(zmq::socket_t& socket, OP op, unsigned id, bool data = false) {
     } else {                    // Get matrix data.
         unsigned rows = parse<unsigned>((char *) respHeader.data(), 2);
         unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
-        // If talking to the graph servers, tell us if this is training or validation
-        if (data) {
-            unsigned eval = parse<unsigned>((char*) respHeader.data(), 4);
-            evaluate = bool(eval);
-        }
 
         zmq::message_t matxData(rows * cols * sizeof(FeatType));
         socket.recv(&matxData);
@@ -132,6 +127,20 @@ sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned
     socket.send(actData);
 
     // Wait for data settled reply.
+    zmq::message_t confirm;
+    socket.recv(&confirm);
+}
+
+static void
+sendWeightUpdates(zmq::socket_t& socket, Matrix& weightUpdates, unsigned layer) {
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader((char*) header.data(), OP::PUSH_BACKWARD, layer);
+    socket.send(header, ZMQ_SNDMORE);
+
+    zmq::message_t updateMsg(weightUpdates.getDataSize());
+    std::memcpy(udpateMsg.data(), weightUpdates.getData(), weightUpdtaes.getDataSize());
+    socket.send(updateMsg);
+
     zmq::message_t confirm;
     socket.recv(&confirm);
 }
@@ -286,6 +295,30 @@ evaluateModel(Matrix& activations, zmq::socket_t& datasocket, unsigned partId) {
     datasocket.recv(&confirm);
 }
 
+static Matrix
+gradLoss(Matrix& z, Matrix& weights, Matrix& AH, zmq::socket_t& weightSocket,
+         unsigned partId, unsigned layer) {
+    Matrix labels = requestMatrix(datasocket, OP::PULL_EVAL, partId);
+    Matrix predictions = softmax(z);
+
+    Matrix d_out = predictions - labels;
+
+    // True indicating that AH is transposed
+    // NOTE:
+    //  In the future it would make more sense to return the d_AH
+    //  values to the server first so that computation can proceed
+    //  and then calculate the weight updates as there are no
+    //  dependencies on the weight updates
+    Matrix weightUpdates = AH.dot(d_out, true);
+
+    sendWeightUpdates(weightSocket, weightUpdates, layer);
+
+    // True here indicating the weights are transposed
+    Matrix d_AH = d_out.dot(weights, false, true);
+
+    return d_AH;
+}
+
 /**
  *
  * Main logic:
@@ -361,24 +394,18 @@ forward_prop_layer(std::string dataserver, std::string weightserver, std::string
 
         // Multiplication.
         computationTimer.start();
-        //std::cout << "< FORWARD > Doing the dot multiplication..." << std::endl;
-        z = dot(feats, weights);
-
-        // Activation.
-        //std::cout << "< FORWARD > Doing the activation..." << std::endl;
-        activations = activate(z);
+        z = feats.dot(weights);
         computationTimer.stop();
 
-        // Send back to dataserver.
-        sendResTimer.start();
-        //std::cout << "< FORWARD > Sending results back..." << std::endl;
-        sendMatrices(z, activations, data_socket, id);
-        //std::cout << "< FORWARD > Results sent." << std::endl;
-        sendResTimer.stop();
 
-        if (evaluate) {
-            evaluateModel(activations, data_socket, id);
-		}
+        if (lastLayer) {
+            activations = softmax(z);
+		} else {
+            activations = activate(z);
+        }
+        sendResTimer.start();
+        sendMatrices(z, activations, data_socket, id);
+        sendResTimer.stop();
 
         // Delete malloced spaces.
         delete[] weights.getData();
@@ -415,11 +442,12 @@ my_handler(invocation_request const& request) {
     std::string wport = pt.get<std::string>("wport");
     unsigned layer = pt.get<int>("layer");
     unsigned chunkId = pt.get<int>("id");
+    lastLayer = pt.get<bool>("lastLayer");
 
     std::cout << "[ACCEPTED] Thread " << chunkId << " is requested from " << dataserver << ":" << dport
               << ", FORWARD layer " << layer << "." << std::endl;
 
-    return forward_prop_layer(dataserver, weightserver, dport, wport, chunkId, layer);
+    return forward_prop_layer(dataserver, weightserver, dport, wport, chunkId, layer, lastLayer);
 }
 
 int
