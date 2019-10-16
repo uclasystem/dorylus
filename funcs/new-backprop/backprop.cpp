@@ -67,7 +67,6 @@ requestWeights(zmq::socket_t& socket, OP op, unsigned layer) {
 
     zmq::message_t respHeader;
     socket.recv(&respHeader);
-
     unsigned layerResp = parse<unsigned>((char*) respHeader.data(), 1);
     if (layerResp == -1) {
         std::cerr << "[ ERROR ] No corresponding matrix" << std::endl;
@@ -94,7 +93,6 @@ requestTensor(zmq::socket_t& socket, OP op, unsigned partId, TYPE type = 0, unsi
 
     zmq::message_t respHeader;
     socket.recv(&respHeader);
-
     unsigned layerResp = parse<unsigned>((char*) respHeader.data(), 1);
     if (layerResp == -1) {
         std::cerr << "[ ERROR ] No corresponding matrix" << std::endl;
@@ -352,6 +350,5 @@ my_handler(invocation_request const& request) {
 int
 main(int argc, char *argv[]) {
     run_handler(my_handler);
-
     return 0;
 }
