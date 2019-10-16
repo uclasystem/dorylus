@@ -64,7 +64,7 @@ callback(const Aws::Lambda::LambdaClient *client, const Aws::Lambda::Model::Invo
  */
 static void
 invokeFunction(Aws::String funcName, char *dataserver, char *dport, char *weightserver, char *wport,
-               unsigned layer, unsigned id) {
+               unsigned layer, unsigned id, bool lastLayer) {
     Aws::Lambda::Model::InvokeRequest invReq;
     invReq.SetFunctionName(funcName);
     invReq.SetInvocationType(Aws::Lambda::Model::InvocationType::RequestResponse);
@@ -77,6 +77,7 @@ invokeFunction(Aws::String funcName, char *dataserver, char *dport, char *weight
     jsonPayload.WithString("dport", dport);
     jsonPayload.WithInteger("layer", layer);    // For forward-prop: layer-ID; For backward-prop: numLayers.
     jsonPayload.WithInteger("id", id);
+    jsonPayload.WithBool("lastLayer", lastLayer);
     *payload << jsonPayload.View().WriteReadable();
     invReq.SetBody(payload);
     m_client->InvokeAsync(invReq, callback);
@@ -151,6 +152,7 @@ CoordServer::run() {
             unsigned op = parse<unsigned>((char *) header.data(), 0);
             unsigned layer = parse<unsigned>((char *) header.data(), 1);    // At backprop, this is total number of layers.
             unsigned nThreadsReq = parse<unsigned>((char *) header.data(), 2);
+            unsigned lastLayer = parse<unsigned>((char*) header.data(), 3);
 
             // Append a terminating null char to ensure this is a valid C string.
             char* dataserverIpCopy = new char[dataserverIp.size() + 1];
@@ -175,7 +177,8 @@ CoordServer::run() {
                 unsigned lambdaId = nThreadsReq;
                 // Issue the lambda thread to serve the request.
                 char *weightserverIp = weightserverAddrs[req_count % weightserverAddrs.size()];
-                invokeFunction("new-forward-prop", dataserverIpCopy, dataserverPort, weightserverIp, weightserverPort, layer, lambdaId);
+                invokeFunction("new-forward-prop", dataserverIpCopy, dataserverPort,
+                               weightserverIp, weightserverPort, layer, lambdaId, (bool) lastLayer);
                 req_count++;
 
             // This is backward.
