@@ -3,6 +3,7 @@
 
 
 #include <pthread.h>
+#include <functional>
 
 
 /** Structure of a thread's info block. */
@@ -31,7 +32,7 @@ public:
     void createPool();
     void destroyPool();
 
-    void perform(void (*func)(unsigned, void *));
+    void perform(std::function<void(unsigned, void *)> func);
     void sync();
 
 private:
@@ -44,7 +45,7 @@ private:
     bool die;
     bool running;
 
-    void (*wFunc)(unsigned, void *);
+    std::function<void(unsigned, void *)> wFunc;
     static void *worker(void *args);
 };
 

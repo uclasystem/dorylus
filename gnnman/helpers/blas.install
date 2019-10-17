@@ -1,16 +1,15 @@
 #!/bin/bash
 
 ##
-## Install requried dependencies on a graph server. TO be invoked on the remote machine.
+## Install BLAS dependencies. TO be invoked on the remote machine.
 ##
 
 
 cd ${HOME}
 
 
-
 # OpenBLAS. 
-if [[ ! -d /usr/local/blas/OpenBLAS ]]; then 
+if [[ ! -d /usr/local/blas/OpenBLAS ]]; then    # Only install if not have been installed.
     git clone https://github.com/xianyi/OpenBLAS.git 
     cd OpenBLAS 
     make 
@@ -20,8 +19,9 @@ if [[ ! -d /usr/local/blas/OpenBLAS ]]; then
     rm -rf OpenBLAS 
 fi
 
+
 # CBLAS.
-if [[ ! -d /usr/local/blas/CBLAS ]]; then     # Only install if not installed yet.
+if [[ ! -d /usr/local/blas/CBLAS ]]; then
     wget http://www.netlib.org/blas/blast-forum/cblas.tgz
     tar xf cblas.tgz
     rm cblas.tgz

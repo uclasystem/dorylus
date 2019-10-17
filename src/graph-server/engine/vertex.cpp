@@ -17,8 +17,8 @@ Vertex::getSourceVertexLocalId(unsigned i) {
         return inEdges[i].getSourceId();
     } else {
         unsigned gvid = inEdges[i].getSourceId();
-        assert(graph_ptr->containsGhostVertex(gvid));
-        return graph_ptr->getGhostVertex(gvid).getLocalId();
+        assert(graph_ptr->containsInEdgeGhostVertex(gvid));
+        return graph_ptr->getInEdgeGhostVertex(gvid).getLocalId();
     }
 }
 
@@ -40,8 +40,8 @@ Vertex::getDestVertexLocalId(unsigned i) {
         return outEdges[i].getDestId();
     } else {
         unsigned gvid = outEdges[i].getDestId();
-        assert(graph_ptr->containsGhostVertex(gvid));
-        return graph_ptr->getGhostVertex(gvid).getLocalId();
+        assert(graph_ptr->containsOutEdgeGhostVertex(gvid));
+        return graph_ptr->getOutEdgeGhostVertex(gvid).getLocalId();
     }
 }
 
@@ -68,5 +68,5 @@ Vertex::compactVertex() {
 
 void
 GhostVertex::compactVertex() {
-    outEdges.shrink_to_fit();
+    edges.shrink_to_fit();
 }

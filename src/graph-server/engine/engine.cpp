@@ -15,64 +15,6 @@
 #include "engine.hpp"
 
 
-/** Extern class-wide fields. */
-Graph Engine::graph;
-ThreadPool* Engine::dataPool = NULL;
-unsigned Engine::dThreads;
-ThreadPool* Engine::computePool = NULL;
-unsigned Engine::cThreads;
-std::string Engine::graphFile;
-std::string Engine::outFile;
-std::string Engine::featuresFile;
-std::string Engine::layerConfigFile;
-std::string Engine::labelsFile;
-std::string Engine::dshMachinesFile;
-std::string Engine::myPrIpFile;
-std::string Engine::myPubIpFile;
-unsigned Engine::dataserverPort;
-unsigned Engine::weightserverPort;
-std::string Engine::coordserverIp;
-std::string Engine::weightserverIPFile;
-unsigned Engine::coordserverPort;
-ResourceComm *Engine::resComm = NULL;
-CommInfo Engine::commInfo;
-unsigned Engine::numLambdasForward = 0;
-unsigned Engine::numLambdasBackward = 0;
-unsigned Engine::numEpochs = 0;
-unsigned Engine::valFreq = 0;
-std::vector<bool> Engine::trainPartition;
-unsigned Engine::gpuEnabled = 0;
-unsigned Engine::currId = 0;
-Lock Engine::lockCurrId;
-int Engine::recvCnt = 0;
-Lock Engine::lockRecvCnt;
-Cond Engine::condRecvCnt;
-Lock Engine::lockHalt;
-unsigned Engine::nodeId;
-unsigned Engine::numNodes;
-Barrier Engine::barComp;
-std::vector<unsigned> Engine::layerConfig;
-unsigned Engine::numLayers = 0;
-FeatType **Engine::localVerticesZData = NULL;
-FeatType **Engine::localVerticesActivationData = NULL;
-FeatType **Engine::ghostVerticesActivationData = NULL;
-unsigned *Engine::ghostVCnts;
-unsigned **Engine::batchMsgBuf = NULL;
-FeatType *Engine::localVerticesDataBuf = NULL;
-FeatType *Engine::localVerticesLabels = NULL;
-unsigned Engine::iteration = 0;
-bool Engine::undirected = false;
-bool Engine::evaluate = false;
-bool Engine::halt = false;
-double Engine::timeInit = 0.0;
-double Engine::timeForwardProcess = 0.0;
-std::vector<double> Engine::vecTimeAggregate;
-std::vector<double> Engine::vecTimeLambda;
-std::vector<double> Engine::vecTimeSendout;
-double Engine::timeBackwardProcess = 0.0;
-
-
-
 /**
  *
  * Initialize the engine with the given command line arguments.
@@ -86,22 +28,25 @@ Engine::init(int argc, char *argv[]) {
     parseArgs(argc, argv);
 
     // Initialize the node manager and communication manager.
-    NodeManager::init(dshMachinesFile, myPrIpFile, myPubIpFile);    // NodeManger should go first.
+    nodeManager.init(dshMachinesFile, myPrIpFile, myPubIpFile);    // NodeManger should go first.
 
-    nodeId = NodeManager::getMyNodeId();
-    numNodes = NodeManager::getNumNodes();
+    nodeId = nodeManager.getMyNodeId();
+    numNodes = nodeManager.getNumNodes();
     assert(numNodes <= 256);    // Cluster size limitation.
     outFile += std::to_string(nodeId);
-    CommManager::init();
+    commManager.init(nodeManager);
 
     // Set number of layers and number of features in each layer. Also store the prefix sum of config for offset querying use.
     readLayerConfigFile(layerConfigFile);
     numLayers = layerConfig.size() - 1;
 
     // Leave buf for myself empty, which is a little wasting.
-    ghostVCnts = new unsigned[numNodes];
-    memset(ghostVCnts, 0, sizeof(unsigned) * numNodes);
-    batchMsgBuf = new unsigned*[numNodes];
+    forwardGhostVCnts = new unsigned [numNodes];
+    backwardGhostVCnts = new unsigned [numNodes];
+    memset(forwardGhostVCnts, 0, sizeof(unsigned) * numNodes);
+    memset(backwardGhostVCnts, 0 ,sizeof(unsigned) * numNodes);
+    forwardBatchMsgBuf = new unsigned *[numNodes];
+    backwardBatchMsgBuf = new unsigned *[numNodes];
     // Read in the graph and subscribe vertex global ID topics.
     std::set<unsigned> inTopics;
     std::vector<unsigned> outTopics;
@@ -112,21 +57,27 @@ Engine::init(int argc, char *argv[]) {
     // Create the global contiguous memory for ghost vertices' data similarly. Then read in initial features.
     localVerticesZData = new FeatType *[numLayers + 1];
     localVerticesActivationData = new FeatType *[numLayers + 1];
-    ghostVerticesActivationData = new FeatType *[numLayers + 1];
+
+    // Init it here for collecting data when reading files
+    forwardGhostInitData = new FeatType[layerConfig[0] * graph.getNumInEdgeGhostVertices()];
 
     // Create data storage area for each layer.
     for (size_t i = 0; i <= numLayers; ++i) {
         localVerticesZData[i] = new FeatType[layerConfig[i] * graph.getNumLocalVertices()];
         localVerticesActivationData[i] = new FeatType[layerConfig[i] * graph.getNumLocalVertices()];
-        ghostVerticesActivationData[i] = new FeatType[layerConfig[i] * graph.getNumGhostVertices()];
     }
 
     // Create labels storage area. Read in labels and store as one-hot format.
     localVerticesLabels = new FeatType[layerConfig[numLayers] * graph.getNumLocalVertices()];
     // Set a local index for all ghost vertices along the way. This index is used for indexing within the ghost data arrays.
     unsigned ghostCount = 0;
-    for (auto it = graph.getGhostVertices().begin(); it != graph.getGhostVertices().end(); ++it)
-        it->second.setLocalId(ghostCount++);
+    for (auto it: graph.getInEdgeGhostVertices()) {
+        it.second.setLocalId(ghostCount++);
+    }
+    ghostCount = 0;
+    for (auto it: graph.getOutEdgeGhostVertices()) {
+        it.second.setLocalId(ghostCount++);
+    }
 
     // Read in initial feature values (input features) & labels.
     readFeaturesFile(featuresFile);
@@ -174,7 +125,7 @@ Engine::init(int argc, char *argv[]) {
 */
 void
 Engine::setUpCommInfo(){
-    commInfo.nodeIp=NodeManager::getNode(nodeId).pubip;
+    commInfo.nodeIp=nodeManager.getNode(nodeId).pubip;
     commInfo.nodeId=nodeId;
     commInfo.dataserverPort=dataserverPort;
     commInfo.coordserverIp=coordserverIp;
@@ -207,13 +158,13 @@ Engine::setTrainValidationSplit(float trainPortion) {
  */
 bool
 Engine::master() {
-    return NodeManager::amIMaster();
+    return nodeManager.amIMaster();
 }
 
 /**
  *
  * Whether GPU is enabled or not
- * 
+ *
  */
 bool
 Engine::isGPUEnabled() {
@@ -222,7 +173,7 @@ Engine::isGPUEnabled() {
 
 void
 Engine::makeBarrier() {
-    NodeManager::barrier();
+    nodeManager.barrier();
 }
 
 /**
@@ -266,7 +217,7 @@ void
 Engine::runForward(bool eval) {
 
     // Make sure all nodes start running the forward-prop phase.
-    NodeManager::barrier();
+    nodeManager.barrier();
     printLog(nodeId, "Engine starts running FORWARD...");
 
     timeForwardProcess = -getTimer();
@@ -275,16 +226,18 @@ Engine::runForward(bool eval) {
     currId = 0;
     iteration = 0;
     halt = false;
-    evaluate = eval;
 
     // Create buffer for first-layer aggregation.
     localVerticesDataBuf = new FeatType[layerConfig[0] * graph.getNumLocalVertices()];
+    forwardGhostVerticesData = forwardGhostInitData;
 
     // Start data communicators.
-    dataPool->perform(ghostCommunicator);
+    auto fgc_fp = std::bind(&Engine::forwardGhostCommunicator, this, std::placeholders::_1, std::placeholders::_2);
+    dataPool->perform(fgc_fp);
 
     // Start aggregation workers.
-    computePool->perform(forwardWorker);
+    auto fw_fp = std::bind(&Engine::forwardWorker, this, std::placeholders::_1, std::placeholders::_2);
+    computePool->perform(fw_fp);
 
     // Join all aggregation workers.
     computePool->sync();
@@ -306,21 +259,39 @@ Engine::runForward(bool eval) {
  */
 void
 Engine::runBackward() {
-
     // Make sure all nodes start running the backward-prop phase.
-    NodeManager::barrier();
+    nodeManager.barrier();
     printLog(nodeId, "Engine starts running BACKWARD...");
 
     timeBackwardProcess = getTimer();
 
-    // Start backward-prop workers. Backward-prop is only a single-threaded task for dataservers, thus actually one a master
-    // thread is doing the work.
-    computePool->perform(backwardWorker);
+    // Set initial conditions.
+    currId = 0;
+    iteration = numLayers;
+    halt = false;
+
+    bool disableBackward = true;
+    if (disableBackward) {
+        timeBackwardProcess = getTimer() - timeBackwardProcess;
+        printLog(nodeId, "Engine skips BACKWRAD propagation.");
+        return;
+    }
+
+    // Start data communicators.
+    auto bgc_fp = std::bind(&Engine::backwardGhostCommunicator, this, std::placeholders::_1, std::placeholders::_2);
+    dataPool->perform(bgc_fp);
+
+    // Start backward-prop workers.
+    auto bw_fp = std::bind(&Engine::backwardWorker, this, std::placeholders::_1, std::placeholders::_2);
+    computePool->perform(bw_fp);
 
     // Join all backward-prop workers.
     computePool->sync();
 
     timeBackwardProcess = getTimer() - timeBackwardProcess;
+
+    // Join all data communicators.
+    dataPool->sync();
 
     printLog(nodeId, "Engine completes BACKWARD propagation.");
 }
@@ -406,8 +377,8 @@ void
 Engine::destroy() {
     printLog(nodeId, "Destroying the engine...");
 
-    NodeManager::destroy();
-    CommManager::destroy();
+    nodeManager.destroy();
+    commManager.destroy();
     computePool->destroyPool();
     dataPool->destroyPool();
 
@@ -418,22 +389,30 @@ Engine::destroy() {
 
     resComm->sendShutdownMessage();
 
-    delete[] ghostVCnts;
+    delete[] forwardGhostVCnts;
+    delete[] backwardGhostVCnts;
     for (size_t i = 0; i < numNodes; ++i) {
         if (i != nodeId) {
-            delete[] batchMsgBuf[i];
+            delete[] forwardBatchMsgBuf[i];
+            delete[] backwardBatchMsgBuf[i];
         }
     }
-    delete[] batchMsgBuf;
+    delete[] forwardBatchMsgBuf;
+    delete[] backwardBatchMsgBuf;
 
     for (size_t i = 0; i <= numLayers; ++i) {
         delete[] localVerticesZData[i];
         delete[] localVerticesActivationData[i];
-        delete[] ghostVerticesActivationData[i];
     }
     delete[] localVerticesZData;
     delete[] localVerticesActivationData;
-    delete[] ghostVerticesActivationData;
+    delete[] forwardGhostInitData;
+    delete[] forwardGhostVerticesData;
+
+    bool disableBackward = true;
+    if (!disableBackward) {
+        delete[] backwardGhostVerticesData;
+    }
 
     delete[] localVerticesDataBuf;
     delete[] localVerticesLabels;
@@ -456,131 +435,189 @@ Engine::forwardWorker(unsigned tid, void *args) {
     // A Stopwatch for composing steps of run().
     double timeWorker = getTimer();
 
-    const unsigned graphLocalVertices = graph.getNumLocalVertices();
-    const unsigned lambdaVChunk = (graphLocalVertices + numLambdasForward - 1) / numLambdasForward;
-    unsigned availLambdaId = 0;
-    unsigned readyVertices = lambdaVChunk;
+    const unsigned graphLocalVerticesNum = graph.getNumLocalVertices();
+    const unsigned lambdaVChunk = (graphLocalVerticesNum + numLambdasForward - 1) / numLambdasForward;
 
-    if (tid == 0) {
-        printLog(nodeId, "Iteration %u starts. Invoking lambda...", iteration);
-        // Run evaluation if it is an evaluation run and this is the last layer
-        bool runEval = evaluate && iteration == numLayers-1;
-        
-        // Start a new lambda communication context.
-        resComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
-                                    graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1), runEval);
-        
-    }
-
-    // Outer while loop. Looping infinitely, looking for a new task to handle.
-    while (1) {
-
-        // Get current vertex that need to be handled.
-        lockCurrId.lock();
-        unsigned lvid = currId++;
-        lockCurrId.unlock();
-
-        if (lvid >= readyVertices) { // may invoke lambdas or proceed to next iteration
-            // Non-master threads.
-            if (tid != 0) {
-                // All local vertices have been processed. Hit the barrier and wait for next iteration / decide to halt.
-                if (lvid >= graphLocalVertices) {
-                    //## Worker barrier 1: Everyone reach to this point, then only master will work. ##//
-                    barComp.wait();
-                    //## Worker barrier 2: Master has finished its checking work. ##//
-                    barComp.wait();
-
-                    // If master says halt then go to death; else continue for the new iteration.
-                    if (halt) {
-                        return;
-                    } else {
-                        continue;
-                    }
-                }
-            // Master thread
-            } else {
-                if (!gpuEnabled) {
-                    // invoke all available lambda threads
-                    while (lvid >= readyVertices && availLambdaId < numLambdasForward) {
-                        resComm->invokeLambdaForward(iteration, availLambdaId);
-                        availLambdaId++;
-                        readyVertices = std::min(readyVertices + lambdaVChunk, graphLocalVertices);
-                    }
-                }
-
-                // All local vertices have been processed. Hit the barrier and wait for next iteration / decide to halt.
-                if (lvid >= graphLocalVertices) {
-                    //## Worker barrier 1: Everyone reach to this point, then only master will work. ##//
-                    barComp.wait();
-                    // Only master works now
-                    vecTimeAggregate.push_back(getTimer() - timeWorker);
-                    timeWorker = getTimer();
-
-                    // if in GPU mode we launch gpu computation here and wait the results
-                    if (gpuEnabled) {
-                        resComm->requestForward(iteration);
-                    } else {
-                        resComm->waitLambdaForward();
-                    }
-
-                    vecTimeLambda.push_back(getTimer() - timeWorker);
-                    timeWorker = getTimer();
-                    printLog(nodeId, "All lambda requests finished. Results received.");
-
-                    sendGhostUpdates();
-                    vecTimeSendout.push_back(getTimer() - timeWorker);
-
-                    //## Global Iteration barrier. ##//
-                    NodeManager::barrier();
-
-                    timeWorker = getTimer();
-                    printLog(nodeId, "Global barrier after ghost data exchange crossed.");
-
-                    // There is a new layer ahead, please start a new iteration.
-                    if (++iteration < numLayers) {
-                        printLog(nodeId, "Starting a new iteration %u...", iteration);
-
-                        // Reset data buffer area's size.
-                        delete[] localVerticesDataBuf;
-                        localVerticesDataBuf = new FeatType[layerConfig[iteration] * graph.getNumLocalVertices()];
-                        // Reset current id.
-                        currId = 0;       // This is unprotected by lockCurrId because only master executes.
-                        // Reset new lambda communication context.
-                        availLambdaId = 0;
-                        readyVertices = lambdaVChunk;
-                        // Run evaluation if it is an evaluation run and this is the last layer
-                        bool runEval = evaluate && iteration == numLayers-1;
-                        // Start a new lambda communication context.
-                        resComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
-                                                graph.getNumLocalVertices(), getNumFeats(iteration), getNumFeats(iteration + 1), runEval);
-
-                        //## Worker barrier 2: Starting a new iteration. ##//
-                        barComp.wait();
-
-                        continue;
-
-                    // No more, so deciding to halt. But still needs the communicator to check if there will be further scheduling invoked by ghost
-                    // vertices. If so we are stilling going to the next iteration.
-                    } else {
-                        printLog(nodeId, "Deciding to halt at iteration %u...", iteration);
-
-                        // Set this to signal data communicator to end its life.
-                        lockHalt.lock();
-                        halt = true;
-                        lockHalt.unlock();
-
-                        //## Worker barrier 2: Going to die. ##//
-                        barComp.wait();
-
-                        return;
-                    }
-                }
-            }
+    while(iteration < numLayers) {
+        unsigned availLambdaId = 0;
+        unsigned readyVertices = lambdaVChunk;
+        if (tid == 0) {
+            printLog(nodeId, "Iteration %u starts.", iteration);
+            // Run evaluation if it is an evaluation run and this is the last layer
+            bool runEval = evaluate && iteration == numLayers-1;
+            // Start a new lambda communication context.
+            resComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
+                                        graphLocalVerticesNum, getNumFeats(iteration), getNumFeats(iteration + 1), runEval);
         }
 
-        // Doing the aggregation. Data send out used to be here, but we changed it to after lambda finishes.
-        aggregateFromNeighbors(lvid);
+        unsigned lvid = 0;
+        while (currId < graphLocalVerticesNum) {
+            lockCurrId.lock();
+            lvid = currId++;
+            lockCurrId.unlock();
+
+            // A naive way to prevent threads contention. TODO: use a lock.
+            if (tid == 0) {
+                while (!gpuEnabled && lvid > readyVertices && availLambdaId < numLambdasForward) {
+                    resComm->invokeLambdaForward(iteration, availLambdaId);
+                    availLambdaId++;
+                    readyVertices = std::min(readyVertices + lambdaVChunk, graphLocalVerticesNum);
+                }
+            }
+            if (lvid < graphLocalVerticesNum) {
+                // Forward Aggregation.
+                forwardAggregateFromNeighbors(lvid);
+            }
+        }
+        barComp.wait();
+
+        if (tid == 0) {
+            vecTimeAggregate.push_back(getTimer() - timeWorker);
+            timeWorker = getTimer();
+
+            // if in GPU mode we launch gpu computation here and wait the results
+            if (gpuEnabled) {
+                resComm->requestForward(iteration);
+            } else {
+                while(availLambdaId < numLambdasForward) {
+                    resComm->invokeLambdaForward(iteration, availLambdaId);
+                    availLambdaId++;
+                }
+                resComm->waitLambdaForward();
+            }
+            vecTimeLambda.push_back(getTimer() - timeWorker);
+            timeWorker = getTimer();
+            printLog(nodeId, "All lambda requests finished. Results received.");
+
+            // Skip first iteration to preserve the ghost vertices initial data
+            if (iteration > 0) {
+                delete[] forwardGhostVerticesData;
+            }
+            forwardGhostVerticesData = new FeatType[layerConfig[iteration + 1] * graph.getNumInEdgeGhostVertices()];
+
+            sendForwardGhostUpdates();
+            vecTimeSendout.push_back(getTimer() - timeWorker);
+
+            //## Global Iteration barrier. ##//
+            nodeManager.barrier();
+            timeWorker = getTimer();
+            printLog(nodeId, "Global barrier after ghost data exchange crossed.");
+
+            // Reset for next iteration
+            // Run evaluation if it is an evaluation run and this is the last layer
+            delete[] localVerticesDataBuf;
+            localVerticesDataBuf = new FeatType[layerConfig[iteration + 1] * graphLocalVerticesNum];
+
+            bool runEval = evaluate && iteration == numLayers-1;
+            // Start a new lambda communication context.
+            resComm->newContextForward(localVerticesDataBuf, localVerticesZData[iteration + 1], localVerticesActivationData[iteration + 1],
+                graphLocalVerticesNum, getNumFeats(iteration), getNumFeats(iteration + 1), runEval);
+
+            currId = 0;
+            iteration++;
+        }
+        barComp.wait();
     }
+
+    // stop communicate thread
+    if (tid == 0) {
+        printLog(nodeId, "Deciding to halt at iteration %u...", numLayers);
+        lockHalt.lock();
+        halt = true;
+        lockHalt.unlock();
+    }
+}
+
+
+/**
+ *
+ * Aggregate numFeats feature values starting from offset from all neighbors (including self). Then write the results to the
+ * data buffer area for serialization. The results are to be used for being sent to lambda threads.
+ *
+ */
+void
+Engine::forwardAggregateFromNeighbors(unsigned lvid) {
+    unsigned numFeats = getNumFeats(iteration);
+
+    // Read out data of the current iteration of given vertex.
+    FeatType *currDataDst = localVertexDataBufPtr(lvid, iteration);
+    FeatType *currDataPtr = localVertexActivationDataPtr(lvid, iteration);
+    memcpy(currDataDst, currDataPtr, numFeats * sizeof(FeatType));
+
+    // Apply normalization factor on the current data.
+    Vertex& v = graph.getVertex(lvid);
+    for (unsigned i = 0; i < numFeats; ++i) {
+        currDataDst[i] *= v.getNormFactor();
+    }
+
+    // Aggregate from incoming neighbors.
+    for (unsigned i = 0; i < v.getNumInEdges(); ++i) {
+        FeatType *otherDataPtr;
+        EdgeType normFactor = v.getInEdge(i).getData();
+
+        if (v.getInEdge(i).getEdgeLocation() == LOCAL_EDGE_TYPE) {    // Local vertex.
+            otherDataPtr = localVertexActivationDataPtr(v.getSourceVertexLocalId(i), iteration);
+        } else {                                                      // Ghost vertex.
+            otherDataPtr = forwardGhostVertexDataPtr(v.getSourceVertexLocalId(i), iteration);
+        }
+        // TODO: Locks on the data array area is not properly set yet. But does not affect forward prop.
+        for (unsigned j = 0; j < numFeats; ++j) {
+            currDataDst[j] += (otherDataPtr[j] * normFactor);
+        }
+    }
+}
+
+
+void
+Engine::sendForwardGhostUpdates() {
+    // Loop through all local vertices and do the data send out work. If there are any remote edges for a vertex, should send this vid to
+    // other nodes for their ghost's update.
+    // TODO: (YIFAN) process crashes when return if BATCH_SIZE is too large. Weird, to be fixed.
+    // Please decrease BATCH_SIZE if porcess crashed.
+    bool batchFlag = false;
+    unsigned BATCH_SIZE = std::max(((batchFlag ? MAX_MSG_SIZE : 4096) - DATA_HEADER_SIZE) /
+                        (sizeof(unsigned) + sizeof(FeatType) * getNumFeats(iteration + 1)), 1ul); // at least send one vertex
+    for (unsigned nid = 0; nid < numNodes; ++nid) {
+        if (nid == nodeId) {
+            continue;
+        }
+        unsigned forwardGhostVCnt = forwardGhostVCnts[nid];
+        for (unsigned ib = 0; ib < forwardGhostVCnt; ib += BATCH_SIZE) {
+            unsigned remainCnt = (forwardGhostVCnt - ib) < BATCH_SIZE ? (forwardGhostVCnt - ib) : BATCH_SIZE;
+
+            forwardVerticesPushOut(nid, nodeId, remainCnt, forwardBatchMsgBuf[nid] + ib);
+            lockRecvCnt.lock();
+            recvCnt++;
+            lockRecvCnt.unlock();
+        }
+    }
+    // Wait for all remote schedulings sent by me to be handled.
+    lockRecvCnt.lock();
+    if (recvCnt > 0) {
+        condRecvCnt.wait();
+    }
+    lockRecvCnt.unlock();
+}
+
+inline void
+Engine::forwardVerticesPushOut(unsigned receiver, unsigned sender, unsigned totCnt, unsigned *lvids) {
+    const unsigned featSize = sizeof(FeatType) * getNumFeats(iteration + 1);
+    zmq::message_t msg(DATA_HEADER_SIZE + (sizeof(unsigned) + featSize) * totCnt);
+    char *msgPtr = (char *)(msg.data());
+    sprintf(msgPtr, NODE_ID_HEADER, receiver);
+    msgPtr += NODE_ID_DIGITS;
+    *(unsigned *)msgPtr = sender;
+    msgPtr += sizeof(unsigned);
+    *(unsigned *)msgPtr = totCnt;
+    msgPtr += sizeof(unsigned);
+    for (unsigned i = 0; i < totCnt; ++i) {
+        *(unsigned *)msgPtr = graph.localToGlobalId[lvids[i]];
+        msgPtr += sizeof(unsigned);
+        FeatType *dataPtr = localVertexActivationDataPtr(lvids[i], iteration + 1);
+        memcpy(msgPtr, dataPtr, featSize);
+        msgPtr += featSize;
+    }
+    commManager.rawMsgPushOut(msg);
 }
 
 
@@ -590,7 +627,7 @@ Engine::forwardWorker(unsigned tid, void *args) {
  *
  */
 void
-Engine::ghostCommunicator(unsigned tid, void *args) {
+Engine::forwardGhostCommunicator(unsigned tid, void *args) {
     // backoff sleep strategy to improve CPU utilization
     int failedTrials = 0;
     const int INIT_PERIOD = 256;
@@ -601,10 +638,8 @@ Engine::ghostCommunicator(unsigned tid, void *args) {
 
     // While loop, looping infinitely to get the next message.
     while (1) {
-
         // No message in queue.
-        if (!CommManager::dataPullIn(&sender, &topic, msgBuf, MAX_MSG_SIZE)) {
-
+        if (!commManager.dataPullIn(&sender, &topic, msgBuf, MAX_MSG_SIZE)) {
             // Computation workers done their work, so communicator goes to death as well.
             if (halt) {
                 delete[] msgBuf;
@@ -619,20 +654,19 @@ Engine::ghostCommunicator(unsigned tid, void *args) {
             }
             // Pull in the next message, and process this message.
         } else {
-
             // A normal ghost value broadcast.
             if (topic < MAX_IDTYPE - 1) {
                 // Using MAX_IDTYPE - 1 as the receive signal.
-                CommManager::dataPushOut(sender, nodeId, MAX_IDTYPE - 1, NULL, 0);
+                commManager.dataPushOut(sender, nodeId, MAX_IDTYPE - 1, NULL, 0);
 
                 char *bufPtr = (char *)msgBuf;
-                unsigned ghostVCnt = topic;
+                unsigned recvGhostVCnt = topic;
                 unsigned featSize = sizeof(FeatType) * getNumFeats(iteration + 1);
                 // Update ghost vertices
-                for (unsigned i = 0; i < ghostVCnt; ++i) {
+                for (unsigned i = 0; i < recvGhostVCnt; ++i) {
                     unsigned gvid = *(unsigned *)bufPtr;
                     bufPtr += sizeof(unsigned);
-                    FeatType *dataPtr = ghostVertexActivationDataPtr(graph.getGhostVertex(gvid).getLocalId(), iteration + 1);
+                    FeatType *dataPtr = forwardGhostVertexDataPtr(graph.getInEdgeGhostVertex(gvid).getLocalId(), iteration + 1);
                     memcpy(dataPtr, bufPtr, featSize);
                     bufPtr += featSize;
                 }
@@ -658,98 +692,131 @@ Engine::ghostCommunicator(unsigned tid, void *args) {
 
 /**
  *
- * Major part of the engine's backward-prop logic. Single-threaded.
+ * Major part of the engine's backward-prop logic.
  *
  */
 void
 Engine::backwardWorker(unsigned tid, void *args) {
-    if (tid == 0) {     // Only master thread does the actual work.
+    // A Stopwatch for composing steps of run().
+    double timeWorker = getTimer();
 
-        // Start a new lambda communication context.
-        resComm->newContextBackward(localVerticesZData, localVerticesActivationData, localVerticesLabels,
-                                       graph.getNumLocalVertices(), layerConfig);
-         // Trigger a request towards the coordicate server. Wait until the request completes.
-        std::thread treq([&] {
-            resComm->requestBackward(numLayers);
-        });
-        treq.join();
-       
+    const unsigned graphLocalVerticesNum = graph.getNumLocalVertices();
+    while (iteration > 0) {
+        if (tid == 0) {
+            printLog(nodeId, "Iteration %u starts.", iteration);
+            if (iteration < numLayers) {
+                delete[] backwardGhostVerticesData;
+            }
+            backwardGhostVerticesData = new FeatType[layerConfig[iteration] * graph.getNumOutEdgeGhostVertices()];
+            delete[] localVerticesDataBuf;
+            localVerticesDataBuf = new FeatType[layerConfig[iteration] * graphLocalVerticesNum];
+
+            // Start a new lambda communication context.
+            resComm->newContextBackward(localVerticesZData, localVerticesActivationData, localVerticesLabels,
+                                            graphLocalVerticesNum, layerConfig);
+            // resComm->requestBackward(iteration);
+
+            vecTimeLambda.push_back(getTimer() - timeWorker);
+            timeWorker = getTimer();
+            printLog(nodeId, "All lambda requests finished. Results received.");
+
+            sendBackwardGhostGradients();
+            vecTimeSendout.push_back(getTimer() - timeWorker);
+
+            //## Global Iteration barrier. ##//
+            nodeManager.barrier();
+            timeWorker = getTimer();
+            printLog(nodeId, "Global barrier after ghost data exchange crossed.");
+
+            currId = 0;
+        }
+        barComp.wait();
+
+        unsigned lvid = 0;
+        while (currId < graphLocalVerticesNum) {
+            lockCurrId.lock();
+            lvid = currId++;
+            lockCurrId.unlock();
+
+            if (lvid < graphLocalVerticesNum) {
+                // Backward Aggregation.
+                backwardAggregateFromNeighbors(lvid);
+            }
+        }
+        if (tid == 0) {
+            vecTimeAggregate.push_back(getTimer() - timeWorker);
+            timeWorker = getTimer();
+
+            iteration--;
+        }
+        barComp.wait();
+    }
+    if (tid == 0) {
+        printLog(nodeId, "Deciding to halt at iteration %u...", 0);
+        lockHalt.lock();
+        halt = true;
+        lockHalt.unlock();
     }
 }
 
 
 /**
  *
- * Get number of features in the current layer.
+ * Aggregate numFeats feature values starting from offset from all neighbors (including self). Then write the results to the
+ * data buffer area for serialization. The results are to be used for being sent to lambda threads.
  *
  */
-unsigned
-Engine::getNumFeats(unsigned layer) {
-    return layerConfig[layer];
-}
+void
+Engine::backwardAggregateFromNeighbors(unsigned lvid) {
+    unsigned numFeats = getNumFeats(iteration);
 
+    // Read out data of the current iteration of given vertex.
+    FeatType *currDataDst = localVertexDataBufPtr(lvid, iteration);
+    FeatType *currDataPtr = localVertexActivationDataPtr(lvid, iteration);
 
-/**
- *
- * Get the data pointer in dataAll area.
- *
- */
-FeatType *
-Engine::localVertexZDataPtr(unsigned lvid, unsigned layer) {
-    return (FeatType *) (localVerticesZData[layer]) + lvid * getNumFeats(layer);
-}
+    memcpy(currDataDst, currDataPtr, numFeats * sizeof(FeatType));
 
-FeatType *
-Engine::localVertexActivationDataPtr(unsigned lvid, unsigned layer) {
-    return (FeatType *) (localVerticesActivationData[layer]) + lvid * getNumFeats(layer);
-}
+    // Apply normalization factor on the current data.
+    Vertex& v = graph.getVertex(lvid);
+    for (unsigned i = 0; i < numFeats; ++i)
+        currDataDst[i] *= v.getNormFactor();
 
-FeatType *
-Engine::ghostVertexActivationDataPtr(unsigned lvid, unsigned layer) {
-    return (FeatType *) (ghostVerticesActivationData[layer]) + lvid * getNumFeats(layer);
-}
+    // Aggregate from incoming neighbors.
+    for (unsigned i = 0; i < v.getNumOutEdges(); ++i) {
+        FeatType *otherDataPtr;
+        EdgeType normFactor = v.getOutEdge(i).getData();
 
-
-/**
- *
- * Get the data pointer to a local vertex's data buffer.
- *
- */
-FeatType *
-Engine::localVertexDataBufPtr(unsigned lvid, unsigned layer) {
-    return (FeatType *) localVerticesDataBuf + lvid * getNumFeats(layer);
-}
-
-
-/**
- *
- * Get the data pointer to a local vertex's labels area.
- *
- */
-FeatType *
-Engine::localVertexLabelsPtr(unsigned lvid) {
-    return (FeatType *) localVerticesLabels + lvid * getNumFeats(numLayers);
+        if (v.getOutEdge(i).getEdgeLocation() == LOCAL_EDGE_TYPE) {    // Local vertex.
+            otherDataPtr = localVertexActivationDataPtr(v.getDestVertexLocalId(i), iteration);
+        } else {                                                       // Ghost vertex.
+            otherDataPtr = backwardGhostVertexDataPtr(v.getDestVertexLocalId(i), iteration);
+        }
+        // TODO: Locks on the data array area is not properly set yet. But does not affect forward prop.
+        for (unsigned j = 0; j < numFeats; ++j) {
+            currDataDst[j] += (otherDataPtr[j] * normFactor);
+        }
+    }
 }
 
 
 void
-Engine::sendGhostUpdates() {
+Engine::sendBackwardGhostGradients() {
     // Loop through all local vertices and do the data send out work. If there are any remote edges for a vertex, should send this vid to
     // other nodes for their ghost's update.
     // TODO: (YIFAN) process crashes when return if BATCH_SIZE is too large. Weird, to be fixed.
     // Please decrease BATCH_SIZE if porcess crashed.
     bool batchFlag = false;
     unsigned BATCH_SIZE = std::max(((batchFlag ? MAX_MSG_SIZE : 4096) - DATA_HEADER_SIZE) /
-                        (sizeof(unsigned) + sizeof(FeatType) * getNumFeats(iteration + 1)), 1ul); // at least send one vertex
+                        (sizeof(unsigned) + sizeof(FeatType) * getNumFeats(iteration)), 1ul); // at least send one vertex
     for (unsigned nid = 0; nid < numNodes; ++nid) {
         if (nid == nodeId) {
             continue;
         }
-        unsigned ghostVCnt = ghostVCnts[nid];
-        for (unsigned ib = 0; ib < ghostVCnt; ib += BATCH_SIZE) {
-            unsigned remainCnt = (ghostVCnt - ib) < BATCH_SIZE ? (ghostVCnt - ib) : BATCH_SIZE;
+        unsigned recvGhostVCnt = backwardGhostVCnts[nid];
+        for (unsigned ib = 0; ib < recvGhostVCnt; ib += BATCH_SIZE) {
+            unsigned remainCnt = (recvGhostVCnt - ib) < BATCH_SIZE ? (recvGhostVCnt - ib) : BATCH_SIZE;
 
-            verticesPushOut(nid, nodeId, remainCnt, batchMsgBuf[nid] + ib);
+            backwardVerticesPushOut(nid, nodeId, remainCnt, backwardBatchMsgBuf[nid] + ib);
             lockRecvCnt.lock();
             recvCnt++;
             lockRecvCnt.unlock();
@@ -764,9 +831,9 @@ Engine::sendGhostUpdates() {
 }
 
 
-void
-Engine::verticesPushOut(unsigned receiver, unsigned sender, unsigned totCnt, unsigned *lvids) {
-    const unsigned featSize = sizeof(FeatType) * getNumFeats(iteration + 1);
+inline void
+Engine::backwardVerticesPushOut(unsigned receiver, unsigned sender, unsigned totCnt, unsigned *lvids) {
+    const unsigned featSize = sizeof(FeatType) * getNumFeats(iteration);
     zmq::message_t msg(DATA_HEADER_SIZE + (sizeof(unsigned) + featSize) * totCnt);
     char *msgPtr = (char *)(msg.data());
     sprintf(msgPtr, NODE_ID_HEADER, receiver);
@@ -778,46 +845,79 @@ Engine::verticesPushOut(unsigned receiver, unsigned sender, unsigned totCnt, uns
     for (unsigned i = 0; i < totCnt; ++i) {
         *(unsigned *)msgPtr = graph.localToGlobalId[lvids[i]];
         msgPtr += sizeof(unsigned);
-        FeatType *dataPtr = localVertexActivationDataPtr(lvids[i], iteration + 1);
+        FeatType *dataPtr = localVertexActivationDataPtr(lvids[i], iteration);
         memcpy(msgPtr, dataPtr, featSize);
         msgPtr += featSize;
     }
-    CommManager::rawMsgPushOut(msg);
+    commManager.rawMsgPushOut(msg);
 }
+
 
 /**
  *
- * Aggregate numFeats feature values starting from offset from all neighbors (including self). Then write the results to the
- * data buffer area for serialization. The results are to be used for being sent to lambda threads.
+ * Major part of the engine's communication logic is done by data threads. These threads loop asynchronously with computation workers.
  *
  */
 void
-Engine::aggregateFromNeighbors(unsigned lvid) {
-    unsigned numFeats = getNumFeats(iteration);
+Engine::backwardGhostCommunicator(unsigned tid, void *args) {
+    // backoff sleep strategy to improve CPU utilization
+    int failedTrials = 0;
+    const int INIT_PERIOD = 256;
+    const int MAX_PERIOD = 4096;
+    int SLEEP_PERIOD = INIT_PERIOD;
+    unsigned sender, topic;
+    FeatType *msgBuf = (FeatType *)new char[MAX_MSG_SIZE];
 
-    // Read out data of the current iteration of given vertex.
-    FeatType *currDataDst = localVertexDataBufPtr(lvid, iteration);
-    FeatType *currDataPtr = localVertexActivationDataPtr(lvid, iteration);
-    memcpy(currDataDst, currDataPtr, numFeats * sizeof(FeatType));
+    // While loop, looping infinitely to get the next message.
+    while (1) {
+        // No message in queue.
+        if (!commManager.dataPullIn(&sender, &topic, msgBuf, MAX_MSG_SIZE)) {
+            // Computation workers done their work, so communicator goes to death as well.
+            if (halt) {
+                delete[] msgBuf;
+                return;
+            }
 
-    // Apply normalization factor on the current data.
-    Vertex& v = graph.getVertex(lvid);
-    for (unsigned i = 0; i < numFeats; ++i)
-        currDataDst[i] *= v.getNormFactor();
+            usleep(SLEEP_PERIOD); // sleep a little and give up CPUs
+            failedTrials++;
+            if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
+                failedTrials = 0;
+                SLEEP_PERIOD *= 2;
+            }
+            // Pull in the next message, and process this message.
+        } else {
+            // A normal ghost value broadcast.
+            if (topic < MAX_IDTYPE - 1) {
+                // Using MAX_IDTYPE - 1 as the receive signal.
+                commManager.dataPushOut(sender, nodeId, MAX_IDTYPE - 1, NULL, 0);
 
-    // Aggregate from incoming neighbors.
-    for (unsigned i = 0; i < v.getNumInEdges(); ++i) {
-        FeatType *otherDataPtr;
-        EdgeType normFactor = v.getInEdge(i).getData();
+                char *bufPtr = (char *)msgBuf;
+                unsigned recvGhostVCnt = topic;
+                unsigned featSize = sizeof(FeatType) * getNumFeats(iteration);
+                // Update ghost vertices
+                for (unsigned i = 0; i < recvGhostVCnt; ++i) {
+                    unsigned gvid = *(unsigned *)bufPtr;
+                    bufPtr += sizeof(unsigned);
+                    FeatType *dataPtr = backwardGhostVertexDataPtr(graph.getOutEdgeGhostVertex(gvid).getLocalId(), iteration);
+                    memcpy(dataPtr, bufPtr, featSize);
+                    bufPtr += featSize;
+                }
 
-        if (v.getInEdge(i).getEdgeLocation() == LOCAL_EDGE_TYPE)    // Local vertex.
-            otherDataPtr = localVertexActivationDataPtr(v.getSourceVertexLocalId(i), iteration);
-        else                                                        // Ghost vertex.
-            otherDataPtr = ghostVertexActivationDataPtr(v.getSourceVertexLocalId(i), iteration);
+                // A respond to a broadcast, and the topic vertex is in my local vertices. I should update the
+                // corresponding recvWaiter's value. If waiters become empty, send a signal in case the workers are
+                // waiting on it to be empty at the iteration barrier.
+            } else { // (topic == MAX_IDTYPE - 1)
+                lockRecvCnt.lock();
+                recvCnt--;
+                if (recvCnt == 0) {
+                    condRecvCnt.signal();
+                }
+                lockRecvCnt.unlock();
+            }
 
-        // TODO: Locks on the data array area is not properly set yet. But does not affect forward prop.
-        for (unsigned j = 0; j < numFeats; ++j)
-            currDataDst[j] += (otherDataPtr[j] * normFactor);
+            SLEEP_PERIOD = INIT_PERIOD;
+            failedTrials = 0;
+        }
     }
 }
 
@@ -830,13 +930,20 @@ Engine::aggregateFromNeighbors(unsigned lvid) {
 void
 Engine::printEngineMetrics() {
     printLog(nodeId, "<EM>: Initialization takes %.3lf ms", timeInit);
-    printLog(nodeId, "<EM>: Time per stage:");
+    printLog(nodeId, "<EM>: Forward:  Time per stage:");
     for (size_t i = 0; i < numLayers; ++i) {
         printLog(nodeId, "<EM>    Aggregation   %2d  %.3lf ms", i, vecTimeAggregate[i]);
         printLog(nodeId, "<EM>    Lambda        %2d  %.3lf ms", i, vecTimeLambda[i]);
         printLog(nodeId, "<EM>    Ghost update  %2d  %.3lf ms", i, vecTimeSendout[i]);
     }
     printLog(nodeId, "<EM>: Total forward-prop time %.3lf ms", timeForwardProcess);
+
+    printLog(nodeId, "<EM>: Backward: Time per stage:");
+    for (size_t i = numLayers; i < 2 * numLayers; i++) {
+        printLog(nodeId, "<EM>    Aggregation   %2d  %.3lf ms", i, vecTimeAggregate[i]);
+        printLog(nodeId, "<EM>    Lambda        %2d  %.3lf ms", i, vecTimeLambda[i]);
+        printLog(nodeId, "<EM>    Ghost update  %2d  %.3lf ms", i, vecTimeSendout[i]);
+    }
     printLog(nodeId, "<EM>: Backward-prop takes %.3lf ms", timeBackwardProcess);
 }
 
@@ -945,7 +1052,7 @@ Engine::parseArgs(int argc, char *argv[]) {
 
     assert(vm.count("wserveripfile"));
     weightserverIPFile = vm["wserveripfile"].as<std::string>();
-    
+
     assert(vm.count("coordserverip"));
     coordserverIp = vm["coordserverip"].as<std::string>();
 
@@ -957,15 +1064,15 @@ Engine::parseArgs(int argc, char *argv[]) {
 
     assert(vm.count("dataport"));
     unsigned data_port = vm["dataport"].as<unsigned>();
-    CommManager::setDataPort(data_port);
+    commManager.setDataPort(data_port);
 
     assert(vm.count("ctrlport"));
     unsigned ctrl_port = vm["ctrlport"].as<unsigned>();
-    CommManager::setControlPortStart(ctrl_port);
+    commManager.setControlPortStart(ctrl_port);
 
     assert(vm.count("nodeport"));
     unsigned node_port = vm["nodeport"].as<unsigned>();
-    NodeManager::setNodePort(node_port);
+    nodeManager.setNodePort(node_port);
 
     assert(vm.count("numlambdasforward"));
     numLambdasForward = vm["numlambdasforward"].as<unsigned>();
@@ -1041,8 +1148,8 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
     feature_vec.resize(nFeats);
     while (infile.read(reinterpret_cast<char *> (&feature_vec[0]) , sizeof(FeatType) * nFeats)) {
         // Set the vertex's initial values, if it is one of my local vertices / ghost vertices.
-        if (graph.containsGhostVertex(gvid)) {      // Global vertex.
-            FeatType *actDataPtr = ghostVertexActivationDataPtr(graph.getGhostVertex(gvid).getLocalId(), 0);
+        if (graph.containsInEdgeGhostVertex(gvid)) {      // Global vertex.
+            FeatType *actDataPtr = forwardGhostInitDataPtr(graph.getInEdgeGhostVertex(gvid).getLocalId(), 0);
             memcpy(actDataPtr, feature_vec.data(), feature_vec.size() * sizeof(FeatType));
         } else if (graph.containsVertex(gvid)) {    // Local vertex.
             FeatType *zDataPtr = localVertexZDataPtr(graph.getVertexByGlobal(gvid).getLocalId(), 0);
@@ -1152,7 +1259,7 @@ Engine::readPartsFile(std::string& partsFileName, Graph& lGraph) {
  *
  */
 void
-Engine::processEdge(unsigned& from, unsigned& to, Graph& lGraph, std::set<unsigned> *inTopics, std::set<unsigned> *oTopics, int **ghostVTables, unsigned *ghostVCnts) {
+Engine::processEdge(unsigned& from, unsigned& to, Graph& lGraph, std::set<unsigned> *inTopics, std::set<unsigned> *oTopics, int **forwardGhostVTables, int **backwardGhostVTables) {
     if (lGraph.getVertexPartitionId(from) == nodeId) {
         unsigned lFromId = lGraph.globalToLocalId[from];
         unsigned toId;
@@ -1167,9 +1274,14 @@ Engine::processEdge(unsigned& from, unsigned& to, Graph& lGraph, std::set<unsign
             eLocation = REMOTE_EDGE_TYPE;
             lGraph.getVertex(lFromId).setVertexLocation(BOUNDARY_VERTEX);
 
-            if (ghostVTables[toPartition][lFromId] == 0) {
-                ghostVTables[toPartition][lFromId] = 1;
-                ghostVCnts[toPartition]++;
+            if (!lGraph.containsOutEdgeGhostVertex(to)) {
+                lGraph.getOutEdgeGhostVertices()[to] = GhostVertex();
+            }
+            lGraph.getOutEdgeGhostVertex(to).addAssocEdge(lFromId);
+
+            if (forwardGhostVTables[toPartition][lFromId] == 0) {
+                forwardGhostVTables[toPartition][lFromId] = 1;
+                forwardGhostVCnts[toPartition]++;
             }
 
             if (oTopics != NULL)
@@ -1184,16 +1296,23 @@ Engine::processEdge(unsigned& from, unsigned& to, Graph& lGraph, std::set<unsign
         unsigned fromId;
         EdgeLocationType eLocation;
 
-        if (lGraph.getVertexPartitionId(from) == nodeId) {
+        unsigned fromPartition = lGraph.getVertexPartitionId(from);
+        if (fromPartition == nodeId) {
             fromId = lGraph.globalToLocalId[from];
             eLocation = LOCAL_EDGE_TYPE;
         } else {
             fromId = from;
             eLocation = REMOTE_EDGE_TYPE;
 
-            if (!lGraph.containsGhostVertex(from))
-                lGraph.getGhostVertices()[from] = GhostVertex();
-            lGraph.getGhostVertex(from).addOutEdge(lToId);
+            if (!lGraph.containsInEdgeGhostVertex(from)) {
+                lGraph.getInEdgeGhostVertices()[from] = GhostVertex();
+            }
+            lGraph.getInEdgeGhostVertex(from).addAssocEdge(lToId);
+
+            if (backwardGhostVTables[fromPartition][lToId] == 0) {
+                backwardGhostVTables[fromPartition][lToId] = 1;
+                backwardGhostVCnts[fromPartition]++;
+            }
 
             if (inTopics != NULL)
                 inTopics->insert(from);
@@ -1212,20 +1331,33 @@ Engine::processEdge(unsigned& from, unsigned& to, Graph& lGraph, std::set<unsign
 void
 Engine::setEdgeNormalizations() {
     for (Vertex& vertex : graph.getVertices()) {
-        unsigned dstDeg = vertex.getNumInEdges() + 1;
-        float dstNorm = std::pow(dstDeg, -.5);
-        vertex.setNormFactor(dstNorm * dstNorm);
+        unsigned vtxDeg = vertex.getNumInEdges() + 1;
+        float vtxNorm = std::pow(vtxDeg, -.5);
+        vertex.setNormFactor(vtxNorm * vtxNorm);
         for (unsigned i = 0; i < vertex.getNumInEdges(); ++i) {
             InEdge& e = vertex.getInEdge(i);
             unsigned vid = e.getSourceId();
             if (e.getEdgeLocation() == LOCAL_EDGE_TYPE) {
                 unsigned srcDeg = graph.getVertex(vid).getNumInEdges() + 1;
                 float srcNorm = std::pow(srcDeg, -.5);
-                e.setData(srcNorm * dstNorm);
+                e.setData(srcNorm * vtxNorm);
             } else {
-                unsigned ghostDeg = graph.getGhostVertex(vid).getDegree() + 1;
+                unsigned ghostDeg = graph.getInEdgeGhostVertex(vid).getDegree() + 1;
                 float ghostNorm = std::pow(ghostDeg, -.5);
-                e.setData(ghostNorm * dstNorm);
+                e.setData(ghostNorm * vtxNorm);
+            }
+        }
+        for (unsigned i = 0; i < vertex.getNumOutEdges(); ++i) {
+            OutEdge& e = vertex.getOutEdge(i);
+            unsigned vid = e.getDestId();
+            if (e.getEdgeLocation() == LOCAL_EDGE_TYPE) {
+                unsigned dstDeg = graph.getVertex(vid).getNumOutEdges() + 1;
+                float dstNorm = std::pow(dstDeg, -.5);
+                e.setData(vtxNorm * dstNorm);
+            } else {
+                unsigned ghostDeg = graph.getOutEdgeGhostVertex(vid).getDegree() + 1;
+                float ghostNorm = std::pow(ghostDeg, -.5);
+                e.setData(vtxNorm * ghostNorm);
             }
         }
     }
@@ -1250,11 +1382,16 @@ Engine::findGhostDegrees(std::string& fileName) {
 
     unsigned srcdst[2];
     while (infile.read((char *) srcdst, bsHeader.sizeOfVertexType * 2)) {
-        if (srcdst[0] == srcdst[1])
+        if (srcdst[0] == srcdst[1]) {
             continue;
+        }
 
-        if (graph.containsGhostVertex(srcdst[1]))
-            graph.getGhostVertex(srcdst[1]).incrementDegree();
+        if (graph.containsOutEdgeGhostVertex(srcdst[0])) {
+            graph.getOutEdgeGhostVertex(srcdst[0]).incrementDegree();
+        }
+        if (graph.containsInEdgeGhostVertex(srcdst[1])) {
+            graph.getInEdgeGhostVertex(srcdst[1]).incrementDegree();
+        }
     }
 
     infile.close();
@@ -1294,14 +1431,17 @@ Engine::readGraphBS(std::string& fileName, std::set<unsigned>& inTopics, std::ve
     infile.read((char *) &bSHeader, sizeof(bSHeader));
     assert(bSHeader.sizeOfVertexType == sizeof(unsigned));
 
-    const unsigned graphLocalVertices = graph.getNumLocalVertices();
-    int **ghostVTables = new int*[numNodes];
+    const unsigned graphLocalVerticesNum = graph.getNumLocalVertices();
+    int **forwardGhostVTables = new int*[numNodes];
+    int **backwardGhostVTables = new int*[numNodes];
     for (unsigned i = 0; i < numNodes; ++i) {
         if (i == nodeId) {
             continue;
         }
-        ghostVTables[i] = new int[graphLocalVertices];
-        memset(ghostVTables[i], 0, sizeof(int) * graphLocalVertices);
+        forwardGhostVTables[i] = new int[graphLocalVerticesNum];
+        backwardGhostVTables[i] = new int[graphLocalVerticesNum];
+        memset(forwardGhostVTables[i], 0, sizeof(int) * graphLocalVerticesNum);
+        memset(backwardGhostVTables[i], 0, sizeof(int) * graphLocalVerticesNum);
     }
 
     // Loop through all edges and process them.
@@ -1311,33 +1451,41 @@ Engine::readGraphBS(std::string& fileName, std::set<unsigned>& inTopics, std::ve
         if (srcdst[0] == srcdst[1])
             continue;
 
-        processEdge(srcdst[0], srcdst[1], graph, &inTopics, &oTopics, ghostVTables, ghostVCnts);
+        processEdge(srcdst[0], srcdst[1], graph, &inTopics, &oTopics, forwardGhostVTables, backwardGhostVTables);
         if (undirected)
-            processEdge(srcdst[1], srcdst[0], graph, &inTopics, &oTopics, ghostVTables, ghostVCnts);
+            processEdge(srcdst[1], srcdst[0], graph, &inTopics, &oTopics, forwardGhostVTables, backwardGhostVTables);
         graph.incrementNumGlobalEdges();
     }
 
     for (unsigned i = 0; i < numNodes; ++i) {
         if (i == nodeId) {
-            batchMsgBuf[i] = NULL;
+            forwardBatchMsgBuf[i] = NULL;
+            backwardBatchMsgBuf[i] = NULL;
             continue;
         }
-        batchMsgBuf[i] = new unsigned[ghostVCnts[i]];
+        forwardBatchMsgBuf[i] = new unsigned[forwardGhostVCnts[i]];
+        backwardBatchMsgBuf[i] = new unsigned[backwardGhostVCnts[i]];
         unsigned cnt = 0;
-        for (unsigned j = 0; j < graphLocalVertices; ++j) {
-            if (ghostVTables[i][j]) {
-                batchMsgBuf[i][cnt] = j;
+        for (unsigned j = 0; j < graphLocalVerticesNum; ++j) {
+            if (forwardGhostVTables[i][j]) {
+                forwardBatchMsgBuf[i][cnt] = j;
                 cnt++;
             }
+            if (backwardGhostVTables[i][j]) {
+                backwardBatchMsgBuf[i][cnt] = j;
+            }
         }
-        delete[] ghostVTables[i];
+        delete[] forwardGhostVTables[i];
+        delete[] backwardGhostVTables[i];
     }
-    delete[] ghostVTables;
+    delete[] forwardGhostVTables;
+    delete[] backwardGhostVTables;
 
     infile.close();
 
     // Extra works added.
-    graph.setNumGhostVertices(graph.getGhostVertices().size());
+    graph.setNumInEdgeGhostVertices(graph.getInEdgeGhostVertices().size());
+    graph.setNumOutEdgeGhostVertices(graph.getOutEdgeGhostVertices().size());
     findGhostDegrees(edgeFileName);
     setEdgeNormalizations();
 

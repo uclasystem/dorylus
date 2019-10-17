@@ -6,6 +6,7 @@
 
 
 cd ${HOME}/gnn-lambda/
+
 build_GPU='no'
 
 if [[ $1 == "GPU" || $1 == "gpu" ]]; then

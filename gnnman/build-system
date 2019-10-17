@@ -27,14 +27,15 @@ fi
 # For graph servers.
 if [[ -z $1 ]] || [[ $1 == "graph" ]]; then
     echo "Processing context 'graph'..."
-    ${EC2MAN_CMD} graph 0 ssh -t "cd gnn-lambda && ./gnnman/helpers/graphserver.bld && ./gnnman/helpers/send-file build/graphserver"
+    # ${EC2MAN_CMD} graph 0 ssh -t "cd gnn-lambda && ./gnnman/helpers/graphserver.bld && ./gnnman/helpers/send-folder build/graph-server"
+    ${EC2MAN_CMD} graph 0 ssh -t "cd gnn-lambda && ./gnnman/helpers/graphserver.bld && ./gnnman/helpers/send-file build/graphserver && ./gnnman/helpers/send-file build/graph-server/commmanager/liblambda_comm.so && ./gnnman/helpers/send-file build/src/common/libmatrix.so"
 fi
 
 
-# For graph servers.
+# For weight servers.
 if [[ -z $1 ]] || [[ $1 == "weight" ]]; then
     echo "Processing context 'weight'..."
-    ${EC2MAN_CMD} weight 0 ssh -t "cd gnn-lambda && ./gnnman/helpers/weightserver.bld && ./gnnman/helpers/send-file build/weightserver"
+    ${EC2MAN_CMD} weight 0 ssh -t "cd gnn-lambda && ./gnnman/helpers/weightserver.bld && ./gnnman/helpers/send-folder build"
 fi
 
 

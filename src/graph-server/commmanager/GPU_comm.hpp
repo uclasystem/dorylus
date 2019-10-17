@@ -97,6 +97,4 @@ private:
 };
 
 
-
-
 #endif // GPU_COMM_HPP

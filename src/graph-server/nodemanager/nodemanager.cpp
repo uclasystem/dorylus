@@ -8,16 +8,6 @@
 #include "../utils/utils.hpp"
 
 
-/** Extern class-wide fields. */
-Node NodeManager::me;
-std::vector<Node> NodeManager::allNodes;
-bool NodeManager::inBarrier = false;
-zmq::context_t NodeManager::nodeContext;                // Node barriering sockets & locks.
-zmq::socket_t *NodeManager::nodePublisher = NULL;
-zmq::socket_t *NodeManager::nodeSubscriber = NULL;
-unsigned NodeManager::nodePort;
-
-
 /**
  *
  * Initialize the communication manager. Should be done before initializing the CommManager.
