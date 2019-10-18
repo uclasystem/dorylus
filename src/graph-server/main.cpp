@@ -19,6 +19,9 @@ main(int argc, char *argv[]) {
     Engine engine;
     engine.init(argc, argv);
 
+    engine.runForward(true);
+    engine.destroy();
+/*
     float splitPortion = 1.0 / 3.0;
     unsigned numEpochs = 2;
     unsigned valFreq = 10;
@@ -58,6 +61,6 @@ main(int argc, char *argv[]) {
 
     // Destroy the engine.
     engine.destroy();
-
+*/
     return 0;
 }
