@@ -226,19 +226,18 @@ Engine::runForward(bool eval) {
 
     const unsigned graphLocalVerticesNum = graph.getNumLocalVertices();
     // Create buffer for first-layer aggregation.
-    FeatType *inputTensor = new FeatType[getFeatDim(0) * graphLocalVerticesNum];
-    FeatType *outputTensor = NULL;
+    FeatType *inputTensor = localVerticesActivationData[0];
     forwardGhostVerticesData = forwardGhostInitData;
     for (iteration = 0; iteration < numLayers; iteration++) {
-        outputTensor = aggregate(inputTensor, graphLocalVerticesNum, getFeatDim(iteration));
-        outputTensor = invokeLambda(outputTensor, graphLocalVerticesNum, getFeatDim(iteration), getFeatDim(iteration + 1));
-        outputTensor = scatter(outputTensor, graphLocalVerticesNum, getFeatDim(iteration + 1));
+        inputTensor = aggregate(inputTensor, graphLocalVerticesNum, getFeatDim(iteration));
+        inputTensor = invokeLambda(inputTensor, graphLocalVerticesNum, getFeatDim(iteration), getFeatDim(iteration + 1));
+        inputTensor = scatter(inputTensor, graphLocalVerticesNum, getFeatDim(iteration + 1));
     }
 
     timeForwardProcess += getTimer();
     printLog(nodeId, "Engine completes FORWARD at iter %u.", iteration);
 
-    return outputTensor;
+    return inputTensor;
 }
 
 
@@ -274,7 +273,7 @@ Engine::runBackward(FeatType *backwardInitData) {
             vecTimeLambda.push_back(0.0);
             vecTimeSendout.push_back(0.0);
         }
-        printLog(nodeId, "Engine skips BACKWRAD propagation.");
+        printLog(nodeId, "Engine skips BACKWARD propagation.");
     } else {
         // Start data communicators.
         auto bgc_fp = std::bind(&Engine::backwardGhostCommunicator, this, std::placeholders::_1, std::placeholders::_2);
@@ -297,6 +296,7 @@ Engine::runBackward(FeatType *backwardInitData) {
     for (size_t i = 1; i <= numLayers; ++i) {
         delete[] localVerticesZData[i];
         delete[] localVerticesActivationData[i];
+        savedTensors[i-1].clear();
     }
 
     printLog(nodeId, "Engine completes BACKWARD propagation.");
@@ -435,6 +435,7 @@ FeatType* Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned fea
     double sttTimer = getTimer();
 
     FeatType *outputTensor = new FeatType [vtcsCnt * featDim];
+    currId = 0;
 
     AggOPArgs args = {outputTensor, vtcsTensor, vtcsCnt, featDim};
     auto computeFn = std::bind(&Engine::aggregateCompute, this, std::placeholders::_1, std::placeholders::_2);
@@ -443,6 +444,7 @@ FeatType* Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned fea
 
     if (iteration > 0) {
         delete[] forwardGhostVerticesData;
+        delete[] vtcsTensor;
     }
 
     if (vecTimeAggregate.size() < numLayers) {
@@ -742,8 +744,7 @@ Engine::backwardWorker(unsigned tid, void *args) {
             // Start a new lambda communication context.
             // TODO: (YIFAN) currently set new context for backward once is enough. Change the newContextBackward interface
             resComm->newContextBackward(aggGradData, newGradData, savedTensors, localVerticesLabels, graphLocalVerticesNum, getFeatDim(iteration - 1), getFeatDim(iteration), getFeatDim(numLayers));
-            resComm->requestBackward(iteration);
-
+            resComm->requestBackward(iteration - 1);
             vecTimeLambda.push_back(getTimer() - timeWorker);
             timeWorker = getTimer();
             printLog(nodeId, "All lambda requests finished. Results received.");
