@@ -17,6 +17,7 @@
 #include "../parallel/cond.hpp"
 #include "../parallel/barrier.hpp"
 #include "../utils/utils.hpp"
+#include "../../common/matrix.hpp"
 
 
 #define MAX_MSG_SIZE (256 * 1024)   // Max size (bytes) for a message received by the data communicator.
@@ -59,8 +60,8 @@ public:
 
     // Public APIs for benchmarks.
     void init(int argc, char *argv[]);
-    void runForward(bool eval = false);
-    void runBackward();
+    FeatType *runForward(bool eval = false);
+    void runBackward(FeatType *backwardInitData);
     void output();
     void destroy();
     bool master();
@@ -102,9 +103,12 @@ private:
     std::vector<unsigned> layerConfig;      // Config of number of features in each layer.
     unsigned numLayers = 0;
 
-    std::vector<FeatType *> *savedTensors; // intermediate data for backward computation.
+    std::vector<Matrix> *savedTensors; // intermediate data for backward computation.
     FeatType **localVerticesZData;       // Global contiguous array for all vertices' data (row-wise order).
     FeatType **localVerticesActivationData;
+
+    FeatType *aggGradData;
+    FeatType *newGradData;
 
     FeatType *forwardGhostInitData;
     FeatType *forwardGhostVerticesData;

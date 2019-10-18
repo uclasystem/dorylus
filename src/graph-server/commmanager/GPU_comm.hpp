@@ -25,8 +25,8 @@
 
 /**
  *
- * Communicate with local GPU process using IPC 
- * 
+ * Communicate with local GPU process using IPC
+ *
  */
 class GPUComm : public ResourceComm{
 
@@ -44,6 +44,8 @@ public:
     // For backward-prop.
     void newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType *targetBuf,
                             unsigned numLocalVertices, std::vector<unsigned> layerConfig);
+    void newContextBackward(FeatType *oldGradBuf, FeatType *newGradBuf, FeatType *savedInputBuf, FeatType *savedOutputBuf, FeatType *targetBuf,
+                            unsigned numLocalVertices_, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim) {};
     void requestBackward(unsigned numLayers);
     void sendBackpropChunks();
 
@@ -79,7 +81,7 @@ private:
     float split;
 
 
-    //backward 
+    //backward
     std::vector<Matrix> zMatrices;
     std::vector<Matrix> actMatrices;
     Matrix targetMatrix;

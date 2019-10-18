@@ -39,17 +39,17 @@ main(int argc, char *argv[]) {
                 printLog(engine.getNodeId(), "Time for some validation");
 
             // Boolean of whether or not to run evaluation
-            engine.runForward(true);
+            FeatType *predictData = engine.runForward(true);
 
             engine.makeBarrier();
 
-            engine.runBackward();
+            engine.runBackward(predictData);
         } else {
-            engine.runForward();
+            FeatType *predictData = engine.runForward();
 
             // Do a backward-prop phase.
             if (engine.isGPUEnabled() == 0)
-                engine.runBackward();
+                engine.runBackward(predictData);
         }
     }
 
