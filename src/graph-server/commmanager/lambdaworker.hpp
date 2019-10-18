@@ -94,7 +94,7 @@ private:
     // Partitions the needed matrices according to the partition id and
     // send that partition to the lambda thread for computation.
     void sendChunk(Matrix &srcMat, zmq::message_t& client_id, unsigned partId, bool forward);
-    void recvChunk(Matrix &dstMat, zmq::message_t& client_id, unsigned partId);
+    void recvChunk(Matrix &dstMat, zmq::message_t& client_id, unsigned partId, bool forward);
 
     // Partitions the label matrix given a partition id and
     // and send that partition to the lambda thread for validation

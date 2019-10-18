@@ -27,17 +27,17 @@ using boost::property_tree::write_json;
 using namespace aws::lambda_runtime;
 using namespace std::chrono;
 
-bool evaluate = false;
+bool lastLayer = false;
 
 
 /**
  *
  * Request the input matrix data from dataserver.
- * 
+ *
  */
 static Matrix
 requestMatrix(zmq::socket_t& socket, OP op, unsigned id, bool data = false) {
-    
+
     // Send pull request.
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char *) header.data(), op, id);
@@ -55,11 +55,6 @@ requestMatrix(zmq::socket_t& socket, OP op, unsigned id, bool data = false) {
     } else {                    // Get matrix data.
         unsigned rows = parse<unsigned>((char *) respHeader.data(), 2);
         unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
-        // If talking to the graph servers, tell us if this is training or validation
-        if (data) {
-            unsigned eval = parse<unsigned>((char*) respHeader.data(), 4);
-            evaluate = bool(eval);
-        }
 
         zmq::message_t matxData(rows * cols * sizeof(FeatType));
         socket.recv(&matxData);
@@ -76,11 +71,11 @@ requestMatrix(zmq::socket_t& socket, OP op, unsigned id, bool data = false) {
 /**
  *
  * Request the input matrix data from weightserver.
- * 
+ *
  */
 static Matrix
 requestWeightsMatrix(zmq::socket_t& socket, unsigned layer) {
-    
+
     // Send pull request.
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char *) header.data(), OP::PULL_FORWARD, layer);
@@ -113,11 +108,11 @@ requestWeightsMatrix(zmq::socket_t& socket, unsigned layer) {
 /**
  *
  * Send multiplied matrix result back to dataserver.
- * 
+ *
  */
 static void
 sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned id) {
-    
+
     // Send push header.
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char *) header.data(), OP::PUSH_FORWARD, id, zResult.getRows(), zResult.getCols());
@@ -136,11 +131,25 @@ sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned
     socket.recv(&confirm);
 }
 
+static void
+sendWeightUpdates(zmq::socket_t& socket, Matrix& weightUpdates, unsigned layer) {
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader((char*) header.data(), OP::PUSH_BACKWARD, layer);
+    socket.send(header, ZMQ_SNDMORE);
+
+    zmq::message_t updateMsg(weightUpdates.getDataSize());
+    std::memcpy(updateMsg.data(), weightUpdates.getData(), weightUpdates.getDataSize());
+    socket.send(updateMsg);
+
+    zmq::message_t confirm;
+    socket.recv(&confirm);
+}
+
 
 /**
  *
  * Matrix multiplication function.
- * 
+ *
  */
 static Matrix
 dot(Matrix& features, Matrix& weights) {
@@ -158,13 +167,13 @@ dot(Matrix& features, Matrix& weights) {
 /**
  *
  * Apply activation function on a matrix.
- * 
+ *
  */
 static Matrix
 activate(Matrix& mat) {
     FeatType *activationData = new FeatType[mat.getNumElemts()];
     FeatType *zData = mat.getData();
-    
+
     for (unsigned i = 0; i < mat.getNumElemts(); ++i)
         activationData[i] = std::tanh(zData[i]);
 
@@ -286,17 +295,41 @@ evaluateModel(Matrix& activations, zmq::socket_t& datasocket, unsigned partId) {
     datasocket.recv(&confirm);
 }
 
+static Matrix
+gradLoss(Matrix& z, Matrix& weights, Matrix& AH, zmq::socket_t& weightSocket,
+         unsigned partId, unsigned layer) {
+    Matrix labels = requestMatrix(datasocket, OP::PULL_EVAL, partId);
+    Matrix predictions = softmax(z);
+
+    Matrix d_out = predictions - labels;
+
+    // True indicating that AH is transposed
+    // NOTE:
+    //  In the future it would make more sense to return the d_AH
+    //  values to the server first so that computation can proceed
+    //  and then calculate the weight updates as there are no
+    //  dependencies on the weight updates
+    Matrix weightUpdates = AH.dot(d_out, true);
+
+    sendWeightUpdates(weightSocket, weightUpdates, layer);
+
+    // True here indicating the weights are transposed
+    Matrix d_AH = d_out.dot(weights, false, true);
+
+    return d_AH;
+}
+
 /**
  *
  * Main logic:
- * 
+ *
  *      1. Querying matrix data from dataserver;
  *      2. Querying weight matrix from weightserver;
  *      3. Conduct the matrix multiplication to get Z matrix;
  *      4. Perform activation on Z to get Activated matrix;
  *      5. Send both matrices back to data server.
  *      6. If evaluate is true, check the model precision
- * 
+ *
  */
 static invocation_response
 forward_prop_layer(std::string dataserver, std::string weightserver, std::string dport, std::string wport,
@@ -334,22 +367,22 @@ forward_prop_layer(std::string dataserver, std::string weightserver, std::string
         char dhost_port[50];
         sprintf(dhost_port, "tcp://%s:%s", dataserver.c_str(), dport.c_str());
         data_socket.connect(dhost_port);
-        
+
         // Request weights matrix of the current layer.
         std::thread t([&] {     // Weight requests run in a separate thread.
-            //std::cout << "< FORWARD > Asking weightserver..." << std::endl;
+            std::cout << "< FORWARD > Asking weightserver..." << whost_port << std::endl;
             getWeightsTimer.start();
             weights = requestMatrix(weights_socket, OP::PULL_FORWARD, layer);
             getWeightsTimer.stop();
-            //std::cout << "< FORWARD > Got data from weightserver." << std::endl;
+            std::cout << "< FORWARD > Got data from weightserver." << dhost_port << std::endl;
         });
 
         // Request feature activation matrix of the current layer.
-        //std::cout << "< FORWARD > Asking dataserver..." << std::endl;
+        std::cout << "< FORWARD > Asking dataserver..." << std::endl;
         getFeatsTimer.start();
         feats = requestMatrix(data_socket, OP::PULL_FORWARD, id, true);
         getFeatsTimer.stop();
-        //std::cout << "< FORWARD > Got data from dataserver." << std::endl;
+        std::cout << "< FORWARD > Got data from dataserver." << std::endl;
 
         t.join();
 
@@ -361,24 +394,18 @@ forward_prop_layer(std::string dataserver, std::string weightserver, std::string
 
         // Multiplication.
         computationTimer.start();
-        //std::cout << "< FORWARD > Doing the dot multiplication..." << std::endl;
-        z = dot(feats, weights);
-
-        // Activation.
-        //std::cout << "< FORWARD > Doing the activation..." << std::endl;
-        activations = activate(z);
+        z = feats.dot(weights);
         computationTimer.stop();
 
-        // Send back to dataserver.
-        sendResTimer.start();
-        //std::cout << "< FORWARD > Sending results back..." << std::endl;
-        sendMatrices(z, activations, data_socket, id);
-        //std::cout << "< FORWARD > Results sent." << std::endl;
-        sendResTimer.stop();
 
-        if (evaluate) {
-            evaluateModel(activations, data_socket, id);
-		}
+        if (lastLayer) {
+            activations = softmax(z);
+        } else {
+            activations = activate(z);
+        }
+        sendResTimer.start();
+        sendMatrices(z, activations, data_socket, id);
+        sendResTimer.stop();
 
         // Delete malloced spaces.
         delete[] weights.getData();
@@ -415,16 +442,17 @@ my_handler(invocation_request const& request) {
     std::string wport = pt.get<std::string>("wport");
     unsigned layer = pt.get<int>("layer");
     unsigned chunkId = pt.get<int>("id");
+    lastLayer = pt.get<bool>("lastLayer");
 
     std::cout << "[ACCEPTED] Thread " << chunkId << " is requested from " << dataserver << ":" << dport
               << ", FORWARD layer " << layer << "." << std::endl;
 
-    return forward_prop_layer(dataserver, weightserver, dport, wport, chunkId, layer);
+    return forward_prop_layer(dataserver, weightserver, dport, wport, chunkId, layer, lastLayer);
 }
 
 int
 main(int argc, char *argv[]) {
     run_handler(my_handler);
-    
+
     return 0;
 }

@@ -47,6 +47,7 @@ LambdaWorker::work() {
 
             switch (op) {
                 case (OP::PULL_FORWARD):
+                    printLog(nodeId, "recv PULL FORWARD");
                     sendAggregatedChunk(identity, partId);
                     break;
                 case (OP::PUSH_FORWARD):
@@ -55,17 +56,14 @@ LambdaWorker::work() {
                 case (OP::PULL_BACKWARD):
                     {
                         unsigned matType = parse<unsigned>((char *) header.data(), 2);
-                        printLog(nodeId, "send a matrix, type %u", matType);
                         if (matType == TYPE::GRAD) {
                             sendChunk(oldGradMatrix, identity, partId, false);
                         } else if (matType == TYPE::AH || matType == TYPE::Z || matType == TYPE::ACT) {
                             unsigned layer = parse<unsigned>((char *) header.data(), 3);
-                            printLog(nodeId, "layer %u", layer);
-                            sendChunk(savedTensors[layer - 1][matType - 1], identity, partId, false);
+                            sendChunk(savedTensors[layer][matType - 1], identity, partId, false);
                         } else if (matType == TYPE::LAB) {
                             sendChunk(targetMatrix, identity, partId, false);
                         }
-                        printLog(nodeId, "finish sending the mat.");
                     }
                     // sendBackpropChunks(identity, partId);
                     break;
@@ -77,7 +75,7 @@ LambdaWorker::work() {
                     break;
                 case (OP::PUSH_BACKWARD):
                     // recvBackpropFinishMsg(identity);
-                    recvChunk(newGradMatrix, identity, partId);
+                    recvChunk(newGradMatrix, identity, partId, false);
                     break;
                 default:
                     break;  /** Not an op that I care about. */
@@ -225,7 +223,7 @@ LambdaWorker::sendChunk(Matrix &srcMat, zmq::message_t& client_id, unsigned part
 }
 
 void
-LambdaWorker::recvChunk(Matrix &dstMat, zmq::message_t &client_id, unsigned partId) {
+LambdaWorker::recvChunk(Matrix &dstMat, zmq::message_t &client_id, unsigned partId, bool forward) {
     unsigned partRows = (dstMat.getRows() + numLambdasBackward) / numLambdasBackward;
     FeatType *partitionStart = dstMat.getData() + partId * partRows * numFeatsNext;
 
@@ -241,9 +239,16 @@ LambdaWorker::recvChunk(Matrix &dstMat, zmq::message_t &client_id, unsigned part
 
     // Check for total number of partitions received. If all partitions received, wake up lambdaComm.
     std::lock_guard<std::mutex> lk(count_mutex);
-    ++countForward;
-    if (countForward == numLambdasBackward)
-        cv_forward.notify_one();
+    if (forward) {
+        ++countForward;
+        if (countForward == numLambdasBackward)
+            cv_forward.notify_one();
+    } else {
+        ++countBackward;
+        if (countBackward == numLambdasBackward) {
+            cv_backward.notify_one();
+        }
+    }
 }
 
 void

@@ -115,6 +115,110 @@ WeightServer::run() {
  * Apply the updates in queue.
  *
  */
+void WeightServer::applyUpdate(unsigned layer) {
+    Timer updateTimer;
+    updateTimer.start();
+    // Master code.
+    if (master) {
+        // For all nodes.
+        for (unsigned i = 0; i < allNodeIps.size() - 1; ++i) {
+            // Recv update info from other weight servers and aggregate.
+            zmq::message_t updateMsg;
+            subscriber.recv(&updateMsg);
+
+            FeatType *updateSum = updateMats[layer].getData();
+            FeatType *updateNew = (FeatType *) updateMsg.data();
+            for (unsigned u = 0; u < updateMats[layer].getNumElemts(); ++u)
+                updateSum[u] += updateNew[u];
+        }
+
+        // If adam is enabled, apply the momentum and decay computation
+        if (adam) {}
+
+        // Once all updates have been aggregated, apply to the weights matrices.
+        FeatType *weightData = weightMats[layer].getData();
+        FeatType *updateSum = updateMats[layer].getData();
+        for (unsigned u = 0; u < weightMats[layer].getNumElemts(); ++u)
+            weightData[u] -= updateSum[u];
+
+        // Send out the updated weights.
+        Matrix& weightMat = weightMats[layer];
+        zmq::message_t weightDataMsg(weightMat.getDataSize());
+        std::memcpy(weightDataMsg.data(), weightMat.getData(), weightMat.getDataSize());
+ 
+        publisher.send(weightDataMsg);
+
+        // Wait for all ACK messages.
+        zmq::message_t inMsg;
+        unsigned acksNeeded = allNodeIps.size() - 1;
+        while (acksNeeded > 0) {
+            subscriber.recv(&inMsg);
+
+            unsigned msgType;
+            std::memcpy(&msgType, inMsg.data(), inMsg.size());
+            if (msgType == CTRL_MSG::ACK)
+                acksNeeded--;
+        }
+
+        serverLog("Finished updating the weights.");
+
+        //
+        // Uncomment below to write updated weights results to `output_0` for correctness checking.
+        //
+        if (checkCorrectnessFlag) {
+            for (Matrix& mat : weightMats)
+                outfile << mat.str() << std::endl;
+        }
+
+    // Worker code.
+    } else {
+
+        // Send all updated weight matrices to the master for aggregation.
+        for (unsigned i = 0; i < updateMats.size(); ++i) {
+            Matrix& updateMat = updateMats[i];
+            zmq::message_t updateDataMsg(updateMat.getDataSize());
+            std::memcpy(updateDataMsg.data(), updateMat.getData(), updateMat.getDataSize());
+
+            if (i == updateMats.size() - 1)
+                publisher.send(updateDataMsg);
+            else
+                publisher.send(updateDataMsg, ZMQ_SNDMORE);
+        }
+
+        // Wait for the master to reply with the aggregated and averaged weight values.
+        for (Matrix& weightMat : weightMats) {
+            zmq::message_t updatedWeightMsg;
+            subscriber.recv(&updatedWeightMsg);
+
+            assert(weightMat.getDataSize() == updatedWeightMsg.size());
+
+            // If there are no errors, copy the new data into the weight matrix.
+            std::memcpy(weightMat.getData(), updatedWeightMsg.data(), weightMat.getDataSize());
+        }
+
+        // Send back confirm ACK message.
+        unsigned msgType = CTRL_MSG::ACK;
+        zmq::message_t ackMsg(sizeof(unsigned));
+        std::memcpy(ackMsg.data(), &msgType, sizeof(unsigned));
+        publisher.send(ackMsg);
+
+        serverLog("All workers weights updated.");
+    }
+
+    updateTimer.stop();
+    outfile << "U: " << updateTimer.getTime() << std::endl;     // Output timing results.
+
+    // Clear the update buffer.
+    for (unsigned l = 0; l < updateMats.size(); ++l) {
+        float *updateData = updateMats[l].getData();
+        for (unsigned u = 0; u < updateMats[l].getNumElemts(); ++u)
+            updateData[u] = 0.;
+    }
+
+    // Reset number of lambdas.
+    numLambdas = 0;
+}
+
 void WeightServer::applyUpdates() {
 
     Timer updateTimer;
