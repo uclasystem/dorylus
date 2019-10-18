@@ -212,13 +212,13 @@ gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, 
     std::cout << "< BACKWARD > Getting weights" << std::endl;
     Matrix weights = requestTensor(weight_socket, OP::PULL_BACKWARD, layer);
     std::cout << "< BACKWARD > Computing gradient" << std::endl;
-    Matrix interGrad = d_output.dot(weights, false, true, LEARNING_RATE);
+    Matrix interGrad = d_output.dot(weights, false, true);
 
     // AH^T * d_out
     std::cout << "< BACKWARD > Requesting AH" << std::endl;
-    Matrix ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::ACT, layer);
+    Matrix ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::AH, layer);
     std::cout << "< BACKWARD > Computing weight updates" << std::endl;
-    Matrix weightUpdates = ah.dot(weights, true);
+    Matrix weightUpdates = ah.dot(d_output, true, false, LEARNING_RATE);
 
     std::cout << "< BACKWARD > Sending weight updates" << std::endl;
     sendMatrix(weightUpdates, weight_socket, layer);
@@ -227,7 +227,7 @@ gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, 
 }
 
 static void
-gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket) {
+gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, unsigned layer) {
 
     std::cout << "< BACKWARD > Requesting gradient from graph server" << std::endl;
     Matrix grad = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::GRAD, layer);
@@ -240,19 +240,19 @@ gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket) {
     Matrix interGrad = grad * actDeriv;
 
     std::cout << "< BACKWARD > Getting weights" << std::endl;
-    Matrix weights = requestTensor(weight_socket, OP::PULL_BACKWAR, layer);
+    Matrix weights = requestTensor(weight_socket, OP::PULL_BACKWARD, layer);
     std::cout << "< BACKWARD > MatMul(gradient, weights)" << std::endl;
-    Matrix interGrad = interGrad.dot(weights, false, true, LEARNING_RATE);
+    Matrix resultGrad = interGrad.dot(weights, false, true);
 
     std::cout << "< BACKWARD > Requesting AH" << std::endl;
     Matrix ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::AH, layer);
     std::cout << "< BACKWARD > Computing weight updates" << std::endl;
-    Matrix weightUpdates = ah.dot(interGrad, true);
+    Matrix weightUpdates = ah.dot(interGrad, true, false, LEARNING_RATE);
 
     std::cout << "< BACKWARD > Sending weight updates" << std::endl;
     sendMatrix(weightUpdates, weight_socket, layer);
     std::cout << "< BACKWARD > Sending gradient to graph server" << std::endl;
-    sendMatrix(interGrad, data_socket, id);
+    sendMatrix(resultGrad, data_socket, id);
 }
 
 
