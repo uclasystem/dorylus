@@ -47,7 +47,6 @@ LambdaWorker::work() {
 
             switch (op) {
                 case (OP::PULL_FORWARD):
-                    printLog(nodeId, "recv PULL FORWARD");
                     sendAggregatedChunk(identity, partId);
                     break;
                 case (OP::PUSH_FORWARD):

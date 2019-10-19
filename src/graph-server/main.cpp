@@ -20,8 +20,8 @@ main(int argc, char *argv[]) {
     engine.init(argc, argv);
 
     float splitPortion = 1.0 / 3.0;
-    unsigned numEpochs = 2;
-    unsigned valFreq = 10;
+    unsigned numEpochs = 5;
+    unsigned valFreq = 1;
 
     if (engine.master())
         printLog(engine.getNodeId(), "% Train Data: %f, \
