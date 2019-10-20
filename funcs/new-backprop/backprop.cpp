@@ -16,7 +16,7 @@
 #include "../../src/common/matrix.hpp"
 #include "../../src/common/utils.hpp"
 
-#define LEARNING_RATE (0.1)
+#define LEARNING_RATE (0.001)
 
 
 #define SND_MORE true
