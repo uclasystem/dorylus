@@ -16,7 +16,7 @@
 #include "../../src/common/matrix.hpp"
 #include "../../src/common/utils.hpp"
 
-#define LEARNING_RATE (0.1)
+#define LEARNING_RATE (0.001)
 
 
 #define SND_MORE true
@@ -190,13 +190,13 @@ gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, 
     std::cout << "< BACKWARD > Getting weights" << std::endl;
     Matrix weights = requestTensor(weight_socket, OP::PULL_BACKWARD, layer);
     std::cout << "< BACKWARD > Computing gradient" << std::endl;
-    Matrix interGrad = d_output.dot(weights, false, true, LEARNING_RATE);
+    Matrix interGrad = d_output.dot(weights, false, true);
 
     // AH^T * d_out
     std::cout << "< BACKWARD > Requesting AH" << std::endl;
-    Matrix ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::ACT, layer);
+    Matrix ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::AH, layer);
     std::cout << "< BACKWARD > Computing weight updates" << std::endl;
-    Matrix weightUpdates = ah.dot(weights, true);
+    Matrix weightUpdates = ah.dot(d_output, true, false, LEARNING_RATE);
 
     std::cout << "< BACKWARD > Sending weight updates" << std::endl;
     sendMatrix(weightUpdates, weight_socket, layer);
@@ -220,12 +220,12 @@ gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id,
     std::cout << "< BACKWARD > Getting weights" << std::endl;
     Matrix weights = requestTensor(weight_socket, OP::PULL_BACKWARD, layer);
     std::cout << "< BACKWARD > MatMul(gradient, weights)" << std::endl;
-    Matrix resultGrad = interGrad.dot(weights, false, true, LEARNING_RATE);
+    Matrix resultGrad = interGrad.dot(weights, false, true);
 
     std::cout << "< BACKWARD > Requesting AH" << std::endl;
     Matrix ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::AH, layer);
     std::cout << "< BACKWARD > Computing weight updates" << std::endl;
-    Matrix weightUpdates = ah.dot(interGrad, true);
+    Matrix weightUpdates = ah.dot(interGrad, true, false, LEARNING_RATE);
 
     std::cout << "< BACKWARD > Sending weight updates" << std::endl;
     sendMatrix(weightUpdates, weight_socket, layer);
