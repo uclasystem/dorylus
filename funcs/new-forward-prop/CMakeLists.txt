@@ -10,7 +10,7 @@ project(new-forward-prop LANGUAGES CXX)
 
 
 # Include ZeroMQ.
-set(ZMQ_INC /usr/local/include)
+set(ZMQ_INC /usr/local/include ../../src/common)
 set(ZMQ_LIB /usr/local/lib/libzmq.a)
 include_directories(${ZMQ_INC})
 
