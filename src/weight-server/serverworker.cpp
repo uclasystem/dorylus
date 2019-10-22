@@ -53,9 +53,9 @@ ServerWorker::work() {
             else if (op == OP::PULL_BACKWARD)
                 accMsg = "[ACCEPTED] Pull BACKWARD from thread " + std::to_string(arg) + ".";
             else if (op == OP::PUSH_BACKWARD)
-                accMsg = "[ UPDATE ] Push BACKWARD from thread " + std::to_string(arg) + ".";
-            if (!accMsg.empty())
-                std::cout << accMsg << std::endl;
+                accMsg = "[ UPDATE ] Push BACKWARD from layer " + std::to_string(arg) + ".";
+            // if (!accMsg.empty())
+                // std::cout << accMsg << std::endl;
 
             switch (op) {
                 case (OP::PULL_FORWARD):
@@ -202,7 +202,7 @@ ServerWorker::recvUpdate(zmq::message_t& client_id, unsigned layer) {
  *
  * Receive all weight updates from a worker. If all udpates have been received, alert the weight server that it is
  * time to average and apply them.
- * 
+ *
  */
 void
 ServerWorker::recvUpdates(zmq::message_t& client_id) {
