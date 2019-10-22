@@ -44,6 +44,7 @@ public:
     // Used at context creation / destruction.
     void refreshState(Matrix actMatrix_, FeatType *zData_, FeatType *actData_, unsigned numFeatsNext_, bool eval);
     void refreshState(std::vector<Matrix> zMatrices_, std::vector<Matrix> actMatrices_, Matrix targetMatrix_);
+    void refreshState(Matrix oldGradMatrix_, Matrix newGradMatrix_, Matrix targetMatrix_, std::vector<Matrix> *savedTensors); // YIFAN for backward
 
 protected:
 
@@ -92,10 +93,8 @@ private:
 
     // Partitions the needed matrices according to the partition id and
     // send that partition to the lambda thread for computation.
-    void sendBackpropChunks(zmq::message_t& client_id, unsigned partId);
-
-    // Accepts an incoming 'finished' message.
-    void recvBackpropFinishMsg(zmq::message_t& client_id);
+    void sendChunk(Matrix &srcMat, zmq::message_t& client_id, unsigned partId, bool forward);
+    void recvChunk(Matrix &dstMat, zmq::message_t& client_id, unsigned partId, bool forward);
 
     // Partitions the label matrix given a partition id and
     // and send that partition to the lambda thread for validation
@@ -104,9 +103,18 @@ private:
     // Receive the summed loss and total correct for this model
     void recvValidationResults(zmq::message_t& client_id, zmq::message_t& header);
 
+    Matrix oldGradMatrix;
+    Matrix newGradMatrix;
+    Matrix targetMatrix;
+    std::vector<Matrix> *savedTensors;
+
+    void sendBackpropChunks(zmq::message_t& client_id, unsigned partId);
+
+    // Accepts an incoming 'finished' message.
+    void recvBackpropFinishMsg(zmq::message_t& client_id);
+
     std::vector<Matrix> zMatrices;      // Matrices to send.
     std::vector<Matrix> actMatrices;
-    Matrix targetMatrix;
 };
 
 

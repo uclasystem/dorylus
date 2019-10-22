@@ -31,7 +31,7 @@ enum CTRL_MSG { MASTERUP, WORKERUP, INITDONE, ACK };
  *
  * Class of the weightserver. Weightservers are only responsible for replying weight requests from lambdas,
  * and handle weight updates.
- * 
+ *
  */
 class WeightServer {
 
@@ -46,6 +46,7 @@ public:
     void run();
 
     // Average and apply update batches.
+    void applyUpdate(unsigned layer);
     void applyUpdates();
 
 private:

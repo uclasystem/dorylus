@@ -6,11 +6,11 @@ set(CMAKE_CXX_STANDARD 11)
 
 
 # Project name.
-project(new-forward-prop LANGUAGES CXX)
+project(new-backward-prop LANGUAGES CXX)
 
 
 # Include ZeroMQ.
-set(ZMQ_INC /usr/local/include ../../src/common)
+set(ZMQ_INC /usr/local/include)
 set(ZMQ_LIB /usr/local/lib/libzmq.a)
 include_directories(${ZMQ_INC})
 
