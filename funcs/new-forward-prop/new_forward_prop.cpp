@@ -296,7 +296,7 @@ evaluateModel(Matrix& activations, zmq::socket_t& datasocket, unsigned partId) {
 }
 
 static Matrix
-gradLoss(Matrix& z, Matrix& weights, Matrix& AH, zmq::socket_t& weightSocket,
+gradLoss(Matrix& z, Matrix& weights, Matrix& AH, zmq::socket_t& datasocket, zmq::socket_t& weightSocket,
          unsigned partId, unsigned layer) {
     Matrix labels = requestMatrix(datasocket, OP::PULL_EVAL, partId);
     Matrix predictions = softmax(z);
@@ -333,7 +333,7 @@ gradLoss(Matrix& z, Matrix& weights, Matrix& AH, zmq::socket_t& weightSocket,
  */
 static invocation_response
 forward_prop_layer(std::string dataserver, std::string weightserver, std::string dport, std::string wport,
-                   unsigned id, unsigned layer) {
+                   unsigned id, unsigned layer, bool lastLayer) {
     zmq::context_t ctx(1);
 
     //
