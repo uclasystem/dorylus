@@ -11,7 +11,7 @@ static std::vector<std::thread *> worker_threads;
 static std::ofstream outfile;
 
 // set true to write weights to `output_0` for correctness checking.
-static bool checkCorrectnessFlag = false;
+static bool checkCorrectnessFlag = true;
 
 #define NUM_LISTENERS 5
 
@@ -145,7 +145,7 @@ void WeightServer::applyUpdate(unsigned layer) {
         Matrix& weightMat = weightMats[layer];
         zmq::message_t weightDataMsg(weightMat.getDataSize());
         std::memcpy(weightDataMsg.data(), weightMat.getData(), weightMat.getDataSize());
- 
+
         publisher.send(weightDataMsg);
 
         // Wait for all ACK messages.
@@ -166,8 +166,16 @@ void WeightServer::applyUpdate(unsigned layer) {
         // Uncomment below to write updated weights results to `output_0` for correctness checking.
         //
         if (checkCorrectnessFlag) {
-            for (Matrix& mat : weightMats)
-                outfile << mat.str() << std::endl;
+            float tmp = 0.0;
+            for (unsigned i = 0; i < updateMats[layer].getNumElemts(); i++) {
+                tmp += std::fabs(updateMats[layer].getData()[i]);
+            }
+            std::cout << "Layer " << layer << " Weight Grad Agg: " << tmp << std::endl;
+            std::cout << "[";
+            for (unsigned i = 0; i < 10; i++) {
+                std::cout << updateMats[layer].getData()[i] << " ";
+            }
+            std::cout << "]\n";
         }
 
     // Worker code.
@@ -515,12 +523,12 @@ WeightServer::initializeWeightMatrices(std::string& configFileName) {
         for (unsigned u = 0; u < weightMats.size(); ++u)
             serverLog("Layer " + std::to_string(u) + " - Weights: " + weightMats[u].shape());
 
-        // for checking correctness
-        if (checkCorrectnessFlag) {
-            for (Matrix& mat : weightMats) {
-                outfile << mat.str() << std::endl;
-            }
-        }
+        // // for checking correctness
+        // if (checkCorrectnessFlag) {
+        //     for (Matrix& mat : weightMats) {
+        //         outfile << mat.str() << std::endl;
+        //     }
+        // }
     }
 
     // For all nodes, initialize empty update matrices buffers.

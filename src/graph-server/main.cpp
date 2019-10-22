@@ -29,7 +29,8 @@ main(int argc, char *argv[]) {
                     splitPortion, numEpochs, valFreq);
 
     // Use one third of partitions as training and 2/3 as validation
-    engine.setTrainValidationSplit(1.0 / 3.0);
+    // engine.setTrainValidationSplit(splitPortion);
+    engine.setTrainValidationSplit(1.0);
 
     // Do specified number of epochs.
     for (unsigned epoch = 0; epoch < numEpochs; ++epoch) {

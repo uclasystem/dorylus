@@ -54,8 +54,8 @@ ServerWorker::work() {
                 accMsg = "[ACCEPTED] Pull BACKWARD from layer " + std::to_string(arg) + ".";
             else if (op == OP::PUSH_BACKWARD)
                 accMsg = "[ UPDATE ] Push BACKWARD from layer " + std::to_string(arg) + ".";
-            if (!accMsg.empty())
-                std::cout << accMsg << std::endl;
+            // if (!accMsg.empty())
+                // std::cout << accMsg << std::endl;
 
             switch (op) {
                 case (OP::PULL_FORWARD):

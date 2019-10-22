@@ -205,6 +205,24 @@ Engine::getNodeId() {
     return Engine::nodeId;
 }
 
+inline size_t argmax(FeatType* first, FeatType* last) {
+    return std::distance(first, std::max_element(first, last));
+}
+inline void calcAcc(Engine *e, FeatType *predicts, FeatType *labels, unsigned vtcsCnt, unsigned featDim) {
+    float acc = 0.0;
+    float loss = 0.0;
+    for (unsigned i = 0; i < vtcsCnt; i++) {
+        FeatType *currLabel = labels + i * featDim;
+        FeatType *currPred = predicts + i * featDim;
+        acc += currLabel[argmax(currPred, currPred + featDim)];
+        for (unsigned j = 0; j < featDim; j++) {
+            loss -= std::log(currPred[argmax(currLabel, currLabel + featDim)] + 1e-20);
+        }
+    }
+    acc /= vtcsCnt;
+    loss /= vtcsCnt;
+    printLog(e->getNodeId(), "batch loss %f, batch acc %f", loss, acc);
+}
 
 /**
  *
@@ -220,7 +238,7 @@ Engine::runForward(bool eval) {
 
     timeForwardProcess -= getTimer();
 
-    evaluate = eval;
+    evaluate = false;
     halt = false;
     commHalt = false;
 
@@ -236,6 +254,7 @@ Engine::runForward(bool eval) {
 
     timeForwardProcess += getTimer();
     printLog(nodeId, "Engine completes FORWARD at iter %u.", iteration);
+    calcAcc(this, inputTensor, localVerticesLabels, graphLocalVerticesNum, getFeatDim(numLayers));
 
     return inputTensor;
 }
@@ -478,7 +497,7 @@ Engine::invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     } else {
         unsigned availLambdaId = 0;
         while(availLambdaId < numLambdasForward) {
-            resComm->invokeLambdaForward(iteration, availLambdaId);
+            resComm->invokeLambdaForward(iteration, availLambdaId, iteration == numLayers - 1);
             availLambdaId++;
         }
         resComm->waitLambdaForward();
@@ -510,6 +529,16 @@ Engine::invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
         vecTimeLambda[iteration] += getTimer() - sttTimer;
     }
     printLog(nodeId, "All lambda requests finished. Results received.");
+
+    if (iteration == numLayers - 1) {
+        for (unsigned i = 0; i < 2; i++) {
+            std::ostringstream vct;
+            for (unsigned j = 0; j < getFeatDim(numLayers); j++) {
+                vct << outputTensor[i * getFeatDim(numLayers) + j] << " ";
+            }
+            printLog(nodeId, vct.str().c_str());
+        }
+    }
 
     return outputTensor;
 }
@@ -744,7 +773,7 @@ Engine::backwardWorker(unsigned tid, void *args) {
             // Start a new lambda communication context.
             // TODO: (YIFAN) currently set new context for backward once is enough. Change the newContextBackward interface
             resComm->newContextBackward(aggGradData, newGradData, savedTensors, localVerticesLabels, graphLocalVerticesNum, getFeatDim(iteration - 1), getFeatDim(iteration), getFeatDim(numLayers));
-            resComm->requestBackward(iteration - 1);
+            resComm->requestBackward(iteration - 1, iteration - 1 == numLayers - 1);
             vecTimeLambda.push_back(getTimer() - timeWorker);
             timeWorker = getTimer();
             printLog(nodeId, "All lambda requests finished. Results received.");
