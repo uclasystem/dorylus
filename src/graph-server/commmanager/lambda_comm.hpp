@@ -49,7 +49,7 @@ public:
 
     void requestForward(unsigned layer);
 
-    void invokeLambdaForward(unsigned layer, unsigned lambdaId);
+    void invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer);
     void waitLambdaForward();
 
     // For backward-prop.
@@ -59,8 +59,8 @@ public:
                             unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim);
 
     // void requestBackward(unsigned numLayers_);
-    void requestBackward(unsigned layer);
-    void invokeLambdaBackward(unsigned layer, unsigned lambdaId);
+    void requestBackward(unsigned layer, bool lastLayer);
+    void invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLayer);
     void waitLambdaBackward();
 
     // Send a message to the coordination server to shutdown.

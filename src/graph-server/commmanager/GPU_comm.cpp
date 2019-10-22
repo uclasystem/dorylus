@@ -15,7 +15,7 @@ GPUComm::GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,
         numNodes(numNodes_),
         dPort(dataserverPort_),
         dataSocket(ctx,ZMQ_REQ){
-        
+
 
         comp_server_thread=std::thread([&](){
             ComputingServer* comp_server=
@@ -33,13 +33,13 @@ GPUComm::GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,
         populateHeader((char*)init_header.data(),nodeId);
         dataSocket.send(init_header);
         dataSocket.recv(&confirm);
-    
+
 }
 
 
 void GPUComm::newContextForward(FeatType *dataBuf, FeatType *zData_, FeatType *actData_,
                             unsigned numLocalVertices_, unsigned numFeats, unsigned numFeatsNext_, bool eval_){
-    
+
     // Create a new matrix object for workers to access.
     eval=eval_;
     numLocalVertices=numLocalVertices_;
@@ -52,7 +52,7 @@ void GPUComm::newContextForward(FeatType *dataBuf, FeatType *zData_, FeatType *a
 }
 
 void GPUComm::requestForward(unsigned layer){
-     
+
     try {
         zmq::message_t confirm(5);
         zmq::message_t header(HEADER_SIZE);
@@ -99,7 +99,7 @@ void GPUComm::requestForward(unsigned layer){
             dataSocket.recv(&result);
             unsigned totalCorrect = parse<unsigned>((char*)result.data(), 2);
             float loss = parse<float>((char*)result.data(), 3);
-            
+
             printLog(nodeId, "Accuracy this epoch: %f",(float) totalCorrect / (float) numValidationVertices);
             printLog(nodeId, "Loss this epoch %f",loss / (float) numValidationVertices);
         }
@@ -140,7 +140,7 @@ void GPUComm::newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType 
     printLog(nodeId, "GPU BACKWARD context created.");
 }
 
-void GPUComm::requestBackward(unsigned numLayers){
+void GPUComm::requestBackward(unsigned numLayers, bool lastLayer){
     printLog(nodeId, "GPU BACKWARD request.");
 
     try {
@@ -159,12 +159,12 @@ void GPUComm::requestBackward(unsigned numLayers){
 
 
 void GPUComm::sendBackpropChunks(){
-    zmq::message_t confirm(5);    
-    
+    zmq::message_t confirm(5);
+
     // Send z matrices, from layer 1-> last.
     for (Matrix& matrix : zMatrices) {
         unsigned bufSize = matrix.getRows() * matrix.getCols() * sizeof(FeatType);
-        
+
         zmq::message_t header(HEADER_SIZE);
         populateHeader((char *) header.data(), OP::RESP, 0, matrix.getRows(), matrix.getCols());
         dataSocket.send(header, ZMQ_SNDMORE);
@@ -206,7 +206,7 @@ void GPUComm::sendShutdownMessage(){
     populateHeader((char *) header.data(), OP::TERM);
     dataSocket.send(header);
     dataSocket.recv(&confirm);
-    
+
     comp_server_thread.join();
     printLog(nodeId, "Joined\n");
 
