@@ -68,6 +68,12 @@ class Tanh(Layer):
         output = self._saved_tensor
         return grad_output * (1 - np.multiply(output, output))
 
+    def str_forward(self, str_input):
+        return 'Tanh({})'.format(str_input)
+
+    def str_backward(self, str_grad):
+        return 'Tanh\'({})'.format(str_grad)
+
     def __repr__(self):
         return 'IR: Tanh(input)'
 
@@ -156,6 +162,12 @@ class Linear(Layer):
         mm = config['momentum']
         lr = config['learning_rate']
         wd = config['weight_decay']
+
+        if (config['check']):
+            self.W = self.W - lr * self.grad_W
+            print(self.name + " Weight Grad Agg: {}".format(np.abs(lr * self.grad_W).sum()))
+            print(lr * self.grad_W[0][:10])
+            return
 
         self.diff_W = mm * self.diff_W + (self.grad_W + wd * self.W)
         self.W = self.W - lr * self.diff_W
