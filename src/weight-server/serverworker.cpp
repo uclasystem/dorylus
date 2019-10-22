@@ -9,7 +9,7 @@ extern bool finished;
 /**
  *
  * ServerWorker constructor & destructor.
- * 
+ *
  */
 ServerWorker::ServerWorker(zmq::context_t& ctx_, unsigned& counter, WeightServer& _ws,
                            std::vector<Matrix>& weights_, std::vector<Matrix>& updates_, unsigned& numLambdas_)
@@ -32,7 +32,7 @@ ServerWorker::~ServerWorker() {
 /**
  *
  * Listen on lambda threads' requests.
- * 
+ *
  */
 void
 ServerWorker::work() {
@@ -43,7 +43,7 @@ ServerWorker::work() {
             zmq::message_t header;
             workersocket.recv(&identity);
             workersocket.recv(&header);
-                
+
             unsigned op = parse<unsigned>((char *) header.data(), 0);
             unsigned arg = parse<unsigned>((char *) header.data(), 1);
 
@@ -51,21 +51,21 @@ ServerWorker::work() {
             if (op == OP::PULL_FORWARD)
                 accMsg = "[ACCEPTED] Pull FORWARD for layer " + std::to_string(arg) + ".";
             else if (op == OP::PULL_BACKWARD)
-                accMsg = "[ACCEPTED] Pull BACKWARD from thread " + std::to_string(arg) + ".";
+                accMsg = "[ACCEPTED] Pull BACKWARD from layer " + std::to_string(arg) + ".";
             else if (op == OP::PUSH_BACKWARD)
-                accMsg = "[ UPDATE ] Push BACKWARD from thread " + std::to_string(arg) + ".";
-            if (!accMsg.empty())
-                std::cout << accMsg << std::endl;
+                accMsg = "[ UPDATE ] Push BACKWARD from layer " + std::to_string(arg) + ".";
+            // if (!accMsg.empty())
+                // std::cout << accMsg << std::endl;
 
             switch (op) {
                 case (OP::PULL_FORWARD):
-                    sendWeightsForwardLayer(identity, arg);
+                    sendWeights(identity, arg);
                     break;
                 case (OP::PULL_BACKWARD):
-                    sendWeightsBackward(identity);
+                    sendWeights(identity, arg);
                     break;
                 case (OP::PUSH_BACKWARD):
-                    recvUpdates(identity);
+                    recvUpdate(identity, arg);
                     break;
                 case (OP::INFO):    // Used to tell how many lambda threads it should expect for this round.
                     setBackpropNumLambdas(identity, arg);
@@ -85,10 +85,10 @@ ServerWorker::work() {
 /**
  *
  * Send weight matrix to lambdas.
- * 
+ *
  */
 void
-ServerWorker::sendWeightsForwardLayer(zmq::message_t& client_id, unsigned layer) {
+ServerWorker::sendWeights(zmq::message_t& client_id, unsigned layer) {
     if (layer >= weightMats.size()) {
         std::cerr << "[ERROR] No such weights corresponding to layer " << layer << std::endl;
     }
@@ -108,7 +108,7 @@ ServerWorker::sendWeightsForwardLayer(zmq::message_t& client_id, unsigned layer)
 /**
  *
  * Send weight matrices 2 -> last to lambdas for backward-prop computation.
- * 
+ *
  */
 void
 ServerWorker::sendWeightsBackward(zmq::message_t& client_id) {
@@ -130,12 +130,46 @@ ServerWorker::sendWeightsBackward(zmq::message_t& client_id) {
     }
 }
 
-
 /**
  *
  * Receive a given update from a worker. If all udpates have been received, alert the weight server that it is
  * time to average and apply them.
- * 
+ *
+ */
+void
+ServerWorker::recvUpdate(zmq::message_t& client_id, unsigned layer) {
+    zmq::message_t updateMsg;
+    workersocket.recv(&updateMsg);
+
+    // Send confirm ACK message.
+    zmq::message_t confirm;
+    workersocket.send(client_id, ZMQ_SNDMORE);
+    workersocket.send(confirm);
+
+    float *updateSum = updateMats[layer].getData();
+    float *updateNew = (float *) updateMsg.data();
+
+    // Grab lock then sum the data received in this update matrix.
+    std::lock_guard<std::mutex> update_lock(update_mutex);
+    for (unsigned u = 0; u < updateMats[layer].getNumElemts(); ++u)
+        updateSum[u] += updateNew[u];
+
+    // if (layer == 0) {
+    numLambdas--;
+
+    // If this is the final update, begin global aggregation.
+    if (numLambdas == 0) {
+        ws.applyUpdate(layer);
+        // ws.applyUpdates();
+    }
+    // }
+}
+
+/**
+ *
+ * Receive all weight updates from a worker. If all udpates have been received, alert the weight server that it is
+ * time to average and apply them.
+ *
  */
 void
 ServerWorker::recvUpdates(zmq::message_t& client_id) {
@@ -172,7 +206,7 @@ ServerWorker::recvUpdates(zmq::message_t& client_id) {
  *
  * Update the weightserver with number of lambdas being called for this iteration.
  * Therefore it knows when to average.
- * 
+ *
  */
 void
 ServerWorker::setBackpropNumLambdas(zmq::message_t& client_id, unsigned numLambdas_) {
@@ -194,7 +228,7 @@ ServerWorker::setBackpropNumLambdas(zmq::message_t& client_id, unsigned numLambd
  *
  * After receiving the termination message from the coordination server alert
  * the main thread that it can shutdown.
- * 
+ *
  */
 void
 ServerWorker::terminateServer(zmq::message_t& client_id) {
@@ -203,7 +237,7 @@ ServerWorker::terminateServer(zmq::message_t& client_id) {
     zmq::message_t confirm;
     workersocket.send(client_id, ZMQ_SNDMORE);
     workersocket.send(confirm);
-    
+
     std::cerr << "[SHUTDOWN] Server shutting down..." << std::endl;
 
     std::lock_guard<std::mutex> lk(term_mutex);

@@ -49,14 +49,19 @@ public:
 
     void requestForward(unsigned layer);
 
-    void invokeLambdaForward(unsigned layer, unsigned lambdaId);
+    void invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer);
     void waitLambdaForward();
 
     // For backward-prop.
     void newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType *targetBuf,
                             unsigned numLocalVertices, std::vector<unsigned> layerConfig);
+    void newContextBackward(FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
+                            unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim);
 
-    void requestBackward(unsigned numLayers_);
+    // void requestBackward(unsigned numLayers_);
+    void requestBackward(unsigned layer, bool lastLayer);
+    void invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLayer);
+    void waitLambdaBackward();
 
     // Send a message to the coordination server to shutdown.
     void sendShutdownMessage();

@@ -33,7 +33,7 @@ GPUComm::GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,
 
 void GPUComm::newContextForward(FeatType *dataBuf, FeatType *zData_, FeatType *actData_,
                             unsigned numLocalVertices_, unsigned numFeats, unsigned numFeatsNext_, bool eval_){
-    
+
     // Create a new matrix object for workers to access.
     eval=eval_;
     numLocalVertices=numLocalVertices_;
@@ -46,7 +46,7 @@ void GPUComm::newContextForward(FeatType *dataBuf, FeatType *zData_, FeatType *a
 }
 
 void GPUComm::requestForward(unsigned layer){
-     
+
     try {
         float split_data=split;
         if(!eval)
@@ -96,7 +96,7 @@ void GPUComm::newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType 
     printLog(nodeId, "GPU BACKWARD context created.");
 }
 
-void GPUComm::requestBackward(unsigned numLayers){
+void GPUComm::requestBackward(unsigned numLayers, bool lastLayer){
     printLog(nodeId, "GPU BACKWARD request.");
 
     try {
@@ -113,6 +113,7 @@ void GPUComm::requestBackward(unsigned numLayers){
 
 
 void GPUComm::sendBackpropChunks(){
+
     
     // Send z matrices, from layer 1-> last.
     for (Matrix& matrix : zMatrices)
@@ -135,7 +136,7 @@ void GPUComm::sendShutdownMessage(){
     populateHeader((char *) header.data(), OP::TERM);
     dataSocket.send(header);
     dataSocket.recv(&confirm);
-    
+
     comp_server_thread.join();
     printLog(nodeId, "Joined\n");
 }

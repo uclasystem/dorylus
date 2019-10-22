@@ -13,7 +13,7 @@ typedef float FeatType;
 
 static const size_t HEADER_SIZE = sizeof(unsigned) * 5;
 enum OP { REQ_FORWARD, PUSH_FORWARD, PULL_FORWARD, REQ_BACKWARD, PUSH_BACKWARD, PULL_BACKWARD, PULL_EVAL, PUSH_EVAL, RESP, INFO, TERM };
-
+enum TYPE { GRAD, AH, Z, ACT, LAB };
 
 #define ERR_HEADER_FIELD UINT_MAX
 

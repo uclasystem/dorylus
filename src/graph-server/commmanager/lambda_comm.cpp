@@ -160,9 +160,9 @@ LambdaComm::requestForward(unsigned layer) {
 
 
 void
-LambdaComm::invokeLambdaForward(unsigned layer, unsigned lambdaId) { // another option is to keep status in coordserver
+LambdaComm::invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer) { // another option is to keep status in coordserver
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::REQ_FORWARD, layer, lambdaId);
+    populateHeader((char *) header.data(), OP::REQ_FORWARD, layer, lambdaId, lastLayer);
     coordsocket.send(header, ZMQ_SNDMORE);
 
     zmq::message_t ip_msg(nodeIp.size());
@@ -190,6 +190,23 @@ LambdaComm::waitLambdaForward() {
  *
  */
 void
+LambdaComm::newContextBackward(FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
+                                unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim) {
+    countBackward = 0;
+
+    // Create new matrices object for workers to access.
+    Matrix oldGradMatrix(numLocalVertices, outFeatDim, oldGradBuf);
+    Matrix newGradMatrix(numLocalVertices, inFeatDim, newGradBuf);
+    Matrix targetMatrix(numLocalVertices, targetDim, targetBuf);
+
+    // Refresh workers' members, and connect their worker sockets to the backend.
+    for (auto&& worker : workers)
+        worker->refreshState(oldGradMatrix, newGradMatrix, targetMatrix, savedTensors);
+
+    printLog(nodeId, "Lambda BACKWARD context created.");
+}
+
+void
 LambdaComm::newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType *targetBuf,
                                unsigned numLocalVertices, std::vector<unsigned> layerConfig) {
     countBackward = 0;
@@ -213,11 +230,11 @@ LambdaComm::newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType *t
 }
 
 void
-LambdaComm::requestBackward(unsigned numLayers_) {
+LambdaComm::requestBackward(unsigned numLayers_, bool lastLayer) {
 
     // Send header info to tell the coordserver to trigger how many lambdas to trigger.
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::REQ_BACKWARD, numLayers_, numLambdasBackward);
+    populateHeader((char *) header.data(), OP::REQ_BACKWARD, numLayers_, numLambdasBackward, lastLayer);
     coordsocket.send(header, ZMQ_SNDMORE);
 
     // Send my ip.

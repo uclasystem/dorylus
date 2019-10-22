@@ -28,7 +28,7 @@ class WeightServer;
 /**
  *
  * Wrapper over a server worker thread.
- * 
+ *
  */
 class ServerWorker {
 
@@ -44,9 +44,10 @@ public:
 
 private:
 
-    void sendWeightsForwardLayer(zmq::message_t& client_id, unsigned layer);
+    void sendWeights(zmq::message_t& client_id, unsigned layer);
     void sendWeightsBackward(zmq::message_t& client_id);
     void recvUpdates(zmq::message_t& client_id);
+    void recvUpdate(zmq::message_t& client_id, unsigned layer);
     void setBackpropNumLambdas(zmq::message_t& client_id, unsigned numLambdas_);
     void terminateServer(zmq::message_t& client_id);
 
@@ -55,7 +56,7 @@ private:
 
     std::vector<Matrix>& weightMats;
     std::vector<Matrix>& updateMats;
-    
+
     unsigned& numLambdas;
     unsigned& count;
 

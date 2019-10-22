@@ -17,6 +17,7 @@
 #include "../parallel/cond.hpp"
 #include "../parallel/barrier.hpp"
 #include "../utils/utils.hpp"
+#include "../../common/matrix.hpp"
 
 
 #define MAX_MSG_SIZE (256 * 1024)   // Max size (bytes) for a message received by the data communicator.
@@ -59,12 +60,16 @@ public:
 
     // Public APIs for benchmarks.
     void init(int argc, char *argv[]);
-    void runForward(bool eval = false);
-    void runBackward();
+    FeatType *runForward(bool eval = false);
+    void runBackward(FeatType *backwardInitData);
     void output();
     void destroy();
     bool master();
     bool isGPUEnabled();
+
+    FeatType* aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
+    FeatType* invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim);
+    FeatType* scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
 
     void makeBarrier();
 
@@ -97,8 +102,14 @@ private:
 
     std::vector<unsigned> layerConfig;      // Config of number of features in each layer.
     unsigned numLayers = 0;
+
+    std::vector<Matrix> *savedTensors; // intermediate data for backward computation.
     FeatType **localVerticesZData;       // Global contiguous array for all vertices' data (row-wise order).
     FeatType **localVerticesActivationData;
+
+    FeatType *aggGradData;
+    FeatType *newGradData;
+
     FeatType *forwardGhostInitData;
     FeatType *forwardGhostVerticesData;
     FeatType *backwardGhostVerticesData;
@@ -152,6 +163,7 @@ private:
     bool evaluate = false;
 
     bool halt = false;
+    bool commHalt = false;
 
     bool undirected = false;
 
@@ -173,41 +185,23 @@ private:
     void forwardGhostCommunicator(unsigned tid, void *args);
     void backwardGhostCommunicator(unsigned tid, void *args);
 
+    void aggregateCompute(unsigned tid, void *args);
+
     // About the global data arrays.
-    inline unsigned getNumFeats(unsigned layer) { return layerConfig[layer]; }
+    inline unsigned getFeatDim(unsigned layer) { return layerConfig[layer]; }
 
-    inline FeatType *localVertexZDataPtr(unsigned lvid, unsigned layer) {
-        return localVerticesZData[layer] + lvid * getNumFeats(layer);
-    }
-    inline FeatType *localVertexActivationDataPtr(unsigned lvid, unsigned layer) {
-        return localVerticesActivationData[layer] + lvid * getNumFeats(layer);
-    }
-    inline FeatType *forwardGhostInitDataPtr(unsigned lvid, unsigned layer) {
-        return forwardGhostInitData + lvid * getNumFeats(layer);
-    }
-    inline FeatType *forwardGhostVertexDataPtr(unsigned lvid, unsigned layer) {
-        return forwardGhostVerticesData + lvid * getNumFeats(layer);
-    }
-    inline FeatType *backwardGhostVertexDataPtr(unsigned lvid, unsigned layer) {
-        return backwardGhostVerticesData + lvid * getNumFeats(layer);
-    }
-
-    inline FeatType *localVertexDataBufPtr(unsigned lvid, unsigned layer) {
-        return localVerticesDataBuf + lvid * getNumFeats(layer);
-    }
     inline FeatType *localVertexLabelsPtr(unsigned lvid) {
-        return localVerticesLabels + lvid * getNumFeats(numLayers);
+        return localVerticesLabels + lvid * getFeatDim(numLayers);
     }
 
-
-    void sendForwardGhostUpdates();
+    void sendForwardGhostUpdates(FeatType *inputTensor, unsigned featDim);
     void sendBackwardGhostGradients();
     // Ghost update operation, send vertices to other nodes
-    void forwardVerticesPushOut(unsigned receiver, unsigned sender, unsigned totCnt, unsigned *lvids);
+    void forwardVerticesPushOut(unsigned receiver, unsigned totCnt, unsigned *lvids, FeatType *inputTensor, unsigned featDim);
     void backwardVerticesPushOut(unsigned receiver, unsigned sender, unsigned totCnt, unsigned *lvids);
 
     // Aggregation operation (along with normalization).
-    void forwardAggregateFromNeighbors(unsigned lvid);
+    void forwardAggregateFromNeighbors(unsigned lvid, FeatType *outputTensor, FeatType *inputTensor, unsigned featDim);
     void backwardAggregateFromNeighbors(unsigned lvid);
 
     // For initialization.
@@ -227,5 +221,10 @@ private:
     void printEngineMetrics();
 };
 
+// Fetch vertex feature from vtx feats array
+#define getVtxFeat(dataBuf, lvid, featDim) ((dataBuf) + (lvid) * (featDim))
+
+// Every one includes this file can access the static engine object now. For TF integration.
+extern Engine engine;
 
 #endif //__ENGINE_HPP__
