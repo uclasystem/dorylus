@@ -18,7 +18,9 @@ target_link_libraries(lambda_comm PRIVATE utils resource_comm matrix
 target_compile_options(lambda_comm PRIVATE "-Wall" "-Werror" "-Wno-reorder" "-MMD")
 
 if(BUILD_GPU)
-	include_directories(/opt/cuda/include/)
+	enable_language(CUDA)
+	FIND_PACKAGE(CUDA REQUIRED)
+	include_directories(${CUDA_INCLUDE_DIRS})
 	add_library(gpu_comm SHARED "GPU_comm.cpp" )
 	set_property(TARGET gpu_comm PROPERTY POSITION_INDEPENDENT_CODE ON)
 	target_link_libraries(gpu_comm PRIVATE utils resource_comm ComputingServer

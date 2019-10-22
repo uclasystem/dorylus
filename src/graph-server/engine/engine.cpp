@@ -69,6 +69,7 @@ Engine::init(int argc, char *argv[]) {
 
     // Set a local index for all ghost vertices along the way. This index is used for indexing within the ghost data arrays.
     unsigned ghostCount = 0;
+
     for (auto it = graph.getInEdgeGhostVertices().begin(); it != graph.getInEdgeGhostVertices().end(); it++) {
         it->second.setLocalId(ghostCount++);
     }
@@ -76,7 +77,7 @@ Engine::init(int argc, char *argv[]) {
     for (auto it = graph.getOutEdgeGhostVertices().begin(); it != graph.getOutEdgeGhostVertices().end(); it++) {
         it->second.setLocalId(ghostCount++);
     }
-
+    
     // Read in initial feature values (input features) & labels.
     readFeaturesFile(featuresFile);
     readLabelsFile(labelsFile);
@@ -105,7 +106,6 @@ Engine::init(int argc, char *argv[]) {
     graph.compactGraph();
 
     setUpCommInfo();
-
     if (gpuEnabled == 1)
         resComm=createResourceComm("GPU",commInfo);
     else
@@ -1220,11 +1220,9 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
             memcpy(zDataPtr, feature_vec.data(), featDim * sizeof(FeatType));
             memcpy(actDataPtr, feature_vec.data(), featDim * sizeof(FeatType));
         }
-
         ++gvid;
     }
     infile.close();
-
     assert(gvid == graph.getNumGlobalVertices());
 }
 
@@ -1528,6 +1526,7 @@ Engine::readGraphBS(std::string& fileName, std::set<unsigned>& inTopics, std::ve
         }
         forwardBatchMsgBuf[i] = new unsigned[forwardGhostVCnts[i]];
         backwardBatchMsgBuf[i] = new unsigned[backwardGhostVCnts[i]];
+        
         unsigned forwardCnt = 0, backwardCnt = 0;
         for (unsigned j = 0; j < graphLocalVerticesNum; ++j) {
             if (forwardGhostVTables[i][j]) {

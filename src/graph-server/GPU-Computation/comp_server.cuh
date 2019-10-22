@@ -30,6 +30,7 @@ typedef struct {
 
 class MessageService{
 public:
+    MessageService(){};
     MessageService(zmq::context_t& dctx,unsigned dPort_,unsigned wPort_);
 
     //weight server related
@@ -54,7 +55,7 @@ private:
     zmq::socket_t* dataSocket;
     zmq::socket_t* weightSocket;
     zmq::message_t confirm;
-    zmq::message_t header;
+    
     unsigned wPort;
     bool wsocktReady;
 };

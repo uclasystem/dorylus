@@ -1,4 +1,5 @@
 #include "GPU_comm.hpp"
+#include <unistd.h>
 
 static void doNotFreeBuffer(void *data, void *hint){
     // printf("Buffer is not freed :)\n");
@@ -18,14 +19,16 @@ GPUComm::GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,
         dPort(dataserverPort_),
         wPort(wPort_),
         dataSocket(ctx,ZMQ_REQ){
-
+        ready=0;
         eval=0;
 
         ComputingServer* comp_server=new ComputingServer(this);
+        printLog(nodeId,"Starting thread\n");
         comp_server_thread=std::thread(std::bind(&ComputingServer::run,comp_server));
-
+        
         char ipc_addr[50];
         sprintf(ipc_addr, "inproc://%u", dPort);
+        
         dataSocket.connect(ipc_addr);
         printLog(nodeId,"Connecting to %s\n", ipc_addr);
 }
@@ -61,7 +64,7 @@ void GPUComm::requestForward(unsigned layer){
         sendMatrix(actMatrix);
         sendResultPtr(zData);
         sendResultPtr(actData);
-
+        
         if(eval){
             unsigned numValidationVertices=std::ceil(split*numLocalVertices);
             sendMatrix(targetMatrix);
@@ -70,6 +73,8 @@ void GPUComm::requestForward(unsigned layer){
             printLog(nodeId, "Accuracy this epoch: %f",(float) totalCorrect / (float) numValidationVertices);
             printLog(nodeId, "Loss this epoch %f",loss / (float) numValidationVertices);
         }
+        unsigned done=0;
+        sendFourBytes((char*)&done);
     }
     catch(std::exception& ex){
         std::cerr << "[ERROR] " << ex.what() << std::endl;
@@ -95,6 +100,7 @@ void GPUComm::newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType 
 
     printLog(nodeId, "GPU BACKWARD context created.");
 }
+
 
 void GPUComm::requestBackward(unsigned numLayers, bool lastLayer){
     printLog(nodeId, "GPU BACKWARD request.");
@@ -159,7 +165,11 @@ T GPUComm::requestFourBytes(){
 void GPUComm::sendMatrix(Matrix& m){
     zmq::message_t matrixMsg(HEADER_SIZE);
     populateHeader((char *) matrixMsg.data(), m.getRows(), m.getCols());
-    serialize<FeatType*>((char*)matrixMsg.data(),2*sizeof(FeatType),m.getData());
+    char* dataPtr=(char*)m.getData();
+    
+    std::memcpy((char*)matrixMsg.data()+sizeof(unsigned)*2, (char*) &dataPtr,
+        sizeof(FeatType*));
+    
     dataSocket.send(matrixMsg);
     dataSocket.recv(&confirm);
 }
@@ -168,6 +178,5 @@ void GPUComm::sendResultPtr(FeatType* ptr){
     zmq::message_t ptrMsg(sizeof(FeatType*));
     memcpy(ptrMsg.data(),&ptr,sizeof(FeatType*));
     dataSocket.send(ptrMsg);
-    dataSocket.recv(&confirm);   
-
+    dataSocket.recv(&confirm);
 }

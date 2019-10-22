@@ -22,9 +22,9 @@ void loadWeightServers(std::vector<char *>& addresses, const std::string& wServe
     }
 }
 
-ComputingServer::ComputingServer(GPUComm* gpu_comm)
-    :msgService(gpu_comm->ctx, gpu_comm->dPort, gpu_comm->wPort){
+ComputingServer::ComputingServer(GPUComm* gpu_comm){
     nodeId=gpu_comm->nodeId;
+    msgService=MessageService(gpu_comm->ctx, gpu_comm->dPort, gpu_comm->wPort);
     loadWeightServers(weightServerAddrs,gpu_comm->wServersFile);
     msgService.setUpWeightSocket(weightServerAddrs.at(nodeId%weightServerAddrs.size()));
 }
@@ -64,10 +64,8 @@ void ComputingServer::processForward(){
     float split= msgService.requestFourBytes<float>();
     Matrix feats=msgService.requestMatrix();
     Matrix weights=msgService.requestWeightsMatrix(layer);
-    
     FeatType* z_data=msgService.requestResultPtr();
     FeatType* act_z=msgService.requestResultPtr();
-
     CuMatrix z = cu.dot(feats, weights);
     memcpy(z_data,z.getData(),z.getDataSize());
     cu.activate(z);//z data get activated ...
@@ -75,7 +73,8 @@ void ComputingServer::processForward(){
 
     if(split!=0)
         evaluateModel(z);
-    delete[] (z.getData());
+    unsigned done= msgService.requestFourBytes<unsigned>();
+    delete[] z.getData();
     delete[] weights.getData();
 }
 
@@ -234,12 +233,10 @@ MessageService::MessageService(zmq::context_t& dctx,unsigned dPort_,unsigned wPo
     wctx(1),
     wPort(wPort_),
     wsocktReady(0),
-    header(HEADER_SIZE),
     confirm(5){
 
     weightSocket=new zmq::socket_t(wctx, ZMQ_DEALER);
     dataSocket=new zmq::socket_t(dctx, ZMQ_REP);
-
     char ipc_addr[50];
     //use port as inproc communication addresss
     sprintf(ipc_addr, "inproc://%u", dPort_); 
@@ -282,10 +279,10 @@ Matrix MessageService::requestMatrix(){
     zmq::message_t matrixInfo;
     dataSocket->recv(&matrixInfo);
     dataSocket->send(confirm);
-    unsigned row=parse<unsigned>((char *) header.data(), 0);
-    unsigned col=parse<unsigned>((char *) header.data(), 1);
+    unsigned row=parse<unsigned>((char *) matrixInfo.data(), 0);
+    unsigned col=parse<unsigned>((char *) matrixInfo.data(), 1);
     FeatType* data;
-    std::memcpy(&data,(char*)matrixInfo.data()+2*sizeof(FeatType),sizeof(FeatType*));
+    std::memcpy(&data,(char*)matrixInfo.data()+2*sizeof(unsigned),sizeof(FeatType*));
     return Matrix(row,col,data);
 }
 
@@ -293,7 +290,7 @@ FeatType* MessageService::requestResultPtr(){
     zmq::message_t ptrMsg(sizeof(FeatType*));
     dataSocket->recv(&ptrMsg);
     dataSocket->send(confirm);
-    return *((FeatType**)header.data());
+    return *((FeatType**)ptrMsg.data());
 }   
 
 Matrix MessageService::requestWeightsMatrix(unsigned layer){
@@ -301,11 +298,9 @@ Matrix MessageService::requestWeightsMatrix(unsigned layer){
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char *) header.data(), OP::PULL_FORWARD, layer);
     weightSocket->send(header);
-
     // Listen on respond.
     zmq::message_t respHeader(HEADER_SIZE);
     weightSocket->recv(&respHeader);
-
     // Parse the respond.
     unsigned layerResp = parse<unsigned>((char *) respHeader.data(), 1);
     if ((int)layerResp == -1) {      // Failed.
