@@ -19,9 +19,10 @@ main(int argc, char *argv[]) {
     // The engine object is static and has been substantiated in Engine.cpp.
     engine.init(argc, argv);
 
+
     float splitPortion = 1.0 / 3.0;
-    unsigned numEpochs = 2;
-    unsigned valFreq = 10;
+    unsigned numEpochs = 20;
+    unsigned valFreq = 1;
 
     if (engine.master())
         printLog(engine.getNodeId(), "% Train Data: %f, \
@@ -59,7 +60,7 @@ main(int argc, char *argv[]) {
         }
     }
 
-    // Procude the output files.
+    // // Procude the output files.
     engine.output();
 
     // Destroy the engine.

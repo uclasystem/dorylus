@@ -3,10 +3,10 @@
 
 
 ComputingUnit::ComputingUnit(){
-
     stat = cublasCreate(&handle);
     if (stat != CUBLAS_STATUS_SUCCESS) {
         printf ("CUBLAS initialization failed\n");
+        printf ("CUBLAS stat %u\n",stat);
         exit (EXIT_FAILURE);
     }
     cublasSetMathMode(handle,CUBLAS_TENSOR_OP_MATH);
@@ -17,7 +17,7 @@ CuMatrix ComputingUnit::wrapMatrix(Matrix m){
 }
 
 
-CuMatrix ComputingUnit::hadamardSub(CuMatrix& matLeft, CuMatrix& matRight) {
+CuMatrix ComputingUnit::hadamardSub(CuMatrix& matLeft,CuMatrix& matRight) {
     assert(matLeft.getRows() == matRight.getRows());
     assert(matLeft.getCols() == matRight.getCols());
     // CuMatrix res(Matrix(matLeft.getRows(),matLeft.getCols(), new FeatType[matLeft.getNumElemts()]),handle);
@@ -35,14 +35,14 @@ CuMatrix ComputingUnit::hadamardSub(CuMatrix& matLeft, CuMatrix& matRight) {
     return res;
 }
 
-CuMatrix* ComputingUnit::hadamardMul( CuMatrix& matLeft, CuMatrix& matRight) {
+CuMatrix ComputingUnit::hadamardMul( CuMatrix& matLeft, CuMatrix& matRight) {
     assert(matLeft.getRows() == matRight.getRows());
     assert(matLeft.getCols() == matRight.getCols());
-    CuMatrix* res=new CuMatrix(Matrix(matLeft.getRows(),matLeft.getCols(), (FeatType *)NULL),handle);
+    CuMatrix res(Matrix(matLeft.getRows(),matLeft.getCols(), (FeatType *)NULL),handle);
 
     thrust::device_ptr<float> cuLeft_ptr(matLeft.devPtr);
     thrust::device_ptr<float> cuRight_ptr(matRight.devPtr);
-    thrust::device_ptr<float> res_ptr(res->devPtr);
+    thrust::device_ptr<float> res_ptr(res.devPtr);
 
     thrust::transform(cuLeft_ptr,cuLeft_ptr+matLeft.getNumElemts(),
                         cuRight_ptr,
@@ -72,12 +72,12 @@ CuMatrix ComputingUnit::softmaxRows( CuMatrix &mat){
     return res;
 }
 
-CuMatrix ComputingUnit::activateDerivate( CuMatrix& mat) {
+CuMatrix ComputingUnit::activateDerivative( CuMatrix& mat) {
     CuMatrix res(Matrix(mat.getRows(),mat.getCols(),(FeatType *)NULL),handle);
     thrust::device_ptr<float> res_ptr(res.devPtr);
     CuMatrix z(Matrix(mat.getRows(),mat.getCols(),mat.getData()),handle);
     thrust::device_ptr<float> z_ptr(z.devPtr);
-    thrust::transform(z_ptr, z_ptr+mat.getNumElemts(),res_ptr, activateDerivate_functor());
+    thrust::transform(z_ptr, z_ptr+mat.getNumElemts(),res_ptr, activateDerivative_functor());
     return res;
 }
 

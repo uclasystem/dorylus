@@ -69,6 +69,7 @@ Engine::init(int argc, char *argv[]) {
 
     // Set a local index for all ghost vertices along the way. This index is used for indexing within the ghost data arrays.
     unsigned ghostCount = 0;
+
     for (auto it = graph.getInEdgeGhostVertices().begin(); it != graph.getInEdgeGhostVertices().end(); it++) {
         it->second.setLocalId(ghostCount++);
     }
@@ -76,7 +77,7 @@ Engine::init(int argc, char *argv[]) {
     for (auto it = graph.getOutEdgeGhostVertices().begin(); it != graph.getOutEdgeGhostVertices().end(); it++) {
         it->second.setLocalId(ghostCount++);
     }
-
+    
     // Read in initial feature values (input features) & labels.
     readFeaturesFile(featuresFile);
     readLabelsFile(labelsFile);
@@ -105,7 +106,6 @@ Engine::init(int argc, char *argv[]) {
     graph.compactGraph();
 
     setUpCommInfo();
-
     if (gpuEnabled == 1)
         resComm=createResourceComm("GPU",commInfo);
     else
@@ -315,6 +315,11 @@ Engine::runBackward(FeatType *backwardInitData) {
     for (size_t i = 1; i <= numLayers; ++i) {
         delete[] localVerticesZData[i];
         delete[] localVerticesActivationData[i];
+
+        // for (size_t j = 0; j < savedTensors[i-1].size(); j++) {
+        //     delete[] savedTensors[i-1][j].getData();
+        // }
+
         savedTensors[i-1].clear();
     }
 
@@ -353,13 +358,13 @@ Engine::output() {
     //
     // The follwing are only-last-layer feature values outputing.
     //
-    for (Vertex& v : graph.getVertices()) {
-        outStream << v.getGlobalId() << ": ";
-        FeatType *dataPtr = getVtxFeat(localVerticesActivationData[numLayers], v.getLocalId(), getFeatDim(numLayers));
-        for (size_t j = 0; j < layerConfig[numLayers]; ++j)
-            outStream << dataPtr[j] << " ";
-        outStream << std::endl;
-    }
+    // for (Vertex& v : graph.getVertices()) {
+    //     outStream << v.getGlobalId() << ": ";
+    //     FeatType *dataPtr = getVtxFeat(localVerticesActivationData[numLayers], v.getLocalId(), getFeatDim(numLayers));
+    //     for (size_t j = 0; j < layerConfig[numLayers]; ++j)
+    //         outStream << dataPtr[j] << " ";
+    //     outStream << std::endl;
+    // }
 
     //
     // The following are labels outputing.
@@ -434,7 +439,7 @@ Engine::destroy() {
     delete[] forwardGhostInitData;
     delete[] forwardGhostVerticesData;
 
-    bool disableBackward = true;
+    bool disableBackward = false;
     if (!disableBackward) {
         delete[] backwardGhostVerticesData;
     }
@@ -466,6 +471,7 @@ FeatType* Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned fea
         delete[] vtcsTensor;
     }
 
+
     if (vecTimeAggregate.size() < numLayers) {
         vecTimeAggregate.push_back(getTimer() - sttTimer);
     } else {
@@ -488,12 +494,13 @@ Engine::invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     FeatType *outputTensor = new FeatType [vtcsCnt * outFeatDim];
 
     bool runEval = evaluate && iteration == numLayers-1;
+    
     // Start a new lambda communication context.
     resComm->newContextForward(vtcsTensor, localVerticesZData[iteration + 1], outputTensor, vtcsCnt, inFeatDim, outFeatDim, runEval);
 
     // if in GPU mode we launch gpu computation here and wait the results
     if (gpuEnabled) {
-        resComm->requestForward(iteration);
+        resComm->requestForward(iteration,iteration == numLayers - 1);
     } else {
         unsigned availLambdaId = 0;
         while(availLambdaId < numLambdasForward) {
@@ -519,7 +526,7 @@ Engine::invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
         // TODO: (YIFAN) thinking about if we can optimize this.
         // localVerticesActivationData[iteration + 1] = outputTensor;
         localVerticesActivationData[iteration + 1] = new FeatType [vtcsCnt * outFeatDim];
-        memcpy(localVerticesActivationData[iteration + 1], outputTensor, vtcsCnt * outFeatDim);
+        memcpy(localVerticesActivationData[iteration + 1], outputTensor, vtcsCnt * outFeatDim * sizeof(FeatType));
         savedTensors[iteration].push_back(Matrix(graph.getNumLocalVertices(), outFeatDim, localVerticesActivationData[iteration + 1]));
     }
 
@@ -529,16 +536,6 @@ Engine::invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
         vecTimeLambda[iteration] += getTimer() - sttTimer;
     }
     printLog(nodeId, "All lambda requests finished. Results received.");
-
-    if (iteration == numLayers - 1) {
-        for (unsigned i = 0; i < 2; i++) {
-            std::ostringstream vct;
-            for (unsigned j = 0; j < getFeatDim(numLayers); j++) {
-                vct << outputTensor[i * getFeatDim(numLayers) + j] << " ";
-            }
-            printLog(nodeId, vct.str().c_str());
-        }
-    }
 
     return outputTensor;
 }
@@ -570,6 +567,7 @@ Engine::scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim) {
     }
     return vtcsTensor;
 }
+
 
 /////////////////////////////////////////////////
 // Below are private functions for the engine. //
@@ -806,6 +804,7 @@ Engine::backwardWorker(unsigned tid, void *args) {
             }
         }
         if (tid == 0) {
+            delete[] newGradData;
             vecTimeAggregate.push_back(getTimer() - timeWorker);
             timeWorker = getTimer();
 
@@ -814,6 +813,8 @@ Engine::backwardWorker(unsigned tid, void *args) {
         barComp.wait();
     }
     if (tid == 0) {
+        // delete[] aggGradData;
+        // delete[] backwardGhostVerticesData;
         printLog(nodeId, "Deciding to halt at iteration %u...", 0);
         lockHalt.lock();
         halt = true;
@@ -841,8 +842,9 @@ Engine::backwardAggregateFromNeighbors(unsigned lvid) {
 
     // Apply normalization factor on the current data.
     Vertex& v = graph.getVertex(lvid);
-    for (unsigned i = 0; i < featDim; ++i)
+    for (unsigned i = 0; i < featDim; ++i) {
         currDataDst[i] *= v.getNormFactor();
+    }
 
     // Aggregate from incoming neighbors.
     for (unsigned i = 0; i < v.getNumOutEdges(); ++i) {
@@ -1220,11 +1222,9 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
             memcpy(zDataPtr, feature_vec.data(), featDim * sizeof(FeatType));
             memcpy(actDataPtr, feature_vec.data(), featDim * sizeof(FeatType));
         }
-
         ++gvid;
     }
     infile.close();
-
     assert(gvid == graph.getNumGlobalVertices());
 }
 
@@ -1414,7 +1414,7 @@ Engine::setEdgeNormalizations() {
             OutEdge& e = vertex.getOutEdge(i);
             unsigned vid = e.getDestId();
             if (e.getEdgeLocation() == LOCAL_EDGE_TYPE) {
-                unsigned dstDeg = graph.getVertex(vid).getNumOutEdges() + 1;
+                unsigned dstDeg = graph.getVertex(vid).getNumInEdges() + 1;
                 float dstNorm = std::pow(dstDeg, -.5);
                 e.setData(vtxNorm * dstNorm);
             } else {
@@ -1449,8 +1449,9 @@ Engine::findGhostDegrees(std::string& fileName) {
             continue;
         }
 
-        if (graph.containsOutEdgeGhostVertex(srcdst[0])) {
-            graph.getOutEdgeGhostVertex(srcdst[0]).incrementDegree();
+        // YIFAN: we count in degree for both outEdgeGhosts and inEdgeGhosts
+        if (graph.containsOutEdgeGhostVertex(srcdst[1])) {
+            graph.getOutEdgeGhostVertex(srcdst[1]).incrementDegree();
         }
         if (graph.containsInEdgeGhostVertex(srcdst[1])) {
             graph.getInEdgeGhostVertex(srcdst[1]).incrementDegree();
@@ -1528,6 +1529,7 @@ Engine::readGraphBS(std::string& fileName, std::set<unsigned>& inTopics, std::ve
         }
         forwardBatchMsgBuf[i] = new unsigned[forwardGhostVCnts[i]];
         backwardBatchMsgBuf[i] = new unsigned[backwardGhostVCnts[i]];
+
         unsigned forwardCnt = 0, backwardCnt = 0;
         for (unsigned j = 0; j < graphLocalVerticesNum; ++j) {
             if (forwardGhostVTables[i][j]) {

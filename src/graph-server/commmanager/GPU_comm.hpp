@@ -37,17 +37,21 @@ public:
     // For forward-prop.
     void newContextForward(FeatType *dataBuf, FeatType *zData_, FeatType *actData_,
                               unsigned numLocalVertices_, unsigned numFeats, unsigned numFeatsNext_, bool eval_);
-    void requestForward(unsigned layer);
-    void waitLambdaForward(){};
+
+    void requestForward(unsigned layer,bool lastLayer);
+
+    void waitLambdaForward(){;};
+
     void invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer){};
 
     // For backward-prop.
     void newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType *targetBuf,
                             unsigned numLocalVertices, std::vector<unsigned> layerConfig);
-    void newContextBackward(FeatType *oldGradBuf, FeatType *newGradBuf, FeatType *savedInputBuf, FeatType *savedOutputBuf, FeatType *targetBuf,
-                            unsigned numLocalVertices_, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim) {};
+
+    void newContextBackward(FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
+                                    unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim);
+
     void requestBackward(unsigned numLayers, bool lastLayer);
-    void sendBackpropChunks();
 
     //for validation
     void setTrainValidationSplit(float trainPortion, unsigned numLocalVertices);
@@ -57,11 +61,19 @@ public:
     // Send a message to the coordination server to shutdown.
     void sendShutdownMessage();
 
+    template <class T>
+    T requestFourBytes();
+    void sendFourBytes(char* data);
+    void sendMatrix(Matrix& m);
+    void sendResultPtr(FeatType* ptr);
+    friend class ComputingServer;
 
 private:
     unsigned nodeId;
     unsigned numNodes;
     unsigned numLocalVertices;
+
+    std::string wServersFile;
 
     std::thread comp_server_thread;
 
@@ -69,6 +81,7 @@ private:
     zmq::context_t ctx;
     zmq::socket_t dataSocket;
     unsigned dPort;
+    unsigned wPort;
 
     //forward
     //data related objs
@@ -80,11 +93,13 @@ private:
     bool eval;
     float split;
 
-
-    //backward
-    std::vector<Matrix> zMatrices;
-    std::vector<Matrix> actMatrices;
+    //backward 
+    Matrix oldGradMatrix;
+    Matrix newGradMatrix;
     Matrix targetMatrix;
+    std::vector<Matrix> *savedTensors;
+
+    zmq::message_t confirm;
 
 };
 

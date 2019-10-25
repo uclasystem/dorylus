@@ -17,9 +17,10 @@ if [ ! -f $dshfile ] ; then
 	echo "You need to write $dshfile file manually"
 	exit 1
 fi
+${EC2MAN_CMD} setup
 # Start all machines...
 ${EC2MAN_CMD} weight all start
-${EC2MAN_CMD} setup
+
 rm -f ~/wserverip
 ${EC2MAN_CMD} weight all pubip > wserverip
 

@@ -31,7 +31,7 @@ public:
         FeatType *actData, unsigned numLocalVertices, unsigned numFeats,
         unsigned numFeatsNext, bool eval)=0;
 
-    virtual void requestForward(unsigned layer)=0;
+    virtual void requestForward(unsigned layer,bool lastLayer)=0;
 
     virtual void invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer)=0;
     virtual void waitLambdaForward()=0;
