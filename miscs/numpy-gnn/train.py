@@ -195,7 +195,7 @@ def main():
     }
 
     A_hat, input_feats, target_labels = load_data(
-        '/home/shenteng/data/cora/raw/', 'cora')
+        '/home/yifan/dataset/cora/raw/', 'cora')
 
     check(A_hat, input_feats, target_labels, config)
 

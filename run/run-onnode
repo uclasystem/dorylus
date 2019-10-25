@@ -45,7 +45,7 @@ case $1 in
         for i in $( seq 1 ${NDS} ); do
           DSHNODES[$i]=$( head -n $i ${DSHMACHINESFILE} | tail -n 1 )
         done
-
+        
         # Choosing the dataset.
         if [[ -z $2 ]] || [[ ! -d /filepool/$2 ]]; then
             echo "Dataset '$2' is empty or not found under '/filepool' (at least on master node)."
@@ -102,12 +102,10 @@ case $1 in
             --nodeport ${NODEPORT} \
             --numlambdasforward ${NUM_LAMBDAS_FORWARD} \
             --numlambdasbackward ${NUM_LAMBDAS_BACKWARD}\
-            --numEpochs 5\
-            --validationFrequency 1\
             --GPU 0"
         dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ${DSH_COMMAND}" 2>&1 | tee ${LOGFILE}
 
-
+        
         # Gather the output files.
         OUTFILEDIR=${HOME}/outfiles/${RUN_MARK}.$2
         mkdir -p ${OUTFILEDIR}

@@ -1,5 +1,4 @@
 #include "GPU_comm.hpp"
-#include <unistd.h>
 
 static void doNotFreeBuffer(void *data, void *hint){
     // printf("Buffer is not freed :)\n");
