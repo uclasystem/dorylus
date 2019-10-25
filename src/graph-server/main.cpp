@@ -23,7 +23,7 @@ main(int argc, char *argv[]) {
     engine.destroy();
 /*
     float splitPortion = 1.0 / 3.0;
-    unsigned numEpochs = 5;
+    unsigned numEpochs = 20;
     unsigned valFreq = 1;
 
     if (engine.master())
@@ -62,8 +62,8 @@ main(int argc, char *argv[]) {
         }
     }
 
-    // Procude the output files.
-    engine.output();
+    // // Procude the output files.
+    // engine.output();
 
     // Destroy the engine.
     engine.destroy();

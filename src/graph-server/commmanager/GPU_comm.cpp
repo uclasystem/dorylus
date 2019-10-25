@@ -19,6 +19,7 @@ GPUComm::GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,
         dPort(dataserverPort_),
         wPort(wPort_),
         dataSocket(ctx,ZMQ_REQ){
+
         ready=0;
         eval=0;
 
@@ -102,6 +103,8 @@ void GPUComm::newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType 
 }
 
 
+
+
 void GPUComm::requestBackward(unsigned numLayers, bool lastLayer){
     printLog(nodeId, "GPU BACKWARD request.");
 
@@ -119,7 +122,6 @@ void GPUComm::requestBackward(unsigned numLayers, bool lastLayer){
 
 
 void GPUComm::sendBackpropChunks(){
-
     
     // Send z matrices, from layer 1-> last.
     for (Matrix& matrix : zMatrices)

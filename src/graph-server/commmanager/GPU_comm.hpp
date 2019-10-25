@@ -38,14 +38,18 @@ public:
     void newContextForward(FeatType *dataBuf, FeatType *zData_, FeatType *actData_,
                               unsigned numLocalVertices_, unsigned numFeats, unsigned numFeatsNext_, bool eval_);
     void requestForward(unsigned layer);
+
     void waitLambdaForward(){;};
+
     void invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer){};
 
     // For backward-prop.
     void newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType *targetBuf,
                             unsigned numLocalVertices, std::vector<unsigned> layerConfig);
+
     void newContextBackward(FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
                                     unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim){};
+
     void requestBackward(unsigned numLayers, bool lastLayer);
     void sendBackpropChunks();
 
@@ -91,7 +95,7 @@ private:
 
     bool ready;
 
-    //backward 
+    //backward
     std::vector<Matrix> zMatrices;
     std::vector<Matrix> actMatrices;
     Matrix targetMatrix;

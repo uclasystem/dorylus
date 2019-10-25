@@ -28,7 +28,8 @@ def load_data(base_dir, dataset):
     for edge in edge_list:
         adj_mat[edge[1]][edge[0]] = 1
 
-    normed_deg_vec = 1 / np.sqrt(np.sum(adj_mat, axis=0, keepdims=True))
+    normed_deg_vec = 1 / np.sqrt(np.sum(adj_mat, axis=1, keepdims=True))
+
     # Normalized A_hat matrix
     A_hat = normed_deg_vec * adj_mat * normed_deg_vec.T
 

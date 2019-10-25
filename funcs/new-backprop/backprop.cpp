@@ -69,6 +69,7 @@ requestTensor(zmq::socket_t& socket, OP op, unsigned partId, TYPE type = TYPE::A
 
     zmq::message_t respHeader;
     socket.recv(&respHeader);
+
     unsigned layerResp = parse<unsigned>((char*) respHeader.data(), 1);
     if (layerResp == -1) {
         std::cerr << "[ ERROR ] No corresponding matrix" << std::endl;
@@ -246,7 +247,11 @@ gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id,
  */
 static invocation_response
 backward_prop(std::string dataserver, std::string weightserver, std::string dport,
+<<<<<<< HEAD
               std::string wport, unsigned id, unsigned layer, bool lastLayer) {
+=======
+                std::string wport, unsigned id, unsigned layer, bool lastLayer) {
+>>>>>>> master
     zmq::context_t ctx(1);
 
     //
@@ -279,7 +284,10 @@ backward_prop(std::string dataserver, std::string weightserver, std::string dpor
         sprintf(dhost_port, "tcp://%s:%s", dataserver.c_str(), dport.c_str());
         data_socket.connect(dhost_port);
 
+<<<<<<< HEAD
         Matrix resultGradient;
+=======
+>>>>>>> master
         if (lastLayer) {
             std::cout << "< BACKWARD > Computing gradient from loss" << std::endl;
             gradLoss(data_socket, weights_socket, id, layer);
@@ -319,9 +327,14 @@ my_handler(invocation_request const& request) {
     unsigned chunkId = pt.get<int>("id");
     lastLayer = pt.get<bool>("lastLayer");
 
+<<<<<<< HEAD
     std::cout << "[ACCEPTED] Thread " << chunkId << " is requested from " <<
         dataserver << ":" << dport << ", BACKWARD on layer " << layer
         << std::endl;
+=======
+    std::cout << "[ACCEPTED] Thread " << chunkId << " is requested from " << dataserver << ":" << dport
+              << ", BACKWARD on " << layer << " layers." << std::endl;
+>>>>>>> master
 
     return backward_prop(dataserver, weightserver, dport, wport, chunkId, layer, lastLayer);
 }

@@ -204,7 +204,8 @@ LambdaWorker::sendChunk(Matrix &srcMat, zmq::message_t& client_id, unsigned part
 
         // Check to make sure that the bounds of this partition do not exceed the bounds of the data array.
         // If they do, set partition end to the end of the array.
-        unsigned partRows = (srcMat.getRows() + numLambdas) / numLambdas;
+
+        unsigned partRows = (srcMat.getRows() + numLambdas - 1) / numLambdas;
         unsigned thisPartRows = partRows;
         if ((partId * partRows + partRows) > srcMat.getRows())
             thisPartRows = srcMat.getRows() - partId * partRows;
@@ -223,8 +224,11 @@ LambdaWorker::sendChunk(Matrix &srcMat, zmq::message_t& client_id, unsigned part
 
 void
 LambdaWorker::recvChunk(Matrix &dstMat, zmq::message_t &client_id, unsigned partId, bool forward) {
-    unsigned partRows = (dstMat.getRows() + numLambdasBackward) / numLambdasBackward;
-    FeatType *partitionStart = dstMat.getData() + partId * partRows * numFeatsNext;
+
+    unsigned numLambdas = forward ? numLambdasForward : numLambdasBackward;
+    unsigned partRows = (dstMat.getRows() + numLambdas - 1) / numLambdas;
+    FeatType *partitionStart = dstMat.getData() + partId * partRows * dstMat.getCols();
+
 
     // Receive the pushed-back results.
     zmq::message_t msg;
@@ -240,11 +244,11 @@ LambdaWorker::recvChunk(Matrix &dstMat, zmq::message_t &client_id, unsigned part
     std::lock_guard<std::mutex> lk(count_mutex);
     if (forward) {
         ++countForward;
-        if (countForward == numLambdasBackward)
+        if (countForward == numLambdas)
             cv_forward.notify_one();
     } else {
         ++countBackward;
-        if (countBackward == numLambdasBackward) {
+        if (countBackward == numLambdas) {
             cv_backward.notify_one();
         }
     }
