@@ -204,7 +204,6 @@ CoordServer::run() {
                     invokeFunction("new-backprop", dataserverIpCopy, dataserverPort, weightserverIp, weightserverPort, layer, i, (bool) lastLayer);
                     req_count++;
                 }
-                std::cout << "after invoke backward lambda\n";
 
             // Unknown op code.
             } else {

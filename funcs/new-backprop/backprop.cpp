@@ -44,6 +44,8 @@ requestMatrix(zmq::socket_t& socket, OP op, unsigned id) {
     unsigned layerResp = parse<unsigned>((char*) respHeader.data(), 1);
     if (layerResp == -1) {
         std::cerr << "[ ERROR ] No corresponding matrix" << std::endl;
+
+        return Matrix();
     } else {
         unsigned rows = parse<unsigned>((char*) respHeader.data(), 2);
         unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
@@ -60,42 +62,19 @@ requestMatrix(zmq::socket_t& socket, OP op, unsigned id) {
 }
 
 static Matrix
-requestWeights(zmq::socket_t& socket, OP op, unsigned layer) {
-    zmq::message_t header(HEADER_SIZE);
-    populateHeader((char*) header.data(), op, layer);
-    socket.send(header);
-
-    zmq::message_t respHeader;
-    socket.recv(&respHeader);
-    unsigned layerResp = parse<unsigned>((char*) respHeader.data(), 1);
-    if (layerResp == -1) {
-        std::cerr << "[ ERROR ] No corresponding matrix" << std::endl;
-    } else {
-        unsigned rows = parse<unsigned>((char*) respHeader.data(), 2);
-        unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
-
-        zmq::message_t matxData(rows * cols * sizeof(FeatType));
-        socket.recv(&matxData);
-
-        FeatType *matxBuffer = new FeatType[rows * cols];
-        std::memcpy(matxBuffer, matxData.data(), matxData.size());
-
-        Matrix m(rows, cols, matxBuffer);
-        return m;
-    }
-}
-
-static Matrix
-requestTensor(zmq::socket_t& socket, OP op, unsigned partId, TYPE type = 0, unsigned layer = 0) {
+requestTensor(zmq::socket_t& socket, OP op, unsigned partId, TYPE type = TYPE::AH, unsigned layer = 0) {
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char*) header.data(), op, partId, type, layer);
     socket.send(header);
 
     zmq::message_t respHeader;
     socket.recv(&respHeader);
+
     unsigned layerResp = parse<unsigned>((char*) respHeader.data(), 1);
     if (layerResp == -1) {
         std::cerr << "[ ERROR ] No corresponding matrix" << std::endl;
+
+        return Matrix();
     } else {
         unsigned rows = parse<unsigned>((char*) respHeader.data(), 2);
         unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
@@ -188,7 +167,7 @@ softmaxRows(Matrix& mat) {
  *
  */
 static Matrix
-activateDerivate(Matrix& mat) {
+activateDerivative(Matrix& mat) {
     FeatType *res = new FeatType[mat.getNumElemts()];
     FeatType *zData = mat.getData();
 
@@ -267,8 +246,8 @@ gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id,
  *
  */
 static invocation_response
-backward_prop(std::string dataserver, std::string weightserver, std::string dport, std::string wport,
-              unsigned id, unsigned layer) {
+backward_prop(std::string dataserver, std::string weightserver, std::string dport,
+                std::string wport, unsigned id, unsigned layer, bool lastLayer) {
     zmq::context_t ctx(1);
 
     //
@@ -301,13 +280,12 @@ backward_prop(std::string dataserver, std::string weightserver, std::string dpor
         sprintf(dhost_port, "tcp://%s:%s", dataserver.c_str(), dport.c_str());
         data_socket.connect(dhost_port);
 
-        Matrix resultGradient;
         if (lastLayer) {
             std::cout << "< BACKWARD > Computing gradient from loss" << std::endl;
-            resultGradient = gradLoss(data_socket, weights_socket, id, layer);
+            gradLoss(data_socket, weights_socket, id, layer);
         } else {
             std::cout << "< BACKWARD > Computing gradient for this layer" << std::endl;
-            resultGradient = gradLayer(data_socket, weights_socket, id, layer);
+            gradLayer(data_socket, weights_socket, id, layer);
         }
 
     } catch(std::exception &ex) {
@@ -342,7 +320,7 @@ my_handler(invocation_request const& request) {
     lastLayer = pt.get<bool>("lastLayer");
 
     std::cout << "[ACCEPTED] Thread " << chunkId << " is requested from " << dataserver << ":" << dport
-              << ", BACKWARD on " << numLayers << " layers." << std::endl;
+              << ", BACKWARD on " << layer << " layers." << std::endl;
 
     return backward_prop(dataserver, weightserver, dport, wport, chunkId, layer, lastLayer);
 }
@@ -350,5 +328,6 @@ my_handler(invocation_request const& request) {
 int
 main(int argc, char *argv[]) {
     run_handler(my_handler);
+
     return 0;
 }
