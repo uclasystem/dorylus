@@ -358,13 +358,13 @@ Engine::output() {
     //
     // The follwing are only-last-layer feature values outputing.
     //
-    for (Vertex& v : graph.getVertices()) {
-        outStream << v.getGlobalId() << ": ";
-        FeatType *dataPtr = getVtxFeat(localVerticesActivationData[numLayers], v.getLocalId(), getFeatDim(numLayers));
-        for (size_t j = 0; j < layerConfig[numLayers]; ++j)
-            outStream << dataPtr[j] << " ";
-        outStream << std::endl;
-    }
+    // for (Vertex& v : graph.getVertices()) {
+    //     outStream << v.getGlobalId() << ": ";
+    //     FeatType *dataPtr = getVtxFeat(localVerticesActivationData[numLayers], v.getLocalId(), getFeatDim(numLayers));
+    //     for (size_t j = 0; j < layerConfig[numLayers]; ++j)
+    //         outStream << dataPtr[j] << " ";
+    //     outStream << std::endl;
+    // }
 
     //
     // The following are labels outputing.
@@ -494,12 +494,13 @@ Engine::invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     FeatType *outputTensor = new FeatType [vtcsCnt * outFeatDim];
 
     bool runEval = evaluate && iteration == numLayers-1;
+    
     // Start a new lambda communication context.
     resComm->newContextForward(vtcsTensor, localVerticesZData[iteration + 1], outputTensor, vtcsCnt, inFeatDim, outFeatDim, runEval);
 
     // if in GPU mode we launch gpu computation here and wait the results
     if (gpuEnabled) {
-        resComm->requestForward(iteration);
+        resComm->requestForward(iteration,iteration == numLayers - 1);
     } else {
         unsigned availLambdaId = 0;
         while(availLambdaId < numLambdasForward) {

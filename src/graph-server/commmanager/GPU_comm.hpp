@@ -37,7 +37,8 @@ public:
     // For forward-prop.
     void newContextForward(FeatType *dataBuf, FeatType *zData_, FeatType *actData_,
                               unsigned numLocalVertices_, unsigned numFeats, unsigned numFeatsNext_, bool eval_);
-    void requestForward(unsigned layer);
+
+    void requestForward(unsigned layer,bool lastLayer);
 
     void waitLambdaForward(){;};
 
@@ -48,10 +49,9 @@ public:
                             unsigned numLocalVertices, std::vector<unsigned> layerConfig);
 
     void newContextBackward(FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
-                                    unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim){};
+                                    unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim);
 
     void requestBackward(unsigned numLayers, bool lastLayer);
-    void sendBackpropChunks();
 
     //for validation
     void setTrainValidationSplit(float trainPortion, unsigned numLocalVertices);
@@ -93,12 +93,11 @@ private:
     bool eval;
     float split;
 
-    bool ready;
-
-    //backward
-    std::vector<Matrix> zMatrices;
-    std::vector<Matrix> actMatrices;
+    //backward 
+    Matrix oldGradMatrix;
+    Matrix newGradMatrix;
     Matrix targetMatrix;
+    std::vector<Matrix> *savedTensors;
 
     zmq::message_t confirm;
 

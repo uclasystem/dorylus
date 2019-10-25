@@ -53,7 +53,6 @@ with open(feat_file, "r") as ffeats:
             input_feats[row_idx] = list(map(float, line.split(",")))
             row_idx += 1
 # print(input_feats)
-
 # Read in target lables one-hot representation.
 target_labels = np.empty(shape=(num_vertices, layer_config[2]), dtype=float)
 with open(label_file, "r") as flabels:
@@ -104,13 +103,13 @@ act_mat0 = input_feats
 z_mat1 = np.dot(S_mat, np.dot(act_mat0, weights[0]))
 act_mat1 = activate(z_mat1)
 z_mat2 = np.dot(S_mat, np.dot(act_mat1, weights[1]))
-act_mat2 = activate(z_mat2)
+act_mat2 = softmax_row(z_mat2)
 
-print("Activation (1): ")
-print(act_mat1)
-print("Activation (2): ")
-print(act_mat2)
-
+#print("Activation (1): ")
+#print(act_mat1[0])
+#print("Activation (2): ")
+print(act_mat2[0])
+"""
 # Backward.
 gd_mat2 = np.multiply(softmax_row(act_mat2) - target_labels, activate_derivate(z_mat2))
 gd_mat1 = np.multiply(np.matmul(gd_mat2, weights[1].transpose()), activate_derivate(z_mat1))
@@ -128,3 +127,4 @@ print("Abs sum of 1st layer:")
 print(np.sum(np.abs(weights[0] - weights[2])))
 print("Abs sum of 2nd layer:")
 print(np.sum(np.abs(weights[1] - weights[3])))
+"""

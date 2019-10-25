@@ -43,8 +43,8 @@ void CuMatrix::deviceSetMatrix(){
             printf("CUBLAS_STATUS_MAPPING_ERROR\n");
             break;
         }
+        printf("********ROWS %d, COLs %d\n", rows,cols);
         
-        printf ("data download failed\n");
         cudaFree (devPtr);
         cublasDestroy(handle);
         exit (EXIT_FAILURE);
@@ -71,26 +71,46 @@ CuMatrix::~CuMatrix(){
     cudaFree (devPtr);
 }
 
-CuMatrix CuMatrix::dot(CuMatrix& M,float alpha,float beta){
-    if(handle!=M.handle){
+void CuMatrix::scale(const float& alpha){
+    cublasSscal(handle, getNumElemts(),&alpha, devPtr, 1);
+}
+
+CuMatrix CuMatrix::dot(CuMatrix& B,bool A_trans,bool B_trans,float alpha,float beta){
+    if(handle!=B.handle){
         std::cout<<"Handle don't match\n";
         exit(EXIT_FAILURE);
     }
-    Matrix mat_C(getRows(),M.getCols(),new FeatType[getRows()*M.getCols()]);
-    CuMatrix C(mat_C,handle);
+    cublasOperation_t ATrans=A_trans?CUBLAS_OP_T:CUBLAS_OP_N;
+    cublasOperation_t BTrans=B_trans?CUBLAS_OP_T:CUBLAS_OP_N;
     //1. cublas is using col-major
     //2. when cpy into/out device memory, it will do Transpose 
     //3. C=AB and C^T= (B^T*A^T)
     //This means just swap the order of multiplicaiton
     //Guide: https://peterwittek.com/cublas-matrix-c-style.html
-    cublasSgemm(handle,
-        CUBLAS_OP_N,CUBLAS_OP_N,
-        M.getCols(),getRows(),M.getRows(),
+    Matrix AT=Matrix(getCols(),getRows(),getData());
+    Matrix BT=Matrix(B.getCols(),B.getRows(),B.getData());
+    
+    unsigned CRow=A_trans?AT.getRows():getRows();
+    unsigned CCol=B_trans?BT.getCols():B.getCols();
+    Matrix mat_C(CRow,CCol,(char*)NULL);//real C
+
+    unsigned k=A_trans?getRows():getCols();
+    CuMatrix C(mat_C,handle);
+
+    stat=cublasSgemm(handle,
+        BTrans,ATrans,
+        C.getCols(),C.getRows(),k,
         &alpha,
-        M.devPtr,M.getCols(),
+        B.devPtr,B.getCols(),
         devPtr,getCols(),
         &beta,
-        C.devPtr,M.getCols());
+        C.devPtr,C.getCols());
+    if (stat != CUBLAS_STATUS_SUCCESS) {
+        printf ("SGEMM ERROR\n");
+        cudaFree (devPtr);
+        cublasDestroy(handle);
+        exit (EXIT_FAILURE);
+    }
     return C;
 }
 

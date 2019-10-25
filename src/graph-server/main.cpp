@@ -19,9 +19,7 @@ main(int argc, char *argv[]) {
     // The engine object is static and has been substantiated in Engine.cpp.
     engine.init(argc, argv);
 
-    engine.runForward(true);
-    engine.destroy();
-/*
+
     float splitPortion = 1.0 / 3.0;
     unsigned numEpochs = 20;
     unsigned valFreq = 1;
@@ -63,10 +61,10 @@ main(int argc, char *argv[]) {
     }
 
     // // Procude the output files.
-    // engine.output();
+    engine.output();
 
     // Destroy the engine.
     engine.destroy();
-*/
+
     return 0;
 }

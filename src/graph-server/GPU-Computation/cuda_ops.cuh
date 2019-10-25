@@ -4,13 +4,14 @@ struct tanh_functor{
         float operator()(const float& x) const { return tanhf(x);}
 };
 
-struct activateDerivate_functor{
-    activateDerivate_functor(){}
+struct activateDerivative_functor{
+    activateDerivative_functor(){}
     __host__ __device__
         float operator()(const float& x) const { 
             return 1 - pow(tanh(x), 2);
         }
 };
+
 
 struct exp_functor{
     exp_functor(){}

@@ -18,8 +18,8 @@ public:
 
     Matrix getMatrix();
 	void updateMatrixFromGPU();
-    
-	CuMatrix dot(CuMatrix& M,float alpha=1.,float beta=0.) ;
+    void scale(const float& alpha);
+	CuMatrix dot(CuMatrix& B,bool A_trans=false,bool B_trans=false,float alpha=1.,float beta=0.);
     CuMatrix transpose();
 // private:
 	void deviceMalloc();

@@ -1,5 +1,6 @@
 #include "comp_server.cuh"
 static void doNotFreeBuffer(void *data, void *hint){
+    // meant to be empty
     // printf("Buffer is not freed :)\n");
 }
 void loadWeightServers(std::vector<char *>& addresses, const std::string& wServersFile){
@@ -61,22 +62,30 @@ void ComputingServer::run(){
 
 void ComputingServer::processForward(){
     unsigned layer = msgService.requestFourBytes<unsigned>();
-    float split= msgService.requestFourBytes<float>();
+    unsigned lastLayer= msgService.requestFourBytes<unsigned>();
+    // float split= msgService.requestFourBytes<float>();
     Matrix feats=msgService.requestMatrix();
     Matrix weights=msgService.requestWeightsMatrix(layer);
     FeatType* z_data=msgService.requestResultPtr();
     FeatType* act_z=msgService.requestResultPtr();
     CuMatrix z = cu.dot(feats, weights);
     memcpy(z_data,z.getData(),z.getDataSize());
-    cu.activate(z);//z data get activated ...
-    memcpy(act_z,z.getData(),z.getDataSize());
-
-    if(split!=0)
-        evaluateModel(z);
+    if(!lastLayer){
+        cu.activate(z);//z data get activated ...
+        memcpy(act_z,z.getData(),z.getDataSize());
+    }else{
+        CuMatrix cuPredictions=cu.softmaxRows(z);
+        cuPredictions.updateMatrixFromGPU();
+        memcpy(act_z,cuPredictions.getData(),z.getDataSize());
+        delete[] cuPredictions.getData();
+    }
     unsigned done= msgService.requestFourBytes<unsigned>();
     delete[] z.getData();
     delete[] weights.getData();
+    // if(split!=0)
+    //     evaluateModel(z);
 }
+
 
 void ComputingServer::evaluateModel(Matrix& activations){
     CuMatrix labels = cu.wrapMatrix(msgService.requestMatrix());
@@ -97,31 +106,100 @@ void ComputingServer::evaluateModel(Matrix& activations){
 void ComputingServer::processBackward(){
     
     unsigned layer = msgService.requestFourBytes<unsigned>();
-    float numNode= msgService.requestFourBytes<float>();
+    unsigned numNode= msgService.requestFourBytes<unsigned>();
+    unsigned lastLayer=msgService.requestFourBytes<unsigned>();
 
-    
     //send INFO to weight server
     if(nodeId<weightServerAddrs.size()){
         unsigned count = 0; 
-        for (size_t i=0;i<numNode;++i)
+        for (size_t i=0;i<numNode;++i){
             if(i%weightServerAddrs.size()==nodeId)
                 count+=1;
+        }
         msgService.sendInfoMessage(count);
     }
 
-    std::vector<Matrix> weightsData;
-    // Request weights matrices.
-    weightsData =  msgService.requestWeightsMatrices(layer);
-    GraphData graphData=msgService.requestForwardMatrices(layer);
+    Matrix resultGradient;
+    if (lastLayer) {
+        std::cout << "< BACKWARD > Computing gradient from loss" << std::endl;
+        gradLoss(layer);
+    } else {
+        std::cout << "< BACKWARD > Computing gradient for this layer" << std::endl;
+        gradLayer(layer);
+    }
+    unsigned done= msgService.requestFourBytes<unsigned>();
+}
 
+void
+ComputingServer::gradLayer(unsigned layer) {
+
+    std::cout << "< BACKWARD > Requesting gradient from graph server" << std::endl;
+    Matrix grad = msgService.requestMatrix();
+    CuMatrix cuGrad=cu.wrapMatrix(grad);
+    std::cout << "< BACKWARD > Requesting Z values" << std::endl;
+    Matrix z = msgService.requestMatrix();
+    CuMatrix cuZ = cu.wrapMatrix(z);
+
+    std::cout << "< BACKWARD > Calculating derivative of activation" << std::endl;
+    CuMatrix actDeriv = cu.activateDerivative(cuZ);
+    std::cout << "< BACKWARD > Hadamard multiplication" << std::endl;
+    CuMatrix interGrad = cu.hadamardMul(cuGrad,actDeriv);
+
+    std::cout << "< BACKWARD > Getting weights" << std::endl;
+    Matrix weights = msgService.requestWeightsMatrix(layer, OP::PULL_BACKWARD);
+    std::cout << "< BACKWARD > MatMul(gradient, weights)" << std::endl;
+    CuMatrix cuWeights=cu.wrapMatrix(weights);
+    CuMatrix resultGrad = interGrad.dot(cuWeights, false, true);
+    resultGrad.setData(msgService.requestResultPtr());
+    resultGrad.updateMatrixFromGPU();
+
+    std::cout << "< BACKWARD > Requesting AH" << std::endl;
+    Matrix ah = msgService.requestMatrix();
+    CuMatrix cuAh=cu.wrapMatrix(ah);
+    std::cout << "< BACKWARD > Computing weight updates" << std::endl;
+    CuMatrix cuWeightUpdates = cuAh.dot(interGrad, true, false, LEARNING_RATE);
+    Matrix weightUpdates=cuWeightUpdates.getMatrix();
+
+    std::cout << "< BACKWARD > Sending weight updates" << std::endl;
+    msgService.sendWeightUpdate(weightUpdates,layer);
+}
+
+
+void
+ComputingServer::gradLoss(unsigned layer) {
+    std::cout << "< BACKWARD > Getting predictions and labels" << std::endl;
+    Matrix predictions = msgService.requestMatrix();
+    Matrix labels = msgService.requestMatrix();
+
+    // derivative of softmax
+    std::cout << "< BACKWARD > Calculating cross entropy" << std::endl;
+    CuMatrix cuPredictions=cu.wrapMatrix(predictions);
     
-    std::vector<Matrix> weightsUpdates;
-    weightsUpdates = gradientComputation(graphData, weightsData);
 
-    msgService.sendWeightsUpdates(weightsUpdates);
 
-    for(auto w:weightsData)
-        delete[] w.getData();
+    CuMatrix cuLabels=cu.wrapMatrix(labels);
+    CuMatrix d_output = cu.hadamardSub(cuPredictions, cuLabels);
+
+    // d_out * W^T
+    std::cout << "< BACKWARD > Getting weights" << std::endl;
+    Matrix weights = msgService.requestWeightsMatrix(layer, OP::PULL_BACKWARD);
+    CuMatrix cuWeights=cu.wrapMatrix(weights);
+    std::cout << "< BACKWARD > Computing gradient" << std::endl;
+    CuMatrix interGrad = d_output.dot(cuWeights, false, true);
+    interGrad.setData(msgService.requestResultPtr());
+    interGrad.updateMatrixFromGPU();
+
+    // AH^T * d_out
+    std::cout << "< BACKWARD > Requesting AH" << std::endl;
+    Matrix ah = msgService.requestMatrix();
+    std::cout << "< BACKWARD > Computing weight updates" << std::endl;
+    CuMatrix cuAh=cu.wrapMatrix(ah);
+    CuMatrix cuWeightUpdates = cuAh.dot(d_output, true, false, LEARNING_RATE);
+    Matrix weightUpdates=cuWeightUpdates.getMatrix();
+    // std::cout<<weightUpdates.str();
+
+    std::cout << "< BACKWARD > Sending weight updates" << std::endl;
+    msgService.sendWeightUpdate(weightUpdates,layer);
 }
 
 /**
@@ -129,6 +207,7 @@ void ComputingServer::processBackward(){
  * Request the graph feature matrices data from dataserver.
  * 
  */ 
+
 GraphData
 MessageService::requestForwardMatrices(unsigned numLayers) {
         
@@ -153,80 +232,19 @@ MessageService::requestForwardMatrices(unsigned numLayers) {
 
 
 void
-MessageService::sendWeightsUpdates(std::vector<Matrix> &weightsUpdates) {
-    
+MessageService::sendWeightUpdate(Matrix& matrix,unsigned layer) {
     // Send push header.
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::PUSH_BACKWARD, 0);
-    printf("Sending updates\n");
+    populateHeader((char *) header.data(), OP::PUSH_BACKWARD, layer, matrix.getRows(),
+                    matrix.getCols());
     weightSocket->send(header, ZMQ_SNDMORE);
 
-    // Send updates to all weight matrices given by my chunk.
-    for (unsigned i = 0; i < weightsUpdates.size(); ++i) {
-        Matrix& updateMat = weightsUpdates[i];
-
-        zmq::message_t updateData(updateMat.getData(),updateMat.getDataSize(),doNotFreeBuffer,NULL);
-        if (i == weightsUpdates.size() - 1)
-            weightSocket->send(updateData);
-        else
-            weightSocket->send(updateData, ZMQ_SNDMORE);
-    }
+    zmq::message_t updateMsg(matrix.getData(),matrix.getDataSize(),doNotFreeBuffer,NULL);
+    weightSocket->send(updateMsg);
 
     // Wait for updates settled reply.
     zmq::message_t confirm;
     weightSocket->recv(&confirm);
-}
-
-
-/**
- *
- * Main logic of gradient computation and a naive gradient descent to get weight updates.
- *
- * Attention:
- *   zMatrices   vec contains z1   -> zout;
- *   actMatrices vec contains act0 -> actout;
- *   weightData  vec contains w2   -> wout.
- * 
- */
-std::vector<Matrix>
-ComputingServer::gradientComputation(GraphData& graphData, std::vector<Matrix>& weightsData) {
-    
-    std::vector<CuMatrix*> gradients;
-    std::vector<Matrix> weightsUpdates;
-
-    // // Compute last layer's gradients.
-    CuMatrix cuAct=cu.wrapMatrix(graphData.actMatrices.back());
-    CuMatrix softmaxRes = cu.softmaxRows(cuAct);
-
-    CuMatrix cuTarget=cu.wrapMatrix(graphData.targetMatrix);
-    CuMatrix subRes = cu.hadamardSub(softmaxRes, cuTarget);
-
-    CuMatrix cuZ=cu.wrapMatrix(graphData.zMatrices.back());
-    CuMatrix derivateRes = cu.activateDerivate(cuZ);
-    gradients.push_back(cu.hadamardMul(subRes, derivateRes));
-
-    // Compute previous layers gradients.
-    for (unsigned i = weightsData.size(); i > 0; --i) {
-        CuMatrix cuWeights=cu.wrapMatrix(weightsData[i - 1]);
-        CuMatrix dotRes = cu.dotGDwithWTrans(*gradients.back(),cuWeights);
-        CuMatrix cuZ= cu.wrapMatrix(graphData.zMatrices[i - 1]);
-        CuMatrix derivateRes = cu.activateDerivate(cuZ);
-        gradients.push_back(cu.hadamardMul(dotRes, derivateRes));
-    }
-
-    std::reverse(gradients.begin(), gradients.end());
-
-    // Compute weights updates.
-    for (unsigned i = 0; i < gradients.size(); ++i){
-        CuMatrix cuAct_=cu.wrapMatrix(graphData.actMatrices[i]);
-        Matrix update=cu.dotActTranswithGD(cuAct_, *gradients[i], LEARNING_RATE).getMatrix();
-        weightsUpdates.push_back(update);
-    }
-
-    for(auto g:gradients)
-        delete g;
-
-    return weightsUpdates;
 }
 
 MessageService::MessageService(zmq::context_t& dctx,unsigned dPort_,unsigned wPort_):
@@ -286,6 +304,7 @@ Matrix MessageService::requestMatrix(){
     return Matrix(row,col,data);
 }
 
+
 FeatType* MessageService::requestResultPtr(){
     zmq::message_t ptrMsg(sizeof(FeatType*));
     dataSocket->recv(&ptrMsg);
@@ -293,10 +312,10 @@ FeatType* MessageService::requestResultPtr(){
     return *((FeatType**)ptrMsg.data());
 }   
 
-Matrix MessageService::requestWeightsMatrix(unsigned layer){
+Matrix MessageService::requestWeightsMatrix(unsigned layer,OP op){
     // Send pull request.
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::PULL_FORWARD, layer);
+    populateHeader((char *) header.data(), op, layer);
     weightSocket->send(header);
     // Listen on respond.
     zmq::message_t respHeader(HEADER_SIZE);

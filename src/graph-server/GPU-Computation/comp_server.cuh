@@ -17,7 +17,7 @@
 
 class GPUComm;
 
-const float LEARNING_RATE=0.1;
+const float LEARNING_RATE=0.01;
 unsigned nodeId;
 /** Struct for wrapping over the returned matrices. */
 typedef struct {
@@ -35,10 +35,10 @@ public:
 
     //weight server related
     void setUpWeightSocket(char* addr);
-    Matrix requestWeightsMatrix(unsigned layer);
+    Matrix requestWeightsMatrix(unsigned layer, OP op=OP::PULL_FORWARD);
     void sendInfoMessage(unsigned numLambdas);
     std::vector<Matrix> requestWeightsMatrices(unsigned numLayers);
-    void sendWeightsUpdates(std::vector<Matrix>& weightsUpdates);
+    void sendWeightUpdate(Matrix& matrix,unsigned layer);
     void terminateWeightServers(std::vector<char*>& weightServerAddrs);
     void sendShutdownMessage(zmq::socket_t& weightsocket);
 
@@ -76,7 +76,8 @@ public:
 
     //For backward
     void processBackward();
-    std::vector<Matrix> gradientComputation(GraphData& graphData, std::vector<Matrix>& weightsData);
+    void gradLayer(unsigned layer);
+    void gradLoss(unsigned layer);
 
 private:
 

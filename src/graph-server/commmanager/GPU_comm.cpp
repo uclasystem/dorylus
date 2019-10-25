@@ -20,7 +20,6 @@ GPUComm::GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,
         wPort(wPort_),
         dataSocket(ctx,ZMQ_REQ){
 
-        ready=0;
         eval=0;
 
         ComputingServer* comp_server=new ComputingServer(this);
@@ -42,6 +41,7 @@ void GPUComm::newContextForward(FeatType *dataBuf, FeatType *zData_, FeatType *a
     eval=eval_;
     numLocalVertices=numLocalVertices_;
     actMatrix=Matrix(numLocalVertices_, numFeats, dataBuf);
+    printf("numLocalVertices_ %d\n", numLocalVertices_);
     zData = zData_;
     actData = actData_;
     numFeatsNext = numFeatsNext_;
@@ -49,33 +49,36 @@ void GPUComm::newContextForward(FeatType *dataBuf, FeatType *zData_, FeatType *a
 
 }
 
-void GPUComm::requestForward(unsigned layer){
+void GPUComm::requestForward(unsigned layer,bool lastLayer){
 
     try {
-        float split_data=split;
-        if(!eval)
-            split_data=0;
-        else
-            printLog(nodeId,"Evaling");
-
+        // float split_data=split;
+        // if(!eval)
+        //     split_data=0;
+        // else
+        //     printLog(nodeId,"Evaling");
+    
         int op=OP::REQ_FORWARD;
+        unsigned lastLayerInt=lastLayer;
         sendFourBytes((char*)&op);
         sendFourBytes((char*)&layer);
-        sendFourBytes((char*)&split_data);
+        sendFourBytes((char*)&lastLayerInt);
+        // sendFourBytes((char*)&split_data);
         sendMatrix(actMatrix);
         sendResultPtr(zData);
         sendResultPtr(actData);
-        
-        if(eval){
-            unsigned numValidationVertices=std::ceil(split*numLocalVertices);
-            sendMatrix(targetMatrix);
-            unsigned totalCorrect = requestFourBytes<unsigned>();
-            float loss = requestFourBytes<float>();
-            printLog(nodeId, "Accuracy this epoch: %f",(float) totalCorrect / (float) numValidationVertices);
-            printLog(nodeId, "Loss this epoch %f",loss / (float) numValidationVertices);
-        }
         unsigned done=0;
         sendFourBytes((char*)&done);
+
+
+        // if(eval){
+        //     unsigned numValidationVertices=std::ceil(split*numLocalVertices);
+        //     sendMatrix(targetMatrix);
+        //     unsigned totalCorrect = requestFourBytes<unsigned>();
+        //     float loss = requestFourBytes<float>();
+        //     printLog(nodeId, "Accuracy this epoch: %f",(float) totalCorrect / (float) numValidationVertices);
+        //     printLog(nodeId, "Loss this epoch %f",loss / (float) numValidationVertices);
+        // }
     }
     catch(std::exception& ex){
         std::cerr << "[ERROR] " << ex.what() << std::endl;
@@ -91,48 +94,47 @@ void GPUComm::setTrainValidationSplit(float trainPortion, unsigned numLocalVerti
 // For backward-prop.
 void GPUComm::newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType *targetBuf,
                             unsigned numLocalVertices, std::vector<unsigned> layerConfig){
-    zMatrices.clear();
-    for (size_t i = 1; i < layerConfig.size(); ++i)
-        zMatrices.push_back(Matrix(numLocalVertices, layerConfig[i], zBufs[i]));
-    actMatrices.clear();
-    for (size_t i = 0; i < layerConfig.size(); ++i)
-        actMatrices.push_back(Matrix(numLocalVertices, layerConfig[i], actBufs[i]));
-    targetMatrix=Matrix(numLocalVertices, layerConfig[layerConfig.size() - 1], targetBuf);
+    printLog(nodeId, "***********SHOULD NOT APPEAR********************");
+    printLog(nodeId, "GPU BACKWARD context(Old) created.");
+}
 
+void GPUComm::newContextBackward(FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
+                                    unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim){
+    // Create new matrices object for workers to access.
+    oldGradMatrix=Matrix(numLocalVertices, outFeatDim, oldGradBuf);
+    newGradMatrix=Matrix(numLocalVertices, inFeatDim, newGradBuf);
+    targetMatrix=Matrix(numLocalVertices, targetDim, targetBuf);
+    this->savedTensors=savedTensors;
     printLog(nodeId, "GPU BACKWARD context created.");
 }
 
-
-
-
 void GPUComm::requestBackward(unsigned numLayers, bool lastLayer){
     printLog(nodeId, "GPU BACKWARD request.");
-
+    unsigned layer=numLayers;
     try {
+        int lastLayerInt=(int)lastLayer;
         int op=OP::REQ_BACKWARD;
         sendFourBytes((char*)&op);
-        sendFourBytes((char*)&numLayers);
+        sendFourBytes((char*)&numLayers);//which layer |not the totalnumber of layers
         sendFourBytes((char*)&numNodes);
-        sendBackpropChunks();
+        sendFourBytes((char*)&lastLayerInt);
+        if(lastLayer){
+            sendMatrix(savedTensors[layer][TYPE::ACT - 1]);
+            sendMatrix(targetMatrix);
+            sendResultPtr(newGradMatrix.getData());
+            sendMatrix(savedTensors[layer][TYPE::AH - 1]);
+        }else{
+            sendMatrix(oldGradMatrix);
+            sendMatrix(savedTensors[layer][TYPE::Z - 1]);
+            sendResultPtr(newGradMatrix.getData());
+            sendMatrix(savedTensors[layer][TYPE::AH - 1]);
+        }
+        unsigned done=0;
+        sendFourBytes((char*)&done);
     }
     catch(std::exception& ex){
         std::cerr << "[ERROR] " << ex.what() << std::endl;
     }
-}
-
-
-void GPUComm::sendBackpropChunks(){
-    
-    // Send z matrices, from layer 1-> last.
-    for (Matrix& matrix : zMatrices)
-        sendMatrix(matrix);
-
-    // Send activation matrices, from layer 0 -> last.
-    for (Matrix& matrix : actMatrices) 
-        sendMatrix(matrix);
-
-    // Send target label matrix.
-    sendMatrix(targetMatrix);
 }
 
 

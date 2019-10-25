@@ -170,21 +170,13 @@ void WeightServer::applyUpdate(unsigned layer) {
             for (unsigned i = 0; i < updateMats[layer].getNumElemts(); i++) {
                 tmp += std::fabs(updateMats[layer].getData()[i]);
             }
-<<<<<<< HEAD
-            std::cout << "Layer " << layer << " Weight Grad Agg: " << tmp << std::endl;
-            std::cout << "[";
-            for (unsigned i = 0; i < 10; i++) {
-                std::cout << updateMats[layer].getData()[i] << " ";
-            }
-            std::cout << "]\n";
-=======
+            
             std::cout << "Layer " << layer << " Weight Grad Agg: " << tmp << " Max element: " << *(std::max_element(updateMats[layer].getData(), updateMats[layer].getData() + updateMats[layer].getNumElemts())) << " Min element: " << *(std::min_element(updateMats[layer].getData(), updateMats[layer].getData() + updateMats[layer].getNumElemts())) << std::endl;
             // std::cout << "[";
             // for (unsigned i = 0; i < 10; i++) {
             //     std::cout << updateMats[layer].getData()[i] << " ";
             // }
             // std::cout << "]\n";
->>>>>>> master
         }
 
     // Worker code.

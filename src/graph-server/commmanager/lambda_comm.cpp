@@ -137,7 +137,7 @@ LambdaComm::newContextForward(FeatType *dataBuf, FeatType *zData, FeatType *actD
 }
 
 void
-LambdaComm::requestForward(unsigned layer) {
+LambdaComm::requestForward(unsigned layer, bool lastLayer) {
 
     // Send header info to tell the coordserver to trigger how many lambdas in which forward layer.
     zmq::message_t header(HEADER_SIZE);
