@@ -21,7 +21,7 @@ main(int argc, char *argv[]) {
 
 
     float splitPortion = 1.0 / 3.0;
-    unsigned numEpochs = 20;
+    unsigned numEpochs = 5;
     unsigned valFreq = 1;
 
     if (engine.master())
@@ -47,7 +47,6 @@ main(int argc, char *argv[]) {
 
             engine.runBackward(predictData);
             engine.makeBarrier();
-            // sleep(2);
         } else {
             FeatType *predictData =
             engine.runForward();
@@ -57,7 +56,6 @@ main(int argc, char *argv[]) {
             if (engine.isGPUEnabled() == 0) {
                 engine.runBackward(predictData);
                 engine.makeBarrier();
-                // sleep(2);
             }
         }
     }

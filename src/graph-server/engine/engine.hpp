@@ -108,32 +108,29 @@ private:
     unsigned numLayers = 0;
 
     std::vector<Matrix> *savedTensors; // intermediate data for backward computation.
-    FeatType **localVerticesZData;       // Global contiguous array for all vertices' data (row-wise order).
     FeatType **localVerticesActivationData;
 
     FeatType *aggGradData;
     FeatType *newGradData;
 
+    FeatType *forwardVerticesInitData;
     FeatType *forwardGhostInitData;
+
     FeatType *forwardGhostVerticesData;
     FeatType *backwardGhostVerticesData;
+
     unsigned *forwardGhostVCnts;
     unsigned *backwardGhostVCnts;
     unsigned **forwardBatchMsgBuf;
     unsigned **backwardBatchMsgBuf;
 
-    FeatType *localVerticesDataBuf = NULL;  // A smaller buffer storing current iter's data after aggregation.
-
     FeatType *localVerticesLabels = NULL;   // Labels one-hot storage array.
 
     unsigned currId = 0;
-    Lock lockCurrId;
 
     int recvCnt = 0;
     Lock lockRecvCnt;
     Cond condRecvCnt;
-
-    Lock lockHalt;
 
     std::string graphFile;
     std::string outFile;
@@ -166,7 +163,6 @@ private:
 
     bool evaluate = false;
 
-    bool halt = false;
     bool commHalt = false;
 
     bool undirected = false;
