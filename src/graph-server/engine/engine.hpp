@@ -71,6 +71,10 @@ public:
     FeatType* invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim);
     FeatType* scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
 
+    FeatType* aggregateBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim);
+    FeatType* invokeLambdaBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim);
+    FeatType* scatterBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim);
+
     void makeBarrier();
 
     unsigned getNumEpochs();
@@ -186,6 +190,7 @@ private:
     void backwardGhostCommunicator(unsigned tid, void *args);
 
     void aggregateCompute(unsigned tid, void *args);
+    void aggregateBPCompute(unsigned tid, void *args);
 
     // About the global data arrays.
     inline unsigned getFeatDim(unsigned layer) { return layerConfig[layer]; }
@@ -195,14 +200,14 @@ private:
     }
 
     void sendForwardGhostUpdates(FeatType *inputTensor, unsigned featDim);
-    void sendBackwardGhostGradients();
+    void sendBackwardGhostGradients(FeatType *gradTensor, unsigned featDim);
     // Ghost update operation, send vertices to other nodes
     void forwardVerticesPushOut(unsigned receiver, unsigned totCnt, unsigned *lvids, FeatType *inputTensor, unsigned featDim);
-    void backwardVerticesPushOut(unsigned receiver, unsigned sender, unsigned totCnt, unsigned *lvids);
+    void backwardVerticesPushOut(unsigned receiver, unsigned sender, unsigned totCnt, unsigned *lvids, FeatType *gradTensor, unsigned featDim);
 
     // Aggregation operation (along with normalization).
     void forwardAggregateFromNeighbors(unsigned lvid, FeatType *outputTensor, FeatType *inputTensor, unsigned featDim);
-    void backwardAggregateFromNeighbors(unsigned lvid);
+    void backwardAggregateFromNeighbors(unsigned lvid, FeatType *nextGradTensor, FeatType *gradTensor, unsigned featDim);
 
     // For initialization.
     void parseArgs(int argc, char* argv[]);

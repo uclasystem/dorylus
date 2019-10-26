@@ -164,9 +164,9 @@ class Linear(Layer):
         wd = config['weight_decay']
 
         if (config['check']):
-            self.W = self.W - lr * self.grad_W
-            print(self.name + " Weight Grad Agg: {}".format(np.abs(lr * self.grad_W).sum()))
-            print(lr * self.grad_W[0][:10])
+            self.diff_W = lr * self.grad_W
+            self.W = self.W - self.diff_W
+            print(self.name + " Weight Grad Agg: {}".format(np.abs(self.diff_W).sum()) + " Max abs element {}".format(np.max(np.abs(self.diff_W))))
             return
 
         self.diff_W = mm * self.diff_W + (self.grad_W + wd * self.W)

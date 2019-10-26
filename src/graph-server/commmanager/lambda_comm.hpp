@@ -25,6 +25,10 @@
 #include "../../common/utils.hpp"
 
 
+#define SLEEP_PERIOD 5000 // sleep 5000us and then check the condition.
+#define TIMEOUT_PERIOD 5000.0 // lambda is considered timed out after 5000ms.
+
+
 class LambdaWorker;
 
 /**
@@ -46,22 +50,18 @@ public:
     void newContextForward(FeatType *dataBuf, FeatType *zData,
         FeatType *actData, unsigned numLocalVertices, unsigned numFeats,
         unsigned numFeatsNext, bool eval);
-
-    void requestForward(unsigned layer,bool lastLayer);
-
+    void requestForward(unsigned layer, bool lastLayer);
     void invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer);
-    void waitLambdaForward();
+    void waitLambdaForward(unsigned layer, bool lastLayer);
 
     // For backward-prop.
     void newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType *targetBuf,
                             unsigned numLocalVertices, std::vector<unsigned> layerConfig);
     void newContextBackward(FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
                             unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim);
-
-    // void requestBackward(unsigned numLayers_);
     void requestBackward(unsigned layer, bool lastLayer);
     void invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLayer);
-    void waitLambdaBackward();
+    void waitLambdaBackward(unsigned layer, bool lastLayer);
 
     // Send a message to the coordination server to shutdown.
     void sendShutdownMessage();
@@ -69,8 +69,7 @@ public:
     // simple LambdaWorker initialization
     friend LambdaWorker::LambdaWorker(LambdaComm *manager);
 
-private:
-
+// private:
     unsigned numLambdasForward;
     unsigned numLambdasBackward;
 
@@ -80,7 +79,11 @@ private:
     unsigned numListeners;
 
     unsigned countForward;
+    bool *forwardLambdaTable;
+    double forwardTimer;
     unsigned countBackward;
+    bool *backwardLambdaTable;
+    double backwardTimer;
 
     unsigned numCorrectPredictions;
     float totalLoss;

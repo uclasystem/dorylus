@@ -1,11 +1,8 @@
 #include "lambda_comm.hpp"
 #include <thread>
 
-
-std::mutex count_mutex, eval_mutex;
-std::condition_variable cv_forward, cv_backward;
+std::mutex eval_mutex;
 unsigned evalLambdas = 0;
-
 
 static std::vector<LambdaWorker *> workers;
 static std::vector<std::thread *> worker_threads;
@@ -46,6 +43,11 @@ LambdaComm::LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::strin
         worker_threads[i]->detach();
     }
 
+    forwardLambdaTable = new bool[numLambdasForward];
+    backwardLambdaTable = new bool[numLambdasBackward];
+    memset(forwardLambdaTable, 0, sizeof(bool) * numLambdasForward);
+    memset(backwardLambdaTable, 0, sizeof(bool) * numLambdasBackward);
+
     // Create proxy pipes that connect frontend to backend. This thread hangs throughout the lifetime of this context.
     std::thread tproxy([&] {
         try {
@@ -60,6 +62,13 @@ LambdaComm::~LambdaComm() {
     for (unsigned i = 0; i < numListeners; ++i) {
         delete workers[i];
         delete worker_threads[i];
+    }
+
+    if (forwardLambdaTable) {
+        delete[] forwardLambdaTable;
+    }
+    if (backwardLambdaTable) {
+        delete[] backwardLambdaTable;
     }
 
     frontend.close();
@@ -93,7 +102,7 @@ LambdaComm::setTrainValidationSplit(float trainPortion, unsigned numLocalVertice
     // Randomize which partitions are the training ones so it is not always
     // the first 'numTrainParts'
     // COMMENTED OUT FOR DEBUGGING
-//    std::random_shuffle(trainPartition.begin(), trainPartition.end());
+    // std::random_shuffle(trainPartition.begin(), trainPartition.end());
 
     // Calculate the total number of validaiton vertices
     // This member is passed by reference to the lambda workers so on update
@@ -136,35 +145,28 @@ LambdaComm::newContextForward(FeatType *dataBuf, FeatType *zData, FeatType *actD
     printLog(nodeId, "Lambda FORWARD context created.");
 }
 
+// deprecated.
 void
 LambdaComm::requestForward(unsigned layer, bool lastLayer) {
+    for (unsigned i = 0; i < numLambdasForward; i++) {
+        invokeLambdaForward(layer, i, lastLayer);
+    }
 
-    // Send header info to tell the coordserver to trigger how many lambdas in which forward layer.
-    zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::REQ_FORWARD, layer, numLambdasForward);
-    coordsocket.send(header, ZMQ_SNDMORE);
-
-    // Send my ip.
-    zmq::message_t ip_msg(nodeIp.size());
-    std::memcpy(ip_msg.data(), nodeIp.c_str(), nodeIp.size());
-    coordsocket.send(ip_msg);
-
-    // Wait for a confirm ACK message.
-    zmq::message_t confirm;
-    coordsocket.recv(&confirm);
-
-    // Block until all parts have been handled.
-    std::unique_lock<std::mutex> lk(count_mutex);
-    cv_forward.wait(lk, [&]{ return countForward == numLambdasForward; });
+    waitLambdaForward(layer, lastLayer);
 }
 
 
 void
-LambdaComm::invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer) { // another option is to keep status in coordserver
+LambdaComm::invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer) { // another option is to keep states in coordserver
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char *) header.data(), OP::REQ_FORWARD, layer, lambdaId, lastLayer);
     coordsocket.send(header, ZMQ_SNDMORE);
 
+    forwardLambdaTable[lambdaId] = true;
+    if (lambdaId == numLambdasForward - 1) {
+        forwardTimer = getTimer();
+    }
+
     zmq::message_t ip_msg(nodeIp.size());
     std::memcpy(ip_msg.data(), nodeIp.c_str(), nodeIp.size());
     coordsocket.send(ip_msg);
@@ -176,10 +178,20 @@ LambdaComm::invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLaye
 
 
 void
-LambdaComm::waitLambdaForward() {
+LambdaComm::waitLambdaForward(unsigned layer, bool lastLayer) {
     // Block until all parts have been handled.
-    std::unique_lock<std::mutex> lk(count_mutex);
-    cv_forward.wait(lk, [&]{ return countForward == numLambdasForward; });
+    while (countForward < numLambdasForward) {
+        if (getTimer() - forwardTimer > TIMEOUT_PERIOD) {
+            for (unsigned i = 0; i < numLambdasForward; i++) {
+                if (forwardLambdaTable[i]) {
+                    printLog(nodeId, "relaunch forward lambda %u...", i);
+                    invokeLambdaForward(layer, i, lastLayer);
+                }
+            }
+            forwardTimer = getTimer();
+        }
+        usleep(SLEEP_PERIOD);
+    }
 }
 
 
@@ -206,6 +218,8 @@ LambdaComm::newContextBackward(FeatType *oldGradBuf, FeatType *newGradBuf, std::
     printLog(nodeId, "Lambda BACKWARD context created.");
 }
 
+
+// deprecated.
 void
 LambdaComm::newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType *targetBuf,
                                unsigned numLocalVertices, std::vector<unsigned> layerConfig) {
@@ -230,14 +244,25 @@ LambdaComm::newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType *t
 }
 
 void
-LambdaComm::requestBackward(unsigned numLayers_, bool lastLayer) {
+LambdaComm::requestBackward(unsigned layer, bool lastLayer) {
+    for (unsigned i = 0; i < numLambdasBackward; i++) {
+        invokeLambdaBackward(layer, i, lastLayer);
+    }
 
-    // Send header info to tell the coordserver to trigger how many lambdas to trigger.
+    waitLambdaBackward(layer, lastLayer);
+}
+
+void
+LambdaComm::invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLayer) {
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::REQ_BACKWARD, numLayers_, numLambdasBackward, lastLayer);
+    populateHeader((char *) header.data(), OP::REQ_BACKWARD, layer, lambdaId, lastLayer, numLambdasBackward);
     coordsocket.send(header, ZMQ_SNDMORE);
 
-    // Send my ip.
+    backwardLambdaTable[lambdaId] = true;
+    if (lambdaId == numLambdasBackward - 1) {
+        backwardTimer = getTimer();
+    }
+
     zmq::message_t ip_msg(nodeIp.size());
     std::memcpy(ip_msg.data(), nodeIp.c_str(), nodeIp.size());
     coordsocket.send(ip_msg);
@@ -245,10 +270,23 @@ LambdaComm::requestBackward(unsigned numLayers_, bool lastLayer) {
     // Wait for a confirm ACK message.
     zmq::message_t confirm;
     coordsocket.recv(&confirm);
+}
 
+void
+LambdaComm::waitLambdaBackward(unsigned layer, bool lastLayer) {
     // Block until all parts have been handled.
-    std::unique_lock<std::mutex> lk(count_mutex);
-    cv_backward.wait(lk, [&]{ return countBackward == numLambdasBackward; });
+    while (countBackward < numLambdasBackward) {
+        if (getTimer() - backwardTimer > TIMEOUT_PERIOD) {
+            for (unsigned i = 0; i < numLambdasBackward; i++) {
+                if (backwardLambdaTable[i]) {
+                    printLog(nodeId, "relaunch backward lambda %u...", i);
+                    invokeLambdaBackward(layer, i, lastLayer);
+                }
+            }
+            backwardTimer = getTimer();
+        }
+        usleep(SLEEP_PERIOD);
+    }
 }
 
 

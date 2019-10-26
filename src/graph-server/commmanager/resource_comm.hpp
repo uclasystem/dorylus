@@ -24,28 +24,30 @@ class ResourceComm
 {
 public:
 	ResourceComm(){};
-	virtual void setTrainValidationSplit(float trainPortion, unsigned numLocalVertices)=0;
+	virtual void setTrainValidationSplit(float trainPortion, unsigned numLocalVertices) = 0;
 
     // For forward-prop.
     virtual void newContextForward(FeatType *dataBuf, FeatType *zData,
         FeatType *actData, unsigned numLocalVertices, unsigned numFeats,
-        unsigned numFeatsNext, bool eval)=0;
+        unsigned numFeatsNext, bool eval) = 0;
 
-    virtual void requestForward(unsigned layer,bool lastLayer)=0;
+    virtual void requestForward(unsigned layer, bool lastLayer) = 0;
 
-    virtual void invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer)=0;
-    virtual void waitLambdaForward()=0;
+    virtual void invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer) = 0;
+    virtual void waitLambdaForward(unsigned layer, bool lastLayer) = 0;
 
     // For backward-prop.
     virtual void newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType *targetBuf,
-                            unsigned numLocalVertices, std::vector<unsigned> layerConfig)=0;
+                            unsigned numLocalVertices, std::vector<unsigned> layerConfig) = 0;
     virtual void newContextBackward(FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
                                     unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim) = 0;
 
-    virtual void requestBackward(unsigned numLayers_, bool lastLayer)=0;
+    virtual void requestBackward(unsigned layer, bool lastLayer) = 0;
+    virtual void invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLayer) = 0;
+    virtual void waitLambdaBackward(unsigned layer, bool lastLayer) = 0;
 
     // Send a message to the coordination server to shutdown.
-    virtual void sendShutdownMessage()=0;
+    virtual void sendShutdownMessage() = 0;
 
 	~ResourceComm(){};
 

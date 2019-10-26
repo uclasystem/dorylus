@@ -17,6 +17,7 @@
 #include <thread>
 #include <vector>
 #include <zmq.hpp>
+#include <unistd.h>
 
 #include "../utils/utils.hpp"
 #include "../../common/matrix.hpp"
@@ -34,7 +35,7 @@ class LambdaWorker {
 
 public:
 
-    LambdaWorker(LambdaComm *manager);
+    LambdaWorker(LambdaComm *manager_);
 
     ~LambdaWorker();
 
@@ -47,6 +48,7 @@ public:
     void refreshState(Matrix oldGradMatrix_, Matrix newGradMatrix_, Matrix targetMatrix_, std::vector<Matrix> *savedTensors); // YIFAN for backward
 
 protected:
+    LambdaComm *manager;
 
     unsigned nodeId;
 

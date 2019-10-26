@@ -42,8 +42,9 @@ callback(const Aws::Lambda::LambdaClient *client, const Aws::Lambda::Model::Invo
             outfile << functionResult << std::endl;
 
         // There is error in the results.
-        } else
+        } else {
             std::cout << "\033[1;31m[ ERROR ]\033[0m\t" << functionResult << std::endl;
+        }
 
     // Lambda returns error.
     } else {
@@ -144,15 +145,17 @@ CoordServer::run() {
             datasocket.recv(&header);
             datasocket.recv(&dataserverIp);
 
-            // Send ACK confirm reply.
-            zmq::message_t confirm;
-            datasocket.send(confirm);
-
             // Parse the request.
             unsigned op = parse<unsigned>((char *) header.data(), 0);
             unsigned layer = parse<unsigned>((char *) header.data(), 1);
-            unsigned nThreadsReq = parse<unsigned>((char *) header.data(), 2);
+            unsigned lambdaId = parse<unsigned>((char *) header.data(), 2);
             unsigned lastLayer = parse<unsigned>((char*) header.data(), 3);
+
+            // Send ACK confirm reply.
+            if (op != OP::REQ_BACKWARD) {
+                zmq::message_t confirm;
+                datasocket.send(confirm);
+            }
 
             // Append a terminating null char to ensure this is a valid C string.
             char* dataserverIpCopy = new char[dataserverIp.size() + 1];
@@ -170,11 +173,10 @@ CoordServer::run() {
 
             // Else is a request for lambda threads. Handle that. This is forward.
             } else if (op == OP::REQ_FORWARD) {
-                std::string accMsg = "[ACCEPTED] Req for FORWARD, lambda " + std::to_string(nThreadsReq)
+                std::string accMsg = "[ACCEPTED] Req for FORWARD, lambda " + std::to_string(lambdaId)
                                      + " is invoked for layer " + std::to_string(layer) + ".";
                 std::cout << accMsg << std::endl;
 
-                unsigned lambdaId = nThreadsReq;
                 // Issue the lambda thread to serve the request.
                 char *weightserverIp = weightserverAddrs[req_count % weightserverAddrs.size()];
                 invokeFunction("new-forward-prop", dataserverIpCopy, dataserverPort,
@@ -183,28 +185,31 @@ CoordServer::run() {
 
             // This is backward.
             } else if (op == OP::REQ_BACKWARD) {
-                std::string accMsg = "[ACCEPTED] Req for BACKWARD " + std::to_string(nThreadsReq)
-                                   + " lambdas for layer " + std::to_string(layer) + ".";
+                std::string accMsg = "[ACCEPTED] Req for BACKWARD, lambda " + std::to_string(lambdaId)
+                                   + " is invoked for layer " + std::to_string(layer) + ".";
                 std::cout << accMsg << std::endl;
 
-                // Calculate numLambdas assigned to each weightserver.
-                unsigned baseNumThreads = nThreadsReq / weightserverAddrs.size();
-                std::vector<unsigned> numLambdas(weightserverAddrs.size(), baseNumThreads);
-                for (unsigned i = 0; i < nThreadsReq % weightserverAddrs.size(); ++i)
-                    numLambdas[(req_count + i) % weightserverAddrs.size()]++;
+                unsigned numLambda = parse<unsigned>((char *) header.data(), 4);
+                if (lambdaId == 0) {
+                    // Calculate numLambdas assigned to each weightserver.
+                    unsigned baseNumThreads = numLambda / weightserverAddrs.size();
+                    std::vector<unsigned> numLambdas(weightserverAddrs.size(), baseNumThreads);
+                    for (unsigned i = 0; i < lambdaId % weightserverAddrs.size(); ++i)
+                        numLambdas[(req_count + i) % weightserverAddrs.size()]++;
 
-                // Send info message to weightservers.
-                std::cout << "[  INFO  ] Sending number of lambdas info to weightservers..." << std::endl;
-                for (unsigned i = 0; i < weightserverAddrs.size(); ++i)
-                    sendInfoMessage(weightsockets[i], numLambdas[i]);
-
-                // Issue a bunch of lambda threads to serve the request.
-                for (unsigned i = 0; i < nThreadsReq; ++i) {
-                    char *weightserverIp = weightserverAddrs[req_count % weightserverAddrs.size()];
-                    invokeFunction("new-backprop", dataserverIpCopy, dataserverPort, weightserverIp, weightserverPort, layer, i, (bool) lastLayer);
-                    req_count++;
+                    // Send info message to weightservers.
+                    std::cout << "[  INFO  ] Sending number of lambdas info to weightservers..." << std::endl;
+                    for (unsigned i = 0; i < weightserverAddrs.size(); ++i)
+                        sendInfoMessage(weightsockets[i], numLambdas[i]);
                 }
-                std::cout << "after invoke backward lambda\n";
+                // send confirm here to make sure weight servers are set.
+                zmq::message_t confirm;
+                datasocket.send(confirm);
+
+                // Issue the lambda thread to serve the request.
+                char *weightserverIp = weightserverAddrs[req_count % weightserverAddrs.size()];
+                invokeFunction("new-backprop", dataserverIpCopy, dataserverPort, weightserverIp, weightserverPort, layer, lambdaId, (bool) lastLayer);
+                req_count++;
 
             // Unknown op code.
             } else {

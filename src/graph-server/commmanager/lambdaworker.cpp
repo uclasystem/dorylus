@@ -1,8 +1,7 @@
 #include "lambdaworker.hpp"
 #include "lambda_comm.hpp"
 
-extern std::mutex count_mutex, eval_mutex;
-extern std::condition_variable cv_forward, cv_backward;
+extern std::mutex eval_mutex;
 extern unsigned evalLambdas;
 
 
@@ -11,13 +10,13 @@ extern unsigned evalLambdas;
  * LambdaWorker constructor & destructor.
  *
  */
-LambdaWorker::LambdaWorker(LambdaComm *manager)
-    : nodeId(manager->nodeId), ctx(manager->ctx), workersocket(ctx, ZMQ_DEALER),
-      numLambdasForward(manager->numLambdasForward), numLambdasBackward(manager->numLambdasBackward),
-      countForward(manager->countForward), countBackward(manager->countBackward),
-      numCorrectPredictions(manager->numCorrectPredictions), totalLoss(manager->totalLoss),
-      numValidationVertices(manager->numValidationVertices), evalPartitions(manager->evalPartitions),
-      trainPartitions(manager->trainPartitions) {
+LambdaWorker::LambdaWorker(LambdaComm *manager_)
+    : manager(manager_), nodeId(manager_->nodeId), ctx(manager_->ctx), workersocket(ctx, ZMQ_DEALER),
+      numLambdasForward(manager_->numLambdasForward), numLambdasBackward(manager_->numLambdasBackward),
+      countForward(manager_->countForward), countBackward(manager_->countBackward),
+      numCorrectPredictions(manager_->numCorrectPredictions), totalLoss(manager_->totalLoss),
+      numValidationVertices(manager_->numValidationVertices), evalPartitions(manager_->evalPartitions),
+      trainPartitions(manager_->trainPartitions) {
     workersocket.setsockopt(ZMQ_LINGER, 0);
     workersocket.connect("inproc://backend");
 }
@@ -64,7 +63,6 @@ LambdaWorker::work() {
                             sendChunk(targetMatrix, identity, partId, false);
                         }
                     }
-                    // sendBackpropChunks(identity, partId);
                     break;
                 case (OP::PULL_EVAL):
                     sendTargetMatrix(identity, partId);
@@ -73,7 +71,6 @@ LambdaWorker::work() {
                     recvValidationResults(identity, header);
                     break;
                 case (OP::PUSH_BACKWARD):
-                    // recvBackpropFinishMsg(identity);
                     recvChunk(newGradMatrix, identity, partId, false);
                     break;
                 default:
@@ -181,10 +178,8 @@ LambdaWorker::recvLambdaResults(zmq::message_t& client_id, unsigned partId) {
     workersocket.send(confirm);
 
     // Check for total number of partitions received. If all partitions received, wake up lambdaComm.
-    std::lock_guard<std::mutex> lk(count_mutex);
+    manager->forwardLambdaTable[partId] = false;
     ++countForward;
-    if (countForward == numLambdasForward)
-        cv_forward.notify_one();
 }
 
 void
@@ -241,16 +236,12 @@ LambdaWorker::recvChunk(Matrix &dstMat, zmq::message_t &client_id, unsigned part
     workersocket.send(confirm);
 
     // Check for total number of partitions received. If all partitions received, wake up lambdaComm.
-    std::lock_guard<std::mutex> lk(count_mutex);
     if (forward) {
+        manager->forwardLambdaTable[partId] = false;
         ++countForward;
-        if (countForward == numLambdas)
-            cv_forward.notify_one();
     } else {
+        manager->backwardLambdaTable[partId] = false;
         ++countBackward;
-        if (countBackward == numLambdas) {
-            cv_backward.notify_one();
-        }
     }
 }
 
@@ -327,10 +318,7 @@ LambdaWorker::recvBackpropFinishMsg(zmq::message_t& client_id) {
     workersocket.send(confirm);
 
     // Check for total number of partitions received. If all partitions received, wake up lambdaComm.
-    std::lock_guard<std::mutex> lk(count_mutex);
     ++countBackward;
-    if (countBackward == numLambdasBackward)
-        cv_backward.notify_one();
 }
 
 void

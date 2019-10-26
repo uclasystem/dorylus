@@ -24,10 +24,10 @@ GPUComm::GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,
         ComputingServer* comp_server=new ComputingServer(this);
         printLog(nodeId,"Starting thread\n");
         comp_server_thread=std::thread(std::bind(&ComputingServer::run,comp_server));
-        
+
         char ipc_addr[50];
         sprintf(ipc_addr, "inproc://%u", dPort);
-        
+
         dataSocket.connect(ipc_addr);
         printLog(nodeId,"Connecting to %s\n", ipc_addr);
 }
@@ -48,7 +48,7 @@ void GPUComm::newContextForward(FeatType *dataBuf, FeatType *zData_, FeatType *a
 
 }
 
-void GPUComm::requestForward(unsigned layer,bool lastLayer){
+void GPUComm::requestForward(unsigned layer, bool lastLayer){
 
     try {
         // float split_data=split;
@@ -56,7 +56,7 @@ void GPUComm::requestForward(unsigned layer,bool lastLayer){
         //     split_data=0;
         // else
         //     printLog(nodeId,"Evaling");
-    
+
         int op=OP::REQ_FORWARD;
         unsigned lastLayerInt=lastLayer;
         sendFourBytes((char*)&op);
@@ -107,14 +107,13 @@ void GPUComm::newContextBackward(FeatType *oldGradBuf, FeatType *newGradBuf, std
     printLog(nodeId, "GPU BACKWARD context created.");
 }
 
-void GPUComm::requestBackward(unsigned numLayers, bool lastLayer){
+void GPUComm::requestBackward(unsigned layer, bool lastLayer){
     printLog(nodeId, "GPU BACKWARD request.");
-    unsigned layer=numLayers;
     try {
         int lastLayerInt=(int)lastLayer;
         int op=OP::REQ_BACKWARD;
         sendFourBytes((char*)&op);
-        sendFourBytes((char*)&numLayers);//which layer |not the totalnumber of layers
+        sendFourBytes((char*)&layer);
         sendFourBytes((char*)&numNodes);
         sendFourBytes((char*)&lastLayerInt);
         if(lastLayer){
@@ -128,8 +127,8 @@ void GPUComm::requestBackward(unsigned numLayers, bool lastLayer){
             sendResultPtr(newGradMatrix.getData());
             sendMatrix(savedTensors[layer][TYPE::AH - 1]);
         }
-        unsigned done=0;
-        sendFourBytes((char*)&done);
+        unsigned done = 0;
+        sendFourBytes((char *)&done);
     }
     catch(std::exception& ex){
         std::cerr << "[ERROR] " << ex.what() << std::endl;
@@ -169,10 +168,10 @@ void GPUComm::sendMatrix(Matrix& m){
     zmq::message_t matrixMsg(HEADER_SIZE);
     populateHeader((char *) matrixMsg.data(), m.getRows(), m.getCols());
     char* dataPtr=(char*)m.getData();
-    
+
     std::memcpy((char*)matrixMsg.data()+sizeof(unsigned)*2, (char*) &dataPtr,
         sizeof(FeatType*));
-    
+
     dataSocket.send(matrixMsg);
     dataSocket.recv(&confirm);
 }
