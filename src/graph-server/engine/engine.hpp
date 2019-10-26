@@ -108,10 +108,6 @@ private:
     unsigned numLayers = 0;
 
     std::vector<Matrix> *savedTensors; // intermediate data for backward computation.
-    FeatType **localVerticesActivationData;
-
-    FeatType *aggGradData;
-    FeatType *newGradData;
 
     FeatType *forwardVerticesInitData;
     FeatType *forwardGhostInitData;
@@ -119,12 +115,10 @@ private:
     FeatType *forwardGhostVerticesData;
     FeatType *backwardGhostVerticesData;
 
-    unsigned *forwardGhostVCnts;
-    unsigned *backwardGhostVCnts;
-    unsigned **forwardBatchMsgBuf;
-    unsigned **backwardBatchMsgBuf;
-
     FeatType *localVerticesLabels = NULL;   // Labels one-hot storage array.
+
+    std::vector<unsigned> *forwardGhostsList;
+    std::vector<unsigned> *backwardGhostsList;
 
     unsigned currId = 0;
 
@@ -172,12 +166,14 @@ private:
     // Timing stuff.
     double timeInit = 0.0;
     double timeForwardProcess = 0.0;
+    double timeBackwardProcess = 0.0;
     std::vector<double> vecTimeAggregate;
     std::vector<double> vecTimeLambda;
     std::vector<double> vecTimeSendout;
-    double timeBackwardProcess = 0.0;
 
     Barrier barComp;
+
+    void calcAcc(FeatType *predicts, FeatType *labels, unsigned vtcsCnt, unsigned featDim);
 
     // Worker and communicator thread function.
     void forwardWorker(unsigned tid, void *args);
@@ -211,10 +207,10 @@ private:
     void readFeaturesFile(std::string& featuresFileName);
     void readLabelsFile(std::string& labelsFileName);
     void readPartsFile(std::string& partsFileName, Graph& lGraph);
-    void processEdge(unsigned& from, unsigned& to, Graph& lGraph, std::set<unsigned>* inTopics, std::set<unsigned>* oTopics, int **forwardGhostVTables, int **backwardGhostVTables);
+    void processEdge(unsigned& from, unsigned& to, Graph& lGraph, bool **forwardGhostVTables, bool **backwardGhostVTables);
     void findGhostDegrees(std::string& fileName);
     void setEdgeNormalizations();
-    void readGraphBS(std::string& fileName, std::set<unsigned>& inTopics, std::vector<unsigned>& outTopics);
+    void readGraphBS(std::string& fileName);
     void setUpCommInfo();
 
     // Metric printing.

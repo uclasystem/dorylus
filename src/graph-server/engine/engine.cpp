@@ -41,16 +41,11 @@ Engine::init(int argc, char *argv[]) {
     numLayers = layerConfig.size() - 1;
 
     // Leave buf for myself empty, which is a little wasting.
-    forwardGhostVCnts = new unsigned [numNodes];
-    backwardGhostVCnts = new unsigned [numNodes];
-    memset(forwardGhostVCnts, 0, sizeof(unsigned) * numNodes);
-    memset(backwardGhostVCnts, 0 ,sizeof(unsigned) * numNodes);
-    forwardBatchMsgBuf = new unsigned *[numNodes];
-    backwardBatchMsgBuf = new unsigned *[numNodes];
+    forwardGhostsList = new std::vector<unsigned> [numNodes];
+    backwardGhostsList = new std::vector<unsigned> [numNodes];
+
     // Read in the graph and subscribe vertex global ID topics.
-    std::set<unsigned> inTopics;
-    std::vector<unsigned> outTopics;
-    readGraphBS(graphFile, inTopics, outTopics);
+    readGraphBS(graphFile);
     printGraphMetrics();
 
     // save intermediate tensors during forward phase for backward computation.
@@ -84,12 +79,10 @@ Engine::init(int argc, char *argv[]) {
 
     // Initialize computation thread barrier.
     barComp.init(cThreads);
-
     // Create computation workers thread pool.
     computePool = new ThreadPool(cThreads);
     computePool->createPool();
     printLog(nodeId, "Created %u computation threads.", cThreads);
-
     // Create data communicators thread pool.
     dataPool = new ThreadPool(dThreads);
     dataPool->createPool();
@@ -198,23 +191,6 @@ Engine::getNodeId() {
     return Engine::nodeId;
 }
 
-inline size_t argmax(FeatType* first, FeatType* last) {
-    return std::distance(first, std::max_element(first, last));
-}
-inline void calcAcc(Engine *e, FeatType *predicts, FeatType *labels, unsigned vtcsCnt, unsigned featDim) {
-    float acc = 0.0;
-    float loss = 0.0;
-    for (unsigned i = 0; i < vtcsCnt; i++) {
-        FeatType *currLabel = labels + i * featDim;
-        FeatType *currPred = predicts + i * featDim;
-        acc += currLabel[argmax(currPred, currPred + featDim)];
-        loss -= std::log(currPred[argmax(currLabel, currLabel + featDim)]);
-    }
-    acc /= vtcsCnt;
-    loss /= vtcsCnt;
-    printLog(e->getNodeId(), "batch loss %f, batch acc %f", loss, acc);
-}
-
 /**
  *
  * Runs a forward propagation phase: (Aggregate -> Lambda Computing -> Ghost Update) -> ( ... ) -> ...
@@ -243,7 +219,7 @@ Engine::runForward(bool eval) {
 
     timeForwardProcess += getTimer();
     printLog(nodeId, "Engine completes FORWARD at iter %u.", iteration);
-    calcAcc(this, inputTensor, localVerticesLabels, graphLocalVerticesNum, getFeatDim(numLayers));
+    calcAcc(inputTensor, localVerticesLabels, graphLocalVerticesNum, getFeatDim(numLayers));
 
     return inputTensor;
 }
@@ -345,16 +321,8 @@ Engine::destroy() {
 
     resComm->sendShutdownMessage();
 
-    delete[] forwardGhostVCnts;
-    delete[] backwardGhostVCnts;
-    for (size_t i = 0; i < numNodes; ++i) {
-        if (i != nodeId) {
-            delete[] forwardBatchMsgBuf[i];
-            delete[] backwardBatchMsgBuf[i];
-        }
-    }
-    delete[] forwardBatchMsgBuf;
-    delete[] backwardBatchMsgBuf;
+    delete[] forwardGhostsList;
+    delete[] backwardGhostsList;
 
     delete[] forwardVerticesInitData;
     delete[] forwardGhostInitData;
@@ -460,11 +428,14 @@ Engine::scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim) {
     auto fgc_fp = std::bind(&Engine::forwardGhostCommunicator, this, std::placeholders::_1, std::placeholders::_2);
     dataPool->perform(fgc_fp);
 
+    //## Global Iteration barrier. ##//
+    nodeManager.barrier();
+
     sendForwardGhostUpdates(vtcsTensor, featDim);
 
-    //## Global Iteration barrier. ##//
     // TODO: (YIFAN) we can optimize this to extend comm protocal. Mark the last packet sent so this node knows when to exit ghostCommunicator.
     nodeManager.barrier();
+
     commHalt = true;
 
     // Join all data communicators.
@@ -539,18 +510,18 @@ Engine::sendForwardGhostUpdates(FeatType *inputTensor, unsigned featDim) {
     // other nodes for their ghost's update.
     // TODO: (YIFAN) process crashes when return if BATCH_SIZE is too large. Weird, to be fixed.
     // Please decrease BATCH_SIZE if porcess crashed.
-    bool batchFlag = false;
+    bool batchFlag = true;
     unsigned BATCH_SIZE = std::max(((batchFlag ? MAX_MSG_SIZE : 4096) - DATA_HEADER_SIZE) /
                         (sizeof(unsigned) + sizeof(FeatType) * featDim), 1ul); // at least send one vertex
     for (unsigned nid = 0; nid < numNodes; ++nid) {
         if (nid == nodeId) {
             continue;
         }
-        unsigned forwardGhostVCnt = forwardGhostVCnts[nid];
+        unsigned forwardGhostVCnt = forwardGhostsList[nid].size();
         for (unsigned ib = 0; ib < forwardGhostVCnt; ib += BATCH_SIZE) {
             unsigned sendBatchSize = (forwardGhostVCnt - ib) < BATCH_SIZE ? (forwardGhostVCnt - ib) : BATCH_SIZE;
 
-            forwardVerticesPushOut(nid, sendBatchSize, forwardBatchMsgBuf[nid] + ib, inputTensor, featDim);
+            forwardVerticesPushOut(nid, sendBatchSize, forwardGhostsList[nid].data() + ib, inputTensor, featDim);
             lockRecvCnt.lock();
             recvCnt++;
             lockRecvCnt.unlock();
@@ -808,11 +779,11 @@ Engine::sendBackwardGhostGradients(FeatType *gradTensor, unsigned featDim) {
         if (nid == nodeId) {
             continue;
         }
-        unsigned backwardGhostVCnt = backwardGhostVCnts[nid];
+        unsigned backwardGhostVCnt = backwardGhostsList[nid].size();
         for (unsigned ib = 0; ib < backwardGhostVCnt; ib += BATCH_SIZE) {
             unsigned sendBatchSize = (backwardGhostVCnt - ib) < BATCH_SIZE ? (backwardGhostVCnt - ib) : BATCH_SIZE;
 
-            backwardVerticesPushOut(nid, nodeId, sendBatchSize, backwardBatchMsgBuf[nid] + ib, gradTensor, featDim);
+            backwardVerticesPushOut(nid, nodeId, sendBatchSize, backwardGhostsList[nid].data() + ib, gradTensor, featDim);
             lockRecvCnt.lock();
             recvCnt++;
             lockRecvCnt.unlock();
@@ -914,6 +885,25 @@ Engine::backwardGhostCommunicator(unsigned tid, void *args) {
         }
     }
     delete[] msgBuf;
+}
+
+/**
+ *
+ * Calculate batch loss and accuracy based on forward predicts and labels locally.
+ */
+inline void
+Engine::calcAcc(FeatType *predicts, FeatType *labels, unsigned vtcsCnt, unsigned featDim) {
+    float acc = 0.0;
+    float loss = 0.0;
+    for (unsigned i = 0; i < vtcsCnt; i++) {
+        FeatType *currLabel = labels + i * featDim;
+        FeatType *currPred = predicts + i * featDim;
+        acc += currLabel[argmax(currPred, currPred + featDim)];
+        loss -= std::log(currPred[argmax(currLabel, currLabel + featDim)]);
+    }
+    acc /= vtcsCnt;
+    loss /= vtcsCnt;
+    printLog(getNodeId(), "batch loss %f, batch acc %f", loss, acc);
 }
 
 
@@ -1250,7 +1240,7 @@ Engine::readPartsFile(std::string& partsFileName, Graph& lGraph) {
  *
  */
 void
-Engine::processEdge(unsigned& from, unsigned& to, Graph& lGraph, std::set<unsigned> *inTopics, std::set<unsigned> *oTopics, int **forwardGhostVTables, int **backwardGhostVTables) {
+Engine::processEdge(unsigned& from, unsigned& to, Graph& lGraph, bool **forwardGhostVTables, bool **backwardGhostVTables) {
     if (lGraph.getVertexPartitionId(from) == nodeId) {
         unsigned lFromId = lGraph.globalToLocalId[from];
         unsigned toId;
@@ -1270,13 +1260,7 @@ Engine::processEdge(unsigned& from, unsigned& to, Graph& lGraph, std::set<unsign
             }
             lGraph.getOutEdgeGhostVertex(to).addAssocEdge(lFromId);
 
-            if (forwardGhostVTables[toPartition][lFromId] == 0) {
-                forwardGhostVTables[toPartition][lFromId] = 1;
-                forwardGhostVCnts[toPartition]++;
-            }
-
-            if (oTopics != NULL)
-                oTopics->insert(from);
+            forwardGhostVTables[toPartition][lFromId] = true;
         }
 
         lGraph.getVertex(lFromId).addOutEdge(OutEdge(toId, eLocation, EdgeType()));
@@ -1300,13 +1284,7 @@ Engine::processEdge(unsigned& from, unsigned& to, Graph& lGraph, std::set<unsign
             }
             lGraph.getInEdgeGhostVertex(from).addAssocEdge(lToId);
 
-            if (backwardGhostVTables[fromPartition][lToId] == 0) {
-                backwardGhostVTables[fromPartition][lToId] = 1;
-                backwardGhostVCnts[fromPartition]++;
-            }
-
-            if (inTopics != NULL)
-                inTopics->insert(from);
+            backwardGhostVTables[fromPartition][lToId] = true;
         }
 
         lGraph.getVertex(lToId).addInEdge(InEdge(fromId, eLocation, EdgeType()));
@@ -1396,7 +1374,7 @@ Engine::findGhostDegrees(std::string& fileName) {
  *
  */
 void
-Engine::readGraphBS(std::string& fileName, std::set<unsigned>& inTopics, std::vector<unsigned>& outTopics) {
+Engine::readGraphBS(std::string& fileName) {
 
     // Read in the partition file.
     std::string partsFileName = fileName + PARTS_EXT;
@@ -1423,52 +1401,46 @@ Engine::readGraphBS(std::string& fileName, std::set<unsigned>& inTopics, std::ve
     infile.read((char *) &bSHeader, sizeof(bSHeader));
     assert(bSHeader.sizeOfVertexType == sizeof(unsigned));
 
-    const unsigned graphLocalVerticesNum = graph.getNumLocalVertices();
-    int **forwardGhostVTables = new int*[numNodes];
-    int **backwardGhostVTables = new int*[numNodes];
+    bool **forwardGhostVTables = new bool* [numNodes];
+    bool **backwardGhostVTables = new bool* [numNodes];
     for (unsigned i = 0; i < numNodes; ++i) {
         if (i == nodeId) {
             continue;
         }
-        forwardGhostVTables[i] = new int[graphLocalVerticesNum];
-        backwardGhostVTables[i] = new int[graphLocalVerticesNum];
-        memset(forwardGhostVTables[i], 0, sizeof(int) * graphLocalVerticesNum);
-        memset(backwardGhostVTables[i], 0, sizeof(int) * graphLocalVerticesNum);
+        forwardGhostVTables[i] = new bool [graph.getNumLocalVertices()];
+        memset(forwardGhostVTables[i], 0, sizeof(bool) * graph.getNumLocalVertices());
+        backwardGhostVTables[i] = new bool [graph.getNumLocalVertices()];
+        memset(backwardGhostVTables[i], 0, sizeof(bool) * graph.getNumLocalVertices());
     }
 
     // Loop through all edges and process them.
-    std::set<unsigned> oTopics;
     unsigned srcdst[2];
     while (infile.read((char *) srcdst, bSHeader.sizeOfVertexType * 2)) {
         if (srcdst[0] == srcdst[1])
             continue;
 
-        processEdge(srcdst[0], srcdst[1], graph, &inTopics, &oTopics, forwardGhostVTables, backwardGhostVTables);
+        processEdge(srcdst[0], srcdst[1], graph, forwardGhostVTables, backwardGhostVTables);
         if (undirected)
-            processEdge(srcdst[1], srcdst[0], graph, &inTopics, &oTopics, forwardGhostVTables, backwardGhostVTables);
+            processEdge(srcdst[1], srcdst[0], graph, forwardGhostVTables, backwardGhostVTables);
         graph.incrementNumGlobalEdges();
     }
 
     for (unsigned i = 0; i < numNodes; ++i) {
         if (i == nodeId) {
-            forwardBatchMsgBuf[i] = NULL;
-            backwardBatchMsgBuf[i] = NULL;
             continue;
         }
-        forwardBatchMsgBuf[i] = new unsigned[forwardGhostVCnts[i]];
-        backwardBatchMsgBuf[i] = new unsigned[backwardGhostVCnts[i]];
-
-        unsigned forwardCnt = 0, backwardCnt = 0;
-        for (unsigned j = 0; j < graphLocalVerticesNum; ++j) {
+        forwardGhostsList[i].reserve(graph.getNumLocalVertices());
+        backwardGhostsList[i].reserve(graph.getNumLocalVertices());
+        for (unsigned j = 0; j < graph.getNumLocalVertices(); ++j) {
             if (forwardGhostVTables[i][j]) {
-                forwardBatchMsgBuf[i][forwardCnt] = j;
-                forwardCnt++;
+                forwardGhostsList[i].push_back(j);
             }
             if (backwardGhostVTables[i][j]) {
-                backwardBatchMsgBuf[i][backwardCnt] = j;
-                backwardCnt++;
+                backwardGhostsList[i].push_back(j);
             }
         }
+        forwardGhostsList[i].shrink_to_fit();
+        backwardGhostsList[i].shrink_to_fit();
         delete[] forwardGhostVTables[i];
         delete[] backwardGhostVTables[i];
     }
@@ -1482,10 +1454,6 @@ Engine::readGraphBS(std::string& fileName, std::set<unsigned>& inTopics, std::ve
     graph.setNumOutEdgeGhostVertices(graph.getOutEdgeGhostVertices().size());
     findGhostDegrees(edgeFileName);
     setEdgeNormalizations();
-
-    typename std::set<unsigned>::iterator it;
-    for (it = oTopics.begin(); it != oTopics.end(); ++it)
-        outTopics.push_back(*it);
 }
 
 // Substantiate an Engine object here for TF aggregators

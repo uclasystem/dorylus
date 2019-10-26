@@ -25,7 +25,7 @@ main(int argc, char *argv[]) {
     unsigned valFreq = 1;
 
     if (engine.master())
-        printLog(engine.getNodeId(), "% Train Data: %f, \
+        printLog(engine.getNodeId(), "Train Data: %.2f%, \
                     number of epochs: %u, validation frequency: %u",
                     splitPortion, numEpochs, valFreq);
 
