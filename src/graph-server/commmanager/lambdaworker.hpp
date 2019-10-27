@@ -44,31 +44,15 @@ public:
 
     // Used at context creation / destruction.
     void refreshState(Matrix actMatrix_, FeatType *zData_, FeatType *actData_, unsigned numFeatsNext_, bool eval);
-    void refreshState(std::vector<Matrix> zMatrices_, std::vector<Matrix> actMatrices_, Matrix targetMatrix_);
-    void refreshState(Matrix oldGradMatrix_, Matrix newGradMatrix_, Matrix targetMatrix_, std::vector<Matrix> *savedTensors); // YIFAN for backward
+    void refreshState(Matrix oldGradMatrix_, Matrix newGradMatrix_, Matrix targetMatrix_, std::vector<Matrix> *savedTensors);
 
 protected:
     LambdaComm *manager;
 
-    unsigned nodeId;
-
-    zmq::context_t& ctx;
     zmq::socket_t workersocket;
-
-    unsigned numLambdasForward;
-    unsigned numLambdasBackward;
-
-    unsigned& countForward;     // Counting up until all lambdas have returned.
-    unsigned& countBackward;
-
-    unsigned& numCorrectPredictions;
-    float& totalLoss;
-    unsigned& numValidationVertices;
-    unsigned& evalPartitions;
 
     // Whether or not to evaluate this epoch
     bool evaluate;
-    std::vector<bool>& trainPartitions;
 
 private:
 
@@ -109,14 +93,6 @@ private:
     Matrix newGradMatrix;
     Matrix targetMatrix;
     std::vector<Matrix> *savedTensors;
-
-    void sendBackpropChunks(zmq::message_t& client_id, unsigned partId);
-
-    // Accepts an incoming 'finished' message.
-    void recvBackpropFinishMsg(zmq::message_t& client_id);
-
-    std::vector<Matrix> zMatrices;      // Matrices to send.
-    std::vector<Matrix> actMatrices;
 };
 
 

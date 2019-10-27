@@ -38,8 +38,6 @@ public:
     virtual void waitLambdaForward(unsigned layer, bool lastLayer) = 0;
 
     // For backward-prop.
-    virtual void newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType *targetBuf,
-                            unsigned numLocalVertices, std::vector<unsigned> layerConfig) = 0;
     virtual void newContextBackward(FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
                                     unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim) = 0;
 

@@ -95,12 +95,6 @@ void GPUComm::setTrainValidationSplit(float trainPortion, unsigned numLocalVerti
 
 
 // For backward-prop.
-void GPUComm::newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType *targetBuf,
-                            unsigned numLocalVertices, std::vector<unsigned> layerConfig){
-    printLog(nodeId, "***********SHOULD NOT APPEAR********************");
-    printLog(nodeId, "GPU BACKWARD context(Old) created.");
-}
-
 void GPUComm::newContextBackward(FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
                                     unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim){
     // Create new matrices object for workers to access.

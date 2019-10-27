@@ -10,13 +10,7 @@ extern unsigned evalLambdas;
  * LambdaWorker constructor & destructor.
  *
  */
-LambdaWorker::LambdaWorker(LambdaComm *manager_)
-    : manager(manager_), nodeId(manager_->nodeId), ctx(manager_->ctx), workersocket(ctx, ZMQ_DEALER),
-      numLambdasForward(manager_->numLambdasForward), numLambdasBackward(manager_->numLambdasBackward),
-      countForward(manager_->countForward), countBackward(manager_->countBackward),
-      numCorrectPredictions(manager_->numCorrectPredictions), totalLoss(manager_->totalLoss),
-      numValidationVertices(manager_->numValidationVertices), evalPartitions(manager_->evalPartitions),
-      trainPartitions(manager_->trainPartitions) {
+LambdaWorker::LambdaWorker(LambdaComm *manager_) : manager(manager_), workersocket(manager->ctx, ZMQ_DEALER) {
     workersocket.setsockopt(ZMQ_LINGER, 0);
     workersocket.setsockopt(ZMQ_RCVTIMEO, 1000); // Set time out of weight socket to 1s for a graceful shut down.
     workersocket.connect("inproc://backend");
@@ -93,7 +87,7 @@ LambdaWorker::work() {
  *
  */
 void
-LambdaWorker::refreshState(Matrix actMatrix_, FeatType *zData_, FeatType *actData_, unsigned numFeatsNext_, bool eval) {           // For forward-prop.
+LambdaWorker::refreshState(Matrix actMatrix_, FeatType *zData_, FeatType *actData_, unsigned numFeatsNext_, bool eval) { // For forward-prop.
     actMatrix = actMatrix_;
     zData = zData_;
     actData = actData_;
@@ -101,19 +95,12 @@ LambdaWorker::refreshState(Matrix actMatrix_, FeatType *zData_, FeatType *actDat
     evaluate = eval;
 
     if (evaluate) {
-        evalLambdas = evalPartitions;
+        evalLambdas = manager->evalPartitions;
     }
 }
 
 void
-LambdaWorker::refreshState(std::vector<Matrix> zMatrices_, std::vector<Matrix> actMatrices_, Matrix targetMatrix_) {    // For backward-prop.
-    zMatrices = zMatrices_;
-    actMatrices = actMatrices_;
-    targetMatrix = targetMatrix_;
-}
-
-void
-LambdaWorker::refreshState(Matrix oldGradMatrix_, Matrix newGradMatrix_, Matrix targetMatrix_, std::vector<Matrix> *savedTensors_) {
+LambdaWorker::refreshState(Matrix oldGradMatrix_, Matrix newGradMatrix_, Matrix targetMatrix_, std::vector<Matrix> *savedTensors_) { // For backward-prop.
     oldGradMatrix = oldGradMatrix_;
     newGradMatrix = newGradMatrix_;
     targetMatrix = targetMatrix_;
@@ -130,13 +117,13 @@ void
 LambdaWorker::sendAggregatedChunk(zmq::message_t& client_id, unsigned partId) {
 
     // Reject a send request if the partition id is invalid.
-    if (partId >= numLambdasForward) {
+    if (partId >= manager->numLambdasForward) {
         workersocket.send(client_id, ZMQ_SNDMORE);
         zmq::message_t header(HEADER_SIZE);
         populateHeader((char *) header.data(), ERR_HEADER_FIELD, ERR_HEADER_FIELD, ERR_HEADER_FIELD, ERR_HEADER_FIELD);
         workersocket.send(header);
 
-        printLog(nodeId, "[ERROR] Got a request for partition %u, but number of lambdas is %u", partId, numLambdasForward);
+        printLog(manager->nodeId, "[ERROR] Got a request for partition %u, but number of lambdas is %u", partId, manager->numLambdasForward);
 
     // Partition id is valid, so send the matrix segment.
     } else {
@@ -145,7 +132,7 @@ LambdaWorker::sendAggregatedChunk(zmq::message_t& client_id, unsigned partId) {
 
         // Check to make sure that the bounds of this partition do not exceed the bounds of the data array.
         // If they do, set partition end to the end of the array.
-        unsigned partRows = std::ceil((float) actMatrix.getRows() / (float) numLambdasForward);
+        unsigned partRows = std::ceil((float) actMatrix.getRows() / (float) manager->numLambdasForward);
         unsigned thisPartRows = partRows;
         if ((partId * partRows + partRows) > actMatrix.getRows())
             thisPartRows = partRows - (partId * partRows + partRows) + actMatrix.getRows();
@@ -154,7 +141,7 @@ LambdaWorker::sendAggregatedChunk(zmq::message_t& client_id, unsigned partId) {
 
         // Tell the lambda whether or not it should run evaluation
         // If the engine has set evaluate to true and this is not a training partition
-        unsigned lambdaEval = evaluate && !trainPartitions[partId];
+        unsigned lambdaEval = evaluate && !(manager->trainPartitions[partId]);
         zmq::message_t header(HEADER_SIZE);
         populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, actMatrix.getCols(), lambdaEval);
         workersocket.send(header, ZMQ_SNDMORE);
@@ -167,7 +154,7 @@ LambdaWorker::sendAggregatedChunk(zmq::message_t& client_id, unsigned partId) {
 
 void
 LambdaWorker::recvLambdaResults(zmq::message_t& client_id, unsigned partId) {
-    unsigned partRows = std::ceil((float) actMatrix.getRows() / (float) numLambdasForward);
+    unsigned partRows = std::ceil((float) actMatrix.getRows() / (float) (manager->numLambdasForward));
     FeatType *partitionZStart = zData + partId * partRows * numFeatsNext;
     FeatType *partitionActStart = actData + partId * partRows * numFeatsNext;
 
@@ -185,31 +172,28 @@ LambdaWorker::recvLambdaResults(zmq::message_t& client_id, unsigned partId) {
 
     // Check for total number of partitions received. If all partitions received, wake up lambdaComm.
     manager->forwardLambdaTable[partId] = false;
-    ++countForward;
+    ++(manager->countForward);
 }
 
 void
 LambdaWorker::sendChunk(Matrix &srcMat, zmq::message_t& client_id, unsigned partId, bool forward) {
     // Reject a send request if the partition id is invalid.
-    unsigned numLambdas = forward ? numLambdasForward : numLambdasBackward;
+    unsigned numLambdas = forward ? (manager->numLambdasForward) : (manager->numLambdasBackward);
     if (partId >= numLambdas) {
         workersocket.send(client_id, ZMQ_SNDMORE);
         zmq::message_t header(HEADER_SIZE);
         populateHeader((char *) header.data(), ERR_HEADER_FIELD, ERR_HEADER_FIELD, ERR_HEADER_FIELD, ERR_HEADER_FIELD);
         workersocket.send(header);
 
-        printLog(nodeId, "[ERROR] Got a request for partition %u, but number of lambdas is %u", partId, numLambdas);
+        printLog(manager->nodeId, "[ERROR] Got a request for partition %u, but number of lambdas is %u", partId, numLambdas);
     // Partition id is valid, so send the matrix segment.
     } else {
         workersocket.send(client_id, ZMQ_SNDMORE);
 
         // Check to make sure that the bounds of this partition do not exceed the bounds of the data array.
         // If they do, set partition end to the end of the array.
-
         unsigned partRows = (srcMat.getRows() + numLambdas - 1) / numLambdas;
-        unsigned thisPartRows = partRows;
-        if ((partId * partRows + partRows) > srcMat.getRows())
-            thisPartRows = srcMat.getRows() - partId * partRows;
+        unsigned thisPartRows = std::min(partRows, srcMat.getRows() - partId * partRows);
         unsigned bufSize = thisPartRows * srcMat.getCols() * sizeof(FeatType);
         FeatType *partitionStart = srcMat.getData() + (partId * partRows * srcMat.getCols());
 
@@ -225,8 +209,7 @@ LambdaWorker::sendChunk(Matrix &srcMat, zmq::message_t& client_id, unsigned part
 
 void
 LambdaWorker::recvChunk(Matrix &dstMat, zmq::message_t &client_id, unsigned partId, bool forward) {
-
-    unsigned numLambdas = forward ? numLambdasForward : numLambdasBackward;
+    unsigned numLambdas = forward ? (manager->numLambdasForward) : (manager->numLambdasBackward);
     unsigned partRows = (dstMat.getRows() + numLambdas - 1) / numLambdas;
     FeatType *partitionStart = dstMat.getData() + partId * partRows * dstMat.getCols();
 
@@ -244,92 +227,17 @@ LambdaWorker::recvChunk(Matrix &dstMat, zmq::message_t &client_id, unsigned part
     // Check for total number of partitions received. If all partitions received, wake up lambdaComm.
     if (forward) {
         manager->forwardLambdaTable[partId] = false;
-        ++countForward;
+        ++(manager->countForward);
     } else {
         manager->backwardLambdaTable[partId] = false;
-        ++countBackward;
+        ++(manager->countBackward);
     }
 }
 
-void
-LambdaWorker::sendBackpropChunks(zmq::message_t& client_id, unsigned partId) {
-
-    // Reject a send request if the partition id is invalid.
-    if (partId >= numLambdasBackward) {
-        workersocket.send(client_id, ZMQ_SNDMORE);
-        zmq::message_t header(HEADER_SIZE);
-        populateHeader((char *) header.data(), ERR_HEADER_FIELD, ERR_HEADER_FIELD, ERR_HEADER_FIELD, ERR_HEADER_FIELD);
-        workersocket.send(header);
-
-    // Partition id is valid, so send the matrix segments.
-    } else {
-
-        workersocket.send(client_id, ZMQ_SNDMORE);
-
-        // Check to make sure that the bounds of this partition do not exceed the bounds of the data array.
-        // If they do, set partition end to the end of the array.
-        unsigned partRows = std::ceil((float) targetMatrix.getRows() / (float) numLambdasBackward);
-        unsigned thisPartRows = partRows;
-        if ((partId * partRows + partRows) > targetMatrix.getRows())
-            thisPartRows = partRows - (partId * partRows + partRows) + targetMatrix.getRows();
-
-        // Send z matrices, from layer 1-> last.
-        for (Matrix& matrix : zMatrices) {
-            unsigned bufSize = thisPartRows * matrix.getCols() * sizeof(FeatType);
-            FeatType *partitionStart = matrix.getData() + (partId * partRows * matrix.getCols());
-
-            zmq::message_t header(HEADER_SIZE);
-            populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, matrix.getCols());
-            workersocket.send(header, ZMQ_SNDMORE);
-
-            zmq::message_t partitionData(bufSize);
-            std::memcpy(partitionData.data(), partitionStart, bufSize);
-            workersocket.send(partitionData, ZMQ_SNDMORE);
-        }
-
-        // Send activation matrices, from layer 0 -> last.
-        for (Matrix& matrix : actMatrices) {
-            unsigned bufSize = thisPartRows * matrix.getCols() * sizeof(FeatType);
-            FeatType *partitionStart = matrix.getData() + (partId * partRows * matrix.getCols());
-
-            zmq::message_t header(HEADER_SIZE);
-            populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, matrix.getCols());
-            workersocket.send(header, ZMQ_SNDMORE);
-
-            zmq::message_t partitionData(bufSize);
-            std::memcpy(partitionData.data(), partitionStart, bufSize);
-            workersocket.send(partitionData, ZMQ_SNDMORE);
-        }
-
-        // Send target label matrix.
-        unsigned bufSize = thisPartRows * targetMatrix.getCols() * sizeof(FeatType);
-        FeatType *partitionStart = targetMatrix.getData() + (partId * partRows * targetMatrix.getCols());
-
-        zmq::message_t header(HEADER_SIZE);
-        populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, targetMatrix.getCols());
-        workersocket.send(header, ZMQ_SNDMORE);
-
-        zmq::message_t partitionData(bufSize);
-        std::memcpy(partitionData.data(), partitionStart, bufSize);
-        workersocket.send(partitionData);
-    }
-}
-
-void
-LambdaWorker::recvBackpropFinishMsg(zmq::message_t& client_id) {
-
-    // Send confirm ACK message.
-    zmq::message_t confirm;
-    workersocket.send(client_id, ZMQ_SNDMORE);
-    workersocket.send(confirm);
-
-    // Check for total number of partitions received. If all partitions received, wake up lambdaComm.
-    ++countBackward;
-}
 
 void
 LambdaWorker::sendTargetMatrix(zmq::message_t& client_id, unsigned partId) {
-    unsigned partRows = std::ceil((float) targetMatrix.getRows() / (float) numLambdasForward);
+    unsigned partRows = std::ceil((float) targetMatrix.getRows() / (float) (manager->numLambdasForward));
     unsigned thisPartRows = partRows;
     if ((partId * partRows + partRows) > targetMatrix.getRows())
         thisPartRows = partRows - (partId * partRows + partRows) + targetMatrix.getRows();
@@ -360,8 +268,8 @@ LambdaWorker::recvValidationResults(zmq::message_t& client_id, zmq::message_t& h
 
     // atomically sum correct predictions and loss
     std::lock_guard<std::mutex> lk(eval_mutex);
-    numCorrectPredictions += totalCorrectThisPartition;
-    totalLoss += lossThisPartition;
+    manager->numCorrectPredictions += totalCorrectThisPartition;
+    manager->totalLoss += lossThisPartition;
 
     --evalLambdas;
 
@@ -369,12 +277,12 @@ LambdaWorker::recvValidationResults(zmq::message_t& client_id, zmq::message_t& h
     // and accuracy
     // NOTE: Will only be acc/loss per node, not global acc/loss
     if (evalLambdas == 0) {
-        printLog(nodeId, "Accuracy this epoch: %f",
-             (float) numCorrectPredictions / (float) numValidationVertices);
-        printLog(nodeId, "Loss this epoch %f",
-             totalLoss / (float) numValidationVertices);
+        printLog(manager->nodeId, "Accuracy this epoch: %f",
+            (float) (manager->numCorrectPredictions) / (float) manager->numValidationVertices);
+        printLog(manager->nodeId, "Loss this epoch %f",
+            (float) (manager->totalLoss) / (float) manager->numValidationVertices);
 
-        numCorrectPredictions = 0;
-        totalLoss = 0;
+        manager->numCorrectPredictions = 0;
+        manager->totalLoss = 0;
     }
 }

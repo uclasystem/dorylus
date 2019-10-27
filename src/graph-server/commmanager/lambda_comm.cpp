@@ -9,8 +9,7 @@ static std::vector<std::thread *> worker_threads;
 
 
 extern "C" ResourceComm* createComm(CommInfo& commInfo) {
-    return new LambdaComm(commInfo.nodeIp, commInfo.dataserverPort, commInfo.coordserverIp,
-                        commInfo.coordserverPort, commInfo.nodeId, commInfo.numLambdasForward, commInfo.numLambdasBackward);
+    return new LambdaComm(commInfo);
 }
 
 extern "C" void destoryComm(LambdaComm *lambdaComm) {
@@ -22,13 +21,12 @@ extern "C" void destoryComm(LambdaComm *lambdaComm) {
  * Lambda communication manager constructor & destructor.
  *
  */
-LambdaComm::LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::string coordserverIp_, unsigned coordserverPort_, unsigned nodeId_,
-           unsigned numLambdasForward_, unsigned numLambdasBackward_)
-     :ResourceComm(),nodeIp(nodeIp_), dataserverPort(dataserverPort_), coordserverIp(coordserverIp_), coordserverPort(coordserverPort_), nodeId(nodeId_),
-      ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), coordsocket(ctx, ZMQ_REQ), halt(false),
-      numLambdasForward(numLambdasForward_), numLambdasBackward(numLambdasBackward_), numListeners(numLambdasBackward_),   // TODO: Decide numListeners.
-      countForward(0), countBackward(0),
-      numCorrectPredictions(0), totalLoss(0.0), numValidationVertices(0), evalPartitions(0) {
+LambdaComm::LambdaComm(CommInfo &commInfo) :
+        ResourceComm(), nodeIp(commInfo.nodeIp), dataserverPort(commInfo.dataserverPort),
+        coordserverIp(commInfo.coordserverIp), coordserverPort(commInfo.coordserverPort),
+        nodeId(commInfo.nodeId), ctx(1), halt(false), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), coordsocket(ctx, ZMQ_REQ),
+        numLambdasForward(commInfo.numLambdasForward), numLambdasBackward(commInfo.numLambdasBackward), numListeners(numLambdasBackward), // TODO: Decide numListeners.
+        countForward(0), countBackward(0), numCorrectPredictions(0), totalLoss(0.0), numValidationVertices(0), evalPartitions(0) {
 
     // Bind the proxy sockets.
     char dhost_port[50];
@@ -189,7 +187,7 @@ LambdaComm::waitLambdaForward(unsigned layer, bool lastLayer) {
         if (getTimer() - forwardTimer > TIMEOUT_PERIOD) {
             for (unsigned i = 0; i < numLambdasForward; i++) {
                 if (forwardLambdaTable[i]) {
-                    printLog(nodeId, "relaunch forward lambda %u...", i);
+                    printLog(nodeId, "Relaunch FORWARD lambda %u...", i);
                     invokeLambdaForward(layer, i, lastLayer);
                 }
             }
@@ -223,30 +221,6 @@ LambdaComm::newContextBackward(FeatType *oldGradBuf, FeatType *newGradBuf, std::
     printLog(nodeId, "Lambda BACKWARD context created.");
 }
 
-
-// deprecated.
-void
-LambdaComm::newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType *targetBuf,
-                               unsigned numLocalVertices, std::vector<unsigned> layerConfig) {
-    countBackward = 0;
-
-    // Create new matrix objects for workers to access.
-    std::vector<Matrix> zMatrices;
-    for (size_t i = 1; i < layerConfig.size(); ++i)
-        zMatrices.push_back(Matrix(numLocalVertices, layerConfig[i], zBufs[i]));
-
-    std::vector<Matrix> actMatrices;
-    for (size_t i = 0; i < layerConfig.size(); ++i)
-        actMatrices.push_back(Matrix(numLocalVertices, layerConfig[i], actBufs[i]));
-
-    Matrix targetMatrix(numLocalVertices, layerConfig[layerConfig.size() - 1], targetBuf);
-
-    // Refresh workers' members.
-    for (auto&& worker : workers)
-        worker->refreshState(zMatrices, actMatrices, targetMatrix);
-
-    printLog(nodeId, "Lambda BACKWARD context created.");
-}
 
 void
 LambdaComm::requestBackward(unsigned layer, bool lastLayer) {
@@ -284,7 +258,7 @@ LambdaComm::waitLambdaBackward(unsigned layer, bool lastLayer) {
         if (getTimer() - backwardTimer > TIMEOUT_PERIOD) {
             for (unsigned i = 0; i < numLambdasBackward; i++) {
                 if (backwardLambdaTable[i]) {
-                    printLog(nodeId, "relaunch backward lambda %u...", i);
+                    printLog(nodeId, "Relaunch BACKWARD lambda %u...", i);
                     invokeLambdaBackward(layer, i, lastLayer);
                 }
             }

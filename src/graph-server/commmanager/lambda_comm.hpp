@@ -40,8 +40,7 @@ class LambdaComm : public ResourceComm {
 
 public:
 
-    LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::string coordserverIp_, unsigned coordserverPort_, unsigned nodeId_,
-               unsigned numLambdasForward_, unsigned numLambdasBackward_);
+    LambdaComm(CommInfo &commInfo);
     ~LambdaComm();
 
     void setTrainValidationSplit(float trainPortion, unsigned numLocalVertices);
@@ -55,8 +54,6 @@ public:
     void waitLambdaForward(unsigned layer, bool lastLayer);
 
     // For backward-prop.
-    void newContextBackward(FeatType **zBufs, FeatType **actBufs, FeatType *targetBuf,
-                            unsigned numLocalVertices, std::vector<unsigned> layerConfig);
     void newContextBackward(FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
                             unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim);
     void requestBackward(unsigned layer, bool lastLayer);
@@ -72,13 +69,13 @@ public:
 // private:
     unsigned numLambdasForward;
     unsigned numLambdasBackward;
+    unsigned numListeners;
 
     bool evaluate;
     bool halt;
     std::vector<bool> trainPartitions;
 
-    unsigned numListeners;
-
+    // for relaunch timed-out lambdas
     unsigned countForward;
     bool *forwardLambdaTable;
     double forwardTimer;
