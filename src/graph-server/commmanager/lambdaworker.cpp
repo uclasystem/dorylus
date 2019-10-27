@@ -18,6 +18,7 @@ LambdaWorker::LambdaWorker(LambdaComm *manager_)
       numValidationVertices(manager_->numValidationVertices), evalPartitions(manager_->evalPartitions),
       trainPartitions(manager_->trainPartitions) {
     workersocket.setsockopt(ZMQ_LINGER, 0);
+    workersocket.setsockopt(ZMQ_RCVTIMEO, 1000); // Set time out of weight socket to 1s for a graceful shut down.
     workersocket.connect("inproc://backend");
 }
 
@@ -34,12 +35,17 @@ LambdaWorker::~LambdaWorker() {
 void
 LambdaWorker::work() {
     try {
-        while (true) {
+        while (!(manager->halt)) {
             zmq::message_t identity;
             zmq::message_t header;
 
-            workersocket.recv(&identity);
-            workersocket.recv(&header);
+            // recv will return false if timed out.
+            if (!workersocket.recv(&identity)) {
+                continue;
+            }
+            if (!workersocket.recv(&header)) {
+                continue;
+            }
 
             unsigned op = parse<unsigned>((char *) header.data(), 0);
             unsigned partId = parse<unsigned>((char *) header.data(), 1);

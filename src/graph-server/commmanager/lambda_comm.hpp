@@ -74,6 +74,7 @@ public:
     unsigned numLambdasBackward;
 
     bool evaluate;
+    bool halt;
     std::vector<bool> trainPartitions;
 
     unsigned numListeners;

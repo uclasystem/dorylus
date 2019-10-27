@@ -5,26 +5,27 @@
 #include "../../common/matrix.hpp"
 #include <dlfcn.h>
 
-struct CommInfo{
-	std::string nodeIp;
-	unsigned nodeId;
-	unsigned dataserverPort;
-	std::string coordserverIp;
-	unsigned coordserverPort;
-	unsigned numLambdasForward;
-	unsigned numLambdasBackward;
+struct CommInfo {
+    std::string nodeIp;
+    unsigned nodeId;
+    unsigned dataserverPort;
+    std::string coordserverIp;
+    unsigned coordserverPort;
+    unsigned numLambdasForward;
+    unsigned numLambdasBackward;
 
-	unsigned numNodes;
-	std::string wServersFile;
-	unsigned weightserverPort;
+    unsigned numNodes;
+    std::string wServersFile;
+    unsigned weightserverPort;
 };
 
 //abstract interface declaration
-class ResourceComm
-{
+class ResourceComm {
 public:
-	ResourceComm(){};
-	virtual void setTrainValidationSplit(float trainPortion, unsigned numLocalVertices) = 0;
+    ResourceComm() {};
+    virtual ~ResourceComm() {};
+
+    virtual void setTrainValidationSplit(float trainPortion, unsigned numLocalVertices) = 0;
 
     // For forward-prop.
     virtual void newContextForward(FeatType *dataBuf, FeatType *zData,
@@ -48,14 +49,9 @@ public:
 
     // Send a message to the coordination server to shutdown.
     virtual void sendShutdownMessage() = 0;
-
-	~ResourceComm(){};
-
 };
 
-
 ResourceComm* createResourceComm(const std::string& type, CommInfo& commInfo);
-
-
+void destoryResourceComm(const std::string& type, ResourceComm *resourceComm);
 
 #endif // __RESOURCE_COMM_HPP__

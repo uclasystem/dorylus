@@ -92,14 +92,42 @@ Engine::init(int argc, char *argv[]) {
     graph.compactGraph();
 
     setUpCommInfo();
-    if (gpuEnabled == 1)
-        resComm=createResourceComm("GPU",commInfo);
-    else
-        resComm=createResourceComm("Lambda",commInfo);
+    resComm = createResourceComm(gpuEnabled ? "GPU" : "Lambda", commInfo);
 
     timeForwardProcess = 0.0;
     timeInit += getTimer();
     printLog(nodeId, "Engine initialization complete.");
+}
+
+
+/**
+ *
+ * Destroy the engine.
+ *
+ */
+void
+Engine::destroy() {
+    printLog(nodeId, "Destroying the engine...");
+
+    nodeManager.destroy();
+    commManager.destroy();
+    computePool->destroyPool();
+    dataPool->destroyPool();
+
+    lockRecvCnt.destroy();
+    condRecvCnt.destroy();
+
+    resComm->sendShutdownMessage();
+
+    destoryResourceComm(gpuEnabled ? "GPU" : "Lambda", resComm);
+
+    delete[] forwardGhostsList;
+    delete[] backwardGhostsList;
+
+    delete[] forwardVerticesInitData;
+    delete[] forwardGhostInitData;
+
+    delete[] localVerticesLabels;
 }
 
 
@@ -214,7 +242,9 @@ Engine::runForward(bool eval) {
     for (iteration = 0; iteration < numLayers; iteration++) {
         inputTensor = aggregate(inputTensor, graphLocalVerticesNum, getFeatDim(iteration));
         inputTensor = invokeLambda(inputTensor, graphLocalVerticesNum, getFeatDim(iteration), getFeatDim(iteration + 1));
-        inputTensor = scatter(inputTensor, graphLocalVerticesNum, getFeatDim(iteration + 1));
+        if (iteration < numLayers - 1) { // don't need scatter at the last layer.
+            inputTensor = scatter(inputTensor, graphLocalVerticesNum, getFeatDim(iteration + 1));
+        }
     }
 
     timeForwardProcess += getTimer();
@@ -264,11 +294,11 @@ Engine::runBackward(FeatType *initGradTensor) {
  */
 void
 Engine::output() {
-    // std::ofstream outStream(outFile.c_str());
-    // if (!outStream.good())
-    //     printLog(nodeId, "Cannot open output file: %s [Reason: %s]", outFile.c_str(), std::strerror(errno));
+    std::ofstream outStream(outFile.c_str());
+    if (!outStream.good())
+        printLog(nodeId, "Cannot open output file: %s [Reason: %s]", outFile.c_str(), std::strerror(errno));
 
-    // assert(outStream.good());
+    assert(outStream.good());
 
     //
     // The following are labels outputing.
@@ -292,6 +322,35 @@ Engine::output() {
     // }
     // outStream << "B: " << timeBackwardProcess << std::endl;
 
+    char outBuf[1024];
+    sprintf(outBuf, "<EM>: Initialization takes %.3lf ms", timeInit);
+    outStream << outBuf << std::endl;
+    sprintf(outBuf, "<EM>: Forward:  Time per stage:");
+    outStream << outBuf << std::endl;
+    for (unsigned i = 0; i < numLayers; ++i) {
+        sprintf(outBuf, "<EM>    Aggregation   %2u  %.3lf ms", i, vecTimeAggregate[i]);
+        outStream << outBuf << std::endl;
+        sprintf(outBuf, "<EM>    Lambda        %2u  %.3lf ms", i, vecTimeLambda[i]);
+        outStream << outBuf << std::endl;
+        sprintf(outBuf, "<EM>    Ghost update  %2u  %.3lf ms", i, vecTimeSendout[i]);
+        outStream << outBuf << std::endl;
+    }
+    sprintf(outBuf, "<EM>: Total forward-prop time %.3lf ms", timeForwardProcess);
+    outStream << outBuf << std::endl;
+
+    sprintf(outBuf, "<EM>: Backward: Time per stage:");
+    outStream << outBuf << std::endl;
+    for (unsigned i = numLayers; i < 2 * numLayers; i++) {
+        sprintf(outBuf, "<EM>    Aggregation   %2u  %.3lf ms", i, vecTimeAggregate[i]);
+        outStream << outBuf << std::endl;
+        sprintf(outBuf, "<EM>    Lambda        %2u  %.3lf ms", i, vecTimeLambda[i]);
+        outStream << outBuf << std::endl;
+        sprintf(outBuf, "<EM>    Ghost update  %2u  %.3lf ms", i, vecTimeSendout[i]);
+        outStream << outBuf << std::endl;
+    }
+    sprintf(outBuf, "<EM>: Backward-prop takes %.3lf ms", timeBackwardProcess);
+    outStream << outBuf << std::endl;
+
     // Write benchmarking results to log file.
     if (master()) {
         assert(vecTimeAggregate.size() == 2 * numLayers);
@@ -301,34 +360,6 @@ Engine::output() {
     }
 }
 
-
-/**
- *
- * Destroy the engine.
- *
- */
-void
-Engine::destroy() {
-    printLog(nodeId, "Destroying the engine...");
-
-    nodeManager.destroy();
-    commManager.destroy();
-    computePool->destroyPool();
-    dataPool->destroyPool();
-
-    lockRecvCnt.destroy();
-    condRecvCnt.destroy();
-
-    resComm->sendShutdownMessage();
-
-    delete[] forwardGhostsList;
-    delete[] backwardGhostsList;
-
-    delete[] forwardVerticesInitData;
-    delete[] forwardGhostInitData;
-
-    delete[] localVerticesLabels;
-}
 
 struct AggOPArgs {
     FeatType *outputTensor;
@@ -916,18 +947,18 @@ void
 Engine::printEngineMetrics() {
     printLog(nodeId, "<EM>: Initialization takes %.3lf ms", timeInit);
     printLog(nodeId, "<EM>: Forward:  Time per stage:");
-    for (size_t i = 0; i < numLayers; ++i) {
-        printLog(nodeId, "<EM>    Aggregation   %2d  %.3lf ms", i, vecTimeAggregate[i]);
-        printLog(nodeId, "<EM>    Lambda        %2d  %.3lf ms", i, vecTimeLambda[i]);
-        printLog(nodeId, "<EM>    Ghost update  %2d  %.3lf ms", i, vecTimeSendout[i]);
+    for (unsigned i = 0; i < numLayers; ++i) {
+        printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i, vecTimeAggregate[i]);
+        printLog(nodeId, "<EM>    Lambda        %2u  %.3lf ms", i, vecTimeLambda[i]);
+        printLog(nodeId, "<EM>    Ghost update  %2u  %.3lf ms", i, vecTimeSendout[i]);
     }
     printLog(nodeId, "<EM>: Total forward-prop time %.3lf ms", timeForwardProcess);
 
     printLog(nodeId, "<EM>: Backward: Time per stage:");
-    for (size_t i = numLayers; i < 2 * numLayers; i++) {
-        printLog(nodeId, "<EM>    Aggregation   %2d  %.3lf ms", i, vecTimeAggregate[i]);
-        printLog(nodeId, "<EM>    Lambda        %2d  %.3lf ms", i, vecTimeLambda[i]);
-        printLog(nodeId, "<EM>    Ghost update  %2d  %.3lf ms", i, vecTimeSendout[i]);
+    for (unsigned i = numLayers; i < 2 * numLayers; i++) {
+        printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i, vecTimeAggregate[i]);
+        printLog(nodeId, "<EM>    Lambda        %2u  %.3lf ms", i, vecTimeLambda[i]);
+        printLog(nodeId, "<EM>    Ghost update  %2u  %.3lf ms", i, vecTimeSendout[i]);
     }
     printLog(nodeId, "<EM>: Backward-prop takes %.3lf ms", timeBackwardProcess);
 }

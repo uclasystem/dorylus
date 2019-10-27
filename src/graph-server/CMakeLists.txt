@@ -16,7 +16,7 @@ add_subdirectory(engine)
 add_subdirectory(parallel)
 add_subdirectory(utils)
 if(BUILD_GPU)
-	add_subdirectory(GPU-Computation)
+    add_subdirectory(GPU-Computation)
 endif()
 
 # Add the executable.

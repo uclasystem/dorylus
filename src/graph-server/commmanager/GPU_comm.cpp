@@ -4,9 +4,13 @@ static void doNotFreeBuffer(void *data, void *hint){
     // printf("Buffer is not freed :)\n");
 }
 
-extern "C" ResourceComm* createComm(CommInfo& commInfo){
-    return new GPUComm(commInfo.nodeId,commInfo.numNodes,commInfo.dataserverPort,
-                        commInfo.wServersFile,commInfo.weightserverPort);
+extern "C" ResourceComm* createComm(CommInfo& commInfo) {
+    return new GPUComm(commInfo.nodeId, commInfo.numNodes, commInfo.dataserverPort,
+                        commInfo.wServersFile, commInfo.weightserverPort);
+}
+
+extern "C" void destoryComm(GPUComm *gpuComm) {
+    delete gpuComm;
 }
 
 GPUComm::GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,const std::string& wServersFile_,unsigned wPort_):

@@ -8,9 +8,13 @@ static std::vector<LambdaWorker *> workers;
 static std::vector<std::thread *> worker_threads;
 
 
-extern "C" ResourceComm* createComm(CommInfo& commInfo){
-    return new LambdaComm(commInfo.nodeIp,commInfo.dataserverPort,commInfo.coordserverIp,
-                        commInfo.coordserverPort,commInfo.nodeId,commInfo.numLambdasForward,commInfo.numLambdasBackward);
+extern "C" ResourceComm* createComm(CommInfo& commInfo) {
+    return new LambdaComm(commInfo.nodeIp, commInfo.dataserverPort, commInfo.coordserverIp,
+                        commInfo.coordserverPort, commInfo.nodeId, commInfo.numLambdasForward, commInfo.numLambdasBackward);
+}
+
+extern "C" void destoryComm(LambdaComm *lambdaComm) {
+    delete lambdaComm;
 }
 
 /**
@@ -21,7 +25,7 @@ extern "C" ResourceComm* createComm(CommInfo& commInfo){
 LambdaComm::LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::string coordserverIp_, unsigned coordserverPort_, unsigned nodeId_,
            unsigned numLambdasForward_, unsigned numLambdasBackward_)
      :ResourceComm(),nodeIp(nodeIp_), dataserverPort(dataserverPort_), coordserverIp(coordserverIp_), coordserverPort(coordserverPort_), nodeId(nodeId_),
-      ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), coordsocket(ctx, ZMQ_REQ),
+      ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), coordsocket(ctx, ZMQ_REQ), halt(false),
       numLambdasForward(numLambdasForward_), numLambdasBackward(numLambdasBackward_), numListeners(numLambdasBackward_),   // TODO: Decide numListeners.
       countForward(0), countBackward(0),
       numCorrectPredictions(0), totalLoss(0.0), numValidationVertices(0), evalPartitions(0) {
@@ -40,7 +44,6 @@ LambdaComm::LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::strin
     for (unsigned i = 0; i < numListeners; ++i) {
         workers.push_back(new LambdaWorker(this));
         worker_threads.push_back(new std::thread(std::bind(&LambdaWorker::work, workers[i])));
-        worker_threads[i]->detach();
     }
 
     forwardLambdaTable = new bool[numLambdasForward];
@@ -59,9 +62,11 @@ LambdaComm::LambdaComm(std::string nodeIp_, unsigned dataserverPort_, std::strin
 
 LambdaComm::~LambdaComm() {
     // Delete allocated resources.
+    halt = true;
     for (unsigned i = 0; i < numListeners; ++i) {
-        delete workers[i];
+        worker_threads[i]->join();
         delete worker_threads[i];
+        delete workers[i];
     }
 
     if (forwardLambdaTable) {
