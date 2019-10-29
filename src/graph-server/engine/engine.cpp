@@ -119,7 +119,7 @@ Engine::destroy() {
 
     resComm->sendShutdownMessage();
 
-    destoryResourceComm(gpuEnabled ? "GPU" : "Lambda", resComm);
+    destroyResourceComm(gpuEnabled ? "GPU" : "Lambda", resComm);
 
     delete[] forwardGhostsList;
     delete[] backwardGhostsList;

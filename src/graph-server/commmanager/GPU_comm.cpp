@@ -9,7 +9,7 @@ extern "C" ResourceComm* createComm(CommInfo& commInfo) {
                         commInfo.wServersFile, commInfo.weightserverPort);
 }
 
-extern "C" void destoryComm(GPUComm *gpuComm) {
+extern "C" void destroyComm(GPUComm *gpuComm) {
     delete gpuComm;
 }
 

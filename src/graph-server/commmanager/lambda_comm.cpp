@@ -12,7 +12,7 @@ extern "C" ResourceComm* createComm(CommInfo& commInfo) {
     return new LambdaComm(commInfo);
 }
 
-extern "C" void destoryComm(LambdaComm *lambdaComm) {
+extern "C" void destroyComm(LambdaComm *lambdaComm) {
     delete lambdaComm;
 }
 

@@ -50,6 +50,6 @@ public:
 };
 
 ResourceComm* createResourceComm(const std::string& type, CommInfo& commInfo);
-void destoryResourceComm(const std::string& type, ResourceComm *resourceComm);
+void destroyResourceComm(const std::string& type, ResourceComm *resourceComm);
 
 #endif // __RESOURCE_COMM_HPP__

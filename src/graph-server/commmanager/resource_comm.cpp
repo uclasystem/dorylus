@@ -18,7 +18,7 @@ ResourceComm *createResourceComm(const std::string &type, CommInfo &commInfo) {
     return resComm;
 }
 
-void destoryResourceComm(const std::string &type, ResourceComm *resComm) {
+void destroyResourceComm(const std::string &type, ResourceComm *resComm) {
     void *hndl = NULL;
     if (type == "GPU")
         hndl = dlopen("./build/graph-server/commmanager/libgpu_comm.so", RTLD_NOW);
@@ -29,6 +29,6 @@ void destoryResourceComm(const std::string &type, ResourceComm *resComm) {
         std::cerr << dlerror() << std::endl;
         exit(-1);
     }
-    void *destoryer = dlsym(hndl, "destoryComm");
-    ((void (*)(ResourceComm *)) destoryer)(resComm);
+    void *destroyer = dlsym(hndl, "destroyComm");
+    ((void (*)(ResourceComm *)) destroyer)(resComm);
 }
