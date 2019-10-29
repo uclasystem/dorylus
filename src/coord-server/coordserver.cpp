@@ -7,16 +7,20 @@
 #include <aws/lambda/LambdaClient.h>
 #include <aws/lambda/model/InvokeRequest.h>
 #include <ctype.h>
+#include <unistd.h>
 #include "coordserver.hpp"
 
 
+#define SLEEP_FREQUENCY 5
+#define SLEEP_PERIOD 1
+#define ABORT_LIMIT 100
 using namespace std::chrono;
 
 
 static const char *ALLOCATION_TAG = "GNN-Lambda";
 static std::shared_ptr<Aws::Lambda::LambdaClient> m_client;
 static std::ofstream outfile;
-
+static int failedCnt = 0;
 
 /**
  *
@@ -43,17 +47,49 @@ callback(const Aws::Lambda::LambdaClient *client, const Aws::Lambda::Model::Invo
 
         // There is error in the results.
         } else {
-            std::cout << "\033[1;31m[ ERROR ]\033[0m\t" << functionResult << std::endl;
+            std::cout << "\033[1;31m[ ERROR ]\033[0m\t";
+            if (__sync_add_and_fetch(&failedCnt, 1) % SLEEP_FREQUENCY == 0) {
+                if (failedCnt >= ABORT_LIMIT) {
+                    std::cout << "A lot of failures detected. Abort execution and PLEASE check the system settings!" << std::endl;
+                    abort();
+                } else {
+                    std::cout << "A lot of failures detected. Sleep for a while and wait.";
+                    sleep(SLEEP_PERIOD);
+                    std::cout << "Relaunch again..." << std::endl;
+                    m_client->InvokeAsync(invReq, callback);
+                }
+            } else {
+                std::cout << "Timed-out. Relaunch lambda..." << std::endl;
+                m_client->InvokeAsync(invReq, callback);
+            }
         }
 
     // Lambda returns error.
     } else {
-        Aws::Lambda::Model::InvokeResult& result = const_cast<Aws::Lambda::Model::InvokeResult&>(outcome.GetResult());
-
-        Aws::IOStream& payload = result.GetPayload();
-        Aws::String functionResult;
-        std::getline(payload, functionResult);
-        std::cout << "\033[1;31m[ ERROR ]\033[0m\t" << functionResult << std::endl;
+        if (outcome.GetResult().GetStatusCode() != 0) {
+            std::cout << "\033[1;31m[ ERROR ]\033[0m\t" <<
+                "Executed Version:" << outcome.GetResult().GetExecutedVersion() << "\n\t\t" <<
+                "Function Error:" << outcome.GetResult().GetFunctionError() << "\n\t\t" <<
+                "Log Result:" << outcome.GetResult().GetLogResult() << "\n\t\t" <<
+                "Status Code: " << outcome.GetResult().GetStatusCode() << std::endl;
+        } else {
+            // timed out lamdbas
+            std::cout << "\033[1;31m[ ERROR ]\033[0m\t";
+            if (__sync_add_and_fetch(&failedCnt, 1) % SLEEP_FREQUENCY == 0) {
+                if (failedCnt >= ABORT_LIMIT) {
+                    std::cout << "A lot of failures detected. Abort execution and PLEASE check the system settings!" << std::endl;
+                    abort();
+                } else {
+                    std::cout << "A lot of failures detected. Sleep for a while and wait.";
+                    sleep(SLEEP_PERIOD);
+                    std::cout << "Relaunch again..." << std::endl;
+                    m_client->InvokeAsync(invReq, callback);
+                }
+            } else {
+                std::cout << "Timed-out. Relaunch lambda..." << std::endl;
+                m_client->InvokeAsync(invReq, callback);
+            }
+        }
     }
 }
 
