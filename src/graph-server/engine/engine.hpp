@@ -20,7 +20,7 @@
 #include "../../common/matrix.hpp"
 
 
-#define MAX_MSG_SIZE (256 * 1024)   // Max size (bytes) for a message received by the data communicator.
+#define MAX_MSG_SIZE (1024 * 1024)   // Max size (bytes) for a message received by the data communicator.
 #define NODE_ID_DIGITS 8 // Digits num of node id.
 #define NODE_ID_HEADER "%8X" // Header for node id. For communication.
 #define DATA_HEADER_SIZE (NODE_ID_DIGITS + sizeof(unsigned) + sizeof(unsigned))
@@ -195,7 +195,7 @@ private:
     void sendBackwardGhostGradients(FeatType *gradTensor, unsigned featDim);
     // Ghost update operation, send vertices to other nodes
     void forwardVerticesPushOut(unsigned receiver, unsigned totCnt, unsigned *lvids, FeatType *inputTensor, unsigned featDim);
-    void backwardVerticesPushOut(unsigned receiver, unsigned sender, unsigned totCnt, unsigned *lvids, FeatType *gradTensor, unsigned featDim);
+    void backwardVerticesPushOut(unsigned receiver, unsigned totCnt, unsigned *lvids, FeatType *gradTensor, unsigned featDim);
 
     // Aggregation operation (along with normalization).
     void forwardAggregateFromNeighbors(unsigned lvid, FeatType *outputTensor, FeatType *inputTensor, unsigned featDim);

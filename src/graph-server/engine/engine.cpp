@@ -459,16 +459,12 @@ Engine::scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim) {
     auto fgc_fp = std::bind(&Engine::forwardGhostCommunicator, this, std::placeholders::_1, std::placeholders::_2);
     dataPool->perform(fgc_fp);
 
-    //## Global Iteration barrier. ##//
-    nodeManager.barrier();
-
     sendForwardGhostUpdates(vtcsTensor, featDim);
 
     // TODO: (YIFAN) we can optimize this to extend comm protocal. Mark the last packet sent so this node knows when to exit ghostCommunicator.
     nodeManager.barrier();
 
     commHalt = true;
-
     // Join all data communicators.
     dataPool->sync();
 
@@ -729,7 +725,6 @@ Engine::scatterBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim
     // TODO: (YIFAN) we can optimize this to extend comm protocal. Mark the last packet sent so this node knows when to exit ghostCommunicator.
     nodeManager.barrier();
     commHalt = true;
-
     // Join all data communicators.
     dataPool->sync();
 
@@ -814,7 +809,7 @@ Engine::sendBackwardGhostGradients(FeatType *gradTensor, unsigned featDim) {
         for (unsigned ib = 0; ib < backwardGhostVCnt; ib += BATCH_SIZE) {
             unsigned sendBatchSize = (backwardGhostVCnt - ib) < BATCH_SIZE ? (backwardGhostVCnt - ib) : BATCH_SIZE;
 
-            backwardVerticesPushOut(nid, nodeId, sendBatchSize, backwardGhostsList[nid].data() + ib, gradTensor, featDim);
+            backwardVerticesPushOut(nid, sendBatchSize, backwardGhostsList[nid].data() + ib, gradTensor, featDim);
             lockRecvCnt.lock();
             recvCnt++;
             lockRecvCnt.unlock();
@@ -830,12 +825,12 @@ Engine::sendBackwardGhostGradients(FeatType *gradTensor, unsigned featDim) {
 
 
 inline void
-Engine::backwardVerticesPushOut(unsigned receiver, unsigned sender, unsigned totCnt, unsigned *lvids, FeatType *gradTensor, unsigned featDim) {
+Engine::backwardVerticesPushOut(unsigned receiver, unsigned totCnt, unsigned *lvids, FeatType *gradTensor, unsigned featDim) {
     zmq::message_t msg(DATA_HEADER_SIZE + (sizeof(unsigned) + sizeof(FeatType) * featDim) * totCnt);
     char *msgPtr = (char *)(msg.data());
     sprintf(msgPtr, NODE_ID_HEADER, receiver);
     msgPtr += NODE_ID_DIGITS;
-    *(unsigned *)msgPtr = sender;
+    *(unsigned *)msgPtr = nodeId;
     msgPtr += sizeof(unsigned);
     *(unsigned *)msgPtr = totCnt;
     msgPtr += sizeof(unsigned);
