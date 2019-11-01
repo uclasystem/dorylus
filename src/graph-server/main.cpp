@@ -21,11 +21,11 @@ main(int argc, char *argv[]) {
 
 
     float splitPortion = 1.0 / 3.0;
-    unsigned numEpochs = 20;
+    unsigned numEpochs = 5;
     unsigned valFreq = 1;
 
     if (engine.master())
-        printLog(engine.getNodeId(), "% Train Data: %f, \
+        printLog(engine.getNodeId(), "%% Train Data: %.2f, \
                     number of epochs: %u, validation frequency: %u",
                     splitPortion, numEpochs, valFreq);
 
@@ -41,26 +41,20 @@ main(int argc, char *argv[]) {
                 printLog(engine.getNodeId(), "Time for some validation");
 
             // Boolean of whether or not to run evaluation
-            FeatType *predictData = engine.runForward(true);
-            engine.makeBarrier();
-
+            FeatType *predictData =
+            engine.runForward(true);
             engine.runBackward(predictData);
-            engine.makeBarrier();
-            sleep(2);
         } else {
-            FeatType *predictData = engine.runForward();
-            engine.makeBarrier();
-
+            FeatType *predictData =
+            engine.runForward();
             // Do a backward-prop phase.
             if (engine.isGPUEnabled() == 0) {
                 engine.runBackward(predictData);
-                engine.makeBarrier();
-                sleep(2);
             }
         }
     }
 
-    // // Procude the output files.
+    // Procude the output files.
     engine.output();
 
     // Destroy the engine.

@@ -27,5 +27,5 @@ BOOST_PYTHON_MODULE(gnnengine) {
         .def("init", &Engine::pyInit)
         .def("output", &Engine::output)
         .def("isGPUEnabled", &Engine::isGPUEnabled)
-        .def("destory", &Engine::destory);
+        .def("destroy", &Engine::destroy);
 };

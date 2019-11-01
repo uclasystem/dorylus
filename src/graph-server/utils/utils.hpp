@@ -2,6 +2,7 @@
 #define __GRAPH_UTILS_HPP__
 
 
+#include <algorithm>
 #include <cstdio>
 #include <map>
 #include <cstring>
@@ -33,5 +34,7 @@ double getTimer();
 void getPrIP(std::string& myPrIpFile, std::string& ip);
 void getPubIP(std::string& myPubIpFile, std::string& ip);
 
+
+inline size_t argmax(FeatType* first, FeatType* last) { return std::distance(first, std::max_element(first, last)); }
 
 #endif //__GRAPH_UTILS_HPP__
