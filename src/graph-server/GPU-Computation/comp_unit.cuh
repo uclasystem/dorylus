@@ -11,9 +11,11 @@
 #include <cstdlib>
 #include <cmath>
 #include <cuda_runtime.h>
+#include <cudnn.h>
 #include "cublas_v2.h"
 #include "cu_matrix.cuh"
 #include "../utils/utils.hpp"
+
 
 #include <thrust/device_vector.h>
 #include <thrust/functional.h>
@@ -52,6 +54,7 @@ public:
 
 
 // private:
+    cudnnHandle_t cudnnHandle;
 	cublasHandle_t handle;
 	cublasStatus_t stat;
 };

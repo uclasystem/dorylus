@@ -174,8 +174,6 @@ ComputingServer::gradLoss(unsigned layer) {
     // derivative of softmax
     std::cout << "< BACKWARD > Calculating cross entropy" << std::endl;
     CuMatrix cuPredictions=cu.wrapMatrix(predictions);
-    
-
 
     CuMatrix cuLabels=cu.wrapMatrix(labels);
     CuMatrix d_output = cu.hadamardSub(cuPredictions, cuLabels);

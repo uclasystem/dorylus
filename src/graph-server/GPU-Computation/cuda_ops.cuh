@@ -1,9 +1,3 @@
-struct tanh_functor{
-    tanh_functor(){}
-    __host__ __device__
-        float operator()(const float& x) const { return tanhf(x);}
-};
-
 struct activateDerivative_functor{
     activateDerivative_functor(){}
     __host__ __device__

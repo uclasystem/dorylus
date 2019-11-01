@@ -1,13 +1,18 @@
 #include "comp_unit.cuh"
 #include "cuda_ops.cuh"
-
-
+const float alpha=1.0,beta=0.0;
+  
 ComputingUnit::ComputingUnit(){
     stat = cublasCreate(&handle);
     if (stat != CUBLAS_STATUS_SUCCESS) {
         printf ("CUBLAS initialization failed\n");
         printf ("CUBLAS stat %u\n",stat);
         exit (EXIT_FAILURE);
+    }
+    cudnnStatus_t err =cudnnCreate(&cudnnHandle); 
+    if (err != CUDNN_STATUS_SUCCESS) { 
+        std::cout << "Error occurred: " << err << std::endl; 
+        std::exit(EXIT_FAILURE); 
     }
     cublasSetMathMode(handle,CUBLAS_TENSOR_OP_MATH);
 }
@@ -54,21 +59,18 @@ CuMatrix ComputingUnit::hadamardMul( CuMatrix& matLeft, CuMatrix& matRight) {
 
 // GPU is faster than CPU when SIZE>~250000, Maybe CPU is faster in most cases 
 CuMatrix ComputingUnit::softmaxRows( CuMatrix &mat){
+    
     CuMatrix res(Matrix(mat.getRows(),mat.getCols(),(FeatType *)NULL),handle);
-    thrust::device_ptr<float> devMat_ptr(mat.devPtr);
-    thrust::device_ptr<float> res_ptr(res.devPtr);
-    thrust::transform(devMat_ptr, devMat_ptr+mat.getNumElemts(),res_ptr, exp_functor());
-   
-    thrust::device_vector<int> indices(mat.getNumElemts());
-    thrust::counting_iterator<int> idxfirst(0);
-    thrust::counting_iterator<int> idxlast = idxfirst +mat.getNumElemts();
-    thrust::transform(idxfirst, idxlast, indices.begin(), setRow_functor(mat.getCols()));
-    thrust::device_vector<float> row_sums(mat.getRows());
-    thrust::reduce_by_key(indices.begin(), indices.end(),
-                        res_ptr,
-                        thrust::make_discard_iterator(),
-                        row_sums.begin());
-    thrust::transform(indices.begin(), indices.end(),res_ptr,res_ptr, divide_functor(thrust::raw_pointer_cast(row_sums.data())));
+    cudnnTensorDescriptor_t srcTensorDesc, sftTensorDesc;
+    cudnnCreateTensorDescriptor(&srcTensorDesc);
+    cudnnCreateTensorDescriptor(&sftTensorDesc);
+    cudnnSetTensor4dDescriptor(srcTensorDesc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+            mat.getRows(),1,1,mat.getCols());
+    cudnnSetTensor4dDescriptor(sftTensorDesc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+            mat.getRows(),1,1,mat.getCols());
+    cudnnSoftmaxForward(cudnnHandle, CUDNN_SOFTMAX_ACCURATE, CUDNN_SOFTMAX_MODE_INSTANCE,
+            &alpha,srcTensorDesc, mat.devPtr, 
+            &beta, sftTensorDesc, res.devPtr);
     return res;
 }
 
@@ -107,8 +109,16 @@ CuMatrix ComputingUnit::dot( Matrix& A, Matrix& B){
 }
 
 void ComputingUnit::activate(CuMatrix& A){
-    thrust::device_ptr<float> devA_ptr(A.devPtr);
-    thrust::transform(devA_ptr, devA_ptr+A.getNumElemts(),devA_ptr, tanh_functor());
+    cudnnTensorDescriptor_t srcTensorDesc;
+    cudnnCreateTensorDescriptor(&srcTensorDesc);
+    cudnnSetTensor4dDescriptor(srcTensorDesc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+            A.getRows(),1,1,A.getCols());
+
+    cudnnActivationDescriptor_t actDesc;
+    cudnnCreateActivationDescriptor(&actDesc);
+    cudnnSetActivationDescriptor(actDesc,CUDNN_ACTIVATION_TANH,CUDNN_NOT_PROPAGATE_NAN,1.0);
+    cudnnActivationForward(cudnnHandle,actDesc,
+        &alpha,srcTensorDesc,A.devPtr,&beta,srcTensorDesc,A.devPtr);
     A.updateMatrixFromGPU();
 }
 

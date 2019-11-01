@@ -40,7 +40,7 @@ void GPUComm::newContextForward(FeatType *dataBuf, FeatType *zData_, FeatType *a
     eval=eval_;
     numLocalVertices=numLocalVertices_;
     actMatrix=Matrix(numLocalVertices_, numFeats, dataBuf);
-    printf("numLocalVertices_ %d\n", numLocalVertices_);
+    
     zData = zData_;
     actData = actData_;
     numFeatsNext = numFeatsNext_;
