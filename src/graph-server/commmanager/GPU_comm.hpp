@@ -41,9 +41,10 @@ public:
     void waitLambdaForward(unsigned layer, bool lastLayer) {};
     void invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
 
+
     // For backward-prop.
-    void newContextBackward(FeatType *oldGradBuf, FeatType *newGradBuf, FeatType *savedInputBuf, FeatType *savedOutputBuf, FeatType *targetBuf,
-                            unsigned numLocalVertices_, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim) {};
+    void newContextBackward(FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
+                            unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim);
     void requestBackward(unsigned layer, bool lastLayer);
     void invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
     void waitLambdaBackward(unsigned layer, bool lastLayer) {}
