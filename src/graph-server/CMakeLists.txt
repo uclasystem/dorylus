@@ -10,14 +10,14 @@ endif()
 
 
 # Subdirectories, each needs a CMakeLists.txt.
+if(BUILD_GPU)
+    add_subdirectory(GPU-Computation)
+endif()
 add_subdirectory(commmanager)
 add_subdirectory(nodemanager)
 add_subdirectory(engine)
 add_subdirectory(parallel)
 add_subdirectory(utils)
-if(BUILD_GPU)
-    add_subdirectory(GPU-Computation)
-endif()
 
 # Add the executable.
 aux_source_directory(. GRAPH_SRCS)

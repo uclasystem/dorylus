@@ -14,7 +14,7 @@ project(gnn-lambda LANGUAGES CXX)
 
 
 # Include ZeroMQ.
-find_library(ZMQ_LIB NAME libzmq.so HINTS /usr/lib/ /usr/local/lib/)
+find_library(ZMQ_LIB NAME libzmq.so HINTS /usr/lib/ /usr/local/lib/ REQUIRED)
 set(ZMQ_INC /usr/local/include)
 include_directories(${ZMQ_INC})
 

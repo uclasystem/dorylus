@@ -15,25 +15,14 @@ extern "C" void destroyComm(GPUComm *gpuComm) {
 
 GPUComm::GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,const std::string& wServersFile_,unsigned wPort_):
         ResourceComm(),
-        confirm(5),
         wServersFile(wServersFile_),
         nodeId(nodeId_),
         numNodes(numNodes_),
         dPort(dataserverPort_),
         wPort(wPort_),
         dataSocket(ctx,ZMQ_REQ){
-
-        eval=0;
-
-        ComputingServer* comp_server=new ComputingServer(this);
-        printLog(nodeId,"Starting thread\n");
-        comp_server_thread=std::thread(std::bind(&ComputingServer::run,comp_server));
-
-        char ipc_addr[50];
-        sprintf(ipc_addr, "inproc://%u", dPort);
-
-        dataSocket.connect(ipc_addr);
-        printLog(nodeId,"Connecting to %s\n", ipc_addr);
+            eval=0;
+            comp_server=new ComputingServer(this);
 }
 
 
@@ -53,39 +42,7 @@ void GPUComm::newContextForward(FeatType *dataBuf, FeatType *zData_, FeatType *a
 }
 
 void GPUComm::requestForward(unsigned layer, bool lastLayer){
-
-    try {
-        // float split_data=split;
-        // if(!eval)
-        //     split_data=0;
-        // else
-        //     printLog(nodeId,"Evaling");
-
-        int op=OP::REQ_FORWARD;
-        unsigned lastLayerInt=lastLayer;
-        sendFourBytes((char*)&op);
-        sendFourBytes((char*)&layer);
-        sendFourBytes((char*)&lastLayerInt);
-        // sendFourBytes((char*)&split_data);
-        sendMatrix(actMatrix);
-        sendResultPtr(zData);
-        sendResultPtr(actData);
-        unsigned done=0;
-        sendFourBytes((char*)&done);
-
-
-        // if(eval){
-        //     unsigned numValidationVertices=std::ceil(split*numLocalVertices);
-        //     sendMatrix(targetMatrix);
-        //     unsigned totalCorrect = requestFourBytes<unsigned>();
-        //     float loss = requestFourBytes<float>();
-        //     printLog(nodeId, "Accuracy this epoch: %f",(float) totalCorrect / (float) numValidationVertices);
-        //     printLog(nodeId, "Loss this epoch %f",loss / (float) numValidationVertices);
-        // }
-    }
-    catch(std::exception& ex){
-        std::cerr << "[ERROR] " << ex.what() << std::endl;
-    }
+        comp_server->processForward(layer,lastLayer);
 }
 
 
@@ -106,76 +63,12 @@ void GPUComm::newContextBackward(FeatType *oldGradBuf, FeatType *newGradBuf, std
 
 void GPUComm::requestBackward(unsigned layer, bool lastLayer){
     printLog(nodeId, "GPU BACKWARD request.");
-    try {
-        int lastLayerInt=(int)lastLayer;
-        int op=OP::REQ_BACKWARD;
-        sendFourBytes((char*)&op);
-        sendFourBytes((char*)&layer);
-        sendFourBytes((char*)&numNodes);
-        sendFourBytes((char*)&lastLayerInt);
-        if(lastLayer){
-            sendMatrix(savedTensors[layer][TYPE::ACT - 1]);
-            sendMatrix(targetMatrix);
-            sendResultPtr(newGradMatrix.getData());
-            sendMatrix(savedTensors[layer][TYPE::AH - 1]);
-        }else{
-            sendMatrix(oldGradMatrix);
-            sendMatrix(savedTensors[layer][TYPE::Z - 1]);
-            sendResultPtr(newGradMatrix.getData());
-            sendMatrix(savedTensors[layer][TYPE::AH - 1]);
-        }
-        unsigned done = 0;
-        sendFourBytes((char *)&done);
-    }
-    catch(std::exception& ex){
-        std::cerr << "[ERROR] " << ex.what() << std::endl;
-    }
+    comp_server->processBackward(layer, lastLayer);
 }
 
 
 void GPUComm::sendShutdownMessage(){
     printLog(nodeId, "Send Shutdown Message\n");
-
-     // Send kill message.
-    zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::TERM);
-    dataSocket.send(header);
-    dataSocket.recv(&confirm);
-
-    comp_server_thread.join();
-    printLog(nodeId, "Joined\n");
-}
-
-void GPUComm::sendFourBytes(char* data){
-    zmq::message_t dataMsg(4);
-    memcpy(dataMsg.data(),data,4);
-    dataSocket.send(dataMsg);
-    dataSocket.recv(&confirm);
-}
-
-template <class T>
-T GPUComm::requestFourBytes(){
-    zmq::message_t header(4);
-    dataSocket.recv(&header);
-    dataSocket.send(confirm);
-    return *((T*)header.data());
-}
-
-void GPUComm::sendMatrix(Matrix& m){
-    zmq::message_t matrixMsg(HEADER_SIZE);
-    populateHeader((char *) matrixMsg.data(), m.getRows(), m.getCols());
-    char* dataPtr=(char*)m.getData();
-
-    std::memcpy((char*)matrixMsg.data()+sizeof(unsigned)*2, (char*) &dataPtr,
-        sizeof(FeatType*));
-
-    dataSocket.send(matrixMsg);
-    dataSocket.recv(&confirm);
-}
-
-void GPUComm::sendResultPtr(FeatType* ptr){
-    zmq::message_t ptrMsg(sizeof(FeatType*));
-    memcpy(ptrMsg.data(),&ptr,sizeof(FeatType*));
-    dataSocket.send(ptrMsg);
-    dataSocket.recv(&confirm);
+    // Send kill message.
+    comp_server->terminate();
 }
