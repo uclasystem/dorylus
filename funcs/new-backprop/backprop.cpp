@@ -247,7 +247,7 @@ gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id,
  */
 static invocation_response
 backward_prop(std::string dataserver, std::string weightserver, std::string dport,
-                std::string wport, unsigned id, unsigned layer, bool lastLayer) {
+              std::string wport, unsigned id, unsigned layer, bool lastLayer) {
     zmq::context_t ctx(1);
 
     //
@@ -319,8 +319,9 @@ my_handler(invocation_request const& request) {
     unsigned chunkId = pt.get<int>("id");
     lastLayer = pt.get<bool>("lastLayer");
 
-    std::cout << "[ACCEPTED] Thread " << chunkId << " is requested from " << dataserver << ":" << dport
-              << ", BACKWARD on " << layer << " layers." << std::endl;
+    std::cout << "[ACCEPTED] Thread " << chunkId << " is requested from " <<
+        dataserver << ":" << dport << ", BACKWARD on layer " << layer
+        << std::endl;
 
     return backward_prop(dataserver, weightserver, dport, wport, chunkId, layer, lastLayer);
 }
