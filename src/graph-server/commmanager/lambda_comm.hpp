@@ -26,8 +26,6 @@
 
 
 #define SLEEP_PERIOD 5000 // sleep 5000us and then check the condition.
-#define TIMEOUT_PERIOD 5000.0 // lambda is considered timed out after 5000ms.
-
 
 class LambdaWorker;
 
@@ -74,6 +72,8 @@ public:
     bool evaluate;
     bool halt;
     std::vector<bool> trainPartitions;
+
+    double timeoutPeriod;
 
     // for relaunch timed-out lambdas
     unsigned countForward;

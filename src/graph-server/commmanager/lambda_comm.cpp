@@ -26,7 +26,8 @@ LambdaComm::LambdaComm(CommInfo &commInfo) :
         coordserverIp(commInfo.coordserverIp), coordserverPort(commInfo.coordserverPort),
         nodeId(commInfo.nodeId), ctx(1), halt(false), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), coordsocket(ctx, ZMQ_REQ),
         numLambdasForward(commInfo.numLambdasForward), numLambdasBackward(commInfo.numLambdasBackward), numListeners(numLambdasBackward), // TODO: Decide numListeners.
-        countForward(0), countBackward(0), numCorrectPredictions(0), totalLoss(0.0), numValidationVertices(0), evalPartitions(0) {
+        countForward(0), countBackward(0), numCorrectPredictions(0), totalLoss(0.0), numValidationVertices(0), evalPartitions(0),
+        timeoutPeriod(0.0) {
 
     // Bind the proxy sockets.
     char dhost_port[50];
@@ -184,7 +185,10 @@ void
 LambdaComm::waitLambdaForward(unsigned layer, bool lastLayer) {
     // Block until all parts have been handled.
     while (countForward < numLambdasForward) {
-        if (getTimer() - forwardTimer > TIMEOUT_PERIOD) {
+        if (timeoutPeriod < 1e-20 && countForward >= 0.8 * numLambdasForward) {
+            timeoutPeriod = getTimer() - forwardTimer;
+        }
+        if (getTimer() - forwardTimer > 2 * timeoutPeriod) {
             for (unsigned i = 0; i < numLambdasForward; i++) {
                 if (forwardLambdaTable[i]) {
                     printLog(nodeId, "Relaunch FORWARD lambda %u...", i);
@@ -192,6 +196,7 @@ LambdaComm::waitLambdaForward(unsigned layer, bool lastLayer) {
                 }
             }
             forwardTimer = getTimer();
+            timeoutPeriod = 0.0;
         }
         usleep(SLEEP_PERIOD);
     }
@@ -218,6 +223,15 @@ LambdaComm::newContextBackward(FeatType *oldGradBuf, FeatType *newGradBuf, std::
     for (auto&& worker : workers)
         worker->refreshState(oldGradMatrix, newGradMatrix, targetMatrix, savedTensors);
 
+    // sending backward lambda number to coord server and finally set up weight server.
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader((char *)header.data(), OP::INFO, numLambdasBackward);
+    coordsocket.send(header, ZMQ_SNDMORE);
+    zmq::message_t dummyIp;
+    coordsocket.send(dummyIp);
+    zmq::message_t confirm;
+    coordsocket.recv(&confirm);
+
     printLog(nodeId, "Lambda BACKWARD context created.");
 }
 
@@ -234,7 +248,7 @@ LambdaComm::requestBackward(unsigned layer, bool lastLayer) {
 void
 LambdaComm::invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLayer) {
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::REQ_BACKWARD, layer, lambdaId, lastLayer, numLambdasBackward);
+    populateHeader((char *) header.data(), OP::REQ_BACKWARD, layer, lambdaId, lastLayer);
     coordsocket.send(header, ZMQ_SNDMORE);
 
     backwardLambdaTable[lambdaId] = true;
@@ -255,7 +269,10 @@ void
 LambdaComm::waitLambdaBackward(unsigned layer, bool lastLayer) {
     // Block until all parts have been handled.
     while (countBackward < numLambdasBackward) {
-        if (getTimer() - backwardTimer > TIMEOUT_PERIOD) {
+        if (timeoutPeriod < 1e-20 && countBackward >= 0.8 * numLambdasBackward) {
+            timeoutPeriod = getTimer() - backwardTimer;
+        }
+        if (getTimer() - backwardTimer > 2 * timeoutPeriod) {
             for (unsigned i = 0; i < numLambdasBackward; i++) {
                 if (backwardLambdaTable[i]) {
                     printLog(nodeId, "Relaunch BACKWARD lambda %u...", i);
@@ -263,6 +280,7 @@ LambdaComm::waitLambdaBackward(unsigned layer, bool lastLayer) {
                 }
             }
             backwardTimer = getTimer();
+            timeoutPeriod = 0.0;
         }
         usleep(SLEEP_PERIOD);
     }
