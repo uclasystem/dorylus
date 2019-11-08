@@ -138,6 +138,7 @@ ServerWorker::sendWeightsBackward(zmq::message_t& client_id) {
  */
 void
 ServerWorker::recvUpdate(zmq::message_t& client_id, unsigned layer) {
+    const float LEARNING_RATE = 0.00001; // WARNING! This can be multiplied with lr set in lambda funcs. TODO (YIFAN): merge them together.
     zmq::message_t updateMsg;
     workersocket.recv(&updateMsg);
 
@@ -152,7 +153,7 @@ ServerWorker::recvUpdate(zmq::message_t& client_id, unsigned layer) {
     // Grab lock then sum the data received in this update matrix.
     std::lock_guard<std::mutex> update_lock(update_mutex);
     for (unsigned u = 0; u < updateMats[layer].getNumElemts(); ++u)
-        updateSum[u] += updateNew[u];
+        updateSum[u] += LEARNING_RATE * updateNew[u];
 
     // if (layer == 0) {
     numLambdas--;
@@ -160,9 +161,7 @@ ServerWorker::recvUpdate(zmq::message_t& client_id, unsigned layer) {
     // If this is the final update, begin global aggregation.
     if (numLambdas == 0) {
         ws.applyUpdate(layer);
-        // ws.applyUpdates();
     }
-    // }
 }
 
 /**
