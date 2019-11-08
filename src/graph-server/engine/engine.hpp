@@ -60,7 +60,7 @@ public:
 
     // Public APIs for benchmarks.
     void init(int argc, char *argv[]);
-    FeatType *runForward(bool eval = false);
+    FeatType *runForward();
     void runBackward(FeatType *backwardInitData);
     void output();
     void destroy();
@@ -154,8 +154,6 @@ private:
     CommInfo commInfo;
     unsigned nodeId;
     unsigned numNodes;
-
-    bool evaluate = false;
 
     bool commHalt = false;
 

@@ -89,11 +89,6 @@ void GPUComm::requestForward(unsigned layer, bool lastLayer){
 }
 
 
-void GPUComm::setTrainValidationSplit(float trainPortion, unsigned numLocalVertices){
-    split=trainPortion;
-};
-
-
 // For backward-prop.
 void GPUComm::newContextBackward(FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
                                     unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim){

@@ -1,9 +1,6 @@
 #include "lambdaworker.hpp"
 #include "lambda_comm.hpp"
 
-extern std::mutex eval_mutex;
-extern unsigned evalLambdas;
-
 
 /**
  *
@@ -67,9 +64,6 @@ LambdaWorker::work() {
                 case (OP::PULL_EVAL):
                     sendTargetMatrix(identity, partId);
                     break;
-                case (OP::PUSH_EVAL):
-                    recvValidationResults(identity, header);
-                    break;
                 case (OP::PUSH_BACKWARD):
                     recvChunk(newGradMatrix, identity, partId, false);
                     break;
@@ -87,7 +81,7 @@ LambdaWorker::work() {
  *
  */
 void
-LambdaWorker::refreshState(Matrix actMatrix_, FeatType *zData_, FeatType *actData_, unsigned numFeatsNext_, bool eval) { // For forward-prop.
+LambdaWorker::refreshState(Matrix actMatrix_, FeatType *zData_, FeatType *actData_, unsigned numFeatsNext_) { // For forward-prop.
     actMatrix = actMatrix_;
     zData = zData_;
     actData = actData_;
@@ -254,35 +248,4 @@ LambdaWorker::sendTargetMatrix(zmq::message_t& client_id, unsigned partId) {
     zmq::message_t partitionData(bufSize);
     std::memcpy(partitionData.data(), partitionStart, bufSize);
     workersocket.send(partitionData);
-}
-
-void
-LambdaWorker::recvValidationResults(zmq::message_t& client_id, zmq::message_t& header) {
-    // Send empty ack message
-    zmq::message_t confirm;
-    workersocket.send(client_id, ZMQ_SNDMORE);
-    workersocket.send(confirm);
-
-    unsigned totalCorrectThisPartition = parse<unsigned>((char*)header.data(), 2);
-    float lossThisPartition = parse<float>((char*)header.data(), 3);
-
-    // atomically sum correct predictions and loss
-    std::lock_guard<std::mutex> lk(eval_mutex);
-    manager->numCorrectPredictions += totalCorrectThisPartition;
-    manager->totalLoss += lossThisPartition;
-
-    --evalLambdas;
-
-    // If we have received all validation results, calculate the actual loss
-    // and accuracy
-    // NOTE: Will only be acc/loss per node, not global acc/loss
-    if (evalLambdas == 0) {
-        printLog(manager->nodeId, "Accuracy this epoch: %f",
-            (float) (manager->numCorrectPredictions) / (float) manager->numValidationVertices);
-        printLog(manager->nodeId, "Loss this epoch %f",
-            (float) (manager->totalLoss) / (float) manager->numValidationVertices);
-
-        manager->numCorrectPredictions = 0;
-        manager->totalLoss = 0;
-    }
 }

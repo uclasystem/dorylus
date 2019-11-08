@@ -1,9 +1,6 @@
 #include "lambda_comm.hpp"
 #include <thread>
 
-std::mutex eval_mutex;
-unsigned evalLambdas = 0;
-
 static std::vector<LambdaWorker *> workers;
 static std::vector<std::thread *> worker_threads;
 
@@ -26,7 +23,7 @@ LambdaComm::LambdaComm(CommInfo &commInfo) :
         coordserverIp(commInfo.coordserverIp), coordserverPort(commInfo.coordserverPort),
         nodeId(commInfo.nodeId), ctx(1), halt(false), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), coordsocket(ctx, ZMQ_REQ),
         numLambdasForward(commInfo.numLambdasForward), numLambdasBackward(commInfo.numLambdasBackward), numListeners(numLambdasBackward), // TODO: Decide numListeners.
-        countForward(0), countBackward(0), numCorrectPredictions(0), totalLoss(0.0), numValidationVertices(0), evalPartitions(0) {
+        countForward(0), countBackward(0) {
 
     // Bind the proxy sockets.
     char dhost_port[50];
@@ -79,50 +76,6 @@ LambdaComm::~LambdaComm() {
     coordsocket.close();
 
     ctx.close();
-}
-
-/**
- *
- * Set the training validation split based on the partitions
- * float trainPortion must be between (0,1)
- *
- */
-void
-LambdaComm::setTrainValidationSplit(float trainPortion, unsigned numLocalVertices) {
-    // forward propagation partitioning determined by the number of forward lambdas
-    // so assign partitions based on the num of forward lambdas
-    unsigned numTrainParts = std::ceil((float)numLambdasForward * trainPortion);
-
-    // NOTE: could be optimized as a bit vector but probaly not that big a deal
-    // Set the first 'numTrainParts' partitions to true
-    for (unsigned i = 0; i < numLambdasForward; ++i) {
-        if (i < numTrainParts)
-            trainPartitions.push_back(true);
-        else
-            trainPartitions.push_back(false);
-    }
-
-    // Randomize which partitions are the training ones so it is not always
-    // the first 'numTrainParts'
-    // COMMENTED OUT FOR DEBUGGING
-    // std::random_shuffle(trainPartition.begin(), trainPartition.end());
-
-    // Calculate the total number of validaiton vertices
-    // This member is passed by reference to the lambda workers so on update
-    // they will have the correct number
-
-    unsigned partVertices = std::ceil((float) numLocalVertices / (float) numLambdasForward);
-    for (unsigned i = 0; i < trainPartitions.size(); ++i) {
-        if (!trainPartitions[i]) {
-            unsigned thisPartVertices = partVertices;
-            if ((i * partVertices + partVertices) > numLocalVertices) {
-                thisPartVertices = partVertices - (i * partVertices + partVertices) + numLocalVertices;
-            }
-
-            numValidationVertices += thisPartVertices;
-            ++evalPartitions;
-        }
-    }
 }
 
 

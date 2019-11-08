@@ -153,19 +153,6 @@ Engine::setUpCommInfo(){
 
 /**
  *
- * Set the training validation split based on the partitions
- * float trainPortion must be between (0,1)
- *
- */
-void
-Engine::setTrainValidationSplit(float trainPortion) {
-    resComm->setTrainValidationSplit(trainPortion, graph.getNumLocalVertices());
-}
-
-
-
-/**
- *
  * Whether I am the master mode or not.
  *
  */
@@ -226,14 +213,12 @@ Engine::getNodeId() {
  *
  */
 FeatType *
-Engine::runForward(bool eval) {
+Engine::runForward() {
     // Make sure all nodes start running the forward-prop phase.
     nodeManager.barrier();
     printLog(nodeId, "Engine starts running FORWARD...");
 
     timeForwardProcess -= getTimer();
-
-    evaluate = false;
 
     const unsigned graphLocalVerticesNum = graph.getNumLocalVertices();
     // Create buffer for first-layer aggregation.
@@ -409,10 +394,8 @@ Engine::invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     }
     savedTensors[iteration].push_back(Matrix(vtcsCnt, outFeatDim, zTensor));
 
-    bool runEval = evaluate && iteration == numLayers-1;
-
     // Start a new lambda communication context.
-    resComm->newContextForward(vtcsTensor, zTensor, outputTensor, vtcsCnt, inFeatDim, outFeatDim, runEval);
+    resComm->newContextForward(vtcsTensor, zTensor, outputTensor, vtcsCnt, inFeatDim, outFeatDim);
 
     // if in GPU mode we launch gpu computation here and wait the results
     if (gpuEnabled) {
