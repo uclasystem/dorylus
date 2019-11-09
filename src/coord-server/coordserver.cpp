@@ -152,6 +152,7 @@ CoordServer::run() {
     char dhost_port[50];
     sprintf(dhost_port, "tcp://*:%s", coordserverPort);
     std::cout << "Binding to dataserver " << dhost_port << "..." << std::endl;
+    datasocket.setsockopt(ZMQ_RCVHWM, 5000);
     datasocket.bind(dhost_port);
 
     // Connect weightserver sockets. Since sockets on weightserver are DEALERs, so we also have to create DEALERs and
@@ -219,7 +220,7 @@ CoordServer::run() {
 
                 // Issue the lambda thread to serve the request.
                 char *weightserverIp = weightserverAddrs[req_count % weightserverAddrs.size()];
-                invokeFunction("new-forward-prop", dataserverIpCopy, dataserverPort,
+                invokeFunction("yifan-forward", dataserverIpCopy, dataserverPort,
                                weightserverIp, weightserverPort, layer, lambdaId, (bool) lastLayer);
                 req_count++;
             // This is backward.
@@ -234,7 +235,8 @@ CoordServer::run() {
 
                 // Issue the lambda thread to serve the request.
                 char *weightserverIp = weightserverAddrs[req_count % weightserverAddrs.size()];
-                invokeFunction("new-backprop", dataserverIpCopy, dataserverPort, weightserverIp, weightserverPort, layer, lambdaId, (bool) lastLayer);
+                invokeFunction("yifan-backward", dataserverIpCopy, dataserverPort,
+                               weightserverIp, weightserverPort, layer, lambdaId, (bool) lastLayer);
                 req_count++;
             } else if (op == OP::INFO) {
                 unsigned numLambda = parse<unsigned>((char *) header.data(), 1);
