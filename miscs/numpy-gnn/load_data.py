@@ -1,41 +1,84 @@
 import numpy as np
+import os
 
 
-def load_data(base_dir, dataset):
+def load_data(base_dir, dataset, binary=True):
     print("Loading data...")
-    if dataset == 'cora':
-        feat_file = base_dir + dataset+".features"
-        label_file = base_dir + dataset+".labels"
-        graph_file = base_dir + dataset+".graph"
+    if binary:
+        feat_file = base_dir +"features.bsnap"
+        label_file = base_dir +"labels.bsnap"
+        graph_file = base_dir +"graph.bsnap"
+
+        # Read in initial features.
+        f = open(feat_file, 'rb')
+        feat_dim = int.from_bytes(f.read(4), byteorder='little')
+        print("Feature Dim: {}".format(feat_dim))
+        input_feats = np.fromfile(f, dtype=np.float32).reshape(-1, feat_dim)
+        # print(input_feats)
+
+        num_vertices = input_feats.shape[0]
+
+        # Read in target lables one-hot representation.
+        f = open(label_file, 'rb')
+        label_kind = int.from_bytes(f.read(4), byteorder='little')
+        print("Label Kinds: {}".format(label_kind))
+        target_labels = np.fromfile(f, dtype=np.int32)
+        print(target_labels)
+
+        # Read in the graph and construct adjancency and degree matrix.
+        f = open(graph_file, 'rb')
+        vtx_type_size = int.from_bytes(f.read(4), byteorder='little')
+        num_vtcs = int.from_bytes(f.read(4), byteorder='little')
+        num_edges = int.from_bytes(f.read(8), byteorder='little')
+        print("vtx type size: {}, num vtcs: {}, num edges: {}".format(vtx_type_size, num_vtcs, num_edges))
+        edge_list = np.fromfile(f, dtype=np.int32).reshape(num_edges, 2)
+        # Construct Adjacent Matrix with self-loop
+        adj_mat = np.identity(num_vertices)
+        for edge in edge_list:
+            adj_mat[edge[1]][edge[0]] = 1
+
+        normed_deg_vec = 1 / np.sqrt(np.sum(adj_mat, axis=0, keepdims=True))
+        # Normalized A_hat matrix
+        A_hat = normed_deg_vec * adj_mat * normed_deg_vec.T
+
+        print("Data Loaded. Adj Mat: " + str(A_hat.shape) + ", Feats: " +
+            str(input_feats.shape))
+
+        return A_hat, input_feats, target_labels
     else:
-        feat_file = base_dir + "features"
-        label_file = base_dir + "labels"
-        graph_file = base_dir + dataset+".graph"
+        if dataset == 'cora':
+            feat_file = base_dir + dataset+".features"
+            label_file = base_dir + dataset+".labels"
+            graph_file = base_dir + dataset+".graph"
+        else:
+            feat_file = base_dir + "features"
+            label_file = base_dir + "labels"
+            graph_file = base_dir + dataset+".graph"
 
-    # Read in initial features.
-    input_feats = np.genfromtxt(feat_file, delimiter=',', dtype=float)
-    # print(input_feats)
+        # Read in initial features.
+        input_feats = np.genfromtxt(feat_file, delimiter=',', dtype=float)
+        # print(input_feats)
 
-    num_vertices = input_feats.shape[0]
+        num_vertices = input_feats.shape[0]
 
-    # Read in target lables one-hot representation.
-    target_labels = np.genfromtxt(label_file, dtype=int)
+        # Read in target lables one-hot representation.
+        target_labels = np.genfromtxt(label_file, dtype=int)
 
-    # Read in the graph and construct adjancency and degree matrix.
-    edge_list = np.genfromtxt(graph_file, dtype=int)
-    # Construct Adjacent Matrix with self-loop
-    adj_mat = np.identity(num_vertices)
-    for edge in edge_list:
-        adj_mat[edge[1]][edge[0]] = 1
+        # Read in the graph and construct adjancency and degree matrix.
+        edge_list = np.genfromtxt(graph_file, dtype=int)
+        # Construct Adjacent Matrix with self-loop
+        adj_mat = np.identity(num_vertices)
+        for edge in edge_list:
+            adj_mat[edge[1]][edge[0]] = 1
 
-    normed_deg_vec = 1 / np.sqrt(np.sum(adj_mat, axis=0, keepdims=True))
-    # Normalized A_hat matrix
-    A_hat = normed_deg_vec * adj_mat * normed_deg_vec.T
+        normed_deg_vec = 1 / np.sqrt(np.sum(adj_mat, axis=0, keepdims=True))
+        # Normalized A_hat matrix
+        A_hat = normed_deg_vec * adj_mat * normed_deg_vec.T
 
-    print("Data Loaded. Adj Mat: " + str(A_hat.shape) + ", Feats: " +
-          str(input_feats.shape))
+        print("Data Loaded. Adj Mat: " + str(A_hat.shape) + ", Feats: " +
+            str(input_feats.shape))
 
-    return A_hat, input_feats, target_labels
+        return A_hat, input_feats, target_labels
 
 
 def load_weights(weights_file, layer_config):
