@@ -26,25 +26,25 @@ enum TYPE { GRAD, AH, Z, ACT, LAB };
 template<class T>
 static inline void
 serialize(char *buf, unsigned offset, T val) {
-	std::memcpy(buf + (offset * sizeof(T)), &val, sizeof(T));
+    std::memcpy(buf + (offset * sizeof(T)), &val, sizeof(T));
 }
 
 template<class T>
 static inline T
 parse(const char *buf, unsigned offset) {
-	T val;
-	std::memcpy(&val, buf + (offset * sizeof(T)), sizeof(T));
-	return val;
+    T val;
+    std::memcpy(&val, buf + (offset * sizeof(T)), sizeof(T));
+    return val;
 }
 
 // ID represents either layer or data partition, depending on server responding.
 static inline void
 populateHeader(char* header, unsigned op, unsigned field1 = 0, unsigned field2 = 0, unsigned field3 = 0, unsigned field4 = 0) {
-	serialize<unsigned>(header, 0, op);
-	serialize<unsigned>(header, 1, field1);
-	serialize<unsigned>(header, 2, field2);
-	serialize<unsigned>(header, 3, field3);
-	serialize<unsigned>(header, 4, field4);
+    serialize<unsigned>(header, 0, op);
+    serialize<unsigned>(header, 1, field1);
+    serialize<unsigned>(header, 2, field2);
+    serialize<unsigned>(header, 3, field3);
+    serialize<unsigned>(header, 4, field4);
 }
 
 /**
@@ -58,6 +58,12 @@ struct Timer {
 
     void start() { begin = std::chrono::high_resolution_clock::now(); }
     void stop() { end = std::chrono::high_resolution_clock::now(); }
+
+    double peek() {
+        auto now = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::milli> time_span = now - begin;
+        return time_span.count();
+    }
 
     double getTime() {      // Get floating-point milliseconds.
         std::chrono::duration<double, std::milli> time_span = end - begin;

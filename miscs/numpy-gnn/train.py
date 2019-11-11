@@ -139,7 +139,7 @@ def main():
     }
 
     A_hat, input_feats, target_labels = load_data(
-        '/home/yifan/dataset/cora/raw/', 'cora')
+        '/home/yifan/dataset/cora/', 'cora')
 
     train(A_hat, input_feats, target_labels, config)
 
