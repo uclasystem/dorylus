@@ -16,6 +16,8 @@
 #include "../../src/common/matrix.hpp"
 #include "../../src/common/utils.hpp"
 
+#define SLEEP_PERIOD   1000  // us
+#define TIMEOUT_PERIOD (500) // ms
 
 #define SND_MORE true
 #define NO_MORE false
@@ -37,15 +39,26 @@ bool lastLayer = false;
  */
 static Matrix
 requestMatrix(zmq::socket_t& socket, OP op, unsigned id, bool data = false) {
-
     // Send pull request.
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char *) header.data(), op, id);
     socket.send(header);
 
+    Timer reqTimer;
+    reqTimer.start();
+
     // Listen on respond.
     zmq::message_t respHeader;
-    socket.recv(&respHeader);
+    while (!socket.recv(&respHeader, ZMQ_DONTWAIT)) {
+        usleep(SLEEP_PERIOD);
+        if (reqTimer.peek() > TIMEOUT_PERIOD) {
+            // failed
+            zmq::message_t _hdr;
+            _hdr.copy(&header);
+            socket.send(_hdr);
+            reqTimer.start();
+        }
+    }
 
     // Parse the respond.
     unsigned layerResp = parse<unsigned>((char *) respHeader.data(), 1);
@@ -66,44 +79,6 @@ requestMatrix(zmq::socket_t& socket, OP op, unsigned id, bool data = false) {
         return m;
     }
 }
-
-
-/**
- *
- * Request the input matrix data from weightserver.
- *
- */
-static Matrix
-requestWeightsMatrix(zmq::socket_t& socket, unsigned layer) {
-
-    // Send pull request.
-    zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::PULL_FORWARD, layer);
-    socket.send(header);
-
-    // Listen on respond.
-    zmq::message_t respHeader;
-    socket.recv(&respHeader);
-
-    // Parse the respond.
-    unsigned layerResp = parse<unsigned>((char *) respHeader.data(), 1);
-    if (layerResp == ERR_HEADER_FIELD) {    // Failed.
-        std::cerr << "[ ERROR ] No corresponding matrix chunk!" << std::endl;
-        return Matrix();
-    } else {                    // Get matrices data.
-        unsigned rows = parse<unsigned>((char *) respHeader.data(), 2);
-        unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
-        zmq::message_t matxData(rows * cols * sizeof(float));
-        socket.recv(&matxData);
-
-        FeatType *matxBuffer = new FeatType[rows * cols];
-        std::memcpy(matxBuffer, matxData.data(), matxData.size());
-
-        Matrix m(rows, cols, matxBuffer);
-        return m;
-    }
-}
-
 
 /**
  *
@@ -372,7 +347,9 @@ forward_prop_layer(std::string dataserver, std::string weightserver, std::string
         std::thread t([&] {     // Weight requests run in a separate thread.
             std::cout << "< FORWARD > Asking weightserver..." << whost_port << std::endl;
             getWeightsTimer.start();
-            weights = requestMatrix(weights_socket, OP::PULL_FORWARD, layer);
+            do {
+                weights = requestMatrix(weights_socket, OP::PULL_FORWARD, layer);
+            } while (weights.empty());
             getWeightsTimer.stop();
             std::cout << "< FORWARD > Got data from weightserver." << dhost_port << std::endl;
         });
@@ -380,7 +357,9 @@ forward_prop_layer(std::string dataserver, std::string weightserver, std::string
         // Request feature activation matrix of the current layer.
         std::cout << "< FORWARD > Asking dataserver..." << std::endl;
         getFeatsTimer.start();
-        feats = requestMatrix(data_socket, OP::PULL_FORWARD, id, true);
+        do {
+            feats = requestMatrix(data_socket, OP::PULL_FORWARD, id, true);
+        } while (feats.empty());
         getFeatsTimer.stop();
         std::cout << "< FORWARD > Got data from dataserver." << std::endl;
 

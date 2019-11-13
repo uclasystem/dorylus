@@ -16,8 +16,8 @@
 #include "../../src/common/matrix.hpp"
 #include "../../src/common/utils.hpp"
 
-#define LEARNING_RATE (0.01)
-
+#define SLEEP_PERIOD 1000
+#define TIMEOUT_PERIOD 500
 
 #define SND_MORE true
 #define NO_MORE false
@@ -31,77 +31,45 @@ using namespace std::chrono;
 
 bool lastLayer = false;
 
-
 static Matrix
-requestMatrix(zmq::socket_t& socket, OP op, unsigned id) {
-    zmq::message_t header(HEADER_SIZE);
-    populateHeader((char*) header.data(), op, id);
-    socket.send(header);
-
-    zmq::message_t respHeader;
-    socket.recv(&respHeader);
-
-    unsigned layerResp = parse<unsigned>((char*) respHeader.data(), 1);
-    if (layerResp == -1) {
-        std::cerr << "[ ERROR ] No corresponding matrix" << std::endl;
-    } else {
-        unsigned rows = parse<unsigned>((char*) respHeader.data(), 2);
-        unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
-
-        zmq::message_t matxData(rows * cols * sizeof(FeatType));
-        socket.recv(&matxData);
-
-        FeatType *matxBuffer = new FeatType[rows * cols];
-        std::memcpy(matxBuffer, matxData.data(), matxData.size());
-
-        Matrix m(rows, cols, matxBuffer);
-        return m;
-    }
-}
-
-static Matrix
-requestWeights(zmq::socket_t& socket, OP op, unsigned layer) {
-    zmq::message_t header(HEADER_SIZE);
-    populateHeader((char*) header.data(), op, layer);
-    socket.send(header);
-
-    zmq::message_t respHeader;
-    socket.recv(&respHeader);
-    unsigned layerResp = parse<unsigned>((char*) respHeader.data(), 1);
-    if (layerResp == -1) {
-        std::cerr << "[ ERROR ] No corresponding matrix" << std::endl;
-    } else {
-        unsigned rows = parse<unsigned>((char*) respHeader.data(), 2);
-        unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
-
-        zmq::message_t matxData(rows * cols * sizeof(FeatType));
-        socket.recv(&matxData);
-
-        FeatType *matxBuffer = new FeatType[rows * cols];
-        std::memcpy(matxBuffer, matxData.data(), matxData.size());
-
-        Matrix m(rows, cols, matxBuffer);
-        return m;
-    }
-}
-
-static Matrix
-requestTensor(zmq::socket_t& socket, OP op, unsigned partId, TYPE type = 0, unsigned layer = 0) {
+requestTensor(zmq::socket_t& socket, OP op, unsigned partId, TYPE type = TYPE::AH, unsigned layer = 0, bool confirm = false) {
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char*) header.data(), op, partId, type, layer);
     socket.send(header);
 
+    Timer reqTimer;
+    reqTimer.start();
+
     zmq::message_t respHeader;
-    socket.recv(&respHeader);
+    while(!socket.recv(&respHeader, ZMQ_DONTWAIT)) {
+        usleep(SLEEP_PERIOD);
+        if (reqTimer.peek() > TIMEOUT_PERIOD) {
+            zmq::message_t _hdr;
+            _hdr.copy(&header);
+            socket.send(_hdr);
+            reqTimer.start();
+        }
+    }
+
+    if (confirm) {
+        zmq::message_t confMsg;
+        socket.send(confMsg);
+    }
+
     unsigned layerResp = parse<unsigned>((char*) respHeader.data(), 1);
     if (layerResp == -1) {
         std::cerr << "[ ERROR ] No corresponding matrix" << std::endl;
+
+        return Matrix();
     } else {
         unsigned rows = parse<unsigned>((char*) respHeader.data(), 2);
         unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
+        std::cout << "recv somthing... " << layerResp << " " << rows << " " << cols << std::endl;
 
         zmq::message_t matxData(rows * cols * sizeof(FeatType));
+        std::cout << "before recv mat" << std::endl;
         socket.recv(&matxData);
+        std::cout << "after recv mat" << std::endl;
 
         FeatType *matxBuffer = new FeatType[rows * cols];
         std::memcpy(matxBuffer, matxData.data(), matxData.size());
@@ -130,9 +98,22 @@ sendMatrix(Matrix& matrix, zmq::socket_t& socket, unsigned id) {
     std::memcpy(updateMsg.data(), matrix.getData(), matrix.getDataSize());
     socket.send(updateMsg);
 
+    Timer sndTimer;
+    sndTimer.start();
+
     // Wait for updates settled reply.
     zmq::message_t confirm;
-    socket.recv(&confirm);
+    while(!socket.recv(&confirm, ZMQ_DONTWAIT)) {
+        usleep(SLEEP_PERIOD);
+        if (sndTimer.peek() > TIMEOUT_PERIOD) {
+            // zmq::message_t _updMsg(matrix.getDataSize());
+            // std::memcpy(_updMsg.data(), matrix.getData(), matrix.getDataSize());
+            zmq::message_t _updMsg;
+            _updMsg.copy(&updateMsg);
+            socket.send(_updMsg);
+            sndTimer.start();
+        }
+    }
 }
 
 
@@ -188,7 +169,7 @@ softmaxRows(Matrix& mat) {
  *
  */
 static Matrix
-activateDerivate(Matrix& mat) {
+activateDerivative(Matrix& mat) {
     FeatType *res = new FeatType[mat.getNumElemts()];
     FeatType *zData = mat.getData();
 
@@ -200,59 +181,121 @@ activateDerivate(Matrix& mat) {
 
 static void
 gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, unsigned layer) {
-    Matrix predictions = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::ACT, layer);
-    Matrix labels = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::LAB, layer);
-    std::cout << "< BACKWARD > Getting predictions and labels" << std::endl;
+    Matrix predictions;
+    Matrix labels;
+    Matrix weights;
+    Matrix ah;
+
+    std::cout << "< BACKWARD > Getting predictions" << std::endl;
+    do {
+        predictions = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::ACT, layer, true);
+    } while (predictions.empty());
+    std::cout << "< BACKWARD > Getting labels" << std::endl;
+    do {
+        labels = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::LAB, layer, true);
+    } while (labels.empty());
+    std::thread weightsThd([&] {
+        std::cout << "< BACKWARD > Getting weights" << std::endl;
+        do {
+            weights = requestTensor(weight_socket, OP::PULL_BACKWARD, layer);
+        } while (weights.empty());
+    });
+    std::thread ahThd([&] {
+        std::cout << "< BACKWARD > Requesting AH" << std::endl;
+        do {
+            ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::AH, layer, true);
+        } while (ah.empty());
+    });
 
     // derivative of softmax
     std::cout << "< BACKWARD > Calculating cross entropy" << std::endl;
     Matrix d_output = predictions - labels;
+    delete[] predictions.getData();
+    delete[] labels.getData();
 
     // d_out * W^T
-    std::cout << "< BACKWARD > Getting weights" << std::endl;
-    Matrix weights = requestTensor(weight_socket, OP::PULL_BACKWARD, layer);
+    weightsThd.join();
     std::cout << "< BACKWARD > Computing gradient" << std::endl;
     Matrix interGrad = d_output.dot(weights, false, true);
+    delete[] weights.getData();
 
     // AH^T * d_out
-    std::cout << "< BACKWARD > Requesting AH" << std::endl;
-    Matrix ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::AH, layer);
+    ahThd.join();
     std::cout << "< BACKWARD > Computing weight updates" << std::endl;
-    Matrix weightUpdates = ah.dot(d_output, true, false, LEARNING_RATE);
+    Matrix weightUpdates = ah.dot(d_output, true, false);
+    delete[] ah.getData();
+    delete[] d_output.getData();
 
-    std::cout << "< BACKWARD > Sending weight updates" << std::endl;
-    sendMatrix(weightUpdates, weight_socket, layer);
+    std::thread wThd([&] {
+        std::cout << "< BACKWARD > Sending weight updates" << std::endl;
+        sendMatrix(weightUpdates, weight_socket, layer);
+        delete[] weightUpdates.getData();
+    });
     std::cout << "< BACKWARD > Sending gradient to graph server" << std::endl;
     sendMatrix(interGrad, data_socket, id);
+    delete[] interGrad.getData();
+    wThd.join();
 }
 
 static void
 gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, unsigned layer) {
+    Matrix grad;
+    Matrix z;
+    Matrix weights;
+    Matrix ah;
 
-    std::cout << "< BACKWARD > Requesting gradient from graph server" << std::endl;
-    Matrix grad = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::GRAD, layer);
-    std::cout << "< BACKWARD > Requesting Z values" << std::endl;
-    Matrix z = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::Z, layer);
-
-    std::cout << "< BACKWARD > Calculating derivative of activation" << std::endl;
+    do {
+        std::cout << "< BACKWARD > Requesting Z values" << std::endl;
+        z = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::Z, layer, true);
+    } while (z.empty());
+    std::cout << "< BACKWARD > Calculating derivative of activation " << z.shape() << std::endl;
     Matrix actDeriv = activateDerivative(z);
-    std::cout << "< BACKWARD > Hadamard multiplication" << std::endl;
+    delete[] z.getData();
+
+    do {
+        std::cout << "< BACKWARD > Requesting gradient from graph server" << std::endl;
+        grad = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::GRAD, layer, true);
+    } while (grad.empty());
+    std::cout << "< BACKWARD > Hadamard multiplication" << grad.shape() << " " << actDeriv.shape() << std::endl;
     Matrix interGrad = grad * actDeriv;
+    delete[] grad.getData();
+    delete[] actDeriv.getData();
 
-    std::cout << "< BACKWARD > Getting weights" << std::endl;
-    Matrix weights = requestTensor(weight_socket, OP::PULL_BACKWARD, layer);
-    std::cout << "< BACKWARD > MatMul(gradient, weights)" << std::endl;
+
+    std::thread weightsThd([&] {
+        std::cout << "< BACKWARD > Requesting weights" << std::endl;
+        do {
+            weights = requestTensor(weight_socket, OP::PULL_BACKWARD, layer);
+        } while (weights.empty());
+    });
+    weightsThd.join();
+    std::cout << "< BACKWARD > MatMul(gradient, weights) " << interGrad.shape() << " "
+              << weights.shape() << std::endl;
     Matrix resultGrad = interGrad.dot(weights, false, true);
+    delete[] weights.getData();
 
-    std::cout << "< BACKWARD > Requesting AH" << std::endl;
-    Matrix ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::AH, layer);
-    std::cout << "< BACKWARD > Computing weight updates" << std::endl;
-    Matrix weightUpdates = ah.dot(interGrad, true, false, LEARNING_RATE);
+    std::thread ahThd([&] {
+        std::cout << "< BACKWARD > Requesting AH" << std::endl;
+        do {
+            ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::AH, layer, true);
+        } while (ah.empty());
+    });
 
-    std::cout << "< BACKWARD > Sending weight updates" << std::endl;
-    sendMatrix(weightUpdates, weight_socket, layer);
+    ahThd.join();
+    std::cout << "< BACKWARD > Computing weight updates " << ah.shape() << " " << interGrad.shape() << std::endl;
+    Matrix weightUpdates = ah.dot(interGrad, true, false);
+    delete[] ah.getData();
+    delete[] interGrad.getData();
+
+    std::thread wThd([&] {
+        std::cout << "< BACKWARD > Sending weight updates" << std::endl;
+        sendMatrix(weightUpdates, weight_socket, layer);
+        delete[] weightUpdates.getData();
+    });
     std::cout << "< BACKWARD > Sending gradient to graph server" << std::endl;
     sendMatrix(resultGrad, data_socket, id);
+    delete[] resultGrad.getData();
+    wThd.join();
 }
 
 
@@ -267,8 +310,8 @@ gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id,
  *
  */
 static invocation_response
-backward_prop(std::string dataserver, std::string weightserver, std::string dport, std::string wport,
-              unsigned id, unsigned layer) {
+backward_prop(std::string dataserver, std::string weightserver, std::string dport,
+              std::string wport, unsigned id, unsigned layer, bool lastLayer) {
     zmq::context_t ctx(1);
 
     //
@@ -301,13 +344,12 @@ backward_prop(std::string dataserver, std::string weightserver, std::string dpor
         sprintf(dhost_port, "tcp://%s:%s", dataserver.c_str(), dport.c_str());
         data_socket.connect(dhost_port);
 
-        Matrix resultGradient;
         if (lastLayer) {
             std::cout << "< BACKWARD > Computing gradient from loss" << std::endl;
-            resultGradient = gradLoss(data_socket, weights_socket, id, layer);
+            gradLoss(data_socket, weights_socket, id, layer);
         } else {
             std::cout << "< BACKWARD > Computing gradient for this layer" << std::endl;
-            resultGradient = gradLayer(data_socket, weights_socket, id, layer);
+            gradLayer(data_socket, weights_socket, id, layer);
         }
 
     } catch(std::exception &ex) {
@@ -341,8 +383,9 @@ my_handler(invocation_request const& request) {
     unsigned chunkId = pt.get<int>("id");
     lastLayer = pt.get<bool>("lastLayer");
 
-    std::cout << "[ACCEPTED] Thread " << chunkId << " is requested from " << dataserver << ":" << dport
-              << ", BACKWARD on " << numLayers << " layers." << std::endl;
+    std::cout << "[ACCEPTED] Thread " << chunkId << " is requested from " <<
+        dataserver << ":" << dport << ", BACKWARD on layer " << layer
+        << std::endl;
 
     return backward_prop(dataserver, weightserver, dport, wport, chunkId, layer, lastLayer);
 }
@@ -350,5 +393,6 @@ my_handler(invocation_request const& request) {
 int
 main(int argc, char *argv[]) {
     run_handler(my_handler);
+
     return 0;
 }
