@@ -16,8 +16,10 @@
 #include "comp_unit.cuh"
 #include "../utils/utils.hpp"
 #include "message_service.hpp"
+#include <time.h>
 
-const float LEARNING_RATE=0.01;
+
+const float LEARNING_RATE=0.00005;
 unsigned nodeId;
 class GPUComm;
 
@@ -45,6 +47,9 @@ private:
     MessageService msgService;
     ComputingUnit cu;
     GPUComm* gpuComm;
+    unsigned totalLayers;
+
+
 };
 
 

@@ -25,7 +25,6 @@ CuMatrix ComputingUnit::wrapMatrix(Matrix m){
 CuMatrix ComputingUnit::hadamardSub(CuMatrix& matLeft,CuMatrix& matRight) {
     assert(matLeft.getRows() == matRight.getRows());
     assert(matLeft.getCols() == matRight.getCols());
-    // CuMatrix res(Matrix(matLeft.getRows(),matLeft.getCols(), new FeatType[matLeft.getNumElemts()]),handle);
     CuMatrix res(Matrix(matLeft.getRows(),matLeft.getCols(), (FeatType *)NULL),handle);
 
     thrust::device_ptr<float> cuLeft_ptr(matLeft.devPtr);
@@ -57,9 +56,7 @@ CuMatrix ComputingUnit::hadamardMul( CuMatrix& matLeft, CuMatrix& matRight) {
     return res;
 }
 
-// GPU is faster than CPU when SIZE>~250000, Maybe CPU is faster in most cases 
 CuMatrix ComputingUnit::softmaxRows( CuMatrix &mat){
-    
     CuMatrix res(Matrix(mat.getRows(),mat.getCols(),(FeatType *)NULL),handle);
     cudnnTensorDescriptor_t srcTensorDesc, sftTensorDesc;
     cudnnCreateTensorDescriptor(&srcTensorDesc);
@@ -74,30 +71,27 @@ CuMatrix ComputingUnit::softmaxRows( CuMatrix &mat){
     return res;
 }
 
-CuMatrix ComputingUnit::activateDerivative( CuMatrix& mat) {
-    CuMatrix res(Matrix(mat.getRows(),mat.getCols(),(FeatType *)NULL),handle);
-    thrust::device_ptr<float> res_ptr(res.devPtr);
-    CuMatrix z(Matrix(mat.getRows(),mat.getCols(),mat.getData()),handle);
-    thrust::device_ptr<float> z_ptr(z.devPtr);
-    thrust::transform(z_ptr, z_ptr+mat.getNumElemts(),res_ptr, activateDerivative_functor());
-    return res;
+CuMatrix ComputingUnit::activateBackward( CuMatrix& y,CuMatrix& gradient){
+    cudnnActivationDescriptor_t actDesc;
+    cudnnCreateActivationDescriptor(&actDesc);
+    cudnnSetActivationDescriptor(actDesc,CUDNN_ACTIVATION_RELU,CUDNN_NOT_PROPAGATE_NAN,1.0);
+
+    cudnnTensorDescriptor_t yDesc,dyDesc;
+    cudnnCreateTensorDescriptor(&yDesc);
+    cudnnSetTensor4dDescriptor(yDesc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+            y.getRows(),1,1,y.getCols());
+    cudnnCreateTensorDescriptor(&dyDesc);
+    cudnnSetTensor4dDescriptor(dyDesc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+            gradient.getRows(),1,1,gradient.getCols());
+
+    cudnnActivationBackward(cudnnHandle,actDesc,
+        &alpha, yDesc,y.devPtr,
+        dyDesc, gradient.devPtr,
+        yDesc, y.devPtr,
+        &beta, dyDesc, gradient.devPtr
+    );
+    return gradient;
 }
-
-
-CuMatrix
-ComputingUnit::dotGDwithWTrans( CuMatrix& matLeft, CuMatrix& matRight) {
-    CuMatrix matRightTrans = matRight.transpose();
-    CuMatrix res = matLeft.dot(matRightTrans);
-    return res;
-}
-
-CuMatrix
-ComputingUnit::dotActTranswithGD( CuMatrix& matLeft, CuMatrix& matRight, float learning_rate) {
-    CuMatrix matLeftTrans = matLeft.transpose();
-    CuMatrix res=matLeftTrans.dot(matRight,learning_rate);
-    return res;
-}
-
 
 
 CuMatrix ComputingUnit::dot( Matrix& A, Matrix& B){
@@ -116,7 +110,7 @@ void ComputingUnit::activate(CuMatrix& A){
 
     cudnnActivationDescriptor_t actDesc;
     cudnnCreateActivationDescriptor(&actDesc);
-    cudnnSetActivationDescriptor(actDesc,CUDNN_ACTIVATION_TANH,CUDNN_NOT_PROPAGATE_NAN,1.0);
+    cudnnSetActivationDescriptor(actDesc,CUDNN_ACTIVATION_RELU,CUDNN_NOT_PROPAGATE_NAN,1.0);
     cudnnActivationForward(cudnnHandle,actDesc,
         &alpha,srcTensorDesc,A.devPtr,&beta,srcTensorDesc,A.devPtr);
     A.updateMatrixFromGPU();

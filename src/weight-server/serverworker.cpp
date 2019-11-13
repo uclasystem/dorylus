@@ -11,10 +11,12 @@ extern bool finished;
  * ServerWorker constructor & destructor.
  *
  */
-ServerWorker::ServerWorker(zmq::context_t& ctx_, unsigned& counter, WeightServer& _ws,
-                           std::vector<Matrix>& weights_, std::vector<Matrix>& updates_, unsigned& numLambdas_)
-    : ctx(ctx_), workersocket(ctx, ZMQ_DEALER), count(counter), ws(_ws),
-      weightMats(weights_), updateMats(updates_), numLambdas(numLambdas_) {
+ServerWorker::ServerWorker(zmq::context_t& ctx_, WeightServer& _ws,
+                           std::vector<Matrix>& weights_, std::vector<Matrix>& updates_, 
+                           unsigned& numLambdas_,unsigned& lambdaRecved_)
+    : ctx(ctx_), workersocket(ctx, ZMQ_DEALER), ws(_ws),
+      weightMats(weights_), updateMats(updates_), 
+      numLambdas(numLambdas_),lambdaRecved(lambdaRecved_) {
     workersocket.setsockopt(ZMQ_LINGER, 0);
     workersocket.connect("inproc://backend");
 }
@@ -92,6 +94,10 @@ ServerWorker::sendWeights(zmq::message_t& client_id, unsigned layer) {
     if (layer >= weightMats.size()) {
         std::cerr << "[ERROR] No such weights corresponding to layer " << layer << std::endl;
     }
+    if (ws.servers_updates_done==false){
+        std::unique_lock<std::mutex> lk(ws.servers_updates_mutex);
+        ws.servers_updates_cv.wait(lk,[&]{return ws.servers_updates_done == true;});
+    }
 
     workersocket.send(client_id, ZMQ_SNDMORE);    // The identity message will be implicitly consumed to route to the correct client.
 
@@ -105,30 +111,6 @@ ServerWorker::sendWeights(zmq::message_t& client_id, unsigned layer) {
 }
 
 
-/**
- *
- * Send weight matrices 2 -> last to lambdas for backward-prop computation.
- *
- */
-void
-ServerWorker::sendWeightsBackward(zmq::message_t& client_id) {
-    workersocket.send(client_id, ZMQ_SNDMORE);
-
-    for (unsigned i = 1; i < weightMats.size(); ++i) {
-        Matrix& weightMat = weightMats[i];
-
-        zmq::message_t header(HEADER_SIZE);
-        populateHeader((char *) header.data(), OP::RESP, 0, weightMat.getRows(), weightMat.getCols());
-        workersocket.send(header, ZMQ_SNDMORE);
-
-        zmq::message_t weightData(weightMat.getDataSize());
-        std::memcpy((char *) weightData.data(), weightMat.getData(), weightMat.getDataSize());
-        if (i == weightMats.size() - 1)
-            workersocket.send(weightData);
-        else
-            workersocket.send(weightData, ZMQ_SNDMORE);
-    }
-}
 
 /**
  *
@@ -140,29 +122,30 @@ void
 ServerWorker::recvUpdate(zmq::message_t& client_id, unsigned layer) {
     zmq::message_t updateMsg;
     workersocket.recv(&updateMsg);
+    std::lock_guard<std::mutex> update_lock(update_mutex);
+    lambdaRecved++;
+    if (numLambdas == lambdaRecved) {ws.servers_updates_done=false;}
 
     // Send confirm ACK message.
     zmq::message_t confirm;
     workersocket.send(client_id, ZMQ_SNDMORE);
     workersocket.send(confirm);
 
+    
     float *updateSum = updateMats[layer].getData();
     float *updateNew = (float *) updateMsg.data();
 
     // Grab lock then sum the data received in this update matrix.
-    std::lock_guard<std::mutex> update_lock(update_mutex);
+    
     for (unsigned u = 0; u < updateMats[layer].getNumElemts(); ++u)
         updateSum[u] += updateNew[u];
 
-    // if (layer == 0) {
-    numLambdas--;
+    
 
     // If this is the final update, begin global aggregation.
-    if (numLambdas == 0) {
+    if (numLambdas == lambdaRecved) {
         ws.applyUpdate(layer);
-        // ws.applyUpdates();
     }
-    // }
 }
 
 /**
@@ -173,17 +156,17 @@ ServerWorker::recvUpdate(zmq::message_t& client_id, unsigned layer) {
  */
 void
 ServerWorker::setBackpropNumLambdas(zmq::message_t& client_id, unsigned numLambdas_) {
-
     // This is not a thread-safe call, but as the coordination server should
     // only send one info message per server, it should be fine.
     std::lock_guard<std::mutex> update_lock(update_mutex);
-    numLambdas += numLambdas_;
+    numLambdas = numLambdas_;
     std::cout << "[  INFO  ] Number of lambdas set to " << numLambdas << "." << std::endl;
 
     // Send confirm ACK message.
     zmq::message_t confirm;
     workersocket.send(client_id, ZMQ_SNDMORE);
     workersocket.send(confirm);
+
 }
 
 

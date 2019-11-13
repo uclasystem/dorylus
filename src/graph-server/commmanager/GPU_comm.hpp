@@ -27,7 +27,7 @@ class GPUComm : public ResourceComm{
 
 public:
 
-    GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,const std::string& wServersFile,unsigned wPort_);
+    GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,const std::string& wServersFile,unsigned wPort_,unsigned totalLayers_);
 
     // For forward-prop.
     void newContextForward(FeatType *dataBuf, FeatType *zData_, FeatType *actData_,
@@ -55,6 +55,7 @@ public:
     friend class ComputingServer;
 
 private:
+    unsigned totalLayers;
     unsigned nodeId;
     unsigned numNodes;
     unsigned numLocalVertices;
@@ -84,6 +85,7 @@ private:
     std::vector<Matrix> *savedTensors;
 
     ComputingServer* comp_server;
+
 };
 
 

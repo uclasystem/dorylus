@@ -6,15 +6,16 @@ static void doNotFreeBuffer(void *data, void *hint){
 
 extern "C" ResourceComm* createComm(CommInfo& commInfo) {
     return new GPUComm(commInfo.nodeId, commInfo.numNodes, commInfo.dataserverPort,
-                        commInfo.wServersFile, commInfo.weightserverPort);
+                        commInfo.wServersFile, commInfo.weightserverPort, commInfo.totalLayers);
 }
 
 extern "C" void destroyComm(GPUComm *gpuComm) {
     delete gpuComm;
 }
 
-GPUComm::GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,const std::string& wServersFile_,unsigned wPort_):
+GPUComm::GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,const std::string& wServersFile_,unsigned wPort_, unsigned totalLayers_):
         ResourceComm(),
+        totalLayers(totalLayers_),
         wServersFile(wServersFile_),
         nodeId(nodeId_),
         numNodes(numNodes_),
@@ -38,7 +39,6 @@ void GPUComm::newContextForward(FeatType *dataBuf, FeatType *zData_, FeatType *a
     actData = actData_;
     numFeatsNext = numFeatsNext_;
     printLog(nodeId, "GPU FORWARD context created.");
-
 }
 
 void GPUComm::requestForward(unsigned layer, bool lastLayer){
@@ -62,7 +62,7 @@ void GPUComm::newContextBackward(FeatType *oldGradBuf, FeatType *newGradBuf, std
 }
 
 void GPUComm::requestBackward(unsigned layer, bool lastLayer){
-    printLog(nodeId, "GPU BACKWARD request.");
+    printLog(nodeId, "GPU BACKWARD request. %u",layer);
     comp_server->processBackward(layer, lastLayer);
 }
 

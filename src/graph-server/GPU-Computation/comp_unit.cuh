@@ -43,9 +43,8 @@ public:
     CuMatrix softmaxRows(CuMatrix &mat);
     CuMatrix hadamardSub(CuMatrix& matLeft,CuMatrix& matRight);
     CuMatrix hadamardMul(CuMatrix& matLeft, CuMatrix& matRight);
-    CuMatrix activateDerivative(CuMatrix& mat);
-    CuMatrix dotGDwithWTrans(CuMatrix& matLeft, CuMatrix& matRight);
-    CuMatrix dotActTranswithGD(CuMatrix& matLeft, CuMatrix& matRight, const float learning_rate);
+
+    CuMatrix activateBackward(CuMatrix& y,CuMatrix& gradient);
 
     unsigned checkAccuracy(CuMatrix& predictions, CuMatrix& labels);
 	float checkLoss(CuMatrix& preds, CuMatrix& labels);

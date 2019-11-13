@@ -148,6 +148,7 @@ Engine::setUpCommInfo(){
     commInfo.numNodes=numNodes;
     commInfo.wServersFile=weightserverIPFile;
     commInfo.weightserverPort=weightserverPort;
+    commInfo.totalLayers=numLayers;
 }
 
 

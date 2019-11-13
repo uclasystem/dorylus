@@ -17,6 +17,8 @@ struct CommInfo {
     unsigned numNodes;
     std::string wServersFile;
     unsigned weightserverPort;
+
+    unsigned totalLayers; //for weights prefetching
 };
 
 //abstract interface declaration

@@ -14,6 +14,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <mutex>
 #include <zmq.hpp>
 #include <boost/algorithm/string/trim.hpp>
 
@@ -34,8 +35,9 @@ class ServerWorker {
 
 public:
 
-    ServerWorker(zmq::context_t& ctx_, unsigned& counter, WeightServer& _ws,
-                 std::vector<Matrix>& weights_, std::vector<Matrix>& updates_, unsigned& numLambdas_);
+    ServerWorker(zmq::context_t& ctx_, WeightServer& _ws,
+                 std::vector<Matrix>& weights_, std::vector<Matrix>& updates_, 
+                 unsigned& numLambdas_, unsigned& lambdaRecved_);
 
     ~ServerWorker();
 
@@ -45,7 +47,6 @@ public:
 private:
 
     void sendWeights(zmq::message_t& client_id, unsigned layer);
-    void sendWeightsBackward(zmq::message_t& client_id);
     void recvUpdates(zmq::message_t& client_id);
     void recvUpdate(zmq::message_t& client_id, unsigned layer);
     void setBackpropNumLambdas(zmq::message_t& client_id, unsigned numLambdas_);
@@ -58,7 +59,7 @@ private:
     std::vector<Matrix>& updateMats;
 
     unsigned& numLambdas;
-    unsigned& count;
+    unsigned& lambdaRecved;
 
     // Reference back to weight server so we can tell it to average and apply
     // final weight gradients.

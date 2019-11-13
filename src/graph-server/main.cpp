@@ -21,7 +21,7 @@ main(int argc, char *argv[]) {
 
 
     float splitPortion = 1.0 / 3.0;
-    unsigned numEpochs = 5;
+    unsigned numEpochs = 1000;
     unsigned valFreq = 1;
 
     if (engine.master())
@@ -36,22 +36,9 @@ main(int argc, char *argv[]) {
     // Do specified number of epochs.
     for (unsigned epoch = 0; epoch < numEpochs; ++epoch) {
         printLog(engine.getNodeId(), "Starting Epoch %u", epoch+1);
-        if (epoch != 0 && (epoch % valFreq == 0 || epoch == 1)) {
-            if (engine.master())
-                printLog(engine.getNodeId(), "Time for some validation");
-
-            // Boolean of whether or not to run evaluation
-            FeatType *predictData =
-            engine.runForward(true);
-            engine.runBackward(predictData);
-        } else {
-            FeatType *predictData =
-            engine.runForward();
-            // Do a backward-prop phase.
-            if (engine.isGPUEnabled() == 0) {
-                engine.runBackward(predictData);
-            }
-        }
+        FeatType *predictData = engine.runForward();
+        // Do a backward-prop phase.
+        engine.runBackward(predictData);
     }
 
     // Procude the output files.

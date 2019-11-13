@@ -68,6 +68,7 @@ public:
     bool isGPUEnabled();
 
     FeatType* aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
+
     FeatType* invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim);
     FeatType* scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
 
