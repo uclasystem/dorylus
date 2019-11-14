@@ -19,7 +19,7 @@
 #include <time.h>
 
 
-const float LEARNING_RATE=0.00005;
+const float LEARNING_RATE=1.;
 unsigned nodeId;
 class GPUComm;
 

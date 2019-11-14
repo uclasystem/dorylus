@@ -37,7 +37,7 @@ WeightServer::WeightServer(std::string& weightServersFile, std::string& myPrIpFi
       dataCtx(1), publisher(dataCtx, ZMQ_PUB), subscriber(dataCtx, ZMQ_SUB),
       serverPort(_serverPort) {
     // Hardcoding adam to false for right now
-    adam = false;
+    adam = true;
 
     // Read the dsh file to get info about all weight server nodes.
     initializeWeightServerComms(weightServersFile, myPrIpFile);
@@ -50,9 +50,8 @@ WeightServer::WeightServer(std::string& weightServersFile, std::string& myPrIpFi
     // Read in layer configurations and initialize weight matrices.
     initializeWeightMatrices(configFileName);
 
-    if (adam) {
-        initializeAdamVariables();
-    }
+    if (adam) 
+        adamOpt=AdamOptimizer(LEARNING_RATE,dims);
 
     // Send weight matrix info to all servers and wait for ack.
     distributeWeightMatrices();
@@ -133,14 +132,16 @@ void WeightServer::applyUpdate(unsigned layer) {
                 updateSum[u] += updateNew[u];
         }
 
-        // If adam is enabled, apply the momentum and decay computation
-        if (adam) {}
-
-        // Once all updates have been aggregated, apply to the weights matrices.
         FeatType *weightData = weightMats[layer].getData();
         FeatType *updateSum = updateMats[layer].getData();
-        for (unsigned u = 0; u < weightMats[layer].getNumElemts(); ++u)
-            weightData[u] -= updateSum[u];
+        if (adam) {
+            adamOpt.update(layer,weightData,updateSum);
+        }
+        else{
+            // Once all updates have been aggregated, apply to the weights matrices.
+            for (unsigned u = 0; u < weightMats[layer].getNumElemts(); ++u)
+                weightData[u] -=  LEARNING_RATE * updateSum[u];
+        }
 
         // Send out the updated weights.
         Matrix& weightMat = weightMats[layer];
@@ -515,7 +516,7 @@ WeightServer::initializeWeightMatrices(std::string& configFileName) {
         for (unsigned u = 0; u < dims.size() - 1; ++u) {
             // Hardcoding this to xavier init for now. Eventually need to make it
             // configurable
-            Matrix w = kaimingInitialization(dims[u], dims[u+1]);
+            Matrix w = xavierInitialization(dims[u], dims[u+1]);
             weightMats.push_back(w);
 
             // Initialize layer biases
@@ -635,32 +636,6 @@ WeightServer::initBias(unsigned dim, float initVal) {
     return Matrix(dim, 1, dptr);
 }
 
-/**
- *
- * Initialize the variables for Adam Optimziation
- *
- */
-void
-WeightServer::initializeAdamVariables() {
-    // Initialize momentum and decay parameters
-    beta1 = .9;
-    beta2 = .999;
-    epsilon = 1e-8;
-    alpha = 1e-2;
-
-    // Momentum and decay matrices match shape of weight matrices and have init to zero
-    for (unsigned ui = 0; ui < dims.size(); ++ui) {
-        unsigned dataSize = dims[ui] * dims[ui+1];
-        FeatType* momentumptr = new FeatType[dataSize];
-        FeatType* decayptr = new FeatType[dataSize];
-
-        std::memset(momentumptr, 0, dataSize * sizeof(FeatType));
-        std::memset(decayptr, 0, dataSize * sizeof(FeatType));
-
-        momentum.push_back(Matrix(dims[ui], dims[ui+1], momentumptr));
-        decay.push_back(Matrix(dims[ui], dims[ui+1], decayptr));
-    }
-}
 
 /**
  *

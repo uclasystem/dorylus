@@ -120,7 +120,7 @@ ServerWorker::sendWeights(zmq::message_t& client_id, unsigned layer) {
  */
 void
 ServerWorker::recvUpdate(zmq::message_t& client_id, unsigned layer) {
-    const float LEARNING_RATE = 0.00001; // WARNING! This can be multiplied with lr set in lambda funcs. TODO (YIFAN): merge them together.
+    
     zmq::message_t updateMsg;
     workersocket.recv(&updateMsg);
     std::lock_guard<std::mutex> update_lock(update_mutex);
@@ -139,7 +139,7 @@ ServerWorker::recvUpdate(zmq::message_t& client_id, unsigned layer) {
     // Grab lock then sum the data received in this update matrix.
     
     for (unsigned u = 0; u < updateMats[layer].getNumElemts(); ++u)
-        updateSum[u] += LEARNING_RATE * updateNew[u];
+        updateSum[u] +=  updateNew[u];
 
     
 
@@ -159,6 +159,7 @@ void
 ServerWorker::setBackpropNumLambdas(zmq::message_t& client_id, unsigned numLambdas_) {
     // This is not a thread-safe call, but as the coordination server should
     // only send one info message per server, it should be fine.
+
     std::lock_guard<std::mutex> update_lock(update_mutex);
     numLambdas = numLambdas_;
     std::cout << "[  INFO  ] Number of lambdas set to " << numLambdas << "." << std::endl;

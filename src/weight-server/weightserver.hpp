@@ -1,7 +1,7 @@
 #ifndef __WEIGHT_SERVER_HPP__
 #define __WEIGHT_SERVER_HPP__
 
-
+#include "AdamOptimizer.hpp"
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -25,7 +25,7 @@
 
 
 enum CTRL_MSG { MASTERUP, WORKERUP, INITDONE, ACK };
-
+const float LEARNING_RATE = 0.01; // WARNING! This can be multiplied with lr set in lambda funcs. TODO (YIFAN): merge them together.
 
 /**
  *
@@ -116,6 +116,9 @@ private:
     zmq::socket_t publisher;
     zmq::socket_t subscriber;
     unsigned serverPort;
+
+
+    AdamOptimizer adamOpt;
 
 };
 
