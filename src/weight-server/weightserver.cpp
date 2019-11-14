@@ -558,9 +558,7 @@ WeightServer::initializeWeightMatrices(std::string& configFileName) {
  */
 Matrix
 WeightServer::xavierInitialization(unsigned dim1, unsigned dim2) {
-    int t= 1573771109;
-    printf("Time %u\n",t);
-    std::default_random_engine dre(t);
+    std::default_random_engine dre(time(0));
     std::uniform_real_distribution<float> dist(-1, 1);
 
     unsigned dataSize = dim1 * dim2;
