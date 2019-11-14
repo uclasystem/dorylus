@@ -51,11 +51,15 @@ Engine::init(int argc, char *argv[]) {
     // save intermediate tensors during forward phase for backward computation.
     savedTensors = new std::vector<Matrix> [numLayers];
 
+    printLog(nodeId, "saving tensors");
+
     // Init it here for collecting data when reading files
     forwardVerticesInitData = new FeatType[getFeatDim(0) * graph.getNumLocalVertices()];
     forwardGhostInitData = new FeatType[getFeatDim(0) * graph.getNumInEdgeGhostVertices()];
     // Create labels storage area. Read in labels and store as one-hot format.
     localVerticesLabels = new FeatType[layerConfig[numLayers] * graph.getNumLocalVertices()];
+
+    printLog(nodeId, "allocating feats");
 
     // Set a local index for all ghost vertices along the way. This index is used for indexing within the ghost data arrays.
     unsigned ghostCount = 0;
@@ -68,9 +72,13 @@ Engine::init(int argc, char *argv[]) {
         it->second.setLocalId(ghostCount++);
     }
 
+    printLog(nodeId, "finished index ghosts");
+
     // Read in initial feature values (input features) & labels.
     readFeaturesFile(featuresFile);
+    printLog(nodeId, "read feats");
     readLabelsFile(labelsFile);
+    printLog(nodeId, "read labels");
 
     // Initialize synchronization utilities.
     recvCnt = 0;

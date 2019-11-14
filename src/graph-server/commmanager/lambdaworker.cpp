@@ -43,13 +43,17 @@ LambdaWorker::work() {
 
             switch (op) {
                 case (OP::PULL_FORWARD):
-                    sendAggregatedChunk(identity, partId);
+                    if (manager->forwardLambdaTable[partId]) {
+                        sendAggregatedChunk(identity, partId);
+                    }
                     break;
                 case (OP::PUSH_FORWARD):
-                    recvLambdaResults(identity, partId);
+                    if (manager->forwardLambdaTable[partId]) {
+                        recvLambdaResults(identity, partId);
+                    }
                     break;
                 case (OP::PULL_BACKWARD):
-                    {
+                    if (manager->backwardLambdaTable[partId]) {
                         unsigned matType = parse<unsigned>((char *) header.data(), 2);
                         if (matType == TYPE::GRAD) {
                             sendChunk(oldGradMatrix, identity, partId, false);
@@ -62,10 +66,14 @@ LambdaWorker::work() {
                     }
                     break;
                 case (OP::PULL_EVAL):
-                    sendTargetMatrix(identity, partId);
+                    if (manager->forwardLambdaTable[partId]) {
+                        sendTargetMatrix(identity, partId);
+                    }
                     break;
                 case (OP::PUSH_BACKWARD):
-                    recvChunk(newGradMatrix, identity, partId, false);
+                    if (manager->backwardLambdaTable[partId]) {
+                        recvChunk(newGradMatrix, identity, partId, false);
+                    }
                     break;
                 default:
                     break;  /** Not an op that I care about. */
@@ -86,11 +94,6 @@ LambdaWorker::refreshState(Matrix actMatrix_, FeatType *zData_, FeatType *actDat
     zData = zData_;
     actData = actData_;
     numFeatsNext = numFeatsNext_;
-    evaluate = eval;
-
-    if (evaluate) {
-        evalLambdas = manager->evalPartitions;
-    }
 }
 
 void
@@ -133,11 +136,8 @@ LambdaWorker::sendAggregatedChunk(zmq::message_t& client_id, unsigned partId) {
         unsigned bufSize = thisPartRows * actMatrix.getCols() * sizeof(FeatType);
         FeatType *partitionStart = actMatrix.getData() + (partId * partRows * actMatrix.getCols());
 
-        // Tell the lambda whether or not it should run evaluation
-        // If the engine has set evaluate to true and this is not a training partition
-        unsigned lambdaEval = evaluate && !(manager->trainPartitions[partId]);
         zmq::message_t header(HEADER_SIZE);
-        populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, actMatrix.getCols(), lambdaEval);
+        populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, actMatrix.getCols());
         workersocket.send(header, ZMQ_SNDMORE);
 
         zmq::message_t partitionData(bufSize);
@@ -167,6 +167,7 @@ LambdaWorker::recvLambdaResults(zmq::message_t& client_id, unsigned partId) {
     // Check for total number of partitions received. If all partitions received, wake up lambdaComm.
     manager->forwardLambdaTable[partId] = false;
     ++(manager->countForward);
+    ++(manager->finishedTask);
 }
 
 void
@@ -222,9 +223,11 @@ LambdaWorker::recvChunk(Matrix &dstMat, zmq::message_t &client_id, unsigned part
     if (forward) {
         manager->forwardLambdaTable[partId] = false;
         ++(manager->countForward);
+        ++(manager->finishedTask);
     } else {
         manager->backwardLambdaTable[partId] = false;
         ++(manager->countBackward);
+        ++(manager->finishedTask);
     }
 }
 

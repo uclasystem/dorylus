@@ -48,25 +48,31 @@ callback(const Aws::Lambda::LambdaClient *client, const Aws::Lambda::Model::Invo
         // There is error in the results.
         } else {
             std::cout << "\033[1;31m[ ERROR ]\033[0m\t";
-            if (__sync_add_and_fetch(&failedCnt, 1) % SLEEP_FREQUENCY == 0) {
-                if (failedCnt >= ABORT_LIMIT) {
-                    std::cout << "A lot of failures detected. Abort execution and PLEASE check the system settings!" << std::endl;
-                    abort();
+            bool relaunch = false;
+            if (relaunch) {
+                if (__sync_add_and_fetch(&failedCnt, 1) % SLEEP_FREQUENCY == 0) {
+                    if (failedCnt >= ABORT_LIMIT) {
+                        std::cout << "A lot of failures detected. Abort execution and PLEASE check the system settings!" << std::endl;
+                        abort();
+                    } else {
+                        std::cout << "A lot of failures detected. Sleep for a while and wait.";
+                        sleep(SLEEP_PERIOD);
+                        std::cout << "Relaunch again..." << std::endl;
+                        m_client->InvokeAsync(invReq, callback);
+                    }
                 } else {
-                    std::cout << "A lot of failures detected. Sleep for a while and wait.";
-                    sleep(SLEEP_PERIOD);
-                    std::cout << "Relaunch again..." << std::endl;
+                    std::cout << "Timed-out. Relaunch lambda..." << std::endl;
                     m_client->InvokeAsync(invReq, callback);
                 }
             } else {
-                std::cout << "Timed-out. Relaunch lambda..." << std::endl;
-                m_client->InvokeAsync(invReq, callback);
+                std::cout << functionResult << std::endl;
             }
         }
 
     // Lambda returns error.
     } else {
-        if (outcome.GetResult().GetStatusCode() != 0) {
+        bool relaunch = false;
+        if (!relaunch || outcome.GetResult().GetStatusCode() != 0) {
             std::cout << "\033[1;31m[ ERROR ]\033[0m\t" <<
                 "Executed Version:" << outcome.GetResult().GetExecutedVersion() << "\n\t\t" <<
                 "Function Error:" << outcome.GetResult().GetFunctionError() << "\n\t\t" <<
@@ -146,6 +152,7 @@ CoordServer::run() {
     char dhost_port[50];
     sprintf(dhost_port, "tcp://*:%s", coordserverPort);
     std::cout << "Binding to dataserver " << dhost_port << "..." << std::endl;
+    datasocket.setsockopt(ZMQ_RCVHWM, 5000);
     datasocket.bind(dhost_port);
 
     // Connect weightserver sockets. Since sockets on weightserver are DEALERs, so we also have to create DEALERs and
@@ -180,18 +187,12 @@ CoordServer::run() {
             zmq::message_t dataserverIp;
             datasocket.recv(&header);
             datasocket.recv(&dataserverIp);
+            // Send ACK confirm reply.
+            zmq::message_t confirm;
+            datasocket.send(confirm);
 
             // Parse the request.
             unsigned op = parse<unsigned>((char *) header.data(), 0);
-            unsigned layer = parse<unsigned>((char *) header.data(), 1);
-            unsigned lambdaId = parse<unsigned>((char *) header.data(), 2);
-            unsigned lastLayer = parse<unsigned>((char*) header.data(), 3);
-
-            // Send ACK confirm reply.
-            if (op != OP::REQ_BACKWARD) {
-                zmq::message_t confirm;
-                datasocket.send(confirm);
-            }
 
             // Append a terminating null char to ensure this is a valid C string.
             char* dataserverIpCopy = new char[dataserverIp.size() + 1];
@@ -209,44 +210,50 @@ CoordServer::run() {
 
             // Else is a request for lambda threads. Handle that. This is forward.
             } else if (op == OP::REQ_FORWARD) {
+                unsigned layer = parse<unsigned>((char *) header.data(), 1);
+                unsigned lambdaId = parse<unsigned>((char *) header.data(), 2);
+                unsigned lastLayer = parse<unsigned>((char*) header.data(), 3);
+
                 std::string accMsg = "[ACCEPTED] Req for FORWARD, lambda " + std::to_string(lambdaId)
                                      + " is invoked for layer " + std::to_string(layer) + ".";
                 std::cout << accMsg << std::endl;
 
                 // Issue the lambda thread to serve the request.
                 char *weightserverIp = weightserverAddrs[req_count % weightserverAddrs.size()];
-                invokeFunction("new-forward-prop", dataserverIpCopy, dataserverPort,
+                invokeFunction("yifan-forward", dataserverIpCopy, dataserverPort,
                                weightserverIp, weightserverPort, layer, lambdaId, (bool) lastLayer);
                 req_count++;
-
             // This is backward.
             } else if (op == OP::REQ_BACKWARD) {
+                unsigned layer = parse<unsigned>((char *) header.data(), 1);
+                unsigned lambdaId = parse<unsigned>((char *) header.data(), 2);
+                unsigned lastLayer = parse<unsigned>((char*) header.data(), 3);
+
                 std::string accMsg = "[ACCEPTED] Req for BACKWARD, lambda " + std::to_string(lambdaId)
                                    + " is invoked for layer " + std::to_string(layer) + ".";
                 std::cout << accMsg << std::endl;
 
-                unsigned numLambda = parse<unsigned>((char *) header.data(), 4);
-                if (lambdaId == 0) {
-                    // Calculate numLambdas assigned to each weightserver.
-                    unsigned baseNumThreads = numLambda / weightserverAddrs.size();
-                    std::vector<unsigned> numLambdas(weightserverAddrs.size(), baseNumThreads);
-                    for (unsigned i = 0; i < lambdaId % weightserverAddrs.size(); ++i)
-                        numLambdas[(req_count + i) % weightserverAddrs.size()]++;
-
-                    // Send info message to weightservers.
-                    std::cout << "[  INFO  ] Sending number of lambdas info to weightservers..." << std::endl;
-                    for (unsigned i = 0; i < weightserverAddrs.size(); ++i)
-                        sendInfoMessage(weightsockets[i], numLambdas[i]);
-                }
-                // send confirm here to make sure weight servers are set.
-                zmq::message_t confirm;
-                datasocket.send(confirm);
-
                 // Issue the lambda thread to serve the request.
                 char *weightserverIp = weightserverAddrs[req_count % weightserverAddrs.size()];
-                invokeFunction("new-backprop", dataserverIpCopy, dataserverPort, weightserverIp, weightserverPort, layer, lambdaId, (bool) lastLayer);
+                invokeFunction("yifan-backward", dataserverIpCopy, dataserverPort,
+                               weightserverIp, weightserverPort, layer, lambdaId, (bool) lastLayer);
                 req_count++;
+            } else if (op == OP::INFO) {
+                unsigned numLambda = parse<unsigned>((char *) header.data(), 1);
 
+                std::string accMsg = "[  INFO  ] Sending number of lambdas info to weightservers...";
+                std::cout << accMsg << std::endl;
+
+                // Calculate numLambdas assigned to each weightserver.
+                unsigned baseNumThreads = numLambda / weightserverAddrs.size();
+                unsigned remainder = numLambda % weightserverAddrs.size();
+                // Send info message to weightservers.
+                for (unsigned i = 0; i < remainder; i++) {
+                    sendInfoMessage(weightsockets[i], baseNumThreads + 1);
+                }
+                for (unsigned i = remainder; i < weightserverAddrs.size(); i++) {
+                    sendInfoMessage(weightsockets[i], baseNumThreads);
+                }
             // Unknown op code.
             } else {
                 std::cerr << "[ ERROR ] Unknown OP code (" << op << ") received." << std::endl;

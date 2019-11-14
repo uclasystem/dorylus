@@ -25,9 +25,10 @@
 #include "../../common/utils.hpp"
 
 
-#define SLEEP_PERIOD 5000 // sleep 5000us and then check the condition.
-#define TIMEOUT_PERIOD 5000.0 // lambda is considered timed out after 5000ms.
-
+#define SLEEP_PERIOD 5000   // sleep 5000us and then check the condition.
+#define TIMEOUT_PERIOD 5000 // wait for up to 5000ms before relaunching
+#define MAX_TIMEOUT 10000   //
+#define MIN_TIMEOUT 500     // at least wait for 500ms before relaunching
 
 class LambdaWorker;
 
@@ -43,12 +44,10 @@ public:
     LambdaComm(CommInfo &commInfo);
     ~LambdaComm();
 
-    void setTrainValidationSplit(float trainPortion, unsigned numLocalVertices);
-
     // For forward-prop.
     void newContextForward(FeatType *dataBuf, FeatType *zData,
         FeatType *actData, unsigned numLocalVertices, unsigned numFeats,
-        unsigned numFeatsNext, bool eval);
+        unsigned numFeatsNext);
     void requestForward(unsigned layer, bool lastLayer);
     void invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer);
     void waitLambdaForward(unsigned layer, bool lastLayer);
@@ -71,9 +70,10 @@ public:
     unsigned numLambdasBackward;
     unsigned numListeners;
 
-    bool evaluate;
     bool halt;
     std::vector<bool> trainPartitions;
+
+    double timeoutPeriod;
 
     // for relaunch timed-out lambdas
     unsigned countForward;
@@ -83,10 +83,8 @@ public:
     bool *backwardLambdaTable;
     double backwardTimer;
 
-    unsigned numCorrectPredictions;
-    float totalLoss;
-    unsigned numValidationVertices;
-    unsigned evalPartitions;
+    unsigned remainedTask;
+    unsigned finishedTask;
 
     zmq::context_t ctx;
     zmq::socket_t frontend;
