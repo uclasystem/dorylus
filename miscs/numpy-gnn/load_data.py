@@ -1,6 +1,6 @@
 import numpy as np
 import os
-
+from scipy.sparse import csr_matrix, identity
 
 def load_data(base_dir, dataset, binary=True):
     print("Loading data...")
@@ -23,7 +23,6 @@ def load_data(base_dir, dataset, binary=True):
         label_kind = int.from_bytes(f.read(4), byteorder='little')
         print("Label Kinds: {}".format(label_kind))
         target_labels = np.fromfile(f, dtype=np.int32)
-        print(target_labels)
 
         # Read in the graph and construct adjancency and degree matrix.
         f = open(graph_file, 'rb')
@@ -33,13 +32,21 @@ def load_data(base_dir, dataset, binary=True):
         print("vtx type size: {}, num vtcs: {}, num edges: {}".format(vtx_type_size, num_vtcs, num_edges))
         edge_list = np.fromfile(f, dtype=np.int32).reshape(num_edges, 2)
         # Construct Adjacent Matrix with self-loop
-        adj_mat = np.identity(num_vertices)
-        for edge in edge_list:
-            adj_mat[edge[1]][edge[0]] = 1
+        # adj_mat = np.identity(num_vertices)
+        # for edge in edge_list:
+        #     adj_mat[edge[1]][edge[0]] = 1
 
-        normed_deg_vec = 1 / np.sqrt(np.sum(adj_mat, axis=0, keepdims=True))
-        # Normalized A_hat matrix
+        # normed_deg_vec = 1 / np.sqrt(np.sum(adj_mat, axis=0, keepdims=True))
+        # # Normalized A_hat matrix
+        # A_hat = normed_deg_vec * adj_mat * normed_deg_vec.T
+        adj_mat = identity(num_vertices, dtype=float).tolil()
+        for edge in edge_list:
+            adj_mat[edge[1], edge[0]] = 1
+        normed_deg_vec = 1 / np.sqrt(np.sum(adj_mat, axis=0)).toarray()
+        print(normed_deg_vec.type)
         A_hat = normed_deg_vec * adj_mat * normed_deg_vec.T
+        print(A_hat)
+        # np.save('ahat.npy', A_hat)
 
         print("Data Loaded. Adj Mat: " + str(A_hat.shape) + ", Feats: " +
             str(input_feats.shape))

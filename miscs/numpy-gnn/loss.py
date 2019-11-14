@@ -23,26 +23,26 @@ class SoftmaxCrossEntropyLoss(object):
     def __init__(self, name):
         self.name = name
 
-    # def forward(self, input, target):
-    #     exp_input = np.exp(input - np.max(input, axis=1, keepdims=True))
-    #     prob = exp_input / (np.sum(exp_input, axis=1, keepdims=True) + 1e-20)
-    #     return np.mean(np.sum(-target * np.log(prob + 1e-20), axis=1))
-
-    # def backward(self, input, target):
-    #     exp_input = np.exp(input - np.max(input, axis=1, keepdims=True))
-    #     prob = exp_input / (np.sum(exp_input, axis=1, keepdims=True) + 1e-20)
-    #     return (prob - target)
-
-    # for correctness check
     def forward(self, input, target):
-        exp_input = np.exp(input)
-        prob = exp_input / np.sum(exp_input, axis=1, keepdims=True)
-        return np.mean(np.sum(-target * np.log(prob), axis=1))
+        exp_input = np.exp(input - np.max(input, axis=1, keepdims=True))
+        prob = exp_input / (np.sum(exp_input, axis=1, keepdims=True) + 1e-20)
+        return np.mean(np.sum(-target * np.log(prob + 1e-20), axis=1))
 
     def backward(self, input, target):
-        exp_input = np.exp(input)
-        prob = exp_input / (np.sum(exp_input, axis=1, keepdims=True))
+        exp_input = np.exp(input - np.max(input, axis=1, keepdims=True))
+        prob = exp_input / (np.sum(exp_input, axis=1, keepdims=True) + 1e-20)
         return (prob - target)
+
+    # for correctness check
+    # def forward(self, input, target):
+    #     exp_input = np.exp(input)
+    #     prob = exp_input / np.sum(exp_input, axis=1, keepdims=True)
+    #     return np.mean(np.sum(-target * np.log(prob), axis=1))
+
+    # def backward(self, input, target):
+    #     exp_input = np.exp(input)
+    #     prob = exp_input / (np.sum(exp_input, axis=1, keepdims=True))
+    #     return (prob - target)
 
     def str_backward(self):
         return '(Z - Y)'

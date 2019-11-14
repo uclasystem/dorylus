@@ -97,7 +97,7 @@ def GCN(name, adj, weights, layer_config):
 
 
 def train(adj, input_feats, target_labels, config, weights=None):
-    num_vertices = adj.shape[0]
+    num_vertices = input_feats.shape[0]
     label_kind = np.max(target_labels) + 1
     feat_dim = input_feats.shape[-1]
     layer_config = (feat_dim, config['hidden_dim'], label_kind)
@@ -129,9 +129,10 @@ def train(adj, input_feats, target_labels, config, weights=None):
 def main():
     config = {
         'train_portion': 1.0,
-        'hidden_dim': 16,
-        'learning_rate': 0.01,
-        'weight_decay': 5e-4,
+        'hidden_dim': 128,
+        'learning_rate': 0.0001,
+        # 'weight_decay': 5e-4,
+        'weight_decay': 0.0,
         'momentum': 0.0,
         'max_epoch': 100,
         'test_epoch': 10,

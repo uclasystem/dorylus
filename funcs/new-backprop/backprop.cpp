@@ -169,7 +169,18 @@ softmaxRows(Matrix& mat) {
  *
  */
 static Matrix
-activateDerivative(Matrix& mat) {
+tanhDerivative(Matrix& mat) {
+    FeatType *res = new FeatType[mat.getNumElemts()];
+    FeatType *zData = mat.getData();
+
+    for (unsigned i = 0; i < mat.getNumElemts(); ++i)
+        res[i] = 1 - std::pow(std::tanh(zData[i]), 2);
+
+    return Matrix(mat.getRows(), mat.getCols(), res);
+}
+
+static Matrix
+reluDerivative(Matrix& mat) {
     FeatType *res = new FeatType[mat.getNumElemts()];
     FeatType *zData = mat.getData();
 
@@ -249,7 +260,7 @@ gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id,
         z = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::Z, layer, true);
     } while (z.empty());
     std::cout << "< BACKWARD > Calculating derivative of activation " << z.shape() << std::endl;
-    Matrix actDeriv = activateDerivative(z);
+    Matrix actDeriv = tanhDerivative(z);
     delete[] z.getData();
 
     do {

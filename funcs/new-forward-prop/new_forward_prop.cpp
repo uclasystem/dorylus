@@ -145,12 +145,23 @@ dot(Matrix& features, Matrix& weights) {
  *
  */
 static Matrix
-activate(Matrix& mat) {
+tanh(Matrix& mat) {
     FeatType *activationData = new FeatType[mat.getNumElemts()];
     FeatType *zData = mat.getData();
 
     for (unsigned i = 0; i < mat.getNumElemts(); ++i)
         activationData[i] = std::tanh(zData[i]);
+
+    return Matrix(mat.getRows(), mat.getCols(), activationData);
+}
+
+static Matrix
+relu(Matrix& mat) {
+    FeatType *activationData = new FeatType[mat.getNumElemts()];
+    FeatType *zData = mat.getData();
+
+    for (unsigned i = 0; i < mat.getNumElemts(); ++i)
+        activationData[i] = std::fmax(zData[i], 0.0);
 
     return Matrix(mat.getRows(), mat.getCols(), activationData);
 }
@@ -170,9 +181,10 @@ softmax(Matrix& mat) {
         FeatType* vecSrc = mat.getData() + r * length;
         FeatType* vecDst = result + r * length;
 
-        FeatType denom = 0.0;
+        FeatType denom = 1e-20;
+        FeatType maxEle = *(std::max_element(vecSrc, vecSrc + length));
         for (unsigned c = 0; c < length; ++c) {
-            vecDst[c] = std::exp(vecSrc[c]);
+            vecDst[c] = std::exp(vecSrc[c] - maxEle);
             denom += vecDst[c];
         }
 
@@ -380,7 +392,7 @@ forward_prop_layer(std::string dataserver, std::string weightserver, std::string
         if (lastLayer) {
             activations = softmax(z);
         } else {
-            activations = activate(z);
+            activations = relu(z);
         }
         sendResTimer.start();
         sendMatrices(z, activations, data_socket, id);

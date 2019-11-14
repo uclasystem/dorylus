@@ -202,12 +202,15 @@ class Aggregate(Layer):
     def __init__(self, name, adj):
         super(Aggregate, self).__init__(name)
         self.adj = adj
+        self.adjT = adj.transpose()
 
     def forward(self, input_feat):
-        return self.adj @ input_feat
+        # return self.adj @ input_feat
+        return self.adj.multiply(input_feat).todense()
 
     def backward(self, grad_output):
-        return self.adj.T @ grad_output
+        # return self.adj.T @ grad_output
+        return self.adjT.multiply(grad_output).todense()
 
     def str_forward(self, str_input):
         return 'A @ ({})'.format(str_input)
