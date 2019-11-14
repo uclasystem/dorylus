@@ -118,9 +118,13 @@ ComputingServer::gradLayer(unsigned layer) {
     resultGrad.updateMatrixFromGPU();
     Matrix ah = gpuComm->savedTensors[layer][TYPE::AH - 1];
     CuMatrix cuAh=cu.wrapMatrix(ah);
-    CuMatrix cuWeightUpdates = cuAh.dot(interGrad, true, false, LEARNING_RATE);
+    CuMatrix cuWeightUpdates = cuAh.dot(interGrad, true, false);
     Matrix weightUpdates=cuWeightUpdates.getMatrix();
-
+    
+    // printf("interGrad[0] %f\n", (interGrad.getMatrix().getData()[0]));
+    // printf("Ah[0] %f\n",ah.getData()[0]);
+    // printf("Weight Update[0] %f\n", weightUpdates.getData()[0]);
+    
     auto t2 = std::chrono::high_resolution_clock::now();
     std::cout << "Backward Compute "
               << std::chrono::duration_cast<std::chrono::milliseconds>(t2-t3).count()
@@ -148,9 +152,13 @@ ComputingServer::gradLoss(unsigned layer) {
 
     Matrix ah = gpuComm->savedTensors[layer][TYPE::AH - 1];
     CuMatrix cuAh=cu.wrapMatrix(ah);
-    CuMatrix cuWeightUpdates = cuAh.dot(d_output, true, false, LEARNING_RATE);
+    CuMatrix cuWeightUpdates = cuAh.dot(d_output, true, false);
     Matrix weightUpdates=cuWeightUpdates.getMatrix();
     
+    // printf("d_output[0] %f\n", (d_output.getMatrix().getData()[0]));
+    // printf("Ah[0] %f\n",ah.getData()[0]);
+    // printf("Weight Update‘[0] %f\n", weightUpdates.getData()[0]);
+
     auto t2 = std::chrono::high_resolution_clock::now();
     std::cout << "Backward(Loss) Compute "
               << std::chrono::duration_cast<std::chrono::milliseconds>(t2-t3).count()

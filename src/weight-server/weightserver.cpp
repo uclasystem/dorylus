@@ -131,7 +131,7 @@ void WeightServer::applyUpdate(unsigned layer) {
             for (unsigned u = 0; u < updateMats[layer].getNumElemts(); ++u)
                 updateSum[u] += updateNew[u];
         }
-
+        
         FeatType *weightData = weightMats[layer].getData();
         FeatType *updateSum = updateMats[layer].getData();
         if (adam) {
@@ -558,7 +558,9 @@ WeightServer::initializeWeightMatrices(std::string& configFileName) {
  */
 Matrix
 WeightServer::xavierInitialization(unsigned dim1, unsigned dim2) {
-    std::default_random_engine dre(time(0));
+    int t= 1573771109;
+    printf("Time %u\n",t);
+    std::default_random_engine dre(t);
     std::uniform_real_distribution<float> dist(-1, 1);
 
     unsigned dataSize = dim1 * dim2;
@@ -570,7 +572,6 @@ WeightServer::xavierInitialization(unsigned dim1, unsigned dim2) {
     float normFactor = std::sqrt(6.0 / (float (dim1 + dim2)));
     for (unsigned ui = 0; ui < dataSize; ++ui)
         dptr[ui] *= normFactor;
-
     return Matrix(dim1, dim2, dptr);
 }
 

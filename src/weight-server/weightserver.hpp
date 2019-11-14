@@ -25,7 +25,7 @@
 
 
 enum CTRL_MSG { MASTERUP, WORKERUP, INITDONE, ACK };
-const float LEARNING_RATE = 0.01; // WARNING! This can be multiplied with lr set in lambda funcs. TODO (YIFAN): merge them together.
+const float LEARNING_RATE = 0.01; 
 
 /**
  *

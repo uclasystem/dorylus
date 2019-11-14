@@ -120,9 +120,10 @@ ServerWorker::sendWeights(zmq::message_t& client_id, unsigned layer) {
  */
 void
 ServerWorker::recvUpdate(zmq::message_t& client_id, unsigned layer) {
-    
+
     zmq::message_t updateMsg;
     workersocket.recv(&updateMsg);
+    // Grab lock then sum the data received in this update matrix.
     std::lock_guard<std::mutex> update_lock(update_mutex);
     lambdaRecved++;
     if (numLambdas == lambdaRecved) {ws.servers_updates_done=false;}
@@ -135,8 +136,6 @@ ServerWorker::recvUpdate(zmq::message_t& client_id, unsigned layer) {
     
     float *updateSum = updateMats[layer].getData();
     float *updateNew = (float *) updateMsg.data();
-
-    // Grab lock then sum the data received in this update matrix.
     
     for (unsigned u = 0; u < updateMats[layer].getNumElemts(); ++u)
         updateSum[u] +=  updateNew[u];
@@ -147,6 +146,7 @@ ServerWorker::recvUpdate(zmq::message_t& client_id, unsigned layer) {
     if (numLambdas == lambdaRecved) {
         ws.applyUpdate(layer);
     }
+
 }
 
 /**
