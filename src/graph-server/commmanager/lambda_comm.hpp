@@ -44,12 +44,10 @@ public:
     LambdaComm(CommInfo &commInfo);
     ~LambdaComm();
 
-    void setTrainValidationSplit(float trainPortion, unsigned numLocalVertices);
-
     // For forward-prop.
     void newContextForward(FeatType *dataBuf, FeatType *zData,
         FeatType *actData, unsigned numLocalVertices, unsigned numFeats,
-        unsigned numFeatsNext, bool eval);
+        unsigned numFeatsNext);
     void requestForward(unsigned layer, bool lastLayer);
     void invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer);
     void waitLambdaForward(unsigned layer, bool lastLayer);
@@ -72,7 +70,6 @@ public:
     unsigned numLambdasBackward;
     unsigned numListeners;
 
-    bool evaluate;
     bool halt;
     std::vector<bool> trainPartitions;
 
@@ -85,11 +82,6 @@ public:
     unsigned countBackward;
     bool *backwardLambdaTable;
     double backwardTimer;
-
-    unsigned numCorrectPredictions;
-    float totalLoss;
-    unsigned numValidationVertices;
-    unsigned evalPartitions;
 
     unsigned remainedTask;
     unsigned finishedTask;

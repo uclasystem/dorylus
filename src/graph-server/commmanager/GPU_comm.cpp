@@ -28,10 +28,9 @@ GPUComm::GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,
 
 
 void GPUComm::newContextForward(FeatType *dataBuf, FeatType *zData_, FeatType *actData_,
-                            unsigned numLocalVertices_, unsigned numFeats, unsigned numFeatsNext_, bool eval_){
+                            unsigned numLocalVertices_, unsigned numFeats, unsigned numFeatsNext_){
 
     // Create a new matrix object for workers to access.
-    eval=eval_;
     numLocalVertices=numLocalVertices_;
     actMatrix=Matrix(numLocalVertices_, numFeats, dataBuf);
     

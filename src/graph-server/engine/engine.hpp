@@ -60,7 +60,7 @@ public:
 
     // Public APIs for benchmarks.
     void init(int argc, char *argv[]);
-    FeatType *runForward(bool eval = false);
+    FeatType *runForward();
     void runBackward(FeatType *backwardInitData);
     void output();
     void destroy();
@@ -81,16 +81,6 @@ public:
     unsigned getNumEpochs();
     unsigned getValFreq();
     unsigned getNodeId();
-
-    // For now, split is at a partition granularity
-    // For this node, will simply split the data into training data and validaiton data
-    // at the partition level (trainPortion = 1/3 means 1/3 of data will be training data
-    // and 2/3 will be validation
-    // TODO:
-    //  optimize this as ML might require things such as random sampling etc for training
-    //  QUESTION: Is it beneficial to go beyond parition level for individual vertices
-    //      as this will incur serialization overhead
-    void setTrainValidationSplit(float trainPortion);
 
 private:
 
@@ -155,8 +145,6 @@ private:
     CommInfo commInfo;
     unsigned nodeId;
     unsigned numNodes;
-
-    bool evaluate = false;
 
     bool commHalt = false;
 
