@@ -49,10 +49,13 @@ requestMatrix(zmq::socket_t& socket, OP op, unsigned id, bool data = false) {
 
     // Listen on respond.
     zmq::message_t respHeader;
+    // socket.recv(&respHeader);
     while (!socket.recv(&respHeader, ZMQ_DONTWAIT)) {
         usleep(SLEEP_PERIOD);
         if (reqTimer.peek() > TIMEOUT_PERIOD) {
             // failed
+            // zmq::message_t _hdr(HEADER_SIZE);
+            // populateHeader((char *) _hdr.data(), op, id);
             zmq::message_t _hdr;
             _hdr.copy(&header);
             socket.send(_hdr);
@@ -62,7 +65,10 @@ requestMatrix(zmq::socket_t& socket, OP op, unsigned id, bool data = false) {
 
     // Parse the respond.
     unsigned layerResp = parse<unsigned>((char *) respHeader.data(), 1);
-    if (layerResp == -1) {      // Failed.
+    if (layerResp == -2) {
+        std::cerr << "[ ERROR ] Discard execution." << std::endl;
+        exit(0);
+    } else if (layerResp == -1) {      // Failed.
         std::cerr << "[ ERROR ] No corresponding matrix chunk!" << std::endl;
         return Matrix();
     } else {                    // Get matrix data.
@@ -101,9 +107,29 @@ sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned
     socket.send(zData, ZMQ_SNDMORE);
     socket.send(actData);
 
+    Timer sndTimer;
+    sndTimer.start();
+
     // Wait for data settled reply.
     zmq::message_t confirm;
-    socket.recv(&confirm);
+    // socket.recv(&confirm);
+    while(!socket.recv(&confirm, ZMQ_DONTWAIT)) {
+        usleep(SLEEP_PERIOD);
+        if (sndTimer.peek() > TIMEOUT_PERIOD) {
+            zmq::message_t _hdr;
+            _hdr.copy(&header);
+            socket.send(header, ZMQ_SNDMORE);
+            // zmq::message_t _updMsg(matrix.getDataSize());
+            // std::memcpy(_updMsg.data(), matrix.getData(), matrix.getDataSize());
+            zmq::message_t _zDt;
+            _zDt.copy(&zData);
+            socket.send(_zDt, ZMQ_SNDMORE);
+            zmq::message_t _actDt;
+            _actDt.copy(&actData);
+            socket.send(_actDt);
+            sndTimer.start();
+        }
+    }
 }
 
 static void
@@ -318,10 +344,13 @@ forward_prop_layer(std::string dataserver, std::string weightserver, std::string
     //
     // One should extract the partition id by reading the first 4 Bytes, which is simply parse<unsigned>(...).
     //
-    size_t identity_len = sizeof(unsigned) + dataserver.length();
+    size_t identity_len = sizeof(unsigned) * 3 + dataserver.length();
     char identity[identity_len];
     memcpy(identity, (char *) &id, sizeof(unsigned));
-    memcpy(identity + sizeof(unsigned), (char *) dataserver.c_str(), dataserver.length());
+    std::srand(time(NULL));
+    *(unsigned *)(identity + sizeof(unsigned)) = layer;
+    *(unsigned *)(identity + sizeof(unsigned) * 2) = rand();
+    memcpy(identity + sizeof(unsigned) * 3, (char *) dataserver.c_str(), dataserver.length());
 
     Timer getWeightsTimer;
     Timer getFeatsTimer;

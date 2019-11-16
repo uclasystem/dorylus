@@ -27,7 +27,7 @@ LambdaComm::LambdaComm(CommInfo &commInfo) :
         nodeId(commInfo.nodeId), ctx(1), halt(false), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), coordsocket(ctx, ZMQ_REQ),
         numLambdasForward(commInfo.numLambdasForward), numLambdasBackward(commInfo.numLambdasBackward), numListeners(numLambdasBackward), // TODO: Decide numListeners.
         countForward(0), countBackward(0), numCorrectPredictions(0), totalLoss(0.0), numValidationVertices(0), evalPartitions(0),
-        timeoutPeriod(0.0), remainedTask(0), finishedTask(0) {
+        timeoutPeriod(0.0), remainedTask(0), finishedTask(0), currLayer(0) {
 
     // Bind the proxy sockets.
     char dhost_port[50];
@@ -134,10 +134,12 @@ LambdaComm::setTrainValidationSplit(float trainPortion, unsigned numLocalVertice
  *
  */
 void
-LambdaComm::newContextForward(FeatType *dataBuf, FeatType *zData, FeatType *actData,
+LambdaComm::newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData, FeatType *actData,
     unsigned numLocalVertices, unsigned numFeats, unsigned numFeatsNext, bool eval) {
     countForward = 0;
     evaluate = eval;
+
+    currLayer = layer;
 
     remainedTask = numLambdasForward;
     finishedTask = 0;
@@ -232,9 +234,11 @@ LambdaComm::waitLambdaForward(unsigned layer, bool lastLayer) {
  *
  */
 void
-LambdaComm::newContextBackward(FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
+LambdaComm::newContextBackward(unsigned layer, FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
                                 unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim) {
     countBackward = 0;
+
+    currLayer = layer;
 
     remainedTask = numLambdasBackward;
     finishedTask = 0;

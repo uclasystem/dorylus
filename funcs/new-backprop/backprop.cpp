@@ -32,7 +32,7 @@ using namespace std::chrono;
 bool lastLayer = false;
 
 static Matrix
-requestTensor(zmq::socket_t& socket, OP op, unsigned partId, TYPE type = TYPE::AH, unsigned layer = 0, bool confirm = false) {
+requestTensor(zmq::socket_t& socket, OP op, unsigned partId, TYPE type = TYPE::AH, unsigned layer = 0) {
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char*) header.data(), op, partId, type, layer);
     socket.send(header);
@@ -44,6 +44,8 @@ requestTensor(zmq::socket_t& socket, OP op, unsigned partId, TYPE type = TYPE::A
     while(!socket.recv(&respHeader, ZMQ_DONTWAIT)) {
         usleep(SLEEP_PERIOD);
         if (reqTimer.peek() > TIMEOUT_PERIOD) {
+            // zmq::message_t _hdr(HEADER_SIZE);
+            // populateHeader((char *) _hdr.data(), op, partId, type, layer);
             zmq::message_t _hdr;
             _hdr.copy(&header);
             socket.send(_hdr);
@@ -51,13 +53,11 @@ requestTensor(zmq::socket_t& socket, OP op, unsigned partId, TYPE type = TYPE::A
         }
     }
 
-    if (confirm) {
-        zmq::message_t confMsg;
-        socket.send(confMsg);
-    }
-
     unsigned layerResp = parse<unsigned>((char*) respHeader.data(), 1);
-    if (layerResp == -1) {
+    if (layerResp == -2) {
+        std::cerr << "[ ERROR ] Discard execution." << std::endl;
+        exit(0);
+    } else if (layerResp == -1) {
         std::cerr << "[ ERROR ] No corresponding matrix" << std::endl;
 
         return Matrix();
@@ -103,9 +103,15 @@ sendMatrix(Matrix& matrix, zmq::socket_t& socket, unsigned id) {
 
     // Wait for updates settled reply.
     zmq::message_t confirm;
+    // socket.recv(&confirm);
     while(!socket.recv(&confirm, ZMQ_DONTWAIT)) {
         usleep(SLEEP_PERIOD);
         if (sndTimer.peek() > TIMEOUT_PERIOD) {
+            // zmq::message_t _hdr(HEADER_SIZE);
+            // populateHeader((char *) _hdr.data(), OP::PUSH_BACKWARD, id, matrix.getRows(), matrix.getCols());
+            zmq::message_t _hdr;
+            _hdr.copy(&header);
+            socket.send(_hdr, ZMQ_SNDMORE);
             // zmq::message_t _updMsg(matrix.getDataSize());
             // std::memcpy(_updMsg.data(), matrix.getData(), matrix.getDataSize());
             zmq::message_t _updMsg;
@@ -115,24 +121,6 @@ sendMatrix(Matrix& matrix, zmq::socket_t& socket, unsigned id) {
         }
     }
 }
-
-
-static void
-sendIntermediateGradient(Matrix& grad, zmq::socket_t& socket, unsigned id) {
-    zmq::message_t header(HEADER_SIZE);
-    populateHeader((char*) header.data(), OP::PUSH_BACKWARD, id, grad.getRows(),
-                    grad.getCols());
-    socket.send(header, ZMQ_SNDMORE);
-
-    zmq::message_t gradMsg(grad.getDataSize());
-    std::memcpy(gradMsg.data(), grad.getData(), grad.getDataSize());
-    socket.send(gradMsg);
-
-    // Wait for data received reply
-    zmq::message_t confirm;
-    socket.recv(&confirm);
-}
-
 
 
 /**
@@ -188,11 +176,11 @@ gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, 
 
     std::cout << "< BACKWARD > Getting predictions" << std::endl;
     do {
-        predictions = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::ACT, layer, true);
+        predictions = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::ACT, layer);
     } while (predictions.empty());
     std::cout << "< BACKWARD > Getting labels" << std::endl;
     do {
-        labels = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::LAB, layer, true);
+        labels = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::LAB, layer);
     } while (labels.empty());
     std::thread weightsThd([&] {
         std::cout << "< BACKWARD > Getting weights" << std::endl;
@@ -203,7 +191,7 @@ gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, 
     std::thread ahThd([&] {
         std::cout << "< BACKWARD > Requesting AH" << std::endl;
         do {
-            ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::AH, layer, true);
+            ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::AH, layer);
         } while (ah.empty());
     });
 
@@ -246,7 +234,7 @@ gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id,
 
     do {
         std::cout << "< BACKWARD > Requesting Z values" << std::endl;
-        z = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::Z, layer, true);
+        z = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::Z, layer);
     } while (z.empty());
     std::cout << "< BACKWARD > Calculating derivative of activation " << z.shape() << std::endl;
     Matrix actDeriv = activateDerivative(z);
@@ -254,7 +242,7 @@ gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id,
 
     do {
         std::cout << "< BACKWARD > Requesting gradient from graph server" << std::endl;
-        grad = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::GRAD, layer, true);
+        grad = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::GRAD, layer);
     } while (grad.empty());
     std::cout << "< BACKWARD > Hadamard multiplication" << grad.shape() << " " << actDeriv.shape() << std::endl;
     Matrix interGrad = grad * actDeriv;
@@ -277,7 +265,7 @@ gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id,
     std::thread ahThd([&] {
         std::cout << "< BACKWARD > Requesting AH" << std::endl;
         do {
-            ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::AH, layer, true);
+            ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::AH, layer);
         } while (ah.empty());
     });
 
@@ -321,10 +309,13 @@ backward_prop(std::string dataserver, std::string weightserver, std::string dpor
     //
     // One should extract the partition id by reading the first 4 Bytes, which is simply parse<unsigned>(...).
     //
-    size_t identity_len = sizeof(unsigned) + dataserver.length();
+    size_t identity_len = sizeof(unsigned) * 3 + dataserver.length();
     char identity[identity_len];
     memcpy(identity, (char *) &id, sizeof(unsigned));
-    memcpy(identity + sizeof(unsigned), (char *) dataserver.c_str(), dataserver.length());
+    std::srand(time(NULL));
+    *(unsigned *)(identity + sizeof(unsigned)) = layer;
+    *(unsigned *)(identity + sizeof(unsigned) * 2) = rand();
+    memcpy(identity + sizeof(unsigned) * 3, (char *) dataserver.c_str(), dataserver.length());
 
     Timer getWeightsTimer;
     Timer getFeatsTimer;

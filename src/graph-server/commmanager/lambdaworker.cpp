@@ -37,26 +37,71 @@ LambdaWorker::work() {
             if (!workersocket.recv(&identity)) {
                 continue;
             }
+            if (identity.size() != sizeof(unsigned) * 3 + manager->nodeIp.size()) {
+                printLog(manager->nodeId, "identity size %u", identity.size());
+                continue;
+            }
             if (!workersocket.recv(&header)) {
+                continue;
+            }
+            if (header.size() != HEADER_SIZE) {
+                printLog(manager->nodeId, "header size %u", header.size());
                 continue;
             }
 
             unsigned op = parse<unsigned>((char *) header.data(), 0);
-            unsigned partId = parse<unsigned>((char *) header.data(), 1);
+            unsigned partId2 = parse<unsigned>((char *) header.data(), 1);
+            unsigned partId = parse<unsigned>((char *) identity.data(), 0);
+            if (partId != partId2) {
+                printLog(manager->nodeId, "partIds don't match! op %u, partId: %u, %u; %u %u", op, partId, partId2, identity.size(), header.size());
+            }
+            unsigned layer = parse<unsigned>((char *) identity.data(), 1);
+            if (layer != manager->currLayer) {
+                printLog(manager->nodeId, "layer %u %u", layer, manager->currLayer);
+                workersocket.send(identity, ZMQ_SNDMORE);
+                zmq::message_t header(HEADER_SIZE);
+                populateHeader((char *) header.data(), -2, -2, -2, -2);
+                workersocket.send(header);
+                printLog(manager->nodeId, "Discard a old lambda execution");
+                continue;
+            }
 
             switch (op) {
-                case (OP::PULL_FORWARD):
+                case (OP::PULL_FORWARD): {
+                    if (partId >= manager->numLambdasForward) {
+                        printLog(manager->nodeId, "error partid %u!", partId);
+                        break;
+                    }
                     if (manager->forwardLambdaTable[partId]) {
+                        // printLog(manager->nodeId, "recv req from %d", partId);
                         sendAggregatedChunk(identity, partId);
+                        // printLog(manager->nodeId, "send chunk to %d", partId);
+                    } else {
+                        workersocket.send(identity, ZMQ_SNDMORE);
+                        zmq::message_t header(HEADER_SIZE);
+                        populateHeader((char *) header.data(), -2, -2, -2, -2);
+                        workersocket.send(header);
+                        printLog(manager->nodeId, "Discard a lambda execution");
                     }
                     break;
-                case (OP::PUSH_FORWARD):
+                }
+                case (OP::PUSH_FORWARD): {
+                    if (partId >= manager->numLambdasForward) {
+                        printLog(manager->nodeId, "error partid %u!", partId);
+                        break;
+                    }
                     if (manager->forwardLambdaTable[partId]) {
                         recvLambdaResults(identity, partId);
                     }
                     break;
-                case (OP::PULL_BACKWARD):
+                }
+                case (OP::PULL_BACKWARD): {
+                    if (partId >= manager->numLambdasBackward) {
+                        printLog(manager->nodeId, "error partid %u!", partId);
+                        break;
+                    }
                     if (manager->backwardLambdaTable[partId]) {
+                        // printLog(manager->nodeId, "recv req from %d", partId);
                         unsigned matType = parse<unsigned>((char *) header.data(), 2);
                         if (matType == TYPE::GRAD) {
                             sendChunk(oldGradMatrix, identity, partId, false);
@@ -66,8 +111,16 @@ LambdaWorker::work() {
                         } else if (matType == TYPE::LAB) {
                             sendChunk(targetMatrix, identity, partId, false);
                         }
+                        // printLog(manager->nodeId, "send chunk to %d", partId);
+                    } else {
+                        workersocket.send(identity, ZMQ_SNDMORE);
+                        zmq::message_t header(HEADER_SIZE);
+                        populateHeader((char *) header.data(), -2, -2, -2, -2);
+                        workersocket.send(header);
+                        printLog(manager->nodeId, "Discard a lambda execution");
                     }
                     break;
+                }
                 case (OP::PULL_EVAL):
                     if (manager->forwardLambdaTable[partId]) {
                         sendTargetMatrix(identity, partId);
@@ -78,12 +131,20 @@ LambdaWorker::work() {
                         recvValidationResults(identity, header);
                     }
                     break;
-                case (OP::PUSH_BACKWARD):
+                case (OP::PUSH_BACKWARD): {
+                    if (partId >= manager->numLambdasBackward) {
+                        printLog(manager->nodeId, "error partid %u!", partId);
+                        break;
+                    }
                     if (manager->backwardLambdaTable[partId]) {
                         recvChunk(newGradMatrix, identity, partId, false);
                     }
                     break;
+                }
                 default:
+                    {
+                        printLog(manager->nodeId, "unknown op %d, part id %d", op, partId);
+                    }
                     break;  /** Not an op that I care about. */
             }
         }
@@ -125,7 +186,6 @@ LambdaWorker::refreshState(Matrix oldGradMatrix_, Matrix newGradMatrix_, Matrix 
  */
 void
 LambdaWorker::sendAggregatedChunk(zmq::message_t& client_id, unsigned partId) {
-
     // Reject a send request if the partition id is invalid.
     if (partId >= manager->numLambdasForward) {
         workersocket.send(client_id, ZMQ_SNDMORE);
@@ -137,7 +197,6 @@ LambdaWorker::sendAggregatedChunk(zmq::message_t& client_id, unsigned partId) {
 
     // Partition id is valid, so send the matrix segment.
     } else {
-
         workersocket.send(client_id, ZMQ_SNDMORE);
 
         // Check to make sure that the bounds of this partition do not exceed the bounds of the data array.

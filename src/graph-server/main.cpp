@@ -21,7 +21,7 @@ main(int argc, char *argv[]) {
 
 
     float splitPortion = 1.0 / 3.0;
-    unsigned numEpochs = 5;
+    unsigned numEpochs = 30;
     unsigned valFreq = 1;
 
     if (engine.master())
