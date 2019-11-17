@@ -444,7 +444,7 @@ Engine::invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     } else {
         vecTimeLambda[iteration] += getTimer() - sttTimer;
     }
-    printLog(nodeId, "All lambda requests finished. Results received.");
+    // printLog(nodeId, "All lambda requests finished. Results received.");
 
     return outputTensor;
 }
@@ -692,7 +692,7 @@ Engine::invokeLambdaBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned in
 
     resComm->newContextBackward(iteration - 1, gradTensor, outputTensor, savedTensors, localVerticesLabels, vtcsCnt, inFeatDim, outFeatDim, getFeatDim(numLayers));
     resComm->requestBackward(iteration - 1, iteration - 1 == numLayers - 1);
-    printLog(nodeId, "All lambda requests finished. Results received.");
+    // printLog(nodeId, "All lambda requests finished. Results received.");
 
     delete[] gradTensor;
     for (auto &sTensor: savedTensors[iteration - 1]) {

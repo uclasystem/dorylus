@@ -59,17 +59,13 @@ requestTensor(zmq::socket_t& socket, OP op, unsigned partId, TYPE type = TYPE::A
         exit(0);
     } else if (layerResp == -1) {
         std::cerr << "[ ERROR ] No corresponding matrix" << std::endl;
-
         return Matrix();
     } else {
         unsigned rows = parse<unsigned>((char*) respHeader.data(), 2);
         unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
-        std::cout << "recv somthing... " << layerResp << " " << rows << " " << cols << std::endl;
 
         zmq::message_t matxData(rows * cols * sizeof(FeatType));
-        std::cout << "before recv mat" << std::endl;
         socket.recv(&matxData);
-        std::cout << "after recv mat" << std::endl;
 
         FeatType *matxBuffer = new FeatType[rows * cols];
         std::memcpy(matxBuffer, matxData.data(), matxData.size());
