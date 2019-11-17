@@ -27,7 +27,7 @@ LambdaComm::LambdaComm(CommInfo &commInfo) :
         nodeId(commInfo.nodeId), ctx(1), halt(false), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), coordsocket(ctx, ZMQ_REQ),
         numLambdasForward(commInfo.numLambdasForward), numLambdasBackward(commInfo.numLambdasBackward), numListeners(numLambdasBackward), // TODO: Decide numListeners.
         countForward(0), countBackward(0), numCorrectPredictions(0), totalLoss(0.0), numValidationVertices(0), evalPartitions(0),
-        timeoutPeriod(0.0), remainedTask(0), finishedTask(0), currLayer(0) {
+        timeoutPeriod(0.0), currLayer(0) {
 
     // Bind the proxy sockets.
     char dhost_port[50];
@@ -63,9 +63,9 @@ LambdaComm::~LambdaComm() {
     // Delete allocated resources.
     halt = true;
     for (unsigned i = 0; i < numListeners; ++i) {
-        worker_threads[i]->join();
-        delete worker_threads[i];
+        // worker_threads[i]->join();
         delete workers[i];
+        delete worker_threads[i];
     }
 
     if (forwardLambdaTable) {
@@ -140,9 +140,7 @@ LambdaComm::newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData
     evaluate = eval;
 
     currLayer = layer;
-
-    remainedTask = numLambdasForward;
-    finishedTask = 0;
+    timeoutPeriod = 0.0;
 
     // Create a new matrix object for workers to access.
     Matrix actMatrix(numLocalVertices, numFeats, dataBuf);
@@ -151,7 +149,7 @@ LambdaComm::newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData
     for (auto&& worker : workers)
         worker->refreshState(actMatrix, zData, actData, numFeatsNext, eval);
 
-    printLog(nodeId, "Lambda FORWARD context created.");
+    // printLog(nodeId, "Lambda FORWARD context created.");
 }
 
 // deprecated.
@@ -172,7 +170,7 @@ LambdaComm::invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLaye
     coordsocket.send(header, ZMQ_SNDMORE);
 
     forwardLambdaTable[lambdaId] = true;
-    if (lambdaId == numLambdasForward - 1) {
+    if (lambdaId == 0) {
         forwardTimer = getTimer();
     }
 
@@ -190,37 +188,16 @@ void
 LambdaComm::waitLambdaForward(unsigned layer, bool lastLayer) {
     // Block until all parts have been handled.
     while (countForward < numLambdasForward) {
-        if (finishedTask < 0.8 * remainedTask) {
-            if (getTimer() - forwardTimer > MAX_TIMEOUT) {
-                remainedTask = 0;
-                finishedTask = 0;
-                timeoutPeriod = 0.0;
-                for (unsigned i = 0; i < numLambdasForward; i++) {
-                    if (forwardLambdaTable[i]) {
-                        printLog(nodeId, "Relaunch FORWARD lambda %u...", i);
-                        invokeLambdaForward(layer, i, lastLayer);
-                        ++remainedTask;
-                    }
+        if (countForward >= 0.8 * numLambdasForward && timeoutPeriod < 1e-20) {
+            timeoutPeriod = std::fmax(MIN_TIMEOUT, 2 * (getTimer() - forwardTimer));
+        }
+        if (getTimer() - forwardTimer > (timeoutPeriod < 1e-20 ? TIMEOUT_PERIOD : timeoutPeriod)) {
+            for (unsigned i = 0; i < numLambdasForward; i++) {
+                if (forwardLambdaTable[i]) {
+                    relaunchLambda(true, layer, i, lastLayer);
                 }
-                forwardTimer = getTimer();
             }
-        } else {
-            if (timeoutPeriod < (MIN_TIMEOUT + 1e-20)) {
-                timeoutPeriod = std::fmax(MIN_TIMEOUT, 2 * (getTimer() - forwardTimer));
-            }
-            if (getTimer() - forwardTimer > std::fmin(TIMEOUT_PERIOD, timeoutPeriod)) {
-                remainedTask = 0;
-                finishedTask = 0;
-                timeoutPeriod = 0.0;
-                for (unsigned i = 0; i < numLambdasForward; i++) {
-                    if (forwardLambdaTable[i]) {
-                        printLog(nodeId, "Relaunch FORWARD lambda %u...", i);
-                        invokeLambdaForward(layer, i, lastLayer);
-                        ++remainedTask;
-                    }
-                }
-                forwardTimer = getTimer();
-            }
+            forwardTimer = getTimer();
         }
         usleep(SLEEP_PERIOD);
     }
@@ -239,9 +216,7 @@ LambdaComm::newContextBackward(unsigned layer, FeatType *oldGradBuf, FeatType *n
     countBackward = 0;
 
     currLayer = layer;
-
-    remainedTask = numLambdasBackward;
-    finishedTask = 0;
+    timeoutPeriod = 0.0;
 
     // Create new matrices object for workers to access.
     Matrix oldGradMatrix(numLocalVertices, outFeatDim, oldGradBuf);
@@ -261,7 +236,7 @@ LambdaComm::newContextBackward(unsigned layer, FeatType *oldGradBuf, FeatType *n
     zmq::message_t confirm;
     coordsocket.recv(&confirm);
 
-    printLog(nodeId, "Lambda BACKWARD context created.");
+    // printLog(nodeId, "Lambda BACKWARD context created.");
 }
 
 
@@ -281,7 +256,7 @@ LambdaComm::invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLay
     coordsocket.send(header, ZMQ_SNDMORE);
 
     backwardLambdaTable[lambdaId] = true;
-    if (lambdaId == numLambdasBackward - 1) {
+    if (lambdaId == 0) {
         backwardTimer = getTimer();
     }
 
@@ -298,42 +273,36 @@ void
 LambdaComm::waitLambdaBackward(unsigned layer, bool lastLayer) {
     // Block until all parts have been handled.
     while (countBackward < numLambdasBackward) {
-        if (finishedTask < 0.8 * remainedTask) {
-            // regular relaunch if most of lambdas are lost.
-            if (getTimer() - backwardTimer > MAX_TIMEOUT) {
-                remainedTask = 0;
-                finishedTask = 0;
-                timeoutPeriod = 0.0;
-                for (unsigned i = 0; i < numLambdasBackward; i++) {
-                    if (backwardLambdaTable[i]) {
-                        printLog(nodeId, "Relaunch BACKWARD lambda %u...", i);
-                        invokeLambdaBackward(layer, i, lastLayer);
-                        ++remainedTask;
-                    }
+        if (countBackward >= 0.8 * numLambdasBackward && timeoutPeriod < 1e-20) {
+            timeoutPeriod = std::fmax(MIN_TIMEOUT, 2 * (getTimer() - backwardTimer));
+        }
+        if (getTimer() - backwardTimer > (timeoutPeriod < 1e-20 ? TIMEOUT_PERIOD : timeoutPeriod)) {
+            for (unsigned i = 0; i < numLambdasBackward; i++) {
+                if (backwardLambdaTable[i]) {
+                    relaunchLambda(false, layer, i, lastLayer);
                 }
-                backwardTimer = getTimer();
             }
-        } else {
-            // set timeoutPeriod if most of lambdas are finished.
-            if (timeoutPeriod < (MIN_TIMEOUT + 1e-20)) {
-                timeoutPeriod = std::fmax(MIN_TIMEOUT, 2 * (getTimer() - backwardTimer));
-            }
-            if (getTimer() - backwardTimer > std::fmin(SLEEP_PERIOD, timeoutPeriod)) {
-                remainedTask = 0;
-                finishedTask = 0;
-                timeoutPeriod = 0.0;
-                for (unsigned i = 0; i < numLambdasBackward; i++) {
-                    if (backwardLambdaTable[i]) {
-                        printLog(nodeId, "Relaunch BACKWARD lambda %u...", i);
-                        invokeLambdaBackward(layer, i, lastLayer);
-                        ++remainedTask;
-                    }
-                }
-                backwardTimer = getTimer();
-            }
+            backwardTimer = getTimer();
         }
         usleep(SLEEP_PERIOD);
     }
+}
+
+
+void
+LambdaComm::relaunchLambda(bool forward, unsigned layer, unsigned lambdaId, bool lastLayer) {
+    printLog(nodeId, "Relaunch %s lambda %u...", (forward ? "FORWARD" : "BACKWARD"), lambdaId);
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader((char *) header.data(), forward ? OP::REQ_FORWARD : OP::REQ_BACKWARD, layer, lambdaId, lastLayer);
+    coordsocket.send(header, ZMQ_SNDMORE);
+
+    zmq::message_t ip_msg(nodeIp.size());
+    std::memcpy(ip_msg.data(), nodeIp.c_str(), nodeIp.size());
+    coordsocket.send(ip_msg);
+
+    // Wait for a confirm ACK message.
+    zmq::message_t confirm;
+    coordsocket.recv(&confirm);
 }
 
 

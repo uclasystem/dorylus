@@ -242,7 +242,6 @@ LambdaWorker::recvLambdaResults(zmq::message_t& client_id, unsigned partId) {
     // Check for total number of partitions received. If all partitions received, wake up lambdaComm.
     manager->forwardLambdaTable[partId] = false;
     ++(manager->countForward);
-    ++(manager->finishedTask);
 }
 
 void
@@ -298,11 +297,9 @@ LambdaWorker::recvChunk(Matrix &dstMat, zmq::message_t &client_id, unsigned part
     if (forward) {
         manager->forwardLambdaTable[partId] = false;
         ++(manager->countForward);
-        ++(manager->finishedTask);
     } else {
         manager->backwardLambdaTable[partId] = false;
         ++(manager->countBackward);
-        ++(manager->finishedTask);
     }
 }
 

@@ -61,6 +61,8 @@ public:
     void invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLayer);
     void waitLambdaBackward(unsigned layer, bool lastLayer);
 
+    void relaunchLambda(bool forward, unsigned layer, unsigned lambdaId, bool lastLayer);
+
     // Send a message to the coordination server to shutdown.
     void sendShutdownMessage();
 
@@ -92,9 +94,6 @@ public:
     float totalLoss;
     unsigned numValidationVertices;
     unsigned evalPartitions;
-
-    unsigned remainedTask;
-    unsigned finishedTask;
 
     zmq::context_t ctx;
     zmq::socket_t frontend;
