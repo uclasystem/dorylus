@@ -19,6 +19,7 @@ GPUComm::GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,
         wServersFile(wServersFile_),
         nodeId(nodeId_),
         numNodes(numNodes_),
+        currLayer(0),
         dPort(dataserverPort_),
         wPort(wPort_),
         dataSocket(ctx,ZMQ_REQ){
@@ -37,12 +38,13 @@ GPUComm::GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,
 }
 
 
-void GPUComm::newContextForward(FeatType *dataBuf, FeatType *zData_, FeatType *actData_,
+void GPUComm::newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData_, FeatType *actData_,
                             unsigned numLocalVertices_, unsigned numFeats, unsigned numFeatsNext_, bool eval_){
 
     // Create a new matrix object for workers to access.
     eval=eval_;
     numLocalVertices=numLocalVertices_;
+    currLayer = layer;
     actMatrix=Matrix(numLocalVertices_, numFeats, dataBuf);
     printf("numLocalVertices_ %d\n", numLocalVertices_);
     zData = zData_;
@@ -95,8 +97,9 @@ void GPUComm::setTrainValidationSplit(float trainPortion, unsigned numLocalVerti
 
 
 // For backward-prop.
-void GPUComm::newContextBackward(FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
+void GPUComm::newContextBackward(unsigned layer, FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
                                     unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim){
+    currLayer = layer;
     // Create new matrices object for workers to access.
     oldGradMatrix=Matrix(numLocalVertices, outFeatDim, oldGradBuf);
     newGradMatrix=Matrix(numLocalVertices, inFeatDim, newGradBuf);

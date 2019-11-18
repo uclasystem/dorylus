@@ -12,7 +12,7 @@
  *
  * Initialize the communication manager. Should be done before initializing the CommManager.
  * Node manager is NOT thread safe - it can only be invoked by a single computation thread (typically the master thread).
- * 
+ *
  */
 void
 NodeManager::init(std::string dshMachinesFile, std::string myPrIpFile, std::string myPubIpFile) {
@@ -105,12 +105,12 @@ NodeManager::init(std::string dshMachinesFile, std::string myPrIpFile, std::stri
 /**
  *
  * Public API for a node to hit a global barrier.
- * 
+ *
  */
 void
 NodeManager::barrier() {
     inBarrier = true;
-    printLog(me.id, "Hits on a global barrier |xxx|...");
+    // printLog(me.id, "Hits on a global barrier |xxx|...");
 
     // Send BARRIER message.
     zmq::message_t outMsg(sizeof(NodeMessage));
@@ -132,14 +132,14 @@ NodeManager::barrier() {
     // message queue after leaving the global barrier. Thus, we do not need to flush.
 
     inBarrier = false;
-    printLog(me.id, "Left that global barrier |xxx|.");
+    // printLog(me.id, "Left that global barrier |xxx|.");
 }
 
 
 /**
  *
  * Destroy the node manager.
- * 
+ *
  */
 void
 NodeManager::destroy() {
@@ -154,7 +154,7 @@ NodeManager::destroy() {
 /**
  *
  * General public utilities.
- * 
+ *
  */
 Node&
 NodeManager::getNode(unsigned i) {
@@ -185,7 +185,7 @@ NodeManager::amIMaster() {
 /**
  *
  * Parse the node config file.
- * 
+ *
  */
 void
 NodeManager::parseNodeConfig(const std::string dshMachinesFile) {

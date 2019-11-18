@@ -47,7 +47,7 @@ public:
     void setTrainValidationSplit(float trainPortion, unsigned numLocalVertices);
 
     // For forward-prop.
-    void newContextForward(FeatType *dataBuf, FeatType *zData,
+    void newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData,
         FeatType *actData, unsigned numLocalVertices, unsigned numFeats,
         unsigned numFeatsNext, bool eval);
     void requestForward(unsigned layer, bool lastLayer);
@@ -55,11 +55,13 @@ public:
     void waitLambdaForward(unsigned layer, bool lastLayer);
 
     // For backward-prop.
-    void newContextBackward(FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
+    void newContextBackward(unsigned layer, FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
                             unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim);
     void requestBackward(unsigned layer, bool lastLayer);
     void invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLayer);
     void waitLambdaBackward(unsigned layer, bool lastLayer);
+
+    void relaunchLambda(bool forward, unsigned layer, unsigned lambdaId, bool lastLayer);
 
     // Send a message to the coordination server to shutdown.
     void sendShutdownMessage();
@@ -71,6 +73,8 @@ public:
     unsigned numLambdasForward;
     unsigned numLambdasBackward;
     unsigned numListeners;
+
+    unsigned currLayer;
 
     bool evaluate;
     bool halt;
@@ -90,9 +94,6 @@ public:
     float totalLoss;
     unsigned numValidationVertices;
     unsigned evalPartitions;
-
-    unsigned remainedTask;
-    unsigned finishedTask;
 
     zmq::context_t ctx;
     zmq::socket_t frontend;

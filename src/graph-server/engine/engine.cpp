@@ -412,7 +412,7 @@ Engine::invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     bool runEval = evaluate && iteration == numLayers-1;
 
     // Start a new lambda communication context.
-    resComm->newContextForward(vtcsTensor, zTensor, outputTensor, vtcsCnt, inFeatDim, outFeatDim, runEval);
+    resComm->newContextForward(iteration, vtcsTensor, zTensor, outputTensor, vtcsCnt, inFeatDim, outFeatDim, runEval);
 
     // if in GPU mode we launch gpu computation here and wait the results
     if (gpuEnabled) {
@@ -444,7 +444,7 @@ Engine::invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     } else {
         vecTimeLambda[iteration] += getTimer() - sttTimer;
     }
-    printLog(nodeId, "All lambda requests finished. Results received.");
+    // printLog(nodeId, "All lambda requests finished. Results received.");
 
     return outputTensor;
 }
@@ -690,9 +690,9 @@ Engine::invokeLambdaBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned in
 
     FeatType *outputTensor = new FeatType [vtcsCnt * inFeatDim];
 
-    resComm->newContextBackward(gradTensor, outputTensor, savedTensors, localVerticesLabels, vtcsCnt, inFeatDim, outFeatDim, getFeatDim(numLayers));
+    resComm->newContextBackward(iteration - 1, gradTensor, outputTensor, savedTensors, localVerticesLabels, vtcsCnt, inFeatDim, outFeatDim, getFeatDim(numLayers));
     resComm->requestBackward(iteration - 1, iteration - 1 == numLayers - 1);
-    printLog(nodeId, "All lambda requests finished. Results received.");
+    // printLog(nodeId, "All lambda requests finished. Results received.");
 
     delete[] gradTensor;
     for (auto &sTensor: savedTensors[iteration - 1]) {

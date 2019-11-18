@@ -138,7 +138,7 @@ ServerWorker::sendWeightsBackward(zmq::message_t& client_id) {
  */
 void
 ServerWorker::recvUpdate(zmq::message_t& client_id, unsigned layer) {
-    const float LEARNING_RATE = 0.00001; // WARNING! This can be multiplied with lr set in lambda funcs. TODO (YIFAN): merge them together.
+    const float LEARNING_RATE = 0.01;
     zmq::message_t updateMsg;
     workersocket.recv(&updateMsg);
 
