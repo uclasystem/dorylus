@@ -19,8 +19,9 @@ void loadWeightServers(std::vector<char *>& addresses, const std::string& wServe
         addresses.push_back(addr);
     }
 }
+ComputingServer::ComputingServer():cu(ComputingUnit::getInstance()){};
 
-ComputingServer::ComputingServer(GPUComm* gpu_comm){
+ComputingServer::ComputingServer(GPUComm* gpu_comm):cu(ComputingUnit::getInstance()){
     gpuComm=gpu_comm;
     totalLayers=gpu_comm->totalLayers;
     nodeId=gpu_comm->nodeId;

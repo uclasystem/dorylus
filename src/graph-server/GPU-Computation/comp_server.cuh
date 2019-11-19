@@ -23,7 +23,7 @@ class GPUComm;
 
 class ComputingServer {
 public:
-    ComputingServer(){};
+    ComputingServer();
     ComputingServer(GPUComm* gpu_comm);
 
     //For forward

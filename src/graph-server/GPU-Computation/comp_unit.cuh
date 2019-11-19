@@ -25,18 +25,17 @@
 #include <thrust/extrema.h>
 #include <thrust/iterator/counting_iterator.h>
 
-
-
-//TODO: modify function return value and signatures to fit the real workload
-//		This is important because it can reduce memory copy from GPU and RAM
 //AWARE: to free Matrix.data in long run
 //It maintains a GPU context
 class ComputingUnit
 {
 public:
-	ComputingUnit();
+    static ComputingUnit& getInstance();
 
     CuMatrix wrapMatrix(Matrix m);
+
+    // FeatType* Aggregation(FeatType* vecA,FeatType* vecB,FeatType alpha);
+    CuMatrix scaleRowsByVector(Matrix m, Matrix v);
 
 	CuMatrix dot(Matrix& A,Matrix& B);
 	void activate(CuMatrix& A);
@@ -48,14 +47,14 @@ public:
 
     unsigned checkAccuracy(CuMatrix& predictions, CuMatrix& labels);
 	float checkLoss(CuMatrix& preds, CuMatrix& labels);
-    
-    ~ComputingUnit(){cublasDestroy(handle);}
 
 
-// private:
     cudnnHandle_t cudnnHandle;
 	cublasHandle_t handle;
 	cublasStatus_t stat;
+private:
+    ComputingUnit();
+    static ComputingUnit* instance;
 };
 
 

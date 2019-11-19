@@ -1,6 +1,14 @@
 #include "comp_unit.cuh"
 #include "cuda_ops.cuh"
+
 const float alpha=1.0,beta=0.0;
+
+ComputingUnit* ComputingUnit::instance = nullptr;
+ComputingUnit& ComputingUnit::getInstance(){
+    if (instance == nullptr)
+        instance = new ComputingUnit();
+    return *instance;
+}
   
 ComputingUnit::ComputingUnit(){
     stat = cublasCreate(&handle);
@@ -21,6 +29,16 @@ CuMatrix ComputingUnit::wrapMatrix(Matrix m){
     return CuMatrix(m,handle);
 }
 
+// FeatType* ComputingUnit::Aggregation(FeatType*,FeatType*){
+    
+// }
+
+CuMatrix ComputingUnit::scaleRowsByVector(Matrix m, Matrix v){
+    CuMatrix cuM=wrapMatrix(m);
+    CuMatrix cuV=wrapMatrix(v);
+    return cuM;
+
+}
 
 CuMatrix ComputingUnit::hadamardSub(CuMatrix& matLeft,CuMatrix& matRight) {
     assert(matLeft.getRows() == matRight.getRows());
@@ -157,3 +175,4 @@ float ComputingUnit::checkLoss(CuMatrix& preds, CuMatrix& labels){
     float totalLoss = thrust::reduce(losses.begin(), losses.end(), (float) 0, thrust::plus<float>());
     return totalLoss;
 }
+

@@ -13,8 +13,18 @@ target_compile_options(vertex PRIVATE "-Wall" "-Werror" "-Wno-sign-compare" "-Wn
 add_library(graph "graph.cpp")
 target_link_libraries(graph PRIVATE utils
                             PUBLIC ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES})
+
 target_compile_options(graph PRIVATE "-Wall" "-Werror" "-Wno-sign-compare" "-Wno-reorder" "-MMD")
 add_library(engine "engine.cpp")
+if(BUILD_GPU)
+	enable_language(CUDA)
+	find_library(CUDNN NAME libcudnn.so HINTS /opt/cuda/targets/x86_64-linux/lib/ /usr/local/cuda-10.0/lib64/)
+	FIND_PACKAGE(CUDA REQUIRED)
+	include_directories(${CUDA_INCLUDE_DIRS})
+	target_link_libraries(engine PRIVATE ComputingUnit edge vertex graph commmanager resource_comm nodemanager threadpool utils
+                             PUBLIC  ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES})
+else()
 target_link_libraries(engine PRIVATE edge vertex graph commmanager resource_comm nodemanager threadpool utils
                              PUBLIC  ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES})
+endif()
 target_compile_options(engine PRIVATE "-Wall" "-Werror" "-Wno-sign-compare" "-Wno-reorder" "-MMD")
