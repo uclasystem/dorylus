@@ -19,19 +19,12 @@ main(int argc, char *argv[]) {
     // The engine object is static and has been substantiated in Engine.cpp.
     engine.init(argc, argv);
 
-
-    float splitPortion = 1.0 / 3.0;
     unsigned numEpochs = 30;
     unsigned valFreq = 1;
 
     if (engine.master())
-        printLog(engine.getNodeId(), "%% Train Data: %.2f, \
-                    number of epochs: %u, validation frequency: %u",
-                    splitPortion, numEpochs, valFreq);
-
-    // Use one third of partitions as training and 2/3 as validation
-    // engine.setTrainValidationSplit(splitPortion);
-    engine.setTrainValidationSplit(1.0);
+        printLog(engine.getNodeId(),"Number of epochs: %u, validation frequency: %u",
+                    numEpochs, valFreq);
 
     // Do specified number of epochs.
     for (unsigned epoch = 0; epoch < numEpochs; ++epoch) {
@@ -41,12 +34,10 @@ main(int argc, char *argv[]) {
                 printLog(engine.getNodeId(), "Time for some validation");
 
             // Boolean of whether or not to run evaluation
-            FeatType *predictData =
-            engine.runForward(true);
+            FeatType *predictData = engine.runForward();
             engine.runBackward(predictData);
         } else {
-            FeatType *predictData =
-            engine.runForward();
+            FeatType *predictData = engine.runForward();
             // Do a backward-prop phase.
             if (engine.isGPUEnabled() == 0) {
                 engine.runBackward(predictData);

@@ -43,16 +43,13 @@ public:
     void work();
 
     // Used at context creation / destruction.
-    void refreshState(Matrix actMatrix_, FeatType *zData_, FeatType *actData_, unsigned numFeatsNext_, bool eval);
+    void refreshState(Matrix actMatrix_, FeatType *zData_, FeatType *actData_, unsigned numFeatsNext_);
     void refreshState(Matrix oldGradMatrix_, Matrix newGradMatrix_, Matrix targetMatrix_, std::vector<Matrix> *savedTensors);
 
 protected:
     LambdaComm *manager;
 
     zmq::socket_t workersocket;
-
-    // Whether or not to evaluate this epoch
-    bool evaluate;
 
 private:
 
