@@ -43,13 +43,16 @@ public:
     void work();
 
     // Used at context creation / destruction.
-    void refreshState(Matrix actMatrix_, FeatType *zData_, FeatType *actData_, unsigned numFeatsNext_);
+    void refreshState(Matrix actMatrix_, FeatType *zData_, FeatType *actData_, unsigned numFeatsNext_, bool eval);
     void refreshState(Matrix oldGradMatrix_, Matrix newGradMatrix_, Matrix targetMatrix_, std::vector<Matrix> *savedTensors);
 
 protected:
     LambdaComm *manager;
 
     zmq::socket_t workersocket;
+
+    // Whether or not to evaluate this epoch
+    bool evaluate;
 
 private:
 
@@ -82,6 +85,9 @@ private:
     // Partitions the label matrix given a partition id and
     // and send that partition to the lambda thread for validation
     void sendTargetMatrix(zmq::message_t& client_id, unsigned partId);
+
+    // Receive the summed loss and total correct for this model
+    void recvValidationResults(zmq::message_t& client_id, zmq::message_t& header);
 
     Matrix oldGradMatrix;
     Matrix newGradMatrix;

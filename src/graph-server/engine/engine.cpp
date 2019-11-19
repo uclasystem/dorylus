@@ -54,15 +54,12 @@ Engine::init(int argc, char *argv[]) {
     // save intermediate tensors during forward phase for backward computation.
     savedTensors = new std::vector<Matrix> [numLayers];
 
-    printLog(nodeId, "saving tensors");
-
     // Init it here for collecting data when reading files
     forwardVerticesInitData = new FeatType[getFeatDim(0) * graph.getNumLocalVertices()];
     forwardGhostInitData = new FeatType[getFeatDim(0) * graph.getNumInEdgeGhostVertices()];
     // Create labels storage area. Read in labels and store as one-hot format.
     localVerticesLabels = new FeatType[layerConfig[numLayers] * graph.getNumLocalVertices()];
 
-    printLog(nodeId, "allocating feats");
 
     // Set a local index for all ghost vertices along the way. This index is used for indexing within the ghost data arrays.
     unsigned ghostCount = 0;
@@ -75,13 +72,10 @@ Engine::init(int argc, char *argv[]) {
         it->second.setLocalId(ghostCount++);
     }
 
-    printLog(nodeId, "finished index ghosts");
 
     // Read in initial feature values (input features) & labels.
     readFeaturesFile(featuresFile);
-    printLog(nodeId, "read feats");
     readLabelsFile(labelsFile);
-    printLog(nodeId, "read labels");
 
     // Initialize synchronization utilities.
     recvCnt = 0;
@@ -162,6 +156,16 @@ Engine::setUpCommInfo(){
     commInfo.totalLayers=numLayers;
 }
 
+/**
+ *
+ * Set the training validation split based on the partitions
+ * float trainPortion must be between (0,1)
+ *
+ */
+void
+Engine::setTrainValidationSplit(float trainPortion) {
+    resComm->setTrainValidationSplit(trainPortion, graph.getNumLocalVertices());
+}
 
 /**
  *
@@ -225,12 +229,14 @@ Engine::getNodeId() {
  *
  */
 FeatType *
-Engine::runForward() {
+Engine::runForward(bool eval) {
     // Make sure all nodes start running the forward-prop phase.
     nodeManager.barrier();
     printLog(nodeId, "Engine starts running FORWARD...");
 
     timeForwardProcess -= getTimer();
+
+    evaluate = false;
 
     const unsigned graphLocalVerticesNum = graph.getNumLocalVertices();
     // Create buffer for first-layer aggregation.
@@ -421,7 +427,7 @@ FeatType* Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned fea
         vecTimeAggregate[iteration] += getTimer() - sttTimer;
     }
 
-    return outputTensor;    
+    return outputTensor;
 }
 #else
 FeatType* Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim) {
@@ -466,8 +472,9 @@ Engine::invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     }
     savedTensors[iteration].push_back(Matrix(vtcsCnt, outFeatDim, zTensor));
 
+    bool runEval = evaluate && iteration == numLayers-1;
     // Start a new lambda communication context.
-    resComm->newContextForward(vtcsTensor, zTensor, outputTensor, vtcsCnt, inFeatDim, outFeatDim);
+    resComm->newContextForward(iteration, vtcsTensor, zTensor, outputTensor, vtcsCnt, inFeatDim, outFeatDim, runEval);
 
     // if in GPU mode we launch gpu computation here and wait the results
     if (gpuEnabled) {
@@ -499,7 +506,7 @@ Engine::invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     } else {
         vecTimeLambda[iteration] += getTimer() - sttTimer;
     }
-    printLog(nodeId, "All lambda requests finished. Results received.");
+    // printLog(nodeId, "All lambda requests finished. Results received.");
 
     return outputTensor;
 }
@@ -745,9 +752,9 @@ Engine::invokeLambdaBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned in
 
     FeatType *outputTensor = new FeatType [vtcsCnt * inFeatDim];
 
-    resComm->newContextBackward(gradTensor, outputTensor, savedTensors, localVerticesLabels, vtcsCnt, inFeatDim, outFeatDim, getFeatDim(numLayers));
+    resComm->newContextBackward(iteration - 1, gradTensor, outputTensor, savedTensors, localVerticesLabels, vtcsCnt, inFeatDim, outFeatDim, getFeatDim(numLayers));
     resComm->requestBackward(iteration - 1, iteration - 1 == numLayers - 1);
-    printLog(nodeId, "All lambda requests finished. Results received.");
+    // printLog(nodeId, "All lambda requests finished. Results received.");
 
     delete[] gradTensor;
     for (auto &sTensor: savedTensors[iteration - 1]) {

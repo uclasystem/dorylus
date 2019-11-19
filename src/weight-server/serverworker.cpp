@@ -120,7 +120,6 @@ ServerWorker::sendWeights(zmq::message_t& client_id, unsigned layer) {
  */
 void
 ServerWorker::recvUpdate(zmq::message_t& client_id, unsigned layer) {
-
     zmq::message_t updateMsg;
     workersocket.recv(&updateMsg);
     // Grab lock then sum the data received in this update matrix.

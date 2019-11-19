@@ -26,11 +26,11 @@ class ResourceComm {
 public:
     ResourceComm() {};
     virtual ~ResourceComm() {};
-
+    virtual void setTrainValidationSplit(float trainPortion, unsigned numLocalVertices) = 0;
     // For forward-prop.
-    virtual void newContextForward(FeatType *dataBuf, FeatType *zData,
+    virtual void newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData,
         FeatType *actData, unsigned numLocalVertices, unsigned numFeats,
-        unsigned numFeatsNext) = 0;
+        unsigned numFeatsNext, bool eval) = 0;
 
     virtual void requestForward(unsigned layer, bool lastLayer) = 0;
 
@@ -38,7 +38,7 @@ public:
     virtual void waitLambdaForward(unsigned layer, bool lastLayer) = 0;
 
     // For backward-prop.
-    virtual void newContextBackward(FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
+    virtual void newContextBackward(unsigned layer, FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
                                     unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim) = 0;
 
     virtual void requestBackward(unsigned layer, bool lastLayer) = 0;
