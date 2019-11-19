@@ -17,6 +17,8 @@ struct CommInfo {
     unsigned numNodes;
     std::string wServersFile;
     unsigned weightserverPort;
+
+    unsigned totalLayers; //for weights prefetching
 };
 
 //abstract interface declaration
@@ -24,9 +26,7 @@ class ResourceComm {
 public:
     ResourceComm() {};
     virtual ~ResourceComm() {};
-
     virtual void setTrainValidationSplit(float trainPortion, unsigned numLocalVertices) = 0;
-
     // For forward-prop.
     virtual void newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData,
         FeatType *actData, unsigned numLocalVertices, unsigned numFeats,

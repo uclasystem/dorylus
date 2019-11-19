@@ -14,6 +14,9 @@
 #include <cerrno>
 #include "engine.hpp"
 
+#ifdef _GPU_ENABLED_
+#include "../GPU-Computation/comp_unit.cuh"
+#endif
 
 /**
  *
@@ -57,6 +60,7 @@ Engine::init(int argc, char *argv[]) {
     // Create labels storage area. Read in labels and store as one-hot format.
     localVerticesLabels = new FeatType[layerConfig[numLayers] * graph.getNumLocalVertices()];
 
+
     // Set a local index for all ghost vertices along the way. This index is used for indexing within the ghost data arrays.
     unsigned ghostCount = 0;
 
@@ -67,6 +71,7 @@ Engine::init(int argc, char *argv[]) {
     for (auto it = graph.getOutEdgeGhostVertices().begin(); it != graph.getOutEdgeGhostVertices().end(); it++) {
         it->second.setLocalId(ghostCount++);
     }
+
 
     // Read in initial feature values (input features) & labels.
     readFeaturesFile(featuresFile);
@@ -148,8 +153,8 @@ Engine::setUpCommInfo(){
     commInfo.numNodes=numNodes;
     commInfo.wServersFile=weightserverIPFile;
     commInfo.weightserverPort=weightserverPort;
+    commInfo.totalLayers=numLayers;
 }
-
 
 /**
  *
@@ -161,8 +166,6 @@ void
 Engine::setTrainValidationSplit(float trainPortion) {
     resComm->setTrainValidationSplit(trainPortion, graph.getNumLocalVertices());
 }
-
-
 
 /**
  *
@@ -368,6 +371,65 @@ struct AggOPArgs {
     unsigned featDim;
 };
 
+
+#ifdef _GPU_ENABLED_
+FeatType* Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim) {
+    double sttTimer = getTimer();
+    FeatType* outputTensor = new FeatType [vtcsCnt * featDim];
+
+    currId = 0;
+
+    AggOPArgs args = {outputTensor, vtcsTensor, vtcsCnt, featDim};
+    auto computeFn = std::bind(&Engine::aggregateCompute, this, std::placeholders::_1, std::placeholders::_2);
+    computePool->perform(computeFn, &args);
+    computePool->sync();
+
+    //TODO: GPU aggregation is still in progress
+    // FeatType* inputTensor  = vtcsTensor;
+    // FeatType* normFactors  = new FeatType [vtcsCnt];
+    // // Apply normalization factor on the current data.
+    // memcpy(outputTensor,inputTensor,vtcsCnt * featDim);
+    // for (unsigned i=0;i<vtcsCnt;++i){
+    //     Vertex& v= graph.getVertex(i);
+    //     normFactors[i]=v.getNormFactor();
+    // }
+
+    //loadin to memory
+    
+    // for ( unsigned i=0; i<vtcsCnt; ++i){
+    //     Vertex& v= graph.getVertex(i);
+    //     normFactors[i]=v.getNormFactor();
+    //     FeatType* aggregateTensor = new FeatType [v.getNumInEdges() * featDim];
+    //     for( unsigned j=0; j<v.getNumInEdges(); ++j){
+    //         if(v.getInEdge(i).getEdgeLocation() == LOCAL_EDGE_TYPE)
+    //             memcpy(aggregateTensor[j*featDim],
+    //                     getVtxFeat(inputTensor, v.getSourceVertexLocalId(i), featDim),
+    //                     featDim*sizeof(FeatType));
+    //         else
+    //             memcpy(aggregateTensor[j*featDim],
+    //                     getVtxFeat(forwardGhostVerticesData, v.getSourceVertexLocalId(i)),
+    //                     featDim*sizeof(FeatType));
+    //     }
+
+
+    // }
+    // currId = vtcsCnt;
+
+    if (iteration > 0) {
+        delete[] forwardGhostVerticesData;
+        delete[] vtcsTensor;
+    }
+
+
+    if (vecTimeAggregate.size() < numLayers) {
+        vecTimeAggregate.push_back(getTimer() - sttTimer);
+    } else {
+        vecTimeAggregate[iteration] += getTimer() - sttTimer;
+    }
+
+    return outputTensor;
+}
+#else
 FeatType* Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim) {
     double sttTimer = getTimer();
 
@@ -393,6 +455,7 @@ FeatType* Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned fea
 
     return outputTensor;
 }
+#endif // _GPU_ENABLED_
 
 FeatType *
 Engine::invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim) {
@@ -410,7 +473,6 @@ Engine::invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     savedTensors[iteration].push_back(Matrix(vtcsCnt, outFeatDim, zTensor));
 
     bool runEval = evaluate && iteration == numLayers-1;
-
     // Start a new lambda communication context.
     resComm->newContextForward(iteration, vtcsTensor, zTensor, outputTensor, vtcsCnt, inFeatDim, outFeatDim, runEval);
 

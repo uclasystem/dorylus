@@ -1,7 +1,7 @@
 #ifndef __WEIGHT_SERVER_HPP__
 #define __WEIGHT_SERVER_HPP__
 
-
+#include "AdamOptimizer.hpp"
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -25,7 +25,7 @@
 
 
 enum CTRL_MSG { MASTERUP, WORKERUP, INITDONE, ACK };
-
+const float LEARNING_RATE = 0.01; 
 
 /**
  *
@@ -48,6 +48,11 @@ public:
     // Average and apply update batches.
     void applyUpdate(unsigned layer);
     void applyUpdates();
+
+    //For sync
+    std::mutex servers_updates_mutex;
+    std::condition_variable servers_updates_cv;
+    bool servers_updates_done=true;
 
 private:
 
@@ -94,8 +99,9 @@ private:
 
     // Number of lambdas requests at backprop.
     unsigned numLambdas;
+    unsigned lambdaRecved;
     unsigned count;
-
+    
     zmq::context_t ctx;
     zmq::socket_t frontend;
     zmq::socket_t backend;
@@ -110,6 +116,10 @@ private:
     zmq::socket_t publisher;
     zmq::socket_t subscriber;
     unsigned serverPort;
+
+
+    AdamOptimizer adamOpt;
+
 };
 
 

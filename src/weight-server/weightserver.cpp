@@ -32,12 +32,12 @@ WeightServer::serverLog(std::string info) {
 WeightServer::WeightServer(std::string& weightServersFile, std::string& myPrIpFile,
                            unsigned _listenerPort, std::string& configFileName,
                            unsigned _serverPort, std::string& tmpFileName)
-    : ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
-      listenerPort(_listenerPort), numLambdas(0), count(0),
+    : ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), count(0),
+      listenerPort(_listenerPort), numLambdas(0), lambdaRecved(0),
       dataCtx(1), publisher(dataCtx, ZMQ_PUB), subscriber(dataCtx, ZMQ_SUB),
       serverPort(_serverPort) {
     // Hardcoding adam to false for right now
-    adam = false;
+    adam = true;
 
     // Read the dsh file to get info about all weight server nodes.
     initializeWeightServerComms(weightServersFile, myPrIpFile);
@@ -50,9 +50,8 @@ WeightServer::WeightServer(std::string& weightServersFile, std::string& myPrIpFi
     // Read in layer configurations and initialize weight matrices.
     initializeWeightMatrices(configFileName);
 
-    if (adam) {
-        initializeAdamVariables();
-    }
+    if (adam) 
+        adamOpt=AdamOptimizer(LEARNING_RATE,dims);
 
     // Send weight matrix info to all servers and wait for ack.
     distributeWeightMatrices();
@@ -99,7 +98,7 @@ WeightServer::run() {
     std::vector<std::thread *> worker_threads;
     WeightServer& me = *this;
     for (int i = 0; i < NUM_LISTENERS; ++i) {
-        workers.push_back(new ServerWorker(ctx, count, me, weightMats, updateMats, numLambdas));
+        workers.push_back(new ServerWorker(ctx, me, weightMats, updateMats, numLambdas, lambdaRecved));
         worker_threads.push_back(new std::thread(std::bind(&ServerWorker::work, workers[i])));
         worker_threads[i]->detach();
     }
@@ -118,6 +117,7 @@ WeightServer::run() {
 void WeightServer::applyUpdate(unsigned layer) {
     Timer updateTimer;
     updateTimer.start();
+    std::lock_guard<std::mutex> lk(servers_updates_mutex);
     // Master code.
     if (master) {
         // For all nodes.
@@ -131,15 +131,17 @@ void WeightServer::applyUpdate(unsigned layer) {
             for (unsigned u = 0; u < updateMats[layer].getNumElemts(); ++u)
                 updateSum[u] += updateNew[u];
         }
-
-        // If adam is enabled, apply the momentum and decay computation
-        if (adam) {}
-
-        // Once all updates have been aggregated, apply to the weights matrices.
+        
         FeatType *weightData = weightMats[layer].getData();
         FeatType *updateSum = updateMats[layer].getData();
-        for (unsigned u = 0; u < weightMats[layer].getNumElemts(); ++u)
-            weightData[u] -= updateSum[u];
+        if (adam) {
+            adamOpt.update(layer,weightData,updateSum);
+        }
+        else{
+            // Once all updates have been aggregated, apply to the weights matrices.
+            for (unsigned u = 0; u < weightMats[layer].getNumElemts(); ++u)
+                weightData[u] -=  LEARNING_RATE * updateSum[u];
+        }
 
         // Send out the updated weights.
         Matrix& weightMat = weightMats[layer];
@@ -160,6 +162,8 @@ void WeightServer::applyUpdate(unsigned layer) {
                 acksNeeded--;
         }
 
+        servers_updates_done=true;
+        servers_updates_cv.notify_all();
         serverLog("Finished updating the weights.");
 
         //
@@ -211,6 +215,8 @@ void WeightServer::applyUpdate(unsigned layer) {
         std::memcpy(ackMsg.data(), &msgType, sizeof(unsigned));
         publisher.send(ackMsg);
 
+        servers_updates_done=true;
+        servers_updates_cv.notify_all();
         serverLog("All workers weights updated.");
     }
 
@@ -225,7 +231,7 @@ void WeightServer::applyUpdate(unsigned layer) {
     }
 
     // Reset number of lambdas.
-    numLambdas = 0;
+    lambdaRecved = 0;
 }
 
 void WeightServer::applyUpdates() {
@@ -347,7 +353,7 @@ void WeightServer::applyUpdates() {
     }
 
     // Reset number of lambdas.
-    numLambdas = 0;
+    lambdaRecved = 0;
 }
 
 
@@ -552,7 +558,7 @@ WeightServer::initializeWeightMatrices(std::string& configFileName) {
  */
 Matrix
 WeightServer::xavierInitialization(unsigned dim1, unsigned dim2) {
-    std::default_random_engine dre(8888);
+    std::default_random_engine dre(time(0));
     std::uniform_real_distribution<float> dist(-1, 1);
 
     unsigned dataSize = dim1 * dim2;
@@ -564,7 +570,6 @@ WeightServer::xavierInitialization(unsigned dim1, unsigned dim2) {
     float normFactor = std::sqrt(6.0 / (float (dim1 + dim2)));
     for (unsigned ui = 0; ui < dataSize; ++ui)
         dptr[ui] *= normFactor;
-
     return Matrix(dim1, dim2, dptr);
 }
 
@@ -630,32 +635,6 @@ WeightServer::initBias(unsigned dim, float initVal) {
     return Matrix(dim, 1, dptr);
 }
 
-/**
- *
- * Initialize the variables for Adam Optimziation
- *
- */
-void
-WeightServer::initializeAdamVariables() {
-    // Initialize momentum and decay parameters
-    beta1 = .9;
-    beta2 = .999;
-    epsilon = 1e-8;
-    alpha = 1e-2;
-
-    // Momentum and decay matrices match shape of weight matrices and have init to zero
-    for (unsigned ui = 0; ui < dims.size(); ++ui) {
-        unsigned dataSize = dims[ui] * dims[ui+1];
-        FeatType* momentumptr = new FeatType[dataSize];
-        FeatType* decayptr = new FeatType[dataSize];
-
-        std::memset(momentumptr, 0, dataSize * sizeof(FeatType));
-        std::memset(decayptr, 0, dataSize * sizeof(FeatType));
-
-        momentum.push_back(Matrix(dims[ui], dims[ui+1], momentumptr));
-        decay.push_back(Matrix(dims[ui], dims[ui+1], decayptr));
-    }
-}
 
 /**
  *

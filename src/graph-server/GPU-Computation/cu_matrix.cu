@@ -43,7 +43,6 @@ void CuMatrix::deviceSetMatrix(){
             printf("CUBLAS_STATUS_MAPPING_ERROR\n");
             break;
         }
-        printf("********ROWS %d, COLs %d\n", rows,cols);
         
         cudaFree (devPtr);
         cublasDestroy(handle);

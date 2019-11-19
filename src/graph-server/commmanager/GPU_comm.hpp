@@ -1,27 +1,22 @@
 #ifndef __GPU_COMM_HPP__
 #define __GPU_COMM_HPP__
 
-#include <algorithm>
+
+#include "../GPU-Computation/comp_server.cuh"
+
 #include <chrono>
-#include <condition_variable>
 #include <cmath>
-#include <fstream>
-#include <functional>
 #include <iostream>
-#include <mutex>
-#include <random>
 #include <sstream>
 #include <string>
-#include <thread>
 #include <vector>
 #include <zmq.hpp>
-
 #include "resource_comm.hpp"
-#include "../GPU-Computation/comp_server.cuh"
 #include "../utils/utils.hpp"
 #include "../../common/matrix.hpp"
 #include "../../common/utils.hpp"
 
+class ComputingServer;
 
 /**
  *
@@ -32,7 +27,7 @@ class GPUComm : public ResourceComm{
 
 public:
 
-    GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,const std::string& wServersFile,unsigned wPort_);
+    GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,const std::string& wServersFile,unsigned wPort_,unsigned totalLayers_);
 
     // For forward-prop.
     void newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData_, FeatType *actData_,
@@ -41,9 +36,11 @@ public:
     void waitLambdaForward(unsigned layer, bool lastLayer) {};
     void invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
 
+
     // For backward-prop.
-    void newContextBackward(unsigned layer, FeatType *oldGradBuf, FeatType *newGradBuf, FeatType *savedInputBuf, FeatType *savedOutputBuf, FeatType *targetBuf,
-                            unsigned numLocalVertices_, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim) {};
+
+    void newContextBackward(unsigned layer, FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
+                            unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim);
     void requestBackward(unsigned layer, bool lastLayer);
     void invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
     void waitLambdaBackward(unsigned layer, bool lastLayer) {}
@@ -56,14 +53,10 @@ public:
     // Send a message to the coordination server to shutdown.
     void sendShutdownMessage();
 
-    template <class T>
-    T requestFourBytes();
-    void sendFourBytes(char* data);
-    void sendMatrix(Matrix& m);
-    void sendResultPtr(FeatType* ptr);
     friend class ComputingServer;
 
 private:
+    unsigned totalLayers;
     unsigned nodeId;
     unsigned numNodes;
     unsigned numLocalVertices;
@@ -71,8 +64,6 @@ private:
     unsigned currLayer;
 
     std::string wServersFile;
-
-    std::thread comp_server_thread;
 
     //ntw related objs
     zmq::context_t ctx;
@@ -96,7 +87,7 @@ private:
     Matrix targetMatrix;
     std::vector<Matrix> *savedTensors;
 
-    zmq::message_t confirm;
+    ComputingServer* comp_server;
 
 };
 

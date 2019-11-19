@@ -1,13 +1,26 @@
 #include "comp_unit.cuh"
 #include "cuda_ops.cuh"
 
+const float alpha=1.0,beta=0.0;
 
+ComputingUnit* ComputingUnit::instance = nullptr;
+ComputingUnit& ComputingUnit::getInstance(){
+    if (instance == nullptr)
+        instance = new ComputingUnit();
+    return *instance;
+}
+  
 ComputingUnit::ComputingUnit(){
     stat = cublasCreate(&handle);
     if (stat != CUBLAS_STATUS_SUCCESS) {
         printf ("CUBLAS initialization failed\n");
         printf ("CUBLAS stat %u\n",stat);
         exit (EXIT_FAILURE);
+    }
+    cudnnStatus_t err =cudnnCreate(&cudnnHandle); 
+    if (err != CUDNN_STATUS_SUCCESS) { 
+        std::cout << "Error occurred: " << err << std::endl; 
+        std::exit(EXIT_FAILURE); 
     }
     cublasSetMathMode(handle,CUBLAS_TENSOR_OP_MATH);
 }
@@ -16,11 +29,20 @@ CuMatrix ComputingUnit::wrapMatrix(Matrix m){
     return CuMatrix(m,handle);
 }
 
+// FeatType* ComputingUnit::Aggregation(FeatType*,FeatType*){
+    
+// }
+
+CuMatrix ComputingUnit::scaleRowsByVector(Matrix m, Matrix v){
+    CuMatrix cuM=wrapMatrix(m);
+    CuMatrix cuV=wrapMatrix(v);
+    return cuM;
+
+}
 
 CuMatrix ComputingUnit::hadamardSub(CuMatrix& matLeft,CuMatrix& matRight) {
     assert(matLeft.getRows() == matRight.getRows());
     assert(matLeft.getCols() == matRight.getCols());
-    // CuMatrix res(Matrix(matLeft.getRows(),matLeft.getCols(), new FeatType[matLeft.getNumElemts()]),handle);
     CuMatrix res(Matrix(matLeft.getRows(),matLeft.getCols(), (FeatType *)NULL),handle);
 
     thrust::device_ptr<float> cuLeft_ptr(matLeft.devPtr);
@@ -52,50 +74,42 @@ CuMatrix ComputingUnit::hadamardMul( CuMatrix& matLeft, CuMatrix& matRight) {
     return res;
 }
 
-// GPU is faster than CPU when SIZE>~250000, Maybe CPU is faster in most cases 
 CuMatrix ComputingUnit::softmaxRows( CuMatrix &mat){
     CuMatrix res(Matrix(mat.getRows(),mat.getCols(),(FeatType *)NULL),handle);
-    thrust::device_ptr<float> devMat_ptr(mat.devPtr);
-    thrust::device_ptr<float> res_ptr(res.devPtr);
-    thrust::transform(devMat_ptr, devMat_ptr+mat.getNumElemts(),res_ptr, exp_functor());
-   
-    thrust::device_vector<int> indices(mat.getNumElemts());
-    thrust::counting_iterator<int> idxfirst(0);
-    thrust::counting_iterator<int> idxlast = idxfirst +mat.getNumElemts();
-    thrust::transform(idxfirst, idxlast, indices.begin(), setRow_functor(mat.getCols()));
-    thrust::device_vector<float> row_sums(mat.getRows());
-    thrust::reduce_by_key(indices.begin(), indices.end(),
-                        res_ptr,
-                        thrust::make_discard_iterator(),
-                        row_sums.begin());
-    thrust::transform(indices.begin(), indices.end(),res_ptr,res_ptr, divide_functor(thrust::raw_pointer_cast(row_sums.data())));
+    cudnnTensorDescriptor_t srcTensorDesc, sftTensorDesc;
+    cudnnCreateTensorDescriptor(&srcTensorDesc);
+    cudnnCreateTensorDescriptor(&sftTensorDesc);
+    cudnnSetTensor4dDescriptor(srcTensorDesc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+            mat.getRows(),1,1,mat.getCols());
+    cudnnSetTensor4dDescriptor(sftTensorDesc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+            mat.getRows(),1,1,mat.getCols());
+    cudnnSoftmaxForward(cudnnHandle, CUDNN_SOFTMAX_ACCURATE, CUDNN_SOFTMAX_MODE_INSTANCE,
+            &alpha,srcTensorDesc, mat.devPtr, 
+            &beta, sftTensorDesc, res.devPtr);
     return res;
 }
 
-CuMatrix ComputingUnit::activateDerivative( CuMatrix& mat) {
-    CuMatrix res(Matrix(mat.getRows(),mat.getCols(),(FeatType *)NULL),handle);
-    thrust::device_ptr<float> res_ptr(res.devPtr);
-    CuMatrix z(Matrix(mat.getRows(),mat.getCols(),mat.getData()),handle);
-    thrust::device_ptr<float> z_ptr(z.devPtr);
-    thrust::transform(z_ptr, z_ptr+mat.getNumElemts(),res_ptr, activateDerivative_functor());
-    return res;
+CuMatrix ComputingUnit::activateBackward( CuMatrix& y,CuMatrix& gradient){
+    cudnnActivationDescriptor_t actDesc;
+    cudnnCreateActivationDescriptor(&actDesc);
+    cudnnSetActivationDescriptor(actDesc,CUDNN_ACTIVATION_RELU,CUDNN_NOT_PROPAGATE_NAN,1.0);
+
+    cudnnTensorDescriptor_t yDesc,dyDesc;
+    cudnnCreateTensorDescriptor(&yDesc);
+    cudnnSetTensor4dDescriptor(yDesc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+            y.getRows(),1,1,y.getCols());
+    cudnnCreateTensorDescriptor(&dyDesc);
+    cudnnSetTensor4dDescriptor(dyDesc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+            gradient.getRows(),1,1,gradient.getCols());
+
+    cudnnActivationBackward(cudnnHandle,actDesc,
+        &alpha, yDesc,y.devPtr,
+        dyDesc, gradient.devPtr,
+        yDesc, y.devPtr,
+        &beta, dyDesc, gradient.devPtr
+    );
+    return gradient;
 }
-
-
-CuMatrix
-ComputingUnit::dotGDwithWTrans( CuMatrix& matLeft, CuMatrix& matRight) {
-    CuMatrix matRightTrans = matRight.transpose();
-    CuMatrix res = matLeft.dot(matRightTrans);
-    return res;
-}
-
-CuMatrix
-ComputingUnit::dotActTranswithGD( CuMatrix& matLeft, CuMatrix& matRight, float learning_rate) {
-    CuMatrix matLeftTrans = matLeft.transpose();
-    CuMatrix res=matLeftTrans.dot(matRight,learning_rate);
-    return res;
-}
-
 
 
 CuMatrix ComputingUnit::dot( Matrix& A, Matrix& B){
@@ -107,8 +121,16 @@ CuMatrix ComputingUnit::dot( Matrix& A, Matrix& B){
 }
 
 void ComputingUnit::activate(CuMatrix& A){
-    thrust::device_ptr<float> devA_ptr(A.devPtr);
-    thrust::transform(devA_ptr, devA_ptr+A.getNumElemts(),devA_ptr, tanh_functor());
+    cudnnTensorDescriptor_t srcTensorDesc;
+    cudnnCreateTensorDescriptor(&srcTensorDesc);
+    cudnnSetTensor4dDescriptor(srcTensorDesc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+            A.getRows(),1,1,A.getCols());
+
+    cudnnActivationDescriptor_t actDesc;
+    cudnnCreateActivationDescriptor(&actDesc);
+    cudnnSetActivationDescriptor(actDesc,CUDNN_ACTIVATION_RELU,CUDNN_NOT_PROPAGATE_NAN,1.0);
+    cudnnActivationForward(cudnnHandle,actDesc,
+        &alpha,srcTensorDesc,A.devPtr,&beta,srcTensorDesc,A.devPtr);
     A.updateMatrixFromGPU();
 }
 
@@ -153,3 +175,4 @@ float ComputingUnit::checkLoss(CuMatrix& preds, CuMatrix& labels){
     float totalLoss = thrust::reduce(losses.begin(), losses.end(), (float) 0, thrust::plus<float>());
     return totalLoss;
 }
+
