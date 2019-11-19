@@ -220,7 +220,7 @@ CoordServer::run() {
 
                 // Issue the lambda thread to serve the request.
                 char *weightserverIp = weightserverAddrs[req_count % weightserverAddrs.size()];
-                invokeFunction("yifan-forward", dataserverIpCopy, dataserverPort,
+                invokeFunction("forward", dataserverIpCopy, dataserverPort,
                                weightserverIp, weightserverPort, layer, lambdaId, (bool) lastLayer);
                 req_count++;
             // This is backward.
@@ -235,7 +235,7 @@ CoordServer::run() {
 
                 // Issue the lambda thread to serve the request.
                 char *weightserverIp = weightserverAddrs[req_count % weightserverAddrs.size()];
-                invokeFunction("yifan-backward", dataserverIpCopy, dataserverPort,
+                invokeFunction("backward", dataserverIpCopy, dataserverPort,
                                weightserverIp, weightserverPort, layer, lambdaId, (bool) lastLayer);
                 req_count++;
             } else if (op == OP::INFO) {
