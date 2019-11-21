@@ -1,5 +1,7 @@
 #include "cu_matrix.cuh"
 
+std::set<FeatType*> CuMatrix::MemoryPool;
+
 CuMatrix::CuMatrix( Matrix M, const cublasHandle_t & handle_)
     :Matrix(M.getRows(),M.getCols(),M.getData())
 {   
@@ -15,17 +17,36 @@ Matrix CuMatrix::getMatrix(){
     return Matrix(getRows(),getCols(),getData());
 }
 
+void CuMatrix::freeGPU(){
+    for(auto ptr: MemoryPool)
+        cudaFree (ptr);
+}
+
+CuMatrix CuMatrix::extractRow(unsigned row){
+    FeatType* data=getData()?(getData()+row*getCols()):NULL;
+    CuMatrix rowVec;
+    rowVec.handle=handle;
+    rowVec.setData(data);
+    rowVec.setRows(1);
+    rowVec.setCols(getCols());
+    rowVec.devPtr=devPtr+row*getCols();
+    return rowVec;
+}
+
 void CuMatrix::deviceMalloc(){
     unsigned rows=this->getRows();
     unsigned cols=this->getCols();
    
     cudaStat = cudaMalloc ((void**)&devPtr, rows*cols*sizeof(FeatType));
+    MemoryPool.insert(devPtr);
+
     if (cudaStat != cudaSuccess) {
         printf("%u\n", cudaStat);
         printf ("device memory allocation failed\n");
         exit (EXIT_FAILURE);
     }
 }
+
 void CuMatrix::deviceSetMatrix(){
     unsigned rows=this->getRows();
     unsigned cols=this->getCols();
@@ -60,6 +81,17 @@ void CuMatrix::updateMatrixFromGPU(){
     stat = cublasGetMatrix (rows, cols, sizeof(float), devPtr, rows, data, rows );
     if (stat != CUBLAS_STATUS_SUCCESS) {
         printf ("data upload failed\n");
+         switch (stat){
+            case CUBLAS_STATUS_NOT_INITIALIZED:
+            printf("CUBLAS_STATUS_NOT_INITIALIZED\n");
+            break;
+            case CUBLAS_STATUS_INVALID_VALUE:
+            printf("CUBLAS_STATUS_INVALID_VALUE\n");
+            break;
+            case CUBLAS_STATUS_MAPPING_ERROR:
+            printf("CUBLAS_STATUS_MAPPING_ERROR\n");
+            break;
+        }
         cudaFree (devPtr);
         cublasDestroy(handle);
         exit (EXIT_FAILURE);
@@ -67,7 +99,6 @@ void CuMatrix::updateMatrixFromGPU(){
 }
 
 CuMatrix::~CuMatrix(){
-    cudaFree (devPtr);
 }
 
 void CuMatrix::scale(const float& alpha){

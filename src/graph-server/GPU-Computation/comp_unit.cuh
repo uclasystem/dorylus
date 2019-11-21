@@ -36,6 +36,7 @@ public:
 
     // FeatType* Aggregation(FeatType* vecA,FeatType* vecB,FeatType alpha);
     CuMatrix scaleRowsByVector(Matrix m, Matrix v);
+    void aggregateRows(CuMatrix m, CuMatrix norms, CuMatrix bases);
 
 	CuMatrix dot(Matrix& A,Matrix& B);
 	void activate(CuMatrix& A);

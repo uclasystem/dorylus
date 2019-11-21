@@ -104,3 +104,11 @@ struct getLoss{
         }
     unsigned col;
 };
+
+template <typename T>
+struct linear_index_to_row_index : public thrust::unary_function<T,T> {
+    T Ncols;
+    __host__ __device__ linear_index_to_row_index(T Ncols) : Ncols(Ncols) {}
+    __host__ __device__ T operator()(T i) { return i / Ncols; }
+};
+

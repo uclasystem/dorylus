@@ -17,7 +17,7 @@ ComputingUnit::ComputingUnit(){
         printf ("CUBLAS stat %u\n",stat);
         exit (EXIT_FAILURE);
     }
-    cudnnStatus_t err =cudnnCreate(&cudnnHandle); 
+    cudnnStatus_t err = cudnnCreate(&cudnnHandle); 
     if (err != CUDNN_STATUS_SUCCESS) { 
         std::cout << "Error occurred: " << err << std::endl; 
         std::exit(EXIT_FAILURE); 
@@ -29,15 +29,33 @@ CuMatrix ComputingUnit::wrapMatrix(Matrix m){
     return CuMatrix(m,handle);
 }
 
-// FeatType* ComputingUnit::Aggregation(FeatType*,FeatType*){
-    
-// }
 
 CuMatrix ComputingUnit::scaleRowsByVector(Matrix m, Matrix v){
     CuMatrix cuM=wrapMatrix(m);
     CuMatrix cuV=wrapMatrix(v);
+    thrust::device_ptr<float> m_ptr(cuM.devPtr);
+    thrust::device_ptr<float> v_ptr(cuV.devPtr);
+    thrust::transform(m_ptr, m_ptr+m.getNumElemts(),
+                      thrust::make_permutation_iterator(
+                                v_ptr,
+                                thrust::make_transform_iterator(thrust::make_counting_iterator(0), 
+                                linear_index_to_row_index<int>(m.getCols()))),
+                      m_ptr,
+                      thrust::multiplies<float>());
     return cuM;
+}
 
+//norms have to be a 1*N matrix
+void ComputingUnit::aggregateRows(CuMatrix cuM, CuMatrix cuN, CuMatrix cuBase){
+    EdgeType b=1;
+    cublasStatus_t rt=cublasSgemv(handle, CUBLAS_OP_N,
+                            cuM.getCols(),cuM.getRows(),
+                            &alpha,
+                            cuM.devPtr,cuM.getCols(),
+                            cuN.devPtr,1,
+                            &b,
+                            cuBase.devPtr,1);
+    cuBase.updateMatrixFromGPU();
 }
 
 CuMatrix ComputingUnit::hadamardSub(CuMatrix& matLeft,CuMatrix& matRight) {

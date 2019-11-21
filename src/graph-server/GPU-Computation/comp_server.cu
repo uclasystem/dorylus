@@ -71,7 +71,7 @@ void ComputingServer::processForward(unsigned layer, bool lastLayer){
         delete[] cuPredictions.getData();
     }
     delete[] z.getData();
-
+    CuMatrix::freeGPU();
     auto t3 = std::chrono::high_resolution_clock::now();
     std::cout << "Forward Compute "
               << std::chrono::duration_cast<std::chrono::milliseconds>(t3-t2).count()
@@ -101,6 +101,7 @@ void ComputingServer::processBackward(unsigned layer, bool lastLayer){
         if(layer==0)
             msgService.prefetchWeightsMatrix(totalLayers);; //***CAUTION only works for one weight server
     }
+    CuMatrix::freeGPU();
 }
 
 void
