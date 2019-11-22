@@ -50,7 +50,8 @@ WeightServer::WeightServer(std::string& weightServersFile, std::string& myPrIpFi
     // Read in layer configurations and initialize weight matrices.
     initializeWeightMatrices(configFileName);
 
-    if (adam) 
+    // Initialize the adam optimizer if this is the master
+    if (adam && master) 
         adamOpt=AdamOptimizer(LEARNING_RATE,dims);
 
     // Send weight matrix info to all servers and wait for ack.
