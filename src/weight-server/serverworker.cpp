@@ -94,9 +94,9 @@ ServerWorker::sendWeights(zmq::message_t& client_id, unsigned layer) {
     if (layer >= weightMats.size()) {
         std::cerr << "[ERROR] No such weights corresponding to layer " << layer << std::endl;
     }
-    if (ws.servers_updates_done==false){
+    if (ws.servers_updates_done == false){
         std::unique_lock<std::mutex> lk(ws.servers_updates_mutex);
-        ws.servers_updates_cv.wait(lk,[&]{return ws.servers_updates_done == true;});
+        ws.servers_updates_cv.wait(lk,[&]{ return ws.servers_updates_done == true; });
     }
 
     workersocket.send(client_id, ZMQ_SNDMORE);    // The identity message will be implicitly consumed to route to the correct client.
@@ -125,7 +125,7 @@ ServerWorker::recvUpdate(zmq::message_t& client_id, unsigned layer) {
     // Grab lock then sum the data received in this update matrix.
     std::lock_guard<std::mutex> update_lock(update_mutex);
     lambdaRecved++;
-    if (numLambdas == lambdaRecved) {ws.servers_updates_done=false;}
+    if (numLambdas == lambdaRecved) { ws.servers_updates_done = false; }
 
     // Send confirm ACK message.
     zmq::message_t confirm;

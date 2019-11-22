@@ -162,7 +162,7 @@ void WeightServer::applyUpdate(unsigned layer) {
                 acksNeeded--;
         }
 
-        servers_updates_done=true;
+        servers_updates_done = true;
         servers_updates_cv.notify_all();
         serverLog("Finished updating the weights.");
 
@@ -186,28 +186,21 @@ void WeightServer::applyUpdate(unsigned layer) {
     // Worker code.
     } else {
 
-        // Send all updated weight matrices to the master for aggregation.
-        for (unsigned i = 0; i < updateMats.size(); ++i) {
-            Matrix& updateMat = updateMats[i];
-            zmq::message_t updateDataMsg(updateMat.getDataSize());
-            std::memcpy(updateDataMsg.data(), updateMat.getData(), updateMat.getDataSize());
+        // Send the updated weight matrices to the master for aggregation.
+        Matrix& updateMat = updateMats[layer];
+        zmq::message_t updateDataMsg(updateMat.getDataSize());
+        std::memcpy(updateDataMsg.data(), updateMat.getData(), updateMat.getDataSize());
+        publisher.send(updateDataMsg);
 
-            if (i == updateMats.size() - 1)
-                publisher.send(updateDataMsg);
-            else
-                publisher.send(updateDataMsg, ZMQ_SNDMORE);
-        }
+        // Wait for the master to reply with the reduced weight values.
+        zmq::message_t updatedWeightMsg;
+        subscriber.recv(&updatedWeightMsg);
 
-        // Wait for the master to reply with the aggregated and averaged weight values.
-        for (Matrix& weightMat : weightMats) {
-            zmq::message_t updatedWeightMsg;
-            subscriber.recv(&updatedWeightMsg);
+        Matrix& weightMat = weightMats[layer];
+        assert(weightMat.getDataSize() == updatedWeightMsg.size());
 
-            assert(weightMat.getDataSize() == updatedWeightMsg.size());
-
-            // If there are no errors, copy the new data into the weight matrix.
-            std::memcpy(weightMat.getData(), updatedWeightMsg.data(), weightMat.getDataSize());
-        }
+        // If there are no errors, copy the new data into the weight matrix.
+        std::memcpy(weightMat.getData(), updatedWeightMsg.data(), weightMat.getDataSize());
 
         // Send back confirm ACK message.
         unsigned msgType = CTRL_MSG::ACK;
@@ -215,7 +208,7 @@ void WeightServer::applyUpdate(unsigned layer) {
         std::memcpy(ackMsg.data(), &msgType, sizeof(unsigned));
         publisher.send(ackMsg);
 
-        servers_updates_done=true;
+        servers_updates_done = true;
         servers_updates_cv.notify_all();
         serverLog("All workers weights updated.");
     }
