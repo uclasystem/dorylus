@@ -51,8 +51,8 @@ WeightServer::WeightServer(std::string& weightServersFile, std::string& myPrIpFi
     initializeWeightMatrices(configFileName);
 
     // Initialize the adam optimizer if this is the master
-    if (adam && master) 
-        adamOpt=AdamOptimizer(LEARNING_RATE,dims);
+    if (adam && master)
+        adamOpt = AdamOptimizer(LEARNING_RATE, dims);
 
     // Send weight matrix info to all servers and wait for ack.
     distributeWeightMatrices();
@@ -132,11 +132,11 @@ void WeightServer::applyUpdate(unsigned layer) {
             for (unsigned u = 0; u < updateMats[layer].getNumElemts(); ++u)
                 updateSum[u] += updateNew[u];
         }
-        
+
         FeatType *weightData = weightMats[layer].getData();
         FeatType *updateSum = updateMats[layer].getData();
         if (adam) {
-            adamOpt.update(layer,weightData,updateSum);
+            adamOpt.update(layer, weightData, updateSum);
         }
         else{
             // Once all updates have been aggregated, apply to the weights matrices.
@@ -175,7 +175,7 @@ void WeightServer::applyUpdate(unsigned layer) {
             for (unsigned i = 0; i < updateMats[layer].getNumElemts(); i++) {
                 tmp += std::fabs(updateMats[layer].getData()[i]);
             }
-            
+
             std::cout << "Layer " << layer << " Weight Grad Agg: " << tmp << " Max element: " << *(std::max_element(updateMats[layer].getData(), updateMats[layer].getData() + updateMats[layer].getNumElemts())) << " Min element: " << *(std::min_element(updateMats[layer].getData(), updateMats[layer].getData() + updateMats[layer].getNumElemts())) << std::endl;
             // std::cout << "[";
             // for (unsigned i = 0; i < 10; i++) {
@@ -218,11 +218,9 @@ void WeightServer::applyUpdate(unsigned layer) {
     outfile << "U: " << updateTimer.getTime() << std::endl;     // Output timing results.
 
     // Clear the update buffer.
-    for (unsigned l = 0; l < updateMats.size(); ++l) {
-        float *updateData = updateMats[l].getData();
-        for (unsigned u = 0; u < updateMats[l].getNumElemts(); ++u)
-            updateData[u] = 0.;
-    }
+    float *updateData = updateMats[layer].getData();
+    for (unsigned u = 0; u < updateMats[layer].getNumElemts(); ++u)
+        updateData[u] = 0.;
 
     // Reset number of lambdas.
     lambdaRecved = 0;

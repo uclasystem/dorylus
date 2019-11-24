@@ -12,10 +12,10 @@ extern bool finished;
  *
  */
 ServerWorker::ServerWorker(zmq::context_t& ctx_, WeightServer& _ws,
-                           std::vector<Matrix>& weights_, std::vector<Matrix>& updates_, 
+                           std::vector<Matrix>& weights_, std::vector<Matrix>& updates_,
                            unsigned& numLambdas_,unsigned& lambdaRecved_)
     : ctx(ctx_), workersocket(ctx, ZMQ_DEALER), ws(_ws),
-      weightMats(weights_), updateMats(updates_), 
+      weightMats(weights_), updateMats(updates_),
       numLambdas(numLambdas_),lambdaRecved(lambdaRecved_) {
     workersocket.setsockopt(ZMQ_LINGER, 0);
     workersocket.connect("inproc://backend");
@@ -49,15 +49,15 @@ ServerWorker::work() {
             unsigned op = parse<unsigned>((char *) header.data(), 0);
             unsigned arg = parse<unsigned>((char *) header.data(), 1);
 
-            std::string accMsg;
-            if (op == OP::PULL_FORWARD)
-                accMsg = "[ACCEPTED] Pull FORWARD for layer " + std::to_string(arg) + ".";
-            else if (op == OP::PULL_BACKWARD)
-                accMsg = "[ACCEPTED] Pull BACKWARD from layer " + std::to_string(arg) + ".";
-            else if (op == OP::PUSH_BACKWARD)
-                accMsg = "[ UPDATE ] Push BACKWARD from layer " + std::to_string(arg) + ".";
+            // std::string accMsg;
+            // if (op == OP::PULL_FORWARD)
+            //     accMsg = "[ACCEPTED] Pull FORWARD for layer " + std::to_string(arg) + ".";
+            // else if (op == OP::PULL_BACKWARD)
+            //     accMsg = "[ACCEPTED] Pull BACKWARD from layer " + std::to_string(arg) + ".";
+            // else if (op == OP::PUSH_BACKWARD)
+            //     accMsg = "[ UPDATE ] Push BACKWARD from layer " + std::to_string(arg) + ".";
             // if (!accMsg.empty())
-                // std::cout << accMsg << std::endl;
+            //     std::cout << accMsg << std::endl;
 
             switch (op) {
                 case (OP::PULL_FORWARD):
@@ -76,7 +76,8 @@ ServerWorker::work() {
                     terminateServer(identity);
                     break;
                 default:
-                    std::cout << "Unknown op" << std::endl;
+                    std::cout << "Unknown op, message size: " << identity.size() << " " <<
+                    header.size() << std::endl;
                     break;  /** Not an op that I care about. */
             }
         }
@@ -132,20 +133,16 @@ ServerWorker::recvUpdate(zmq::message_t& client_id, unsigned layer) {
     workersocket.send(client_id, ZMQ_SNDMORE);
     workersocket.send(confirm);
 
-    
     float *updateSum = updateMats[layer].getData();
     float *updateNew = (float *) updateMsg.data();
-    
+
     for (unsigned u = 0; u < updateMats[layer].getNumElemts(); ++u)
         updateSum[u] +=  updateNew[u];
-
-    
 
     // If this is the final update, begin global aggregation.
     if (numLambdas == lambdaRecved) {
         ws.applyUpdate(layer);
     }
-
 }
 
 /**
