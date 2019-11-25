@@ -180,6 +180,7 @@ CoordServer::run() {
     try {
         bool terminate = false;
         size_t req_count = 0;
+        size_t sched_cnt = 0;
         while (!terminate) {
 
             // Wait on requests.
@@ -241,7 +242,7 @@ CoordServer::run() {
             } else if (op == OP::INFO) {
                 unsigned numLambda = parse<unsigned>((char *) header.data(), 1);
 
-                std::string accMsg = "[  INFO  ] Sending number of lambdas info to weightservers...";
+                std::string accMsg = "[  INFO  ] Sending number of lambdas (" + std::to_string(numLambda) + ") info to weightservers...";
                 std::cout << accMsg << std::endl;
 
                 // Calculate numLambdas assigned to each weightserver.
@@ -249,11 +250,12 @@ CoordServer::run() {
                 unsigned remainder = numLambda % weightserverAddrs.size();
                 // Send info message to weightservers.
                 for (unsigned i = 0; i < remainder; i++) {
-                    sendInfoMessage(weightsockets[i], baseNumThreads + 1);
+                    sendInfoMessage(weightsockets[(sched_cnt + i) % weightserverAddrs.size()], baseNumThreads + 1);
                 }
                 for (unsigned i = remainder; i < weightserverAddrs.size(); i++) {
-                    sendInfoMessage(weightsockets[i], baseNumThreads);
+                    sendInfoMessage(weightsockets[(sched_cnt + i) % weightserverAddrs.size()], baseNumThreads);
                 }
+                sched_cnt += numLambda;
             // Unknown op code.
             } else {
                 std::cerr << "[ ERROR ] Unknown OP code (" << op << ") received." << std::endl;

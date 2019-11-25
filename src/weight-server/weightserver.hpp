@@ -25,7 +25,7 @@
 
 
 enum CTRL_MSG { MASTERUP, WORKERUP, INITDONE, ACK };
-const float LEARNING_RATE = 0.01; 
+const float LEARNING_RATE = 0.01;
 
 /**
  *
@@ -101,16 +101,16 @@ private:
     unsigned numLambdas;
     unsigned lambdaRecved;
     unsigned count;
-    
+
     zmq::context_t ctx;
     zmq::socket_t frontend;
     zmq::socket_t backend;
     unsigned listenerPort;
 
     // Members related to communications.
-	bool master;
+    bool master;
     unsigned nodeId;
-	std::vector<std::string> allNodeIps;
+    std::vector<std::string> allNodeIps;
 
     zmq::context_t dataCtx;
     zmq::socket_t publisher;

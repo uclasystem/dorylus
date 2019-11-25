@@ -27,8 +27,8 @@
 
 #define SLEEP_PERIOD 5000   // sleep 5000us and then check the condition.
 #define TIMEOUT_PERIOD 5000 // wait for up to 5000ms before relaunching
-#define MAX_TIMEOUT 10000   //
 #define MIN_TIMEOUT 500     // at least wait for 500ms before relaunching
+#define EXP_BACKOFF_FACTOR 1.5 // base of exponential backoff
 
 class LambdaWorker;
 
@@ -93,6 +93,7 @@ public:
     zmq::socket_t coordsocket;
 
     unsigned nodeId;
+    unsigned numNodes;
     std::string nodeIp;
     unsigned dataserverPort;
 
