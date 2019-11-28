@@ -22,9 +22,9 @@ unsigned nodeId;
 class GPUComm;
 
 class ComputingServer {
-public:
+  public:
     ComputingServer();
-    ComputingServer(GPUComm* gpu_comm);
+    ComputingServer(GPUComm *gpu_comm);
 
     //For forward
     void processForward(unsigned layer, bool lastLayer);
@@ -39,12 +39,12 @@ public:
 
     void terminate();
 
-private:
+  private:
 
-    std::vector<char*> weightServerAddrs;
+    std::vector<char *> weightServerAddrs;
     MessageService msgService;
     ComputingUnit cu;
-    GPUComm* gpuComm;
+    GPUComm *gpuComm;
     unsigned totalLayers;
 
 
@@ -52,4 +52,4 @@ private:
 
 
 
-#endif 
+#endif

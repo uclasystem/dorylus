@@ -3,85 +3,89 @@
 #include <iostream>
 #include <cudnn.h>
 #include <time.h>
-
+#include <cusparse.h>
+#include <set>
+#include <tuple>
+typedef std::tuple<int, int, EdgeType> triplet;
 using namespace std;
 cublasHandle_t handle;
-ComputingUnit cu;
+cusparseHandle_t  spHandle;
+ComputingUnit cu = ComputingUnit::getInstance();
 
-const int ROW=5000;
-const int COL=41;
-float alpha=1.0,beta=0.0;
+const int ROW = 5000;
+const int COL = 41;
+float alpha = 1.0, beta = 0.0;
 
-void test0(){
-	float a[6]={1,2,3,4,5,6};
-	float b[12]={1,2,3,4,5,6,7,8,9,10,11,12};
-	Matrix matA(2,3,a);
-	Matrix matB(3,4,b);
-	CuMatrix cuA(matA,handle);
-	CuMatrix cuB(matB,handle);
-	CuMatrix cuD=cuA.dot(cuB,false,false);
-	cuD.updateMatrixFromGPU();
-	cout<<cuD.str();
-	cout<<matA.dot(matB).str();
+void test0() {
+    float a[6] = {1, 2, 3, 4, 5, 6};
+    float b[12] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+    Matrix matA(2, 3, a);
+    Matrix matB(3, 4, b);
+    CuMatrix cuA(matA, handle);
+    CuMatrix cuB(matB, handle);
+    CuMatrix cuD = cuA.dot(cuB, false, false);
+    cuD.updateMatrixFromGPU();
+    cout << cuD.str();
+    cout << matA.dot(matB).str();
 }
-void test1(){
-	float a[6]={1,2,3,4,5,6};
-	float b[12]={1,2,3,4,5,6,7,8,9,10,11,12};
-	Matrix matA(3,2,a);
-	Matrix matB(3,4,b);
-	CuMatrix cuA(matA,handle);
-	CuMatrix cuB(matB,handle);
-	CuMatrix cuD=cuA.dot(cuB,true,false);
-	cuD.updateMatrixFromGPU();
-	cout<<cuD.str();
-	cout<<matA.dot(matB,true,false).str();
+void test1() {
+    float a[6] = {1, 2, 3, 4, 5, 6};
+    float b[12] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+    Matrix matA(3, 2, a);
+    Matrix matB(3, 4, b);
+    CuMatrix cuA(matA, handle);
+    CuMatrix cuB(matB, handle);
+    CuMatrix cuD = cuA.dot(cuB, true, false);
+    cuD.updateMatrixFromGPU();
+    cout << cuD.str();
+    cout << matA.dot(matB, true, false).str();
 }
-void test2(){
-	float a[6]={1,2,3,4,5,6};
-	float b[12]={1,2,3,4,5,6,7,8,9,10,11,12};
-	Matrix matA(2,3,a);
-	Matrix matB(4,3,b);
-	CuMatrix cuA(matA,handle);
-	CuMatrix cuB(matB,handle);
-	CuMatrix cuD=cuA.dot(cuB,false,true);
-	cuD.updateMatrixFromGPU();
-	cout<<cuD.str();
-	cout<<matA.dot(matB,false,true).str();
+void test2() {
+    float a[6] = {1, 2, 3, 4, 5, 6};
+    float b[12] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+    Matrix matA(2, 3, a);
+    Matrix matB(4, 3, b);
+    CuMatrix cuA(matA, handle);
+    CuMatrix cuB(matB, handle);
+    CuMatrix cuD = cuA.dot(cuB, false, true);
+    cuD.updateMatrixFromGPU();
+    cout << cuD.str();
+    cout << matA.dot(matB, false, true).str();
 }
-void test3(){
-	float a[6]={1,2,3,4,5,6};
-	float b[12]={1,2,3,4,5,6,7,8,9,10,11,12};
-	Matrix matA(3,2,a);
-	Matrix matB(4,3,b);	
-	CuMatrix cuA(matA,handle);
-	CuMatrix cuB(matB,handle);
-	CuMatrix cuD=cuA.dot(cuB,true,true);
-	cuD.updateMatrixFromGPU();
-	cout<<cuD.str();
-	cout<<matA.dot(matB,true,true).str();
-
-}
-void test4(){
-	float a[6]={1,2,3,4,5,6};
-	float b[12]={1,2,3,4,5,6,7,8,9,10,11,12};
-	Matrix matA(3,2,a);
-	Matrix matB(4,3,b);	
-	CuMatrix cuA(matA,handle);
-	CuMatrix cuB(matB,handle);
-	CuMatrix cuD=cuA.dot(cuB,true,true);
-	cuD.updateMatrixFromGPU();
-	cout<<cuD.str();
-	cout<<matA.dot(matB,true,true).str();
+void test3() {
+    float a[6] = {1, 2, 3, 4, 5, 6};
+    float b[12] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+    Matrix matA(3, 2, a);
+    Matrix matB(4, 3, b);
+    CuMatrix cuA(matA, handle);
+    CuMatrix cuB(matB, handle);
+    CuMatrix cuD = cuA.dot(cuB, true, true);
+    cuD.updateMatrixFromGPU();
+    cout << cuD.str();
+    cout << matA.dot(matB, true, true).str();
 
 }
+void test4() {
+    float a[6] = {1, 2, 3, 4, 5, 6};
+    float b[12] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+    Matrix matA(3, 2, a);
+    Matrix matB(4, 3, b);
+    CuMatrix cuA(matA, handle);
+    CuMatrix cuB(matB, handle);
+    CuMatrix cuD = cuA.dot(cuB, true, true);
+    cuD.updateMatrixFromGPU();
+    cout << cuD.str();
+    cout << matA.dot(matB, true, true).str();
 
-Matrix softmax(Matrix& mat) {
-    FeatType* result = new FeatType[mat.getNumElemts()];
+}
+
+Matrix softmax(Matrix &mat) {
+    FeatType *result = new FeatType[mat.getNumElemts()];
 
     for (unsigned r = 0; r < mat.getRows(); ++r) {
         unsigned length = mat.getCols();
-        FeatType* vecSrc = mat.getData() + r * length;
-        FeatType* vecDst = result + r * length;
+        FeatType *vecSrc = mat.getData() + r * length;
+        FeatType *vecDst = result + r * length;
 
         FeatType denom = 0.0;
         for (unsigned c = 0; c < length; ++c) {
@@ -96,84 +100,84 @@ Matrix softmax(Matrix& mat) {
 
     return Matrix(mat.getRows(), mat.getCols(), result);
 }
-void test_softmax(){
-	float alpha=1.0,beta=0.0;
-	float b[ROW*COL];
-	Matrix matB(ROW,COL,b);
-	for (int i=0;i<ROW*COL;++i){
-		matB.getData()[i]=i/ROW*COL;
-	}
-	CuMatrix cuB(matB,handle);
-	
-	clock_t t=clock();
-	CuMatrix cuC=cu.softmaxRows(cuB);
-	t = clock() - t;
-  	printf ("GPU %f\n",((float)t)/CLOCKS_PER_SEC);
+void test_softmax() {
+    float alpha = 1.0, beta = 0.0;
+    float b[ROW * COL];
+    Matrix matB(ROW, COL, b);
+    for (int i = 0; i < ROW * COL; ++i) {
+        matB.getData()[i] = i / ROW * COL;
+    }
+    CuMatrix cuB(matB, handle);
 
-  	t=clock();
-	Matrix C=softmax(matB);
-	t = clock() - t;
+    clock_t t = clock();
+    CuMatrix cuC = cu.softmaxRows(cuB);
+    t = clock() - t;
+    printf ("GPU %f\n", ((float)t) / CLOCKS_PER_SEC);
 
-	printf ("CPU %f\n",((float)t)/CLOCKS_PER_SEC);
-	// cout<<C.str();
-	cuC.updateMatrixFromGPU();
-	// cout<<cuC.str();
+    t = clock();
+    Matrix C = softmax(matB);
+    t = clock() - t;
 
-	printf("CHECKING\n");
-	for (int i=0;i<ROW*COL;++i){
-		if(C.getData()[i]-cuC.getData()[i]>0.01){
-			printf("ERROR\n");
-			return;
-		}
-	}
+    printf ("CPU %f\n", ((float)t) / CLOCKS_PER_SEC);
+    // cout<<C.str();
+    cuC.updateMatrixFromGPU();
+    // cout<<cuC.str();
+
+    printf("CHECKING\n");
+    for (int i = 0; i < ROW * COL; ++i) {
+        if(C.getData()[i] - cuC.getData()[i] > 0.01) {
+            printf("ERROR\n");
+            return;
+        }
+    }
 }
 
-void test_tanh(){
-	float alpha=1.0,beta=0.0;
-	float a[ROW*COL];
-	float b[ROW*COL];
+void test_tanh() {
+    float alpha = 1.0, beta = 0.0;
+    float a[ROW * COL];
+    float b[ROW * COL];
 
-	Matrix matA(ROW,COL,a);
-	Matrix matB(ROW,COL,b);
-	for (int i=0;i<ROW*COL;++i){
-		matA.getData()[i]=i/ROW*COL;
-		matB.getData()[i]=i/ROW*COL;
-	}
-	CuMatrix cuB(matB,handle);
-	
-	clock_t t=clock();
-		for (unsigned i = 0; i < matA.getNumElemts(); ++i)
-        	matA.getData()[i] = std::tanh(matA.getData()[i]);
-	t = clock() - t;
-  	printf ("CPU %f\n",((float)t)/CLOCKS_PER_SEC);
+    Matrix matA(ROW, COL, a);
+    Matrix matB(ROW, COL, b);
+    for (int i = 0; i < ROW * COL; ++i) {
+        matA.getData()[i] = i / ROW * COL;
+        matB.getData()[i] = i / ROW * COL;
+    }
+    CuMatrix cuB(matB, handle);
 
-  	t=clock();
-  	cudnnTensorDescriptor_t srcTensorDesc;
-	cudnnCreateTensorDescriptor(&srcTensorDesc);
-	cudnnSetTensor4dDescriptor(srcTensorDesc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-            ROW,1,1,COL);
+    clock_t t = clock();
+    for (unsigned i = 0; i < matA.getNumElemts(); ++i)
+        matA.getData()[i] = std::tanh(matA.getData()[i]);
+    t = clock() - t;
+    printf ("CPU %f\n", ((float)t) / CLOCKS_PER_SEC);
 
-	cudnnActivationDescriptor_t actDesc;
-	cudnnCreateActivationDescriptor(&actDesc);
-	cudnnSetActivationDescriptor(actDesc,CUDNN_ACTIVATION_TANH,CUDNN_NOT_PROPAGATE_NAN,1.0);
-	cudnnActivationForward(cu.cudnnHandle,actDesc,
-		&alpha,srcTensorDesc,cuB.devPtr,&beta,srcTensorDesc,cuB.devPtr);
-	t = clock() - t;
+    t = clock();
+    cudnnTensorDescriptor_t srcTensorDesc;
+    cudnnCreateTensorDescriptor(&srcTensorDesc);
+    cudnnSetTensor4dDescriptor(srcTensorDesc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+                               ROW, 1, 1, COL);
 
-	printf ("CUDNN %f\n",((float)t)/CLOCKS_PER_SEC);
-	cuB.updateMatrixFromGPU();
+    cudnnActivationDescriptor_t actDesc;
+    cudnnCreateActivationDescriptor(&actDesc);
+    cudnnSetActivationDescriptor(actDesc, CUDNN_ACTIVATION_TANH, CUDNN_NOT_PROPAGATE_NAN, 1.0);
+    cudnnActivationForward(cu.cudnnHandle, actDesc,
+                           &alpha, srcTensorDesc, cuB.devPtr, &beta, srcTensorDesc, cuB.devPtr);
+    t = clock() - t;
 
-	printf("CHECKING\n");
-	for (int i=0;i<ROW*COL;++i){
-		if(matA.getData()[i]-cuB.getData()[i]>0.01){
-			printf("ERROR\n");
-			return;
-		}
-	}
+    printf ("CUDNN %f\n", ((float)t) / CLOCKS_PER_SEC);
+    cuB.updateMatrixFromGPU();
+
+    printf("CHECKING\n");
+    for (int i = 0; i < ROW * COL; ++i) {
+        if(matA.getData()[i] - cuB.getData()[i] > 0.01) {
+            printf("ERROR\n");
+            return;
+        }
+    }
 }
 
 static Matrix
-activateDerivate(Matrix& mat) {
+activateDerivate(Matrix &mat) {
     FeatType *res = new FeatType[mat.getNumElemts()];
     FeatType *zData = mat.getData();
 
@@ -183,131 +187,95 @@ activateDerivate(Matrix& mat) {
     return Matrix(mat.getRows(), mat.getCols(), res);
 }
 
-// void test_tanh_derivative(){
-// 	float alpha=1.0,beta=0.0;
-// 	float x[ROW*COL];
-// 	float y[ROW*COL];
-// 	float dy[ROW*COL];
-// 	float dx[ROW*COL];
-	
+void test_aggregation() {
+    std::set<triplet> links;
+    // links.insert(triplet(0, 2, 1));
+    links.insert(triplet(0, 0, .1));
+    links.insert(triplet(1, 1, .01));
+    // links.insert(triplet(1, 2, 1));
+    links.insert(triplet(2, 2, .001));
+    unsigned count = links.size();
+    EdgeType *norms  = new EdgeType[count];
+    int *rowInd = new int[count];
+    int *colInd = new int[count];
+    unsigned i = 0;
+    for(auto link : links) {
+        rowInd[i] = std::get<0>(link);
+        colInd[i] = std::get<1>(link);
+        norms[i] = std::get<2>(link);
+        i++;
+    }
+    for(int i = 0; i < count; ++i)
+        cout << rowInd[i] << " ";
+    cout << endl;
+    for(int i = 0; i < count; ++i)
+        cout << colInd[i] << " ";
+    cout << endl;
+    for(int i = 0; i < count; ++i)
+        cout << norms[i] << " ";
+    cout << endl;
 
-// 	Matrix matX(ROW,COL,x);
-// 	Matrix matY(ROW,COL,y);
-// 	Matrix matDX(ROW,COL,dx);
-// 	Matrix matDY(ROW,COL,dy);
+    EdgeType *csrVal;
+    int *csrRowPtr;
+    int *csrColInd;
+    int *cooRowInd;
+    auto
+    //copy val
+    cudaStat = cudaMalloc ((void **)&csrVal, count * sizeof(EdgeType));
+    assert(cudaStat == cudaSuccess);
+    cudaStat = cudaMemcpy(csrVal, norms, sizeof(EdgeType) * count, cudaMemcpyHostToDevice);
+    assert(cudaStat == cudaSuccess);
 
-	
-// 	for (int i=0;i<ROW*COL;++i){
-// 		x[i]=i;
-// 		dx[i]=1.;
-// 		dy[i]=1.;
-// 		y[i] = std::tanh(x[i]);
-// 	}
-        
+    //copy row indices
+    cudaStat = cudaMalloc ((void **)&cooRowInd, count * sizeof(int));
+    assert(cudaStat == cudaSuccess);
+    cudaStat = cudaMemcpy(cooRowInd, rowInd, sizeof(int) * count, cudaMemcpyHostToDevice);
+    assert(cudaStat == cudaSuccess);
 
-// 	clock_t t=clock();
-// 	Matrix matC=activateDerivate(matY);
-// 	t = clock() - t;
-//   	printf ("CPU %f\n",((float)t)/CLOCKS_PER_SEC);
+    //copy col
+    cudaStat = cudaMalloc ((void **)&csrColInd, count * sizeof(int));
+    assert(cudaStat == cudaSuccess);
+    cudaStat = cudaMemcpy(csrColInd, colInd, sizeof(int) * count, cudaMemcpyHostToDevice);
+    assert(cudaStat == cudaSuccess);
 
-//   	CuMatrix cuX(matX,handle);
-//   	CuMatrix cuY(matY,handle);
-//   	CuMatrix cuDX(matDX,handle);
-//   	CuMatrix cuDY(matDY,handle);
+    cudaStat = cudaMalloc ((void **)&csrRowPtr, (3 + 1) * sizeof(int));
+    assert(cudaStat == cudaSuccess);
+    //convert to COO
+    auto status = cusparseXcoo2csr(spHandle, cooRowInd, count, 3, csrRowPtr, CUSPARSE_INDEX_BASE_ZERO);
 
-//   	t=clock();
-//   	cudnnTensorDescriptor_t srcTensorDesc;
-// 	cudnnCreateTensorDescriptor(&srcTensorDesc);
-// 	cudnnSetTensor4dDescriptor(srcTensorDesc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-//             ROW,1,1,COL);
+    int x[4];
+    cudaMemcpy(x, csrRowPtr, sizeof(int) * 4, cudaMemcpyDeviceToHost);
+    for(int i = 0; i < 4; ++i)
+        cout << x[i] << " ";
+    cout << "\n";
 
-// 	cudnnTensorDescriptor_t dyTensorDesc;
-// 	cudnnCreateTensorDescriptor(&srcTensorDesc);
-// 	cudnnSetTensor4dDescriptor(srcTensorDesc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-//             COL,1,1,ROW);
+    float feats[6] = {0.1, 0.2, 0.3, 0.4, 0.5, 0.6};
+    CuMatrix f(Matrix(3, 2, feats), handle);
+    cout << f.str();
+    CuMatrix A;
+    A.nnz = count;
+    A.csrVal = csrVal;
+    A.csrRowPtr = csrRowPtr;
+    A.csrColInd = csrColInd;
+    A.setRows(3);
+    A.setCols(3);
+    A.handle = handle;
 
-// 	cudnnActivationDescriptor_t actDesc;
-// 	cudnnCreateActivationDescriptor(&actDesc);
-// 	cudnnSetActivationDescriptor(actDesc,CUDNN_ACTIVATION_TANH,CUDNN_NOT_PROPAGATE_NAN,1.0);
-// 	cudnnActivationBackward(cu.cudnnHandle,actDesc,
-// 		&alpha,
-// 		srcTensorDesc,cuY.devPtr,
-// 		dyTensorDesc,cuDY.devPtr,
-// 		srcTensorDesc,cuDX.devPtr,
-// 		&beta,
-// 		srcTensorDesc,cuX.devPtr);
-// 	t = clock() - t;
-
-// 	printf ("CUDNN %f\n",((float)t)/CLOCKS_PER_SEC);
-// 	cuDY.updateMatrixFromGPU();
-
-// 	printf("CHECKING\n");
-// 	for (int i=0;i<ROW*COL;++i){
-// 		if(cuDY.getData()[i]-matC.getData()[i]>0.01){
-// 			printf("ERROR\n");
-// 			return;
-// 		}
-// 	}
-// }
-
-
-int main()
-{	
-	handle=cu.handle;
-	
-	return 0;
+    CuMatrix out = cu.aggregate(A, f);
+    auto z=out.getMatrix();
+    // float* z=new float[out.getNumElemts()];
+    // cudaMemcpy(z, out.devPtr, sizeof(EdgeType) * out.getNumElemts(), cudaMemcpyDeviceToHost);
+    // for(int j=0;j<out.getNumElemts();++j)
+    //     cout<<z[j]<<" ";
+    // cout<<"\n";
+    cout<<z.str();
 }
 
 
-//********Not that important now since our backward prop 
-// computation combines the cross entropy and softmax together
-// void test_softmax_back(){
-// 	float a[ROW*COL];
-// 	float b[ROW*COL];
+int main() {
+    handle = cu.handle;
+    spHandle = cu.spHandle;
+    test_aggregation();
 
-// 	Matrix matA(ROW,COL,b);
-// 	for (int i=0;i<ROW*COL;++i){
-// 		matA.getData()[i]=i/ROW*COL;
-// 	}
-// 	CuMatrix cuA(matA,handle);
-
-// 	Matrix matB(ROW,COL,b);
-// 	for (int i=0;i<ROW*COL;++i){
-// 		matB.getData()[i]=(ROW*COL-i)/ROW*COL;
-// 	}
-// 	CuMatrix cuB(matB,handle);
-
-// 	clock_t t=clock();
-// 	CuMatrix cuC=cu.hadamardSub(cuA,cuB);
-// 	t = clock() - t;
-//   	printf ("GPU %f\n",((float)t)/CLOCKS_PER_SEC);
-//   	cuC.updateMatrixFromGPU();
-
-//   	t=clock();
-//   	CuMatrix res(Matrix(ROW,COL,(FeatType *)NULL),handle);
-//     cudnnTensorDescriptor_t srcTensorDesc, sftTensorDesc;
-//     cudnnCreateTensorDescriptor(&srcTensorDesc);
-//     cudnnCreateTensorDescriptor(&sftTensorDesc);
-//     cudnnSetTensor4dDescriptor(srcTensorDesc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-//             ROW,1,1,COL);
-//     cudnnSetTensor4dDescriptor(sftTensorDesc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-//             ROW,1,1,COL);
-// 	cudnnSoftmaxBackward(cu.cudnnHandle,CUDNN_SOFTMAX_ACCURATE,CUDNN_SOFTMAX_MODE_INSTANCE,
-// 			&alpha,srcTensorDesc, cuA.devPtr, 
-// 			srcTensorDesc, cuB.devPtr, 
-//             &beta, srcTensorDesc, res.devPtr);
-
-// 	t = clock() - t;
-// 	printf ("CUDNN %f\n",((float)t)/CLOCKS_PER_SEC);
-// 	// cout<<C.str();
-// 	res.updateMatrixFromGPU();
-// 	// cout<<cuC.str();
-
-// 	printf("CHECKING\n");
-// 	for (int i=0;i<ROW*COL;++i){
-// 		if(cuC.getData()[i]-res.getData()[i]>0.001){
-// 			printf("ERROR %d\n",i);
-// 			return;
-// 		}
-// 	}
-// }
+    return 0;
+}
