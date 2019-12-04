@@ -28,7 +28,7 @@ void CuMatrix::freeGPU() {
         cudaFree (ptr);
 }
 
-void CuMatrix::loadSpCSR(cusparseHandle_t &handle, unsigned numLocalVertices, std::vector<Vertex> &vertices, unsigned numGhostVertices) {
+void CuMatrix::loadSpCsrForward(cusparseHandle_t &handle, unsigned numLocalVertices, std::vector<Vertex> &vertices, unsigned numGhostVertices) {
     unsigned total = numGhostVertices + numLocalVertices;
     isSparse = true;
 
@@ -38,8 +38,7 @@ void CuMatrix::loadSpCSR(cusparseHandle_t &handle, unsigned numLocalVertices, st
     for(auto &v : vertices) {
         links.insert(triplet(v.getLocalId(), v.getLocalId(), v.getNormFactor()));
         count++;
-
-        for(unsigned i = 0; i < v.getNumInEdges(); ++i) {
+        for(unsigned i = 0; i <  v.getNumInEdges(); ++i) {
             InEdge &ie = v.getInEdge(i);
             if(ie.getEdgeLocation() == LOCAL_EDGE_TYPE)
                 links.insert(triplet(v.getLocalId(), ie.getSourceId(), ie.getData()));
@@ -48,7 +47,7 @@ void CuMatrix::loadSpCSR(cusparseHandle_t &handle, unsigned numLocalVertices, st
             count++;
         }
     }
-    
+
     nnz = count;
     EdgeType *norms  = new EdgeType[count];
     int *rowInd = new int[count];
@@ -68,7 +67,7 @@ void CuMatrix::loadSpCSR(cusparseHandle_t &handle, unsigned numLocalVertices, st
     assert(cudaStat == cudaSuccess);
     cudaStat = cudaMalloc ((void **)&csrColInd, count * sizeof(int));
     assert(cudaStat == cudaSuccess);
-    cudaStat = cudaMalloc ((void **)&csrRowPtr, (numLocalVertices+1) * sizeof(int));
+    cudaStat = cudaMalloc ((void **)&csrRowPtr, (numLocalVertices + 1) * sizeof(int));
     assert(cudaStat == cudaSuccess);
     cudaStat = cudaMemcpy(csrVal, norms, sizeof(EdgeType) * count, cudaMemcpyHostToDevice);
     assert(cudaStat == cudaSuccess);
@@ -76,8 +75,8 @@ void CuMatrix::loadSpCSR(cusparseHandle_t &handle, unsigned numLocalVertices, st
     assert(cudaStat == cudaSuccess);
     cudaStat = cudaMemcpy(csrColInd, colInd, sizeof(int) * count, cudaMemcpyHostToDevice);
     assert(cudaStat == cudaSuccess);
-    
-    cusparseXcoo2csr(handle,cooRowInd,nnz,numLocalVertices,csrRowPtr,CUSPARSE_INDEX_BASE_ZERO);
+
+    cusparseXcoo2csr(handle, cooRowInd, nnz, numLocalVertices, csrRowPtr, CUSPARSE_INDEX_BASE_ZERO);
 
 
     setRows(numLocalVertices);
@@ -87,8 +86,7 @@ void CuMatrix::loadSpCSR(cusparseHandle_t &handle, unsigned numLocalVertices, st
     delete[] norms;
 }
 
-
-void CuMatrix::loadSpCOO(cusparseHandle_t &handle, unsigned numLocalVertices, std::vector<Vertex> &vertices, unsigned numGhostVertices) {
+void CuMatrix::loadSpCsrBackward(cusparseHandle_t &handle, unsigned numLocalVertices, std::vector<Vertex> &vertices, unsigned numGhostVertices) {
     unsigned total = numGhostVertices + numLocalVertices;
     isSparse = true;
 
@@ -98,13 +96,12 @@ void CuMatrix::loadSpCOO(cusparseHandle_t &handle, unsigned numLocalVertices, st
     for(auto &v : vertices) {
         links.insert(triplet(v.getLocalId(), v.getLocalId(), v.getNormFactor()));
         count++;
-
-        for(unsigned i = 0; i < v.getNumInEdges(); ++i) {
-            InEdge &ie = v.getInEdge(i);
-            if(ie.getEdgeLocation() == LOCAL_EDGE_TYPE)
-                links.insert(triplet(v.getLocalId(), ie.getSourceId(), ie.getData()));
+        for(unsigned i = 0; i <  v.getNumOutEdges(); ++i) {
+            OutEdge &oe = v.getOutEdge(i);
+            if(oe.getEdgeLocation() == LOCAL_EDGE_TYPE)
+                links.insert(triplet(v.getLocalId(), oe.getDestId(), oe.getData()));
             else
-                links.insert(triplet(v.getLocalId(), v.getSourceVertexLocalId(i) + numLocalVertices,  ie.getData()));
+                links.insert(triplet(v.getLocalId(), v.getDestVertexLocalId(i) + numLocalVertices, oe.getData()));
             count++;
         }
     }
@@ -128,12 +125,17 @@ void CuMatrix::loadSpCOO(cusparseHandle_t &handle, unsigned numLocalVertices, st
     assert(cudaStat == cudaSuccess);
     cudaStat = cudaMalloc ((void **)&csrColInd, count * sizeof(int));
     assert(cudaStat == cudaSuccess);
+    cudaStat = cudaMalloc ((void **)&csrRowPtr, (numLocalVertices + 1) * sizeof(int));
+    assert(cudaStat == cudaSuccess);
     cudaStat = cudaMemcpy(csrVal, norms, sizeof(EdgeType) * count, cudaMemcpyHostToDevice);
     assert(cudaStat == cudaSuccess);
     cudaStat = cudaMemcpy(cooRowInd, rowInd, sizeof(int) * count, cudaMemcpyHostToDevice);
     assert(cudaStat == cudaSuccess);
     cudaStat = cudaMemcpy(csrColInd, colInd, sizeof(int) * count, cudaMemcpyHostToDevice);
     assert(cudaStat == cudaSuccess);
+
+    cusparseXcoo2csr(handle, cooRowInd, nnz, numLocalVertices, csrRowPtr, CUSPARSE_INDEX_BASE_ZERO);
+
 
     setRows(numLocalVertices);
     setCols(total);

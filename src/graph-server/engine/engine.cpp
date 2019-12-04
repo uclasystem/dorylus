@@ -372,27 +372,26 @@ struct AggOPArgs {
 };
 
 
-#ifdef _GPU_ENABLED_
-static CuMatrix *NormAdjMatrix = NULL;
+#ifndef _GPU_ENABLED_
+static CuMatrix *NormAdjMatrixIn = NULL;
 FeatType *Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim) {
-    double sttTimer = getTimer();
     auto t1 = std::chrono::high_resolution_clock::now();
-    FeatType *outputTensor = new FeatType [(vtcsCnt) * featDim];
 
     ComputingUnit cu = ComputingUnit::getInstance();
-    if (NormAdjMatrix == NULL) {
-        NormAdjMatrix = new CuMatrix();
-        NormAdjMatrix->loadSpCSR(cu.spHandle,
-                                 graph.getNumLocalVertices(),
-                                 graph.getVertices(),
-                                 graph.getNumInEdgeGhostVertices());
+    if (NormAdjMatrixIn == NULL) {
+        NormAdjMatrixIn = new CuMatrix();
+        NormAdjMatrixIn->loadSpCsrForward(cu.spHandle,
+                                          graph.getNumLocalVertices(),
+                                          graph.getVertices(),
+                                          graph.getNumInEdgeGhostVertices());
         auto t3 = std::chrono::high_resolution_clock::now();
         std::cout << "ADJ build "
                   << std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t1).count()
                   << " milliseconds\n";
-        std::cout <<"NNZ "<<NormAdjMatrix->nnz<<std::endl;
-        std::cout <<"TOTAL "<<NormAdjMatrix->getNumElemts()<<std::endl;
     }
+
+    double sttTimer = getTimer();
+    FeatType *outputTensor = new FeatType [(vtcsCnt) * featDim];
     CuMatrix feat;
     auto t7 = std::chrono::high_resolution_clock::now();
     feat.loadSpDense(vtcsTensor, forwardGhostVerticesData,
@@ -402,7 +401,7 @@ FeatType *Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned fea
     std::cout << "loadSpDense[CU] "
               << std::chrono::duration_cast<std::chrono::milliseconds>(t5 - t7).count()
               << " milliseconds\n";
-    CuMatrix out = cu.aggregate(*NormAdjMatrix, feat);
+    CuMatrix out = cu.aggregate(*NormAdjMatrixIn, feat);
     auto t4 = std::chrono::high_resolution_clock::now();
     std::cout << "aggregate[CU] "
               << std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t5).count()
@@ -415,14 +414,14 @@ FeatType *Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned fea
               << " milliseconds\n";
     out.setData(outputTensor);
     out.updateMatrixFromGPU();
-    // std::cout<<out.str()<<std::endl;
+
     currId = vtcsCnt;
     auto t2 = std::chrono::high_resolution_clock::now();
     std::cout << "Aggregate[TOTAL] "
               << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count()
               << " milliseconds\n";
 
-    
+
 
     if (iteration > 0) {
         delete[] forwardGhostVerticesData;
@@ -735,6 +734,68 @@ Engine::forwardGhostCommunicator(unsigned tid, void *args) {
  * Major part of the engine's backward-prop logic.
  *
  */
+#ifndef _GPU_ENABLED_
+static CuMatrix *NormAdjMatrixOut = NULL;
+FeatType *
+Engine::aggregateBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim) {
+    double sttTimer = getTimer();
+    auto t1 = std::chrono::high_resolution_clock::now();
+    FeatType *outputTensor = new FeatType [vtcsCnt * featDim];
+    ComputingUnit cu = ComputingUnit::getInstance();
+    if (NormAdjMatrixOut == NULL) {
+        NormAdjMatrixOut = new CuMatrix();
+        NormAdjMatrixOut->loadSpCsrBackward(cu.spHandle,
+                                            graph.getNumLocalVertices(),
+                                            graph.getVertices(),
+                                            graph.getNumOutEdgeGhostVertices());
+        auto t3 = std::chrono::high_resolution_clock::now();
+        std::cout << "ADJ[Backward] build "
+                  << std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t1).count()
+                  << " milliseconds\n";
+    }
+
+    CuMatrix feat;
+    auto t7 = std::chrono::high_resolution_clock::now();
+    feat.loadSpDense(gradTensor, backwardGhostVerticesData,
+                     graph.getNumLocalVertices(), graph.getNumOutEdgeGhostVertices(),
+                     featDim);
+    auto t5 = std::chrono::high_resolution_clock::now();
+    std::cout << "loadSpDense[Backward] "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(t5 - t7).count()
+              << " milliseconds\n";
+    CuMatrix out = cu.aggregate(*NormAdjMatrixOut, feat);
+    auto t4 = std::chrono::high_resolution_clock::now();
+    std::cout << "aggregate[Backward] "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t5).count()
+              << " milliseconds\n";
+    out = out.transpose();
+    cudaDeviceSynchronize();
+    auto t6 = std::chrono::high_resolution_clock::now();
+    std::cout << "transpose[Backward] "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(t6 - t4).count()
+              << " milliseconds\n";
+    out.setData(outputTensor);
+    out.updateMatrixFromGPU();
+
+    currId = vtcsCnt;
+    auto t2 = std::chrono::high_resolution_clock::now();
+    std::cout << "Aggregate[TOTAL Backward] "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count()
+              << " milliseconds\n";
+
+    delete[] gradTensor;
+    delete[] backwardGhostVerticesData;
+
+    if (vecTimeAggregate.size() < 2 * numLayers) {
+        for (unsigned i = vecTimeAggregate.size(); i < 2 * numLayers; i++) {
+            vecTimeAggregate.push_back(0.0);
+        }
+    }
+    vecTimeAggregate[numLayers + iteration - 1] += getTimer() - sttTimer;
+
+    return outputTensor;
+}
+#else
 FeatType *
 Engine::aggregateBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim) {
     double sttTimer = getTimer();
@@ -759,6 +820,9 @@ Engine::aggregateBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featD
 
     return outputTensor;
 }
+#endif
+
+
 
 FeatType *
 Engine::invokeLambdaBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim) {
