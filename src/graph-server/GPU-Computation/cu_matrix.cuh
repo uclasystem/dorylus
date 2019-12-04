@@ -26,6 +26,7 @@ class CuMatrix : public Matrix {
     ~CuMatrix();
 
     void loadSpCSR(cusparseHandle_t& handle, unsigned numLocalVertices, std::vector<Vertex> &vertices, unsigned numGhostVertices);
+    void loadSpCOO(cusparseHandle_t& handle, unsigned numLocalVertices, std::vector<Vertex> &vertices, unsigned numGhostVertices);
     void loadSpDense(FeatType *vtcsTensor, FeatType *ghostTensor,
                      unsigned numLocalVertices, unsigned numGhostVertices,
                      unsigned numFeat);
@@ -52,8 +53,9 @@ class CuMatrix : public Matrix {
     //the memory will live throughout the lifespan of the program (I didn't release them)
     unsigned nnz;
     EdgeType *csrVal;
-    int *csrRowPtr;
     int *csrColInd;
+    int *cooRowInd;
+    int *csrRowPtr;
 
 };
 

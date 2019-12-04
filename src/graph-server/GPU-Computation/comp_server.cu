@@ -48,6 +48,8 @@ void ComputingServer::terminate() {
 }
 
 void ComputingServer::processForward(unsigned layer, bool lastLayer) {
+    if(layer==0)
+        CuMatrix::freeGPU();
     Matrix feats = gpuComm->actMatrix;
     FeatType *z_data = gpuComm->zData;
     FeatType *act_z = gpuComm->actData;
@@ -71,7 +73,6 @@ void ComputingServer::processForward(unsigned layer, bool lastLayer) {
         delete[] cuPredictions.getData();
     }
     delete[] z.getData();
-    CuMatrix::freeGPU();
     auto t3 = std::chrono::high_resolution_clock::now();
     std::cout << "Forward Compute "
               << std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t2).count()
@@ -101,7 +102,6 @@ void ComputingServer::processBackward(unsigned layer, bool lastLayer) {
         if(layer == 0)
             msgService.prefetchWeightsMatrix(totalLayers);; //***CAUTION only works for one weight server
     }
-    CuMatrix::freeGPU();
 }
 
 void
@@ -123,10 +123,6 @@ ComputingServer::gradLayer(unsigned layer) {
     CuMatrix cuWeightUpdates = cuAh.dot(interGrad, true, false);
     Matrix weightUpdates = cuWeightUpdates.getMatrix();
 
-    // printf("interGrad[0] %f\n", (interGrad.getMatrix().getData()[0]));
-    // printf("Ah[0] %f\n",ah.getData()[0]);
-    // printf("Weight Update[0] %f\n", weightUpdates.getData()[0]);
-
     auto t2 = std::chrono::high_resolution_clock::now();
     std::cout << "Backward Compute "
               << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t3).count()
@@ -144,8 +140,8 @@ ComputingServer::gradLoss(unsigned layer) {
 
     CuMatrix cuPredictions = cu.wrapMatrix(predictions);
     CuMatrix cuLabels = cu.wrapMatrix(labels);
+    
     CuMatrix d_output = cu.hadamardSub(cuPredictions, cuLabels);
-
     Matrix weight = msgService.getWeightMatrix(layer);
     CuMatrix cuWeights = cu.wrapMatrix(weight);
     CuMatrix interGrad = d_output.dot(cuWeights, false, true);
@@ -157,15 +153,10 @@ ComputingServer::gradLoss(unsigned layer) {
     CuMatrix cuWeightUpdates = cuAh.dot(d_output, true, false);
     Matrix weightUpdates = cuWeightUpdates.getMatrix();
 
-    // printf("d_output[0] %f\n", (d_output.getMatrix().getData()[0]));
-    // printf("Ah[0] %f\n",ah.getData()[0]);
-    // printf("Weight Update‘[0] %f\n", weightUpdates.getData()[0]);
-
     auto t2 = std::chrono::high_resolution_clock::now();
     std::cout << "Backward(Loss) Compute "
               << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t3).count()
               << " milliseconds\n";
-
     msgService.sendWeightUpdate(weightUpdates, layer);
 }
 

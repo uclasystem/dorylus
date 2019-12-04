@@ -189,10 +189,10 @@ activateDerivate(Matrix &mat) {
 
 void test_aggregation() {
     std::set<triplet> links;
-    // links.insert(triplet(0, 2, 1));
+    links.insert(triplet(0, 2, 1));
     links.insert(triplet(0, 0, .1));
     links.insert(triplet(1, 1, .01));
-    // links.insert(triplet(1, 2, 1));
+    links.insert(triplet(1, 2, 1));
     links.insert(triplet(2, 2, .001));
     unsigned count = links.size();
     EdgeType *norms  = new EdgeType[count];
@@ -216,7 +216,6 @@ void test_aggregation() {
     cout << endl;
 
     EdgeType *csrVal;
-    int *csrRowPtr;
     int *csrColInd;
     int *cooRowInd;
     auto
@@ -238,44 +237,45 @@ void test_aggregation() {
     cudaStat = cudaMemcpy(csrColInd, colInd, sizeof(int) * count, cudaMemcpyHostToDevice);
     assert(cudaStat == cudaSuccess);
 
-    cudaStat = cudaMalloc ((void **)&csrRowPtr, (3 + 1) * sizeof(int));
-    assert(cudaStat == cudaSuccess);
-    //convert to COO
-    auto status = cusparseXcoo2csr(spHandle, cooRowInd, count, 3, csrRowPtr, CUSPARSE_INDEX_BASE_ZERO);
-
-    int x[4];
-    cudaMemcpy(x, csrRowPtr, sizeof(int) * 4, cudaMemcpyDeviceToHost);
-    for(int i = 0; i < 4; ++i)
-        cout << x[i] << " ";
-    cout << "\n";
 
     float feats[6] = {0.1, 0.2, 0.3, 0.4, 0.5, 0.6};
     CuMatrix f(Matrix(3, 2, feats), handle);
     cout << f.str();
     CuMatrix A;
     A.nnz = count;
+    A.cooRowInd = cooRowInd;
     A.csrVal = csrVal;
-    A.csrRowPtr = csrRowPtr;
     A.csrColInd = csrColInd;
     A.setRows(3);
     A.setCols(3);
     A.handle = handle;
 
     CuMatrix out = cu.aggregate(A, f);
-    auto z=out.getMatrix();
+    cout<<out.getMatrix().str();
+    auto z=out.transpose();
     // float* z=new float[out.getNumElemts()];
     // cudaMemcpy(z, out.devPtr, sizeof(EdgeType) * out.getNumElemts(), cudaMemcpyDeviceToHost);
     // for(int j=0;j<out.getNumElemts();++j)
     //     cout<<z[j]<<" ";
     // cout<<"\n";
-    cout<<z.str();
+    cout<<z.getMatrix().str();
+}
+
+void testElementSub(){
+    float y[6] = {0.1, 0.2, 0.3, 0.4, 0.5, 0.6};
+    float x[6] = {0.1, 0.2, 0.3, 0.4, 0.5, 0.7};
+    CuMatrix cuX(Matrix(6,1,x),handle);
+    CuMatrix cuY(Matrix(6,1,y),handle);
+    auto z=cu.hadamardSub(cuX,cuY);
+    cout<<z.getMatrix().str();
+
 }
 
 
 int main() {
     handle = cu.handle;
     spHandle = cu.spHandle;
-    test_aggregation();
+    
 
     return 0;
 }

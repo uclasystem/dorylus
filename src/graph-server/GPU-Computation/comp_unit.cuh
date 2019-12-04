@@ -35,7 +35,6 @@ class ComputingUnit {
     CuMatrix wrapMatrix(Matrix m);
 
     CuMatrix scaleRowsByVector(Matrix m, Matrix v);
-    void aggregateRows(CuMatrix m, CuMatrix norms, CuMatrix bases);
     CuMatrix aggregate(CuMatrix &sparse, CuMatrix &dense);
 
     CuMatrix dot(Matrix &A, Matrix &B);

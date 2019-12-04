@@ -1,6 +1,9 @@
 #include "comp_unit.cuh"
 #include "cuda_ops.cuh"
 
+using std::cout;
+using std::endl;
+
 const float alpha = 1.0f, beta = 0.0f;
 
 ComputingUnit *ComputingUnit::instance = nullptr;
@@ -32,49 +35,40 @@ CuMatrix ComputingUnit::wrapMatrix(Matrix m) {
 }
 
 CuMatrix ComputingUnit::aggregate(CuMatrix &sparse, CuMatrix &dense) {
-
-    CuMatrix C(Matrix(dense.getCols(), dense.getRows(), (char*) NULL), handle);
+    
+    CuMatrix C(Matrix(dense.getCols(), sparse.getRows(), (FeatType *) NULL), handle);
 
     cusparseSpMatDescr_t desA;
     cusparseDnMatDescr_t desB;
     cusparseDnMatDescr_t desC;
+    auto t0 = std::chrono::high_resolution_clock::now();
     auto
     cusparseStat = cusparseCreateCsr(&desA, sparse.getRows(), sparse.getCols(), sparse.nnz,
                                      sparse.csrRowPtr, sparse.csrColInd, sparse.csrVal,
-                                     CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
+                                     CUSPARSE_INDEX_32I,CUSPARSE_INDEX_32I,
                                      CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F
                                     );
-
     assert(CUSPARSE_STATUS_SUCCESS == cusparseStat);
     cusparseStat = cusparseCreateDnMat(&desB, dense.getCols(), dense.getRows(), dense.getCols(), dense.devPtr,
                                        CUDA_R_32F, CUSPARSE_ORDER_COL);
-
     assert(CUSPARSE_STATUS_SUCCESS == cusparseStat);
-    cusparseStat = cusparseCreateDnMat(&desC, dense.getRows(), dense.getCols(), dense.getRows(), C.devPtr,
+    cusparseStat = cusparseCreateDnMat(&desC, sparse.getRows(), dense.getCols(), sparse.getRows(), C.devPtr,
                                        CUDA_R_32F, CUSPARSE_ORDER_COL);
     assert(CUSPARSE_STATUS_SUCCESS == cusparseStat);
-
-    using std::cout;
-    using std::endl;
-
-    // float values[1000];
-    // cudaMemcpy(values, C.devPtr, sizeof(EdgeType) * dense.getNumElemts(), cudaMemcpyDeviceToHost);
-    // for (int i =0;i<dense.getNumElemts();++i)
-    //     cout<<values[i]<<" ";
-    // cout<<endl;
     // CUSPARSE_OPERATION_TRANSPOSE
     std::size_t buffer_size;
-    cusparseSpMM_bufferSize(spHandle, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
-                            &alpha, desA, desB, &beta,
-                            desC, CUDA_R_32F, CUSPARSE_CSRMM_ALG1, &buffer_size
-                           );
+    cusparseStat = cusparseSpMM_bufferSize(spHandle, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
+                                           &alpha, desA, desB, &beta,
+                                           desC, CUDA_R_32F, CUSPARSE_COOMM_ALG3, &buffer_size
+                                          );
+    // assert(CUSPARSE_STATUS_SUCCESS == cusparseStat);
     float *buffer;
-    cudaMalloc ((void **)&buffer, buffer_size);
-    cusparseSpMM(spHandle, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
-                 &alpha, desA, desB, &beta,
-                 desC, CUDA_R_32F, CUSPARSE_CSRMM_ALG1, buffer
-                );
-    printf("buffer_size: %lu\n", buffer_size );
+    cudaMalloc ((void **)&buffer, buffer_size * sizeof(float));
+    cusparseStat = cusparseSpMM(spHandle, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
+                                &alpha, desA, desB, &beta,
+                                desC, CUDA_R_32F, CUSPARSE_CSRMM_ALG1, buffer
+                               );
+    assert(CUSPARSE_STATUS_SUCCESS == cusparseStat);
     return C;
 }
 
@@ -93,19 +87,6 @@ CuMatrix ComputingUnit::scaleRowsByVector(Matrix m, Matrix v) {
     return cuM;
 }
 
-//norms have to be a 1*N matrix
-void ComputingUnit::aggregateRows(CuMatrix cuM, CuMatrix cuN, CuMatrix cuBase) {
-    EdgeType b = 1;
-    cublasStatus_t rt = cublasSgemv(handle, CUBLAS_OP_N,
-                                    cuM.getCols(), cuM.getRows(),
-                                    &alpha,
-                                    cuM.devPtr, cuM.getCols(),
-                                    cuN.devPtr, 1,
-                                    &b,
-                                    cuBase.devPtr, 1);
-    cuBase.updateMatrixFromGPU();
-}
-
 CuMatrix ComputingUnit::hadamardSub(CuMatrix &matLeft, CuMatrix &matRight) {
     assert(matLeft.getRows() == matRight.getRows());
     assert(matLeft.getCols() == matRight.getCols());
@@ -114,12 +95,10 @@ CuMatrix ComputingUnit::hadamardSub(CuMatrix &matLeft, CuMatrix &matRight) {
     thrust::device_ptr<float> cuLeft_ptr(matLeft.devPtr);
     thrust::device_ptr<float> cuRight_ptr(matRight.devPtr);
     thrust::device_ptr<float> res_ptr(res.devPtr);
-
     thrust::transform(cuLeft_ptr, cuLeft_ptr + matLeft.getNumElemts(),
                       cuRight_ptr,
                       res_ptr,
                       thrust::minus<float>());
-
     return res;
 }
 
