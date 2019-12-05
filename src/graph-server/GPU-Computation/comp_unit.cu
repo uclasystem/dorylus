@@ -59,14 +59,14 @@ CuMatrix ComputingUnit::aggregate(CuMatrix &sparse, CuMatrix &dense) {
     std::size_t buffer_size;
     cusparseStat = cusparseSpMM_bufferSize(spHandle, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
                                            &alpha, desA, desB, &beta,
-                                           desC, CUDA_R_32F, CUSPARSE_COOMM_ALG3, &buffer_size
+                                           desC, CUDA_R_32F, CUSPARSE_MM_ALG_DEFAULT, &buffer_size
                                           );
-    // assert(CUSPARSE_STATUS_SUCCESS == cusparseStat);
+    assert(CUSPARSE_STATUS_SUCCESS == cusparseStat);
     float *buffer;
     cudaMalloc ((void **)&buffer, buffer_size * sizeof(float));
     cusparseStat = cusparseSpMM(spHandle, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
                                 &alpha, desA, desB, &beta,
-                                desC, CUDA_R_32F, CUSPARSE_CSRMM_ALG1, buffer
+                                desC, CUDA_R_32F, CUSPARSE_MM_ALG_DEFAULT, buffer
                                );
     assert(CUSPARSE_STATUS_SUCCESS == cusparseStat);
     return C;

@@ -99,7 +99,7 @@ void CuMatrix::loadSpCsrBackward(cusparseHandle_t &handle, unsigned numLocalVert
         for(unsigned i = 0; i <  v.getNumOutEdges(); ++i) {
             OutEdge &oe = v.getOutEdge(i);
             if(oe.getEdgeLocation() == LOCAL_EDGE_TYPE)
-                links.insert(triplet(v.getLocalId(), oe.getDestId(), oe.getData()));
+                links.insert(triplet(v.getLocalId(), v.getDestVertexLocalId(i), oe.getData()));
             else
                 links.insert(triplet(v.getLocalId(), v.getDestVertexLocalId(i) + numLocalVertices, oe.getData()));
             count++;
@@ -136,7 +136,6 @@ void CuMatrix::loadSpCsrBackward(cusparseHandle_t &handle, unsigned numLocalVert
 
     cusparseXcoo2csr(handle, cooRowInd, nnz, numLocalVertices, csrRowPtr, CUSPARSE_INDEX_BASE_ZERO);
 
-
     setRows(numLocalVertices);
     setCols(total);
     delete[] rowInd;
@@ -151,8 +150,7 @@ void CuMatrix::loadSpDense(FeatType *vtcsTensor, FeatType *ghostTensor,
     unsigned totalVertices = (numLocalVertices + numGhostVertices);
     cudaStat = cudaMalloc ((void **)&devPtr,  numFeat * sizeof(FeatType) * totalVertices);
     assert(cudaStat == cudaSuccess);
-    cudaStat = cudaMemcpy(devPtr, vtcsTensor,
-                          sizeof(FeatType) * numLocalVertices * numFeat, cudaMemcpyHostToDevice);
+    cudaStat = cudaMemcpy(devPtr, vtcsTensor, sizeof(FeatType) * numLocalVertices * numFeat, cudaMemcpyHostToDevice);
     assert(cudaStat == cudaSuccess);
     cudaStat = cudaMemcpy(devPtr  + numLocalVertices * numFeat, ghostTensor,
                           sizeof(FeatType) * numGhostVertices * numFeat, cudaMemcpyHostToDevice);
