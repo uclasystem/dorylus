@@ -26,11 +26,10 @@ class ResourceComm {
 public:
     ResourceComm() {};
     virtual ~ResourceComm() {};
-    virtual void setTrainValidationSplit(float trainPortion, unsigned numLocalVertices) = 0;
     // For forward-prop.
     virtual void newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData,
         FeatType *actData, unsigned numLocalVertices, unsigned numFeats,
-        unsigned numFeatsNext, bool eval) = 0;
+        unsigned numFeatsNext) = 0;
 
     virtual void requestForward(unsigned layer, bool lastLayer) = 0;
 

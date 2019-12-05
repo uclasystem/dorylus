@@ -31,7 +31,7 @@ public:
 
     // For forward-prop.
     void newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData_, FeatType *actData_,
-                              unsigned numLocalVertices_, unsigned numFeats, unsigned numFeatsNext_, bool eval_);
+                              unsigned numLocalVertices_, unsigned numFeats, unsigned numFeatsNext_);
     void requestForward(unsigned layer, bool lastLayer);
     void waitLambdaForward(unsigned layer, bool lastLayer) {};
     void invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
@@ -78,7 +78,6 @@ private:
     FeatType *actData;
     unsigned numFeatsNext;
 
-    bool eval;
     float split;
 
     //backward

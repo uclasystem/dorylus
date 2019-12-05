@@ -23,13 +23,12 @@ GPUComm::GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,
         dPort(dataserverPort_),
         wPort(wPort_),
         dataSocket(ctx,ZMQ_REQ){
-            eval=0;
             comp_server=new ComputingServer(this);
 }
 
 
 void GPUComm::newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData_, FeatType *actData_,
-                            unsigned numLocalVertices_, unsigned numFeats, unsigned numFeatsNext_, bool eval_){
+                            unsigned numLocalVertices_, unsigned numFeats, unsigned numFeatsNext_){
     // Create a new matrix object for workers to access.
     numLocalVertices=numLocalVertices_;
     currLayer = layer;

@@ -27,8 +27,8 @@
 
 #define SLEEP_PERIOD 5000   // sleep 5000us and then check the condition.
 #define TIMEOUT_PERIOD 5000 // wait for up to 5000ms before relaunching
-#define MAX_TIMEOUT 10000   //
 #define MIN_TIMEOUT 500     // at least wait for 500ms before relaunching
+#define EXP_BACKOFF_FACTOR 1.5 // base of exponential backoff
 
 class LambdaWorker;
 
@@ -44,12 +44,10 @@ public:
     LambdaComm(CommInfo &commInfo);
     ~LambdaComm();
 
-    void setTrainValidationSplit(float trainPortion, unsigned numLocalVertices);
-
     // For forward-prop.
     void newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData,
         FeatType *actData, unsigned numLocalVertices, unsigned numFeats,
-        unsigned numFeatsNext, bool eval);
+        unsigned numFeatsNext);
     void requestForward(unsigned layer, bool lastLayer);
     void invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer);
     void waitLambdaForward(unsigned layer, bool lastLayer);
@@ -76,7 +74,6 @@ public:
 
     unsigned currLayer;
 
-    bool evaluate;
     bool halt;
     std::vector<bool> trainPartitions;
 
@@ -90,17 +87,13 @@ public:
     bool *backwardLambdaTable;
     double backwardTimer;
 
-    unsigned numCorrectPredictions;
-    float totalLoss;
-    unsigned numValidationVertices;
-    unsigned evalPartitions;
-
     zmq::context_t ctx;
     zmq::socket_t frontend;
     zmq::socket_t backend;
     zmq::socket_t coordsocket;
 
     unsigned nodeId;
+    unsigned numNodes;
     std::string nodeIp;
     unsigned dataserverPort;
 

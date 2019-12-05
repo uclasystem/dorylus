@@ -50,8 +50,9 @@ WeightServer::WeightServer(std::string& weightServersFile, std::string& myPrIpFi
     // Read in layer configurations and initialize weight matrices.
     initializeWeightMatrices(configFileName);
 
-    if (adam) 
-        adamOpt=AdamOptimizer(LEARNING_RATE,dims);
+    // Initialize the adam optimizer if this is the master
+    if (adam && master)
+        adamOpt = AdamOptimizer(LEARNING_RATE, dims);
 
     // Send weight matrix info to all servers and wait for ack.
     distributeWeightMatrices();
@@ -131,11 +132,11 @@ void WeightServer::applyUpdate(unsigned layer) {
             for (unsigned u = 0; u < updateMats[layer].getNumElemts(); ++u)
                 updateSum[u] += updateNew[u];
         }
-        
+
         FeatType *weightData = weightMats[layer].getData();
         FeatType *updateSum = updateMats[layer].getData();
         if (adam) {
-            adamOpt.update(layer,weightData,updateSum);
+            adamOpt.update(layer, weightData, updateSum);
         }
         else{
             // Once all updates have been aggregated, apply to the weights matrices.
@@ -162,7 +163,7 @@ void WeightServer::applyUpdate(unsigned layer) {
                 acksNeeded--;
         }
 
-        servers_updates_done=true;
+        servers_updates_done = true;
         servers_updates_cv.notify_all();
         serverLog("Finished updating the weights.");
 
@@ -174,7 +175,7 @@ void WeightServer::applyUpdate(unsigned layer) {
             for (unsigned i = 0; i < updateMats[layer].getNumElemts(); i++) {
                 tmp += std::fabs(updateMats[layer].getData()[i]);
             }
-            
+
             std::cout << "Layer " << layer << " Weight Grad Agg: " << tmp << " Max element: " << *(std::max_element(updateMats[layer].getData(), updateMats[layer].getData() + updateMats[layer].getNumElemts())) << " Min element: " << *(std::min_element(updateMats[layer].getData(), updateMats[layer].getData() + updateMats[layer].getNumElemts())) << std::endl;
             // std::cout << "[";
             // for (unsigned i = 0; i < 10; i++) {
@@ -186,28 +187,21 @@ void WeightServer::applyUpdate(unsigned layer) {
     // Worker code.
     } else {
 
-        // Send all updated weight matrices to the master for aggregation.
-        for (unsigned i = 0; i < updateMats.size(); ++i) {
-            Matrix& updateMat = updateMats[i];
-            zmq::message_t updateDataMsg(updateMat.getDataSize());
-            std::memcpy(updateDataMsg.data(), updateMat.getData(), updateMat.getDataSize());
+        // Send the updated weight matrices to the master for aggregation.
+        Matrix& updateMat = updateMats[layer];
+        zmq::message_t updateDataMsg(updateMat.getDataSize());
+        std::memcpy(updateDataMsg.data(), updateMat.getData(), updateMat.getDataSize());
+        publisher.send(updateDataMsg);
 
-            if (i == updateMats.size() - 1)
-                publisher.send(updateDataMsg);
-            else
-                publisher.send(updateDataMsg, ZMQ_SNDMORE);
-        }
+        // Wait for the master to reply with the reduced weight values.
+        zmq::message_t updatedWeightMsg;
+        subscriber.recv(&updatedWeightMsg);
 
-        // Wait for the master to reply with the aggregated and averaged weight values.
-        for (Matrix& weightMat : weightMats) {
-            zmq::message_t updatedWeightMsg;
-            subscriber.recv(&updatedWeightMsg);
+        Matrix& weightMat = weightMats[layer];
+        assert(weightMat.getDataSize() == updatedWeightMsg.size());
 
-            assert(weightMat.getDataSize() == updatedWeightMsg.size());
-
-            // If there are no errors, copy the new data into the weight matrix.
-            std::memcpy(weightMat.getData(), updatedWeightMsg.data(), weightMat.getDataSize());
-        }
+        // If there are no errors, copy the new data into the weight matrix.
+        std::memcpy(weightMat.getData(), updatedWeightMsg.data(), weightMat.getDataSize());
 
         // Send back confirm ACK message.
         unsigned msgType = CTRL_MSG::ACK;
@@ -215,7 +209,7 @@ void WeightServer::applyUpdate(unsigned layer) {
         std::memcpy(ackMsg.data(), &msgType, sizeof(unsigned));
         publisher.send(ackMsg);
 
-        servers_updates_done=true;
+        servers_updates_done = true;
         servers_updates_cv.notify_all();
         serverLog("All workers weights updated.");
     }
@@ -224,11 +218,9 @@ void WeightServer::applyUpdate(unsigned layer) {
     outfile << "U: " << updateTimer.getTime() << std::endl;     // Output timing results.
 
     // Clear the update buffer.
-    for (unsigned l = 0; l < updateMats.size(); ++l) {
-        float *updateData = updateMats[l].getData();
-        for (unsigned u = 0; u < updateMats[l].getNumElemts(); ++u)
-            updateData[u] = 0.;
-    }
+    float *updateData = updateMats[layer].getData();
+    for (unsigned u = 0; u < updateMats[layer].getNumElemts(); ++u)
+        updateData[u] = 0.;
 
     // Reset number of lambdas.
     lambdaRecved = 0;
