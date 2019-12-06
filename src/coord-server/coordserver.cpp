@@ -179,10 +179,7 @@ CoordServer::run() {
     std::cout << "[Coord] Starts listening for dataserver's requests..." << std::endl;
     try {
         bool terminate = false;
-        size_t req_count = 0;
-        size_t sched_cnt = 0;
         while (!terminate) {
-
             // Wait on requests.
             zmq::message_t header;
             zmq::message_t dataserverIp;
@@ -212,33 +209,33 @@ CoordServer::run() {
             // Else is a request for lambda threads. Handle that. This is forward.
             } else if (op == OP::REQ_FORWARD) {
                 unsigned layer = parse<unsigned>((char *) header.data(), 1);
-                unsigned lambdaId = parse<unsigned>((char *) header.data(), 2);
-                unsigned lastLayer = parse<unsigned>((char*) header.data(), 3);
+                unsigned globalLambdaId = parse<unsigned>((char *) header.data(), 2);
+                unsigned lambdaId = parse<unsigned>((char *) header.data(), 3);
+                unsigned lastLayer = parse<unsigned>((char*) header.data(), 4);
 
                 std::string accMsg = "[ACCEPTED] Req for FORWARD, lambda " + std::to_string(lambdaId)
                                      + " is invoked for layer " + std::to_string(layer) + ".";
                 std::cout << accMsg << std::endl;
 
                 // Issue the lambda thread to serve the request.
-                char *weightserverIp = weightserverAddrs[req_count % weightserverAddrs.size()];
+                char *weightserverIp = weightserverAddrs[globalLambdaId % weightserverAddrs.size()];
                 invokeFunction("forward", dataserverIpCopy, dataserverPort,
                                weightserverIp, weightserverPort, layer, lambdaId, (bool) lastLayer);
-                req_count++;
             // This is backward.
             } else if (op == OP::REQ_BACKWARD) {
                 unsigned layer = parse<unsigned>((char *) header.data(), 1);
-                unsigned lambdaId = parse<unsigned>((char *) header.data(), 2);
-                unsigned lastLayer = parse<unsigned>((char*) header.data(), 3);
+                unsigned globalLambdaId = parse<unsigned>((char *) header.data(), 2);
+                unsigned lambdaId = parse<unsigned>((char *) header.data(), 3);
+                unsigned lastLayer = parse<unsigned>((char*) header.data(), 4);
 
                 std::string accMsg = "[ACCEPTED] Req for BACKWARD, lambda " + std::to_string(lambdaId)
                                    + " is invoked for layer " + std::to_string(layer) + ".";
                 std::cout << accMsg << std::endl;
 
                 // Issue the lambda thread to serve the request.
-                char *weightserverIp = weightserverAddrs[req_count % weightserverAddrs.size()];
+                char *weightserverIp = weightserverAddrs[globalLambdaId % weightserverAddrs.size()];
                 invokeFunction("backward", dataserverIpCopy, dataserverPort,
                                weightserverIp, weightserverPort, layer, lambdaId, (bool) lastLayer);
-                req_count++;
             } else if (op == OP::INFO) {
                 unsigned numLambda = parse<unsigned>((char *) header.data(), 1);
 
@@ -250,12 +247,11 @@ CoordServer::run() {
                 unsigned remainder = numLambda % weightserverAddrs.size();
                 // Send info message to weightservers.
                 for (unsigned i = 0; i < remainder; i++) {
-                    sendInfoMessage(weightsockets[(sched_cnt + i) % weightserverAddrs.size()], baseNumThreads + 1);
+                    sendInfoMessage(weightsockets[i % weightserverAddrs.size()], baseNumThreads + 1);
                 }
                 for (unsigned i = remainder; i < weightserverAddrs.size(); i++) {
-                    sendInfoMessage(weightsockets[(sched_cnt + i) % weightserverAddrs.size()], baseNumThreads);
+                    sendInfoMessage(weightsockets[i % weightserverAddrs.size()], baseNumThreads);
                 }
-                sched_cnt += numLambda;
             // Unknown op code.
             } else {
                 std::cerr << "[ ERROR ] Unknown OP code (" << op << ") received." << std::endl;
