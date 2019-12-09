@@ -45,6 +45,21 @@ class CPUComm : public ResourceComm {
 
     void sendShutdownMessage();
 
+    // TODO: (SHEN) resComm interfaces have changed.
+    void newContext(unsigned layer, Matrix &inputTensor_, Matrix &outputTensor_, std::vector<Matrix> *savedTensors_) {};
+    void newContext(unsigned layer, Matrix &inputTensor_, Matrix &outputTensor_, Matrix &targetTensor_, std::vector<Matrix> *savedTensors_) {};
+
+    // For forward-prop.
+    void applyVertexForward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
+    void applyEdgeForward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
+    void waitResForward(unsigned layer, bool lastLayer) {};
+
+    // For backward-prop.
+    void applyVertexBackward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
+    void applyEdgeBackward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
+    void waitResBackward(unsigned layer, bool lastLayer) {};
+
+
     friend class ComputingServer;
 
   private:

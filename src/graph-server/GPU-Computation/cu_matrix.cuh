@@ -21,7 +21,7 @@ class CuMatrix : public Matrix {
     static void freeGPU();
 
     CuMatrix() {};
-    CuMatrix( Matrix M, const cublasHandle_t &handle_);
+    CuMatrix(Matrix M, const cublasHandle_t &handle_);
     ~CuMatrix();
 
     void loadSpCSR(cusparseHandle_t &handle, Graph& graph);
@@ -46,7 +46,7 @@ class CuMatrix : public Matrix {
     cublasStatus_t stat;
 
     bool isSparse;
-    //For normal matrix
+    // For normal matrix
     float *devPtr;
 
     //For sparse matrix
@@ -55,8 +55,6 @@ class CuMatrix : public Matrix {
     EdgeType *csrVal;
     unsigned *csrColInd;
     unsigned *csrRowPtr;
-
 };
-
 
 #endif

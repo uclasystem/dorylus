@@ -57,27 +57,35 @@ public:
     void destroy();
     bool master();
 
-    FeatType* aggregate(FeatType *vtcsTensor, unsigned vtcsCnt,
-                        unsigned featDim);
-    FeatType* invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt,
-                           unsigned inFeatDim, unsigned outFeatDim);
+    FeatType* aggregate(FeatType **eVFeatsTensor, unsigned edgsCnt,
+                        unsigned featDim, AGGREGATOR aggregator);
+    FeatType* applyVertex(FeatType *vtcsTensor, unsigned vtcsCnt,
+                        unsigned inFeatDim, unsigned outFeatDim);
+    FeatType** scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
+    FeatType** applyEdge(EdgeType *edgsTensor, unsigned edgsCnt, unsigned eFeatDim,
+                        FeatType **eSrcVFeatsTensor, FeatType **eDstVFeatsTensor,
+                        unsigned inFeatDim, unsigned outFeatDim);
+
     FeatType* fusedGatherApply(FeatType *vtcsTensor, unsigned vtcsCnt,
-                               unsigned inFeatDim, unsigned outFeatDim);
-    FeatType* scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
-    FeatType* fusedGAS(FeatType* vtcsTensor, unsigned vtcsCnt,
+                            unsigned inFeatDim, unsigned outFeatDim);
+    FeatType* fusedGAS(FeatType *vtcsTensor, unsigned vtcsCnt,
       unsigned inFeatDim, unsigned outFeatDim, bool scatter);
 
-    FeatType* aggregateBackward(FeatType *gradTensor, unsigned vtcsCnt,
-                                unsigned featDim);
-    FeatType* invokeLambdaBackward(FeatType *gradTensor, unsigned vtcsCnt,
-                                   unsigned inFeatDim, unsigned outFeatDim);
+    FeatType* aggregateBackward(FeatType **eVFeatsTensor, unsigned edgsCnt,
+                        unsigned featDim, AGGREGATOR aggregator);
+    FeatType* applyVertexBackward(FeatType *gradTensor, unsigned vtcsCnt,
+                        unsigned inFeatDim, unsigned outFeatDim);
+    FeatType** scatterBackward(FeatType *gradTensor, unsigned vtcsCnt,
+                               unsigned featDim);
+    FeatType** applyEdgeBackward(EdgeType *edgsTensor, unsigned edgsCnt, unsigned eFeatDim,
+                        FeatType **eSrcVGradTensor, FeatType **eDstVGradTensor,
+                        unsigned inFeatDim, unsigned outFeatDim);
+
     FeatType* fusedGatherApplyBackward(FeatType *gradTensor, unsigned vtcsCnt,
                                        unsigned inFeatDim, unsigned outFeatDim);
-    FeatType* scatterBackward(FeatType *gradTensor, unsigned vtcsCnt,
-                              unsigned featDim);
     FeatType* fusedGASBackward(FeatType* gradTensor, unsigned vtcsCnt,
-      unsigned inFeatDim, unsigned outFeatDim,
-      bool aggregate, bool scatter);
+                        unsigned inFeatDim, unsigned outFeatDim,
+                        bool aggregate, bool scatter);
 
     void makeBarrier();
 
@@ -104,8 +112,8 @@ private:
     std::vector<unsigned> layerConfig;
     unsigned numLayers = 0;
 
-    // intermediate data for backward computation.
-    std::vector<Matrix> *savedTensors;
+    std::vector<Matrix> *vtxNNSavedTensors; // intermediate data for vertex NN backward computation.
+    std::vector<Matrix> *edgNNSavedTensors; // intermediate data for edge NN backward computation.
     std::map<std::string, Matrix> savedVtxTensors;
 
     // Persistent pointers to original input data
@@ -119,13 +127,18 @@ private:
 
     struct AggOPArgs {
         FeatType *outputTensor;
-        FeatType *inputTensor;
+        FeatType **inputTensor;
         unsigned vtcsCnt;
+        unsigned edgsCnt;
         unsigned featDim;
     };
 
     // Labels one-hot storage array.
     FeatType *localVerticesLabels = NULL;
+
+    // YIFAN: this is used together with edgsTensor. edgsTensor are arrays of pointers to this underlying vtcs tensors buf.
+    // TODO: (YIFAN) This is not elegant. Think a way to get rid of this.
+    FeatType *underlyingVtcsTensorBuf;
 
     unsigned currId = 0;
 
@@ -178,10 +191,11 @@ private:
     double timeForwardProcess = 0.0;
     double timeBackwardProcess = 0.0;
     std::vector<double> vecTimeAggregate;
-    std::vector<double> vecTimeLambda;
+    std::vector<double> vecTimeApplyVtx;
     std::vector<double> vecTimeLambdaInvoke;
     std::vector<double> vecTimeLambdaWait;
-    std::vector<double> vecTimeSendout;
+    std::vector<double> vecTimeApplyEdg;
+    std::vector<double> vecTimeScatter;
     std::vector<double> epochTimes;
 
     std::vector<unsigned> epochMs;
@@ -202,6 +216,12 @@ private:
 
     void gatherApplyCompute(unsigned tid, void *args);
     void gatherApplyBPCompute(unsigned tid, void *args);
+
+    // transform from vtxFeats/edgFeats to edgFeats/vtxFeats
+    FeatType** srcVFeats2eFeats(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
+    FeatType** dstVFeats2eFeats(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
+    // FeatType* eFeats2dstVFeats(FeatType **edgsTensor, unsigned edgsCnt, unsigned featDim);
+    // FeatType* eFeats2srcVFeats(FeatType **edgsTensor, unsigned edgsCnt, unsigned featDim);
 
     // About the global data arrays.
     inline unsigned getFeatDim(unsigned layer) {
@@ -250,9 +270,9 @@ private:
 
     // Aggregation operation (along with normalization).
     void forwardAggregateFromNeighbors(unsigned lvid, FeatType *outputTensor,
-                                       FeatType *inputTensor, unsigned featDim);
+                                    FeatType **inputTensor, unsigned featDim);
     void backwardAggregateFromNeighbors(unsigned lvid, FeatType *nextGradTensor,
-                                        FeatType *gradTensor, unsigned featDim);
+                                    FeatType **gradTensor, unsigned featDim);
 
     void saveTensor(std::string& name, unsigned rows, unsigned cols, FeatType *dptr);
     void saveTensor(const char* name, unsigned rows, unsigned cols, FeatType *dptr);

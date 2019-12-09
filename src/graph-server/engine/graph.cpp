@@ -127,7 +127,7 @@ bool Graph::containsDstGhostVtx(unsigned gvid) {
 }
 
 void Graph::print() {
-    printf("%d %d %d %d; %lld %lld %lld; %lld %lld\n",
+    fprintf(stderr, "%d %d %d %d; %lld %lld %lld; %lld %lld\n",
             localVtxCnt, globalVtxCnt, srcGhostCnt, dstGhostCnt,
             localInEdgeCnt, localOutEdgeCnt, globalEdgeCnt,
             forwardAdj.nnz, backwardAdj.nnz);
@@ -268,6 +268,6 @@ RawGraph::dump(std::string filename, unsigned numNodes) {
     outfile.write(reinterpret_cast<const char *>(backwardAdj.columnIdxs), sizeof(unsigned) * backwardAdj.nnz);
 
     outfile.close();
-
+    // set file permission to 777 to allow accesses from other users
     chmod(filename.c_str(), S_IRWXU | S_IRWXG | S_IRWXO);
 }

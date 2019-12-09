@@ -36,24 +36,24 @@ public:
     virtual void reset(unsigned layer) = 0;
     virtual void sendInfoMsg(unsigned layer) = 0;
 
-    // For forward-prop.
-    virtual void newContextForward(unsigned layer, FeatType *dataBuf,
-        FeatType *zData, FeatType *actData, unsigned numLocalVertices,
-        unsigned numFeats, unsigned numFeatsNext, bool pipeline = false) = 0;
+    virtual void newContext(unsigned layer, Matrix &inputTensor_, Matrix &outputTensor_,
+                            std::vector<Matrix> *savedTensors_, bool pipeline = false) = 0;
+    virtual void newContext(unsigned layer, Matrix &inputTensor_, Matrix &outputTensor_, Matrix &targetTensor_,
+                            std::vector<Matrix> *savedTensors_, bool pipeline = false) = 0;
 
+    // For forward-prop.
     virtual void requestForward(unsigned layer, bool lastLayer) = 0;
 
-    virtual void invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer) = 0;
-    virtual void waitLambdaForward(unsigned layer, bool lastLayer) = 0;
+    virtual void applyVertexForward(unsigned layer, unsigned lambdaId, bool lastLayer) = 0;
+    virtual void applyEdgeForward(unsigned layer, unsigned lambdaId, bool lastLayer) = 0;
+    virtual void waitResForward(unsigned layer, bool lastLayer) = 0;
 
     // For backward-prop.
-    virtual void newContextBackward(unsigned layer, FeatType *oldGradBuf,
-        FeatType *newGradBuf, std::vector<Matrix> *savedTensors,
-        FeatType *targetBuf, unsigned numLocalVertices, unsigned inFeatDim,
-        unsigned outFeatDim, unsigned targetDim, bool pipeline = false) = 0;
     virtual void requestBackward(unsigned layer, bool lastLayer) = 0;
-    virtual void invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLayer) = 0;
-    virtual void waitLambdaBackward(unsigned layer, bool lastLayer) = 0;
+
+    virtual void applyVertexBackward(unsigned layer, unsigned lambdaId, bool lastLayer) = 0;
+    virtual void applyEdgeBackward(unsigned layer, unsigned lambdaId, bool lastLayer) = 0;
+    virtual void waitResBackward(unsigned layer, bool lastLayer) = 0;
 
     virtual void requestInvoke(unsigned layer, unsigned lambdaId,
       PROP_TYPE prop_dir, bool lastLayer) = 0;

@@ -51,9 +51,10 @@ void ComputingServer::terminate() {
 void ComputingServer::processForward(unsigned layer, bool lastLayer) {
     if (layer == 0)
         CuMatrix::freeGPU();
-    Matrix feats = gpuComm->actMatrix;
-    FeatType *z_data = gpuComm->zData;
-    FeatType *act_z = gpuComm->actData;
+    Matrix feats = gpuComm->inputTensor;
+    // TODO: (YIFAN) now we only save Z data as intermediate tensors. So I hard-code 0 here. Need generalize this.
+    FeatType *z_data = gpuComm->savedTensors[layer][0].getData();
+    FeatType *act_z = gpuComm->outputTensor.getData();
 
     auto tw = gtimers.getTimer("WeightFetchWait");
     auto tz = gtimers.getTimer("CopyZ");
@@ -84,7 +85,6 @@ void ComputingServer::processForward(unsigned layer, bool lastLayer) {
     tc->stop();
     delete[] z.getData();
 }
-
 
 // void ComputingServer::evaluateModel(Matrix& activations){
 //     CuMatrix labels = cu.wrapMatrix(msgService.requestMatrix());
@@ -128,7 +128,7 @@ ComputingServer::gradLayer(unsigned layer) {
     Matrix weight = msgService.getWeightMatrix(layer);
     CuMatrix cuWeights = cu.wrapMatrix(weight);
     CuMatrix resultGrad = interGrad.dot(cuWeights, false, true);
-    resultGrad.setData(gpuComm->newGradMatrix.getData());
+    resultGrad.setData(gpuComm->outputTensor.getData());
     resultGrad.updateMatrixFromGPU();
     Matrix ah = gpuComm->savedTensors[layer][TYPE::AH - 1];
     CuMatrix cuAh = cu.wrapMatrix(ah);
@@ -149,7 +149,7 @@ ComputingServer::gradLoss(unsigned layer) {
 
     tm->start();
     Matrix predictions = gpuComm->savedTensors[layer][TYPE::ACT - 1];
-    Matrix labels = gpuComm->targetMatrix;
+    Matrix labels = gpuComm->targetTensor;
 
     CuMatrix cuPredictions = cu.wrapMatrix(predictions);
     CuMatrix cuLabels = cu.wrapMatrix(labels);
@@ -160,7 +160,7 @@ ComputingServer::gradLoss(unsigned layer) {
     Matrix weight = msgService.getWeightMatrix(layer);
     CuMatrix cuWeights = cu.wrapMatrix(weight);
     CuMatrix interGrad = d_output.dot(cuWeights, false, true);
-    interGrad.setData(gpuComm->newGradMatrix.getData());
+    interGrad.setData(gpuComm->outputTensor.getData());
     interGrad.updateMatrixFromGPU();
 
     Matrix ah = gpuComm->savedTensors[layer][TYPE::AH - 1];
@@ -173,7 +173,3 @@ ComputingServer::gradLoss(unsigned layer) {
     msgService.sendWeightUpdate(weightUpdates, layer);
     tw->stop();
 }
-
-
-
-

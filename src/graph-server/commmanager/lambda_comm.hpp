@@ -76,23 +76,25 @@ public:
     void reset(unsigned layer);
     void sendInfoMsg(unsigned layer);
 
+    void newContext(unsigned layer, Matrix &inputTensor_, Matrix &outputTensor_,
+                    std::vector<Matrix> *savedTensors_, bool pipeline = false);
+    void newContext(unsigned layer, Matrix &inputTensor_, Matrix &outputTensor_, Matrix &targetTensor_,
+                    std::vector<Matrix> *savedTensors_, bool pipeline = false);
+
     // For forward-prop.
-    void newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData,
-      FeatType *actData, unsigned numLocalVertices, unsigned numFeats,
-      unsigned numFeatsNext, bool pipeline = false);
     void requestForward(unsigned layer, bool lastLayer);
-    void invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer);
-    void waitLambdaForward(unsigned layer, bool lastLayer);
+
+    void applyVertexForward(unsigned layer, unsigned lambdaId, bool lastLayer);
+    void applyEdgeForward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
+    void waitResForward(unsigned layer, bool lastLayer);
 
     // For backward-prop.
-    void newContextBackward(unsigned layer, FeatType *oldGradBuf,
-      FeatType *newGradBuf, std::vector<Matrix> *savedTensors,
-      FeatType *targetBuf, unsigned numLocalVertices, unsigned inFeatDim,
-      unsigned outFeatDim, unsigned targetDim, bool pipeline = false);
     void sendInfoMessage(zmq::socket_t& wsocket, unsigned numLambdas);
     void requestBackward(unsigned layer, bool lastLayer);
-    void invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLayer);
-    void waitLambdaBackward(unsigned layer, bool lastLayer);
+
+    void applyVertexBackward(unsigned layer, unsigned lambdaId, bool lastLayer);
+    void applyEdgeBackward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
+    void waitResBackward(unsigned layer, bool lastLayer);
 
     void relaunchLambda(bool forward, unsigned layer, unsigned lambdaId, bool lastLayer);
     void relaunchLambda(unsigned layer, unsigned lambdaId, PROP_TYPE prop_dir,
@@ -108,7 +110,16 @@ public:
     void sendShutdownMessage();
 
     // simple LambdaWorker initialization
-    friend LambdaWorker::LambdaWorker(LambdaComm *manager, PairQueue* _q_ptr, std::map<std::string, Matrix>* _savedTensors);
+    friend LambdaWorker::LambdaWorker(LambdaComm *manager);
+
+    // data
+    Matrix inputTensor;
+    Matrix outputTensor;
+    Matrix targetTensor;
+    std::vector<Matrix> *savedTensors;    // Places to store the intermediate results from lambda.
+    std::map<std::string, Matrix>* savedVtxTensors;
+
+    PairQueue *queuePtr;
 
 // private:
     // AWSSDK Members
@@ -118,6 +129,7 @@ public:
     unsigned numLambdasBackward;
     unsigned numListeners;
 
+    bool pipeline;
     bool forward;
     unsigned currLayer;
 
