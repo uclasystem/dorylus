@@ -142,18 +142,18 @@ Engine::destroy() {
 *
 */
 void
-Engine::setUpCommInfo(){
-    commInfo.nodeIp=nodeManager.getNode(nodeId).pubip;
-    commInfo.nodeId=nodeId;
-    commInfo.dataserverPort=dataserverPort;
-    commInfo.coordserverIp=coordserverIp;
-    commInfo.coordserverPort=coordserverPort;
-    commInfo.numLambdasForward=numLambdasForward;
-    commInfo.numLambdasBackward=numLambdasBackward;
-    commInfo.numNodes=numNodes;
-    commInfo.wServersFile=weightserverIPFile;
-    commInfo.weightserverPort=weightserverPort;
-    commInfo.totalLayers=numLayers;
+Engine::setUpCommInfo() {
+    commInfo.nodeIp = nodeManager.getNode(nodeId).pubip;
+    commInfo.nodeId = nodeId;
+    commInfo.dataserverPort = dataserverPort;
+    commInfo.coordserverIp = coordserverIp;
+    commInfo.coordserverPort = coordserverPort;
+    commInfo.numLambdasForward = numLambdasForward;
+    commInfo.numLambdasBackward = numLambdasBackward;
+    commInfo.numNodes = numNodes;
+    commInfo.wServersFile = weightserverIPFile;
+    commInfo.weightserverPort = weightserverPort;
+    commInfo.totalLayers = numLayers;
 }
 
 /**
@@ -360,47 +360,29 @@ struct AggOPArgs {
 
 
 #ifdef _GPU_ENABLED_
-FeatType* Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim) {
+static CuMatrix *NormAdjMatrixIn = NULL;
+FeatType *Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim) {
+    ComputingUnit cu = ComputingUnit::getInstance();
+    if (NormAdjMatrixIn == NULL) {
+        NormAdjMatrixIn = new CuMatrix();
+        NormAdjMatrixIn->loadSpCsrForward(cu.spHandle,
+                                          graph.getNumLocalVertices(),
+                                          graph.getVertices(),
+                                          graph.getNumInEdgeGhostVertices());
+    }
     double sttTimer = getTimer();
-    FeatType* outputTensor = new FeatType [vtcsCnt * featDim];
+    FeatType *outputTensor = new FeatType [(vtcsCnt) * featDim];
+    CuMatrix feat;
+    feat.loadSpDense(vtcsTensor, forwardGhostVerticesData,
+                     graph.getNumLocalVertices(), graph.getNumInEdgeGhostVertices(),
+                     featDim);
+    CuMatrix out = cu.aggregate(*NormAdjMatrixIn, feat);
+    out = out.transpose();
+    cudaDeviceSynchronize();
+    out.setData(outputTensor);
+    out.updateMatrixFromGPU();
 
-    currId = 0;
-
-    AggOPArgs args = {outputTensor, vtcsTensor, vtcsCnt, featDim};
-    auto computeFn = std::bind(&Engine::aggregateCompute, this, std::placeholders::_1, std::placeholders::_2);
-    computePool->perform(computeFn, &args);
-    computePool->sync();
-
-    //TODO: GPU aggregation is still in progress
-    // FeatType* inputTensor  = vtcsTensor;
-    // FeatType* normFactors  = new FeatType [vtcsCnt];
-    // // Apply normalization factor on the current data.
-    // memcpy(outputTensor,inputTensor,vtcsCnt * featDim);
-    // for (unsigned i=0;i<vtcsCnt;++i){
-    //     Vertex& v= graph.getVertex(i);
-    //     normFactors[i]=v.getNormFactor();
-    // }
-
-    //loadin to memory
-    
-    // for ( unsigned i=0; i<vtcsCnt; ++i){
-    //     Vertex& v= graph.getVertex(i);
-    //     normFactors[i]=v.getNormFactor();
-    //     FeatType* aggregateTensor = new FeatType [v.getNumInEdges() * featDim];
-    //     for( unsigned j=0; j<v.getNumInEdges(); ++j){
-    //         if(v.getInEdge(i).getEdgeLocation() == LOCAL_EDGE_TYPE)
-    //             memcpy(aggregateTensor[j*featDim],
-    //                     getVtxFeat(inputTensor, v.getSourceVertexLocalId(i), featDim),
-    //                     featDim*sizeof(FeatType));
-    //         else
-    //             memcpy(aggregateTensor[j*featDim],
-    //                     getVtxFeat(forwardGhostVerticesData, v.getSourceVertexLocalId(i)),
-    //                     featDim*sizeof(FeatType));
-    //     }
-
-
-    // }
-    // currId = vtcsCnt;
+    currId = vtcsCnt;
 
     if (iteration > 0) {
         delete[] forwardGhostVerticesData;
@@ -417,14 +399,14 @@ FeatType* Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned fea
     return outputTensor;
 }
 #else
-FeatType* Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim) {
+FeatType *Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim) {
     double sttTimer = getTimer();
-
     FeatType *outputTensor = new FeatType [vtcsCnt * featDim];
     currId = 0;
 
     AggOPArgs args = {outputTensor, vtcsTensor, vtcsCnt, featDim};
     auto computeFn = std::bind(&Engine::aggregateCompute, this, std::placeholders::_1, std::placeholders::_2);
+
     computePool->perform(computeFn, &args);
     computePool->sync();
 
@@ -439,7 +421,7 @@ FeatType* Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned fea
     } else {
         vecTimeAggregate[iteration] += getTimer() - sttTimer;
     }
-
+    Matrix m(vtcsCnt, featDim, outputTensor);
     return outputTensor;
 }
 #endif // _GPU_ENABLED_
@@ -551,13 +533,14 @@ void Engine::aggregateCompute(unsigned tid, void *args) {
  */
 inline void
 Engine::forwardAggregateFromNeighbors(unsigned lvid, FeatType *outputTensor, FeatType *inputTensor, unsigned featDim) {
+
     // Read out data of the current iteration of given vertex.
     FeatType *currDataDst = getVtxFeat(outputTensor, lvid, featDim);
     FeatType *currDataPtr = getVtxFeat(inputTensor, lvid, featDim);
     memcpy(currDataDst, currDataPtr, featDim * sizeof(FeatType));
 
     // Apply normalization factor on the current data.
-    Vertex& v = graph.getVertex(lvid);
+    Vertex &v = graph.getVertex(lvid);
     for (unsigned i = 0; i < featDim; ++i) {
         currDataDst[i] *= v.getNormFactor();
     }
@@ -577,6 +560,7 @@ Engine::forwardAggregateFromNeighbors(unsigned lvid, FeatType *outputTensor, Fea
             currDataDst[j] += otherDataPtr[j] * normFactor;
         }
     }
+
 }
 
 inline void
@@ -587,7 +571,7 @@ Engine::sendForwardGhostUpdates(FeatType *inputTensor, unsigned featDim) {
     // Please decrease BATCH_SIZE if porcess crashed.
     bool batchFlag = true;
     unsigned BATCH_SIZE = std::max(((batchFlag ? MAX_MSG_SIZE : 4096) - DATA_HEADER_SIZE) /
-                        (sizeof(unsigned) + sizeof(FeatType) * featDim), 1ul); // at least send one vertex
+                                   (sizeof(unsigned) + sizeof(FeatType) * featDim), 1ul); // at least send one vertex
     for (unsigned nid = 0; nid < numNodes; ++nid) {
         if (nid == nodeId) {
             continue;
@@ -705,7 +689,48 @@ Engine::forwardGhostCommunicator(unsigned tid, void *args) {
  * Major part of the engine's backward-prop logic.
  *
  */
-FeatType*
+#ifdef _GPU_ENABLED_
+static CuMatrix *NormAdjMatrixOut = NULL;
+FeatType *
+Engine::aggregateBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim) {
+    currId = 0;
+    FeatType *outputTensor = new FeatType [vtcsCnt * featDim];
+
+    ComputingUnit cu = ComputingUnit::getInstance();
+    if (NormAdjMatrixOut == NULL) {
+        NormAdjMatrixOut = new CuMatrix();
+        NormAdjMatrixOut->loadSpCsrBackward(cu.spHandle,
+                                            graph.getNumLocalVertices(),
+                                            graph.getVertices(),
+                                            graph.getNumOutEdgeGhostVertices());
+    }
+
+    double sttTimer = getTimer();
+    CuMatrix feat;
+    feat.loadSpDense(gradTensor, backwardGhostVerticesData,
+                     graph.getNumLocalVertices(), graph.getNumOutEdgeGhostVertices(),
+                     featDim);
+    CuMatrix out = cu.aggregate(*NormAdjMatrixOut, feat);
+    out = out.transpose();
+    out.setData(outputTensor);
+    out.updateMatrixFromGPU();
+
+    currId = vtcsCnt;
+
+    delete[] gradTensor;
+    delete[] backwardGhostVerticesData;
+
+    if (vecTimeAggregate.size() < 2 * numLayers) {
+        for (unsigned i = vecTimeAggregate.size(); i < 2 * numLayers; i++) {
+            vecTimeAggregate.push_back(0.0);
+        }
+    }
+    vecTimeAggregate[numLayers + iteration - 1] += getTimer() - sttTimer;
+
+    return outputTensor;
+}
+#else
+FeatType *
 Engine::aggregateBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim) {
     double sttTimer = getTimer();
 
@@ -729,6 +754,9 @@ Engine::aggregateBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featD
 
     return outputTensor;
 }
+#endif
+
+
 
 FeatType *
 Engine::invokeLambdaBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim) {
@@ -743,7 +771,7 @@ Engine::invokeLambdaBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned in
     // printLog(nodeId, "All lambda requests finished. Results received.");
 
     delete[] gradTensor;
-    for (auto &sTensor: savedTensors[iteration - 1]) {
+    for (auto &sTensor : savedTensors[iteration - 1]) {
         delete[] sTensor.getData();
     }
     savedTensors[iteration - 1].clear();
@@ -818,7 +846,7 @@ Engine::backwardAggregateFromNeighbors(unsigned lvid, FeatType *nextGradTensor, 
     memcpy(currDataDst, currDataPtr, featDim * sizeof(FeatType));
 
     // Apply normalization factor on the current data.
-    Vertex& v = graph.getVertex(lvid);
+    Vertex &v = graph.getVertex(lvid);
     for (unsigned i = 0; i < featDim; ++i) {
         currDataDst[i] *= v.getNormFactor();
     }
@@ -848,7 +876,7 @@ Engine::sendBackwardGhostGradients(FeatType *gradTensor, unsigned featDim) {
     // Please decrease BATCH_SIZE if porcess crashed.
     bool batchFlag = false;
     unsigned BATCH_SIZE = std::max(((batchFlag ? MAX_MSG_SIZE : 4096) - DATA_HEADER_SIZE) /
-                        (sizeof(unsigned) + sizeof(FeatType) * featDim), 1ul); // at least send one vertex
+                                   (sizeof(unsigned) + sizeof(FeatType) * featDim), 1ul); // at least send one vertex
     for (unsigned nid = 0; nid < numNodes; ++nid) {
         if (nid == nodeId) {
             continue;
@@ -1015,7 +1043,7 @@ Engine::printEngineMetrics() {
 void
 Engine::printGraphMetrics() {
     printLog(nodeId, "<GM>: %u global vertices, %llu global edges, %u local vertices.",
-                     graph.getNumGlobalVertices(), graph.getNumGlobalEdges(), graph.getNumLocalVertices());
+             graph.getNumGlobalVertices(), graph.getNumGlobalEdges(), graph.getNumLocalVertices());
 }
 
 
@@ -1028,41 +1056,41 @@ void
 Engine::parseArgs(int argc, char *argv[]) {
     boost::program_options::options_description desc("Allowed options");
     desc.add_options()
-        ("help", "Produce help message")
+    ("help", "Produce help message")
 
-        ("graphfile", boost::program_options::value<std::string>(), "Path to the binary file contatining the edge list")
-        ("featuresfile", boost::program_options::value<std::string>(), "Path to the file containing the vertex features")
-        ("layerfile", boost::program_options::value<std::string>(), "Layer configuration file")
-        ("labelsfile", boost::program_options::value<std::string>(), "Target labels file")
-        ("dshmachinesfile", boost::program_options::value<std::string>(), "DSH machines file")
-        ("pripfile", boost::program_options::value<std::string>(), "File containing my private ip")
-        ("pubipfile", boost::program_options::value<std::string>(), "File containing my public ip")
+    ("graphfile", boost::program_options::value<std::string>(), "Path to the binary file contatining the edge list")
+    ("featuresfile", boost::program_options::value<std::string>(), "Path to the file containing the vertex features")
+    ("layerfile", boost::program_options::value<std::string>(), "Layer configuration file")
+    ("labelsfile", boost::program_options::value<std::string>(), "Target labels file")
+    ("dshmachinesfile", boost::program_options::value<std::string>(), "DSH machines file")
+    ("pripfile", boost::program_options::value<std::string>(), "File containing my private ip")
+    ("pubipfile", boost::program_options::value<std::string>(), "File containing my public ip")
 
-        ("tmpdir", boost::program_options::value<std::string>(), "Temporary directory")
+    ("tmpdir", boost::program_options::value<std::string>(), "Temporary directory")
 
-        ("dataserverport", boost::program_options::value<unsigned>(), "The port exposing to the coordination server")
-        ("weightserverport", boost::program_options::value<unsigned>(), "The port of the listener on the coordination server")
-        ("wserveripfile", boost::program_options::value<std::string>(), "The file contains the public IP addresses of the weight server")
-        ("coordserverip", boost::program_options::value<std::string>(), "The private IP address of the coordination server")
-        ("coordserverport", boost::program_options::value<unsigned>(), "The port of the listener on the coordination server")
+    ("dataserverport", boost::program_options::value<unsigned>(), "The port exposing to the coordination server")
+    ("weightserverport", boost::program_options::value<unsigned>(), "The port of the listener on the coordination server")
+    ("wserveripfile", boost::program_options::value<std::string>(), "The file contains the public IP addresses of the weight server")
+    ("coordserverip", boost::program_options::value<std::string>(), "The private IP address of the coordination server")
+    ("coordserverport", boost::program_options::value<unsigned>(), "The port of the listener on the coordination server")
 
-        // Default is directed graph!
-        ("undirected", boost::program_options::value<unsigned>()->default_value(unsigned(0), "0"), "Graph type is undirected or not")
+    // Default is directed graph!
+    ("undirected", boost::program_options::value<unsigned>()->default_value(unsigned(0), "0"), "Graph type is undirected or not")
 
-        ("dthreads", boost::program_options::value<unsigned>(), "Number of data threads")
-        ("cthreads", boost::program_options::value<unsigned>(), "Number of compute threads")
+    ("dthreads", boost::program_options::value<unsigned>(), "Number of data threads")
+    ("cthreads", boost::program_options::value<unsigned>(), "Number of compute threads")
 
-        ("dataport", boost::program_options::value<unsigned>(), "Port for data communication")
-        ("ctrlport", boost::program_options::value<unsigned>(), "Port start for control communication")
-        ("nodeport", boost::program_options::value<unsigned>(), "Port for node manager")
+    ("dataport", boost::program_options::value<unsigned>(), "Port for data communication")
+    ("ctrlport", boost::program_options::value<unsigned>(), "Port start for control communication")
+    ("nodeport", boost::program_options::value<unsigned>(), "Port for node manager")
 
-        ("numlambdasforward", boost::program_options::value<unsigned>()->default_value(unsigned(1), "5"), "Number of lambdas to request at forward")
-        ("numlambdasbackward", boost::program_options::value<unsigned>()->default_value(unsigned(1), "20"), "Number of lambdas to request at backward")
-        ("numEpochs", boost::program_options::value<unsigned>(), "Number of epochs to run")
-        ("validationFrequency", boost::program_options::value<unsigned>(), "Number of epochs to run before validation")
+    ("numlambdasforward", boost::program_options::value<unsigned>()->default_value(unsigned(1), "5"), "Number of lambdas to request at forward")
+    ("numlambdasbackward", boost::program_options::value<unsigned>()->default_value(unsigned(1), "20"), "Number of lambdas to request at backward")
+    ("numEpochs", boost::program_options::value<unsigned>(), "Number of epochs to run")
+    ("validationFrequency", boost::program_options::value<unsigned>(), "Number of epochs to run before validation")
 
-        ("GPU", boost::program_options::value<unsigned>(), "Enable GPU or not")
-        ;
+    ("GPU", boost::program_options::value<unsigned>(), "Enable GPU or not")
+    ;
 
     boost::program_options::variables_map vm;
     boost::program_options::store(boost::program_options::command_line_parser(argc, argv).options(desc).allow_unregistered().run(), vm);
@@ -1140,18 +1168,18 @@ Engine::parseArgs(int argc, char *argv[]) {
     numLambdasBackward = vm["numlambdasbackward"].as<unsigned>();
 
     assert(vm.count("numEpochs"));
-//    numEpochs = vm["numEpochs"].as<unsigned>();
+    //    numEpochs = vm["numEpochs"].as<unsigned>();
 
     assert(vm.count("validationFrequency"));
-//    valFreq = vm["validationFrequency"].as<unsigned>();
+    //    valFreq = vm["validationFrequency"].as<unsigned>();
 
     assert(vm.count("GPU"));
     gpuEnabled = vm["GPU"].as<unsigned>();
 
     printLog(404, "Parsed configuration: dThreads = %u, cThreads = %u, graphFile = %s, featuresFile = %s, dshMachinesFile = %s, "
-                  "myPrIpFile = %s, myPubIpFile = %s, undirected = %s, data port set -> %u, control port set -> %u, node port set -> %u",
-                  dThreads, cThreads, graphFile.c_str(), featuresFile.c_str(), dshMachinesFile.c_str(),
-                  myPrIpFile.c_str(), myPubIpFile.c_str(), undirected ? "true" : "false", data_port, ctrl_port, node_port);
+             "myPrIpFile = %s, myPubIpFile = %s, undirected = %s, data port set -> %u, control port set -> %u, node port set -> %u",
+             dThreads, cThreads, graphFile.c_str(), featuresFile.c_str(), dshMachinesFile.c_str(),
+             myPrIpFile.c_str(), myPubIpFile.c_str(), undirected ? "true" : "false", data_port, ctrl_port, node_port);
 }
 
 
@@ -1161,7 +1189,7 @@ Engine::parseArgs(int argc, char *argv[]) {
  *
  */
 void
-Engine::readLayerConfigFile(std::string& layerConfigFileName) {
+Engine::readLayerConfigFile(std::string &layerConfigFileName) {
     std::ifstream infile(layerConfigFileName.c_str());
     if (!infile.good())
         printLog(nodeId, "Cannot open layer configuration file: %s [Reason: %s]", layerConfigFileName.c_str(), std::strerror(errno));
@@ -1188,7 +1216,7 @@ Engine::readLayerConfigFile(std::string& layerConfigFileName) {
  *
  */
 void
-Engine::readFeaturesFile(std::string& featuresFileName) {
+Engine::readFeaturesFile(std::string &featuresFileName) {
     std::ifstream infile(featuresFileName.c_str());
     if (!infile.good())
         printLog(nodeId, "Cannot open features file: %s [Reason: %s]", featuresFileName.c_str(), std::strerror(errno));
@@ -1205,7 +1233,7 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
     std::vector<FeatType> feature_vec;
 
     feature_vec.resize(featDim);
-    while (infile.read(reinterpret_cast<char *> (&feature_vec[0]) , sizeof(FeatType) * featDim)) {
+    while (infile.read(reinterpret_cast<char *> (&feature_vec[0]), sizeof(FeatType) * featDim)) {
         // Set the vertex's initial values, if it is one of my local vertices / ghost vertices.
         if (graph.containsInEdgeGhostVertex(gvid)) {      // Global vertex.
             FeatType *actDataPtr = getVtxFeat(forwardGhostInitData, graph.getInEdgeGhostVertex(gvid).getLocalId(), featDim);
@@ -1227,7 +1255,7 @@ Engine::readFeaturesFile(std::string& featuresFileName) {
  *
  */
 void
-Engine::readLabelsFile(std::string& labelsFileName) {
+Engine::readLabelsFile(std::string &labelsFileName) {
     std::ifstream infile(labelsFileName.c_str());
     if (!infile.good())
         printLog(nodeId, "Cannot open labels file: %s [Reason: %s]", labelsFileName.c_str(), std::strerror(errno));
@@ -1244,7 +1272,7 @@ Engine::readLabelsFile(std::string& labelsFileName) {
     unsigned curr;
     FeatType one_hot_arr[lKinds] = {0};
 
-    while (infile.read(reinterpret_cast<char *> (&curr) , sizeof(unsigned))) {
+    while (infile.read(reinterpret_cast<char *> (&curr), sizeof(unsigned))) {
 
         // Set the vertex's label values, if it is one of my local vertices & is labeled.
         if (graph.containsVertex(gvid)) {
@@ -1272,7 +1300,7 @@ Engine::readLabelsFile(std::string& labelsFileName) {
  *
  */
 void
-Engine::readPartsFile(std::string& partsFileName, Graph& lGraph) {
+Engine::readPartsFile(std::string &partsFileName, Graph &lGraph) {
     std::ifstream infile(partsFileName.c_str());
     if (!infile.good())
         printLog(nodeId, "Cannot open patition file: %s [Reason: %s]", partsFileName.c_str(), std::strerror(errno));
@@ -1314,7 +1342,7 @@ Engine::readPartsFile(std::string& partsFileName, Graph& lGraph) {
  *
  */
 void
-Engine::processEdge(unsigned& from, unsigned& to, Graph& lGraph, bool **forwardGhostVTables, bool **backwardGhostVTables) {
+Engine::processEdge(unsigned &from, unsigned &to, Graph &lGraph, bool **forwardGhostVTables, bool **backwardGhostVTables) {
     if (lGraph.getVertexPartitionId(from) == nodeId) {
         unsigned lFromId = lGraph.globalToLocalId[from];
         unsigned toId;
@@ -1373,12 +1401,12 @@ Engine::processEdge(unsigned& from, unsigned& to, Graph& lGraph, bool **forwardG
  */
 void
 Engine::setEdgeNormalizations() {
-    for (Vertex& vertex : graph.getVertices()) {
+    for (Vertex &vertex : graph.getVertices()) {
         unsigned vtxDeg = vertex.getNumInEdges() + 1;
         float vtxNorm = std::pow(vtxDeg, -.5);
         vertex.setNormFactor(vtxNorm * vtxNorm);
         for (unsigned i = 0; i < vertex.getNumInEdges(); ++i) {
-            InEdge& e = vertex.getInEdge(i);
+            InEdge &e = vertex.getInEdge(i);
             unsigned vid = e.getSourceId();
             if (e.getEdgeLocation() == LOCAL_EDGE_TYPE) {
                 unsigned srcDeg = graph.getVertex(vid).getNumInEdges() + 1;
@@ -1391,7 +1419,7 @@ Engine::setEdgeNormalizations() {
             }
         }
         for (unsigned i = 0; i < vertex.getNumOutEdges(); ++i) {
-            OutEdge& e = vertex.getOutEdge(i);
+            OutEdge &e = vertex.getOutEdge(i);
             unsigned vid = e.getDestId();
             if (e.getEdgeLocation() == LOCAL_EDGE_TYPE) {
                 unsigned dstDeg = graph.getVertex(vid).getNumInEdges() + 1;
@@ -1413,7 +1441,7 @@ Engine::setEdgeNormalizations() {
  *
  */
 void
-Engine::findGhostDegrees(std::string& fileName) {
+Engine::findGhostDegrees(std::string &fileName) {
     std::ifstream infile(fileName.c_str(), std::ios::binary);
     if (!infile.good())
         printLog(nodeId, "Cannot open BinarySnap file: %s", fileName.c_str());
@@ -1448,7 +1476,7 @@ Engine::findGhostDegrees(std::string& fileName) {
  *
  */
 void
-Engine::readGraphBS(std::string& fileName) {
+Engine::readGraphBS(std::string &fileName) {
 
     // Read in the partition file.
     std::string partsFileName = fileName + PARTS_EXT;

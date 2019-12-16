@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cuda_runtime.h>
 #include <cudnn.h>
+#include <cusparse.h>
 #include "cublas_v2.h"
 #include "cu_matrix.cuh"
 #include "../utils/utils.hpp"
@@ -27,34 +28,33 @@
 
 //AWARE: to free Matrix.data in long run
 //It maintains a GPU context
-class ComputingUnit
-{
-public:
-    static ComputingUnit& getInstance();
+class ComputingUnit {
+  public:
+    static ComputingUnit &getInstance();
 
     CuMatrix wrapMatrix(Matrix m);
 
-    // FeatType* Aggregation(FeatType* vecA,FeatType* vecB,FeatType alpha);
     CuMatrix scaleRowsByVector(Matrix m, Matrix v);
+    CuMatrix aggregate(CuMatrix &sparse, CuMatrix &dense);
 
-	CuMatrix dot(Matrix& A,Matrix& B);
-	void activate(CuMatrix& A);
+    CuMatrix dot(Matrix &A, Matrix &B);
+    void activate(CuMatrix &A);
     CuMatrix softmaxRows(CuMatrix &mat);
-    CuMatrix hadamardSub(CuMatrix& matLeft,CuMatrix& matRight);
-    CuMatrix hadamardMul(CuMatrix& matLeft, CuMatrix& matRight);
+    CuMatrix hadamardSub(CuMatrix &matLeft, CuMatrix &matRight);
+    CuMatrix hadamardMul(CuMatrix &matLeft, CuMatrix &matRight);
+    CuMatrix activateBackward(CuMatrix &y, CuMatrix &gradient);
 
-    CuMatrix activateBackward(CuMatrix& y,CuMatrix& gradient);
-
-    unsigned checkAccuracy(CuMatrix& predictions, CuMatrix& labels);
-	float checkLoss(CuMatrix& preds, CuMatrix& labels);
-
+    unsigned checkAccuracy(CuMatrix &predictions, CuMatrix &labels);
+    float checkLoss(CuMatrix &preds, CuMatrix &labels);
 
     cudnnHandle_t cudnnHandle;
-	cublasHandle_t handle;
-	cublasStatus_t stat;
-private:
+    cusparseHandle_t spHandle;
+    cublasHandle_t handle;
+    cublasStatus_t stat;
+
+  private:
     ComputingUnit();
-    static ComputingUnit* instance;
+    static ComputingUnit *instance;
 };
 
 
