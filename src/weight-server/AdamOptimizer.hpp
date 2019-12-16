@@ -10,21 +10,21 @@ const float BETA2 = .999;
 const float EPSILON = 1e-07;
 
 class AdamOptimizer {
-public:
-	AdamOptimizer(){};
-	AdamOptimizer(float lr,std::vector<unsigned> dims);
-	void nextIteration();
-	void update(unsigned layer, FeatType* weight, FeatType* gradient);
+  public:
+    AdamOptimizer() {};
+    AdamOptimizer(float lr, std::vector<unsigned> dims);
+    void nextIteration();
+    void update(unsigned layer, FeatType *weight, FeatType *gradient);
 
 
-private:
-	float learning_rate;
-	unsigned epochs;
-	std::vector<unsigned> dims;
-	std::vector<FeatType*> momentum;
-	std::vector<FeatType*> decay;
+  private:
+    float learning_rate;
+    unsigned epochs;
+    std::vector<unsigned> dims;
+    std::vector<FeatType *> momentum;
+    std::vector<FeatType *> decay;
 
-	float lr_t;
+    float lr_t;
 };
 
 

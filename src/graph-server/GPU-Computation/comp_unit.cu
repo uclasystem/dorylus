@@ -1,9 +1,6 @@
 #include "comp_unit.cuh"
 #include "cuda_ops.cuh"
 
-using std::cout;
-using std::endl;
-
 const float alpha = 1.0f, beta = 0.0f;
 
 ComputingUnit *ComputingUnit::instance = nullptr;
@@ -35,17 +32,17 @@ CuMatrix ComputingUnit::wrapMatrix(Matrix m) {
 }
 
 CuMatrix ComputingUnit::aggregate(CuMatrix &sparse, CuMatrix &dense) {
-    
     CuMatrix C(Matrix(dense.getCols(), sparse.getRows(), (FeatType *) NULL), handle);
 
+    cudaDeviceSynchronize();
     cusparseSpMatDescr_t desA;
     cusparseDnMatDescr_t desB;
     cusparseDnMatDescr_t desC;
-    auto t0 = std::chrono::high_resolution_clock::now();
+
     auto
     cusparseStat = cusparseCreateCsr(&desA, sparse.getRows(), sparse.getCols(), sparse.nnz,
                                      sparse.csrRowPtr, sparse.csrColInd, sparse.csrVal,
-                                     CUSPARSE_INDEX_32I,CUSPARSE_INDEX_32I,
+                                     CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
                                      CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F
                                     );
     assert(CUSPARSE_STATUS_SUCCESS == cusparseStat);
@@ -55,7 +52,7 @@ CuMatrix ComputingUnit::aggregate(CuMatrix &sparse, CuMatrix &dense) {
     cusparseStat = cusparseCreateDnMat(&desC, sparse.getRows(), dense.getCols(), sparse.getRows(), C.devPtr,
                                        CUDA_R_32F, CUSPARSE_ORDER_COL);
     assert(CUSPARSE_STATUS_SUCCESS == cusparseStat);
-    // CUSPARSE_OPERATION_TRANSPOSE
+
     std::size_t buffer_size;
     cusparseStat = cusparseSpMM_bufferSize(spHandle, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
                                            &alpha, desA, desB, &beta,

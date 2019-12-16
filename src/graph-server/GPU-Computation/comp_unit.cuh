@@ -42,7 +42,6 @@ class ComputingUnit {
     CuMatrix softmaxRows(CuMatrix &mat);
     CuMatrix hadamardSub(CuMatrix &matLeft, CuMatrix &matRight);
     CuMatrix hadamardMul(CuMatrix &matLeft, CuMatrix &matRight);
-
     CuMatrix activateBackward(CuMatrix &y, CuMatrix &gradient);
 
     unsigned checkAccuracy(CuMatrix &predictions, CuMatrix &labels);

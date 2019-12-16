@@ -359,16 +359,9 @@ struct AggOPArgs {
 };
 
 
-#ifndef _GPU_ENABLED_
+#ifdef _GPU_ENABLED_
 static CuMatrix *NormAdjMatrixIn = NULL;
 FeatType *Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim) {
-    auto t1 = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < vtcsCnt*featDim; ++i)
-    {
-        if(i%2000000==0)
-            std::cout<<vtcsTensor[i]<<" ";
-    }
-    std::cout<<std::endl;
     ComputingUnit cu = ComputingUnit::getInstance();
     if (NormAdjMatrixIn == NULL) {
         NormAdjMatrixIn = new CuMatrix();
@@ -376,43 +369,20 @@ FeatType *Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned fea
                                           graph.getNumLocalVertices(),
                                           graph.getVertices(),
                                           graph.getNumInEdgeGhostVertices());
-        auto t3 = std::chrono::high_resolution_clock::now();
-        std::cout << "ADJ build "
-                  << std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t1).count()
-                  << " milliseconds\n";
     }
-
     double sttTimer = getTimer();
     FeatType *outputTensor = new FeatType [(vtcsCnt) * featDim];
     CuMatrix feat;
-    auto t7 = std::chrono::high_resolution_clock::now();
     feat.loadSpDense(vtcsTensor, forwardGhostVerticesData,
                      graph.getNumLocalVertices(), graph.getNumInEdgeGhostVertices(),
                      featDim);
-    auto t5 = std::chrono::high_resolution_clock::now();
-    std::cout << "loadSpDense[CU] "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(t5 - t7).count()
-              << " milliseconds\n";
     CuMatrix out = cu.aggregate(*NormAdjMatrixIn, feat);
-    auto t4 = std::chrono::high_resolution_clock::now();
-    std::cout << "aggregate[CU] "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t5).count()
-              << " milliseconds\n";
     out = out.transpose();
     cudaDeviceSynchronize();
-    auto t6 = std::chrono::high_resolution_clock::now();
-    std::cout << "transpose "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(t6 - t4).count()
-              << " milliseconds\n";
     out.setData(outputTensor);
     out.updateMatrixFromGPU();
 
     currId = vtcsCnt;
-    auto t2 = std::chrono::high_resolution_clock::now();
-    std::cout << "Aggregate[TOTAL] "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count()
-              << " milliseconds\n";
-
 
     if (iteration > 0) {
         delete[] forwardGhostVerticesData;
@@ -431,7 +401,6 @@ FeatType *Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned fea
 #else
 FeatType *Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim) {
     double sttTimer = getTimer();
-    auto t1 = std::chrono::high_resolution_clock::now();
     FeatType *outputTensor = new FeatType [vtcsCnt * featDim];
     currId = 0;
 
@@ -452,10 +421,6 @@ FeatType *Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned fea
     } else {
         vecTimeAggregate[iteration] += getTimer() - sttTimer;
     }
-    auto t2 = std::chrono::high_resolution_clock::now();
-    std::cout << "Aggregate "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count()
-              << " milliseconds\n";
     Matrix m(vtcsCnt, featDim, outputTensor);
     return outputTensor;
 }
@@ -476,10 +441,6 @@ Engine::invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     }
     savedTensors[iteration].push_back(Matrix(vtcsCnt, outFeatDim, zTensor));
 
-<<<<<<< HEAD
-    bool runEval = evaluate && iteration == numLayers - 1;
-=======
->>>>>>> master
     // Start a new lambda communication context.
     resComm->newContextForward(iteration, vtcsTensor, zTensor, outputTensor, vtcsCnt, inFeatDim, outFeatDim);
 
@@ -732,8 +693,6 @@ Engine::forwardGhostCommunicator(unsigned tid, void *args) {
 static CuMatrix *NormAdjMatrixOut = NULL;
 FeatType *
 Engine::aggregateBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim) {
-    double sttTimer = getTimer();
-    auto t1 = std::chrono::high_resolution_clock::now();
     currId = 0;
     FeatType *outputTensor = new FeatType [vtcsCnt * featDim];
 
@@ -744,32 +703,15 @@ Engine::aggregateBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featD
                                             graph.getNumLocalVertices(),
                                             graph.getVertices(),
                                             graph.getNumOutEdgeGhostVertices());
-        auto t3 = std::chrono::high_resolution_clock::now();
-        std::cout << "ADJ[Backward] build "
-                  << std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t1).count()
-                  << " milliseconds\n";
     }
 
+    double sttTimer = getTimer();
     CuMatrix feat;
-    auto t7 = std::chrono::high_resolution_clock::now();
     feat.loadSpDense(gradTensor, backwardGhostVerticesData,
                      graph.getNumLocalVertices(), graph.getNumOutEdgeGhostVertices(),
                      featDim);
-
-    auto t5 = std::chrono::high_resolution_clock::now();
-    std::cout << "loadSpDense[Backward] "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(t5 - t7).count()
-              << " milliseconds\n";
     CuMatrix out = cu.aggregate(*NormAdjMatrixOut, feat);
-    auto t4 = std::chrono::high_resolution_clock::now();
-    std::cout << "aggregate[Backward] "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t5).count()
-              << " milliseconds\n";
     out = out.transpose();
-    auto t6 = std::chrono::high_resolution_clock::now();
-    std::cout << "transpose[Backward] "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(t6 - t4).count()
-              << " milliseconds\n";
     out.setData(outputTensor);
     out.updateMatrixFromGPU();
 

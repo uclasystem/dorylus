@@ -48,7 +48,7 @@ void ComputingServer::terminate() {
 }
 
 void ComputingServer::processForward(unsigned layer, bool lastLayer) {
-    if(layer==0)
+    if(layer == 0)
         CuMatrix::freeGPU();
     Matrix feats = gpuComm->actMatrix;
     FeatType *z_data = gpuComm->zData;
@@ -140,7 +140,7 @@ ComputingServer::gradLoss(unsigned layer) {
 
     CuMatrix cuPredictions = cu.wrapMatrix(predictions);
     CuMatrix cuLabels = cu.wrapMatrix(labels);
-    
+
     CuMatrix d_output = cu.hadamardSub(cuPredictions, cuLabels);
     Matrix weight = msgService.getWeightMatrix(layer);
     CuMatrix cuWeights = cu.wrapMatrix(weight);

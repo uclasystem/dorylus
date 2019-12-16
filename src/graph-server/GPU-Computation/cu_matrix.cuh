@@ -25,8 +25,8 @@ class CuMatrix : public Matrix {
     CuMatrix( Matrix M, const cublasHandle_t &handle_);
     ~CuMatrix();
 
-    void loadSpCsrForward(cusparseHandle_t& handle, unsigned numLocalVertices, std::vector<Vertex> &vertices, unsigned numGhostVertices);
-    void loadSpCsrBackward(cusparseHandle_t& handle, unsigned numLocalVertices, std::vector<Vertex> &vertices, unsigned numGhostVertices);
+    void loadSpCsrForward(cusparseHandle_t &handle, unsigned numLocalVertices, std::vector<Vertex> &vertices, unsigned numGhostVertices);
+    void loadSpCsrBackward(cusparseHandle_t &handle, unsigned numLocalVertices, std::vector<Vertex> &vertices, unsigned numGhostVertices);
 
     void loadSpDense(FeatType *vtcsTensor, FeatType *ghostTensor,
                      unsigned numLocalVertices, unsigned numGhostVertices,

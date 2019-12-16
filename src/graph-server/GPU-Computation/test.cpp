@@ -251,23 +251,23 @@ void test_aggregation() {
     A.handle = handle;
 
     CuMatrix out = cu.aggregate(A, f);
-    cout<<out.getMatrix().str();
-    auto z=out.transpose();
+    cout << out.getMatrix().str();
+    auto z = out.transpose();
     // float* z=new float[out.getNumElemts()];
     // cudaMemcpy(z, out.devPtr, sizeof(EdgeType) * out.getNumElemts(), cudaMemcpyDeviceToHost);
     // for(int j=0;j<out.getNumElemts();++j)
     //     cout<<z[j]<<" ";
     // cout<<"\n";
-    cout<<z.getMatrix().str();
+    cout << z.getMatrix().str();
 }
 
-void testElementSub(){
+void testElementSub() {
     float y[6] = {0.1, 0.2, 0.3, 0.4, 0.5, 0.6};
     float x[6] = {0.1, 0.2, 0.3, 0.4, 0.5, 0.7};
-    CuMatrix cuX(Matrix(6,1,x),handle);
-    CuMatrix cuY(Matrix(6,1,y),handle);
-    auto z=cu.hadamardSub(cuX,cuY);
-    cout<<z.getMatrix().str();
+    CuMatrix cuX(Matrix(6, 1, x), handle);
+    CuMatrix cuY(Matrix(6, 1, y), handle);
+    auto z = cu.hadamardSub(cuX, cuY);
+    cout << z.getMatrix().str();
 
 }
 
@@ -275,7 +275,7 @@ void testElementSub(){
 int main() {
     handle = cu.handle;
     spHandle = cu.spHandle;
-    
+
 
     return 0;
 }

@@ -20,18 +20,18 @@ class ComputingServer;
 
 /**
  *
- * Communicate with local GPU process using IPC
+ * Accelerate computation using GPU
  *
  */
-class GPUComm : public ResourceComm{
+class GPUComm : public ResourceComm {
 
-public:
+  public:
 
-    GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,const std::string& wServersFile,unsigned wPort_,unsigned totalLayers_);
+    GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_, const std::string &wServersFile, unsigned wPort_, unsigned totalLayers_);
 
     // For forward-prop.
     void newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData_, FeatType *actData_,
-                              unsigned numLocalVertices_, unsigned numFeats, unsigned numFeatsNext_);
+                           unsigned numLocalVertices_, unsigned numFeats, unsigned numFeatsNext_);
     void requestForward(unsigned layer, bool lastLayer);
     void waitLambdaForward(unsigned layer, bool lastLayer) {};
     void invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
@@ -55,7 +55,7 @@ public:
 
     friend class ComputingServer;
 
-private:
+  private:
     unsigned totalLayers;
     unsigned nodeId;
     unsigned numNodes;
@@ -86,7 +86,7 @@ private:
     Matrix targetMatrix;
     std::vector<Matrix> *savedTensors;
 
-    ComputingServer* comp_server;
+    ComputingServer *comp_server;
 
 };
 
