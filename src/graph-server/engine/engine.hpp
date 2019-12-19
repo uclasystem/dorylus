@@ -69,10 +69,12 @@ public:
 
     FeatType* aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
     FeatType* invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim);
+    FeatType* fusedGatherApply(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim);
     FeatType* scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
 
     FeatType* aggregateBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim);
     FeatType* invokeLambdaBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim);
+    FeatType* fusedGatherApplyBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim);
     FeatType* scatterBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim);
 
     void makeBarrier();
@@ -181,6 +183,9 @@ private:
 
     void aggregateCompute(unsigned tid, void *args);
     void aggregateBPCompute(unsigned tid, void *args);
+
+    void gatherApplyCompute(unsigned tid, void *args);
+    void gatherApplyBPCompute(unsigned tid, void *args);
 
     // About the global data arrays.
     inline unsigned getFeatDim(unsigned layer) { return layerConfig[layer]; }

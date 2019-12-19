@@ -64,6 +64,7 @@ private:
     // Accepts an incoming connection from a lambda thread and receives
     // two matrices, a 'Z' matrix and a corresponding 'activations' matrix.
     void recvLambdaResults(zmq::message_t& client_id, unsigned partId);
+    void fakeRecvChunks(zmq::message_t& client_id, unsigned chunkCnt);
 
     Matrix actMatrix;   // Current layer's feats.
     unsigned numFeatsNext;

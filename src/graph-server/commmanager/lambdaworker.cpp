@@ -90,6 +90,8 @@ LambdaWorker::work() {
                     }
                     if (manager->forwardLambdaTable[partId]) {
                         recvLambdaResults(identity, partId);
+                    } else {
+                        fakeRecvChunks(identity, 2);
                     }
                     break;
                 }
@@ -133,6 +135,8 @@ LambdaWorker::work() {
                     }
                     if (manager->backwardLambdaTable[partId]) {
                         recvChunk(newGradMatrix, identity, partId, false);
+                    } else {
+                        fakeRecvChunks(identity, 1);
                     }
                     break;
                 }
@@ -229,6 +233,19 @@ LambdaWorker::recvLambdaResults(zmq::message_t& client_id, unsigned partId) {
     // Check for total number of partitions received. If all partitions received, wake up lambdaComm.
     manager->forwardLambdaTable[partId] = false;
     ++(manager->countForward);
+}
+
+void
+LambdaWorker::fakeRecvChunks(zmq::message_t& client_id, unsigned chunkCnt) {
+    zmq::message_t data;
+    for (unsigned i = 0; i < chunkCnt; ++i) {
+        workersocket.recv(&data);
+    }
+
+    // Send confirm ACK message.
+    zmq::message_t confirm;
+    workersocket.send(client_id, ZMQ_SNDMORE);
+    workersocket.send(confirm);
 }
 
 void
