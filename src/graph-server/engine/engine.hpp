@@ -56,7 +56,7 @@ struct LabelsHeaderType {
  */
 class Engine {
 
-public:
+  public:
 
     // Public APIs for benchmarks.
     void init(int argc, char *argv[]);
@@ -65,15 +65,14 @@ public:
     void output();
     void destroy();
     bool master();
-    bool isGPUEnabled();
 
-    FeatType* aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
-    FeatType* invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim);
-    FeatType* scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
+    FeatType *aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
+    FeatType *invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim);
+    FeatType *scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
 
-    FeatType* aggregateBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim);
-    FeatType* invokeLambdaBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim);
-    FeatType* scatterBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim);
+    FeatType *aggregateBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim);
+    FeatType *invokeLambdaBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim);
+    FeatType *scatterBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim);
 
     void makeBarrier();
 
@@ -91,7 +90,7 @@ public:
     //      as this will incur serialization overhead
     void setTrainValidationSplit(float trainPortion);
 
-private:
+  private:
 
     NodeManager nodeManager;
     CommManager commManager;
@@ -149,7 +148,8 @@ private:
     // table representing whether the partition id is a training set or not
     std::vector<bool> trainPartition;
 
-    unsigned gpuEnabled = 0;
+    unsigned mode = 0; //0: Lambda, 1:GPU, 2: CPU
+
     ResourceComm *resComm = NULL;
     CommInfo commInfo;
     unsigned nodeId;
@@ -183,7 +183,9 @@ private:
     void aggregateBPCompute(unsigned tid, void *args);
 
     // About the global data arrays.
-    inline unsigned getFeatDim(unsigned layer) { return layerConfig[layer]; }
+    inline unsigned getFeatDim(unsigned layer) {
+        return layerConfig[layer];
+    }
 
     inline FeatType *localVertexLabelsPtr(unsigned lvid) {
         return localVerticesLabels + lvid * getFeatDim(numLayers);
@@ -200,15 +202,15 @@ private:
     void backwardAggregateFromNeighbors(unsigned lvid, FeatType *nextGradTensor, FeatType *gradTensor, unsigned featDim);
 
     // For initialization.
-    void parseArgs(int argc, char* argv[]);
-    void readLayerConfigFile(std::string& layerConfigFileName);
-    void readFeaturesFile(std::string& featuresFileName);
-    void readLabelsFile(std::string& labelsFileName);
-    void readPartsFile(std::string& partsFileName, Graph& lGraph);
-    void processEdge(unsigned& from, unsigned& to, Graph& lGraph, bool **forwardGhostVTables, bool **backwardGhostVTables);
-    void findGhostDegrees(std::string& fileName);
+    void parseArgs(int argc, char *argv[]);
+    void readLayerConfigFile(std::string &layerConfigFileName);
+    void readFeaturesFile(std::string &featuresFileName);
+    void readLabelsFile(std::string &labelsFileName);
+    void readPartsFile(std::string &partsFileName, Graph &lGraph);
+    void processEdge(unsigned &from, unsigned &to, Graph &lGraph, bool **forwardGhostVTables, bool **backwardGhostVTables);
+    void findGhostDegrees(std::string &fileName);
     void setEdgeNormalizations();
-    void readGraphBS(std::string& fileName);
+    void readGraphBS(std::string &fileName);
     void setUpCommInfo();
 
     // Metric printing.

@@ -17,6 +17,15 @@ target_link_libraries(lambda_comm PRIVATE utils resource_comm matrix
                                   PUBLIC  ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES})
 target_compile_options(lambda_comm PRIVATE "-Wall" "-Werror" "-Wno-reorder" "-MMD")
 
+
+find_package(OpenMP REQUIRED)
+add_library(cpu_comm SHARED "CPU_comm.cpp")
+set_property(TARGET cpu_comm PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(cpu_comm PRIVATE utils resource_comm matrix ${OpenMP_CXX_FLAGS}
+                                  PUBLIC  ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES} )
+target_compile_options(cpu_comm PRIVATE "-Wall" "-Werror" "-Wno-reorder" "-MMD" ${OpenMP_CXX_FLAGS})
+
+
 if(BUILD_GPU)
 	enable_language(CUDA)
 	FIND_PACKAGE(CUDA REQUIRED)

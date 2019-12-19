@@ -21,8 +21,7 @@ GPUComm::GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,
         numNodes(numNodes_),
         currLayer(0),
         dPort(dataserverPort_),
-        wPort(wPort_),
-        dataSocket(ctx,ZMQ_REQ){
+        wPort(wPort_){
             comp_server=new ComputingServer(this);
 }
 

@@ -1,8 +1,6 @@
-#ifndef __GPU_COMM_HPP__
-#define __GPU_COMM_HPP__
+#ifndef __CPU_COMM_HPP__
+#define __CPU_COMM_HPP__
 
-
-#include "../GPU-Computation/comp_server.cuh"
 
 #include <chrono>
 #include <cmath>
@@ -15,19 +13,48 @@
 #include "../utils/utils.hpp"
 #include "../../common/matrix.hpp"
 #include "../../common/utils.hpp"
+#include <thread>
+#include <boost/algorithm/string/trim.hpp>
+#include <fstream>
 
-class ComputingServer;
+class MessageServiceCPU {
+  public:
+    MessageServiceCPU() {};
+    MessageServiceCPU(unsigned wPort_, unsigned nodeId_);
 
-/**
- *
- * Accelerate computation using GPU
- *
- */
-class GPUComm : public ResourceComm {
+    //weight server related
+    void setUpWeightSocket(char *addr);
+    void prefetchWeightsMatrix(unsigned totalLayers);
+    void sendInfoMessage(unsigned numLambdas);
+
+    void sendWeightUpdate(Matrix &matrix, unsigned layer);
+    void terminateWeightServers(std::vector<char *> &weightServerAddrs);
+    void sendShutdownMessage(zmq::socket_t &weightsocket);
+
+    Matrix getWeightMatrix(unsigned layer);
+
+  private:
+    static char weightAddr[50];
+    zmq::context_t wctx;
+    zmq::socket_t *dataSocket;
+    zmq::socket_t *weightSocket;
+    zmq::message_t confirm;
+    unsigned nodeId;
+    unsigned wPort;
+    bool wsocktReady;
+
+    std::vector<Matrix *> weights;
+    std::thread wReqThread;
+    std::thread wSndThread;
+    std::thread infoThread;
+};
+
+
+class CPUComm : public ResourceComm {
 
   public:
 
-    GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_, const std::string &wServersFile, unsigned wPort_, unsigned totalLayers_);
+    CPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_, const std::string &wServersFile, unsigned wPort_, unsigned totalLayers_);
 
     // For forward-prop.
     void newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData_, FeatType *actData_,
@@ -64,6 +91,8 @@ class GPUComm : public ResourceComm {
     std::string wServersFile;
 
     //ntw related objs
+    zmq::context_t ctx;
+    zmq::socket_t weightSocket;
     unsigned dPort;
     unsigned wPort;
 
@@ -82,9 +111,10 @@ class GPUComm : public ResourceComm {
     Matrix targetMatrix;
     std::vector<Matrix> *savedTensors;
 
-    ComputingServer *comp_server;
-
+    std::vector<char *> weightServerAddrs;
+    std::vector<Matrix *> weights;
+    MessageServiceCPU msgService;
 };
 
 
-#endif // GPU_COMM_HPP
+#endif // CPU_COMM_HPP

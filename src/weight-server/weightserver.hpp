@@ -35,11 +35,11 @@ const float LEARNING_RATE = 0.01;
  */
 class WeightServer {
 
-public:
+  public:
 
-    WeightServer(std::string& weightServersFile, std::string& myPrIpFile,
-                 unsigned _listenerPort, std::string& configFileName,
-                 unsigned _serverPort, std::string& tmpFileName);
+    WeightServer(std::string &weightServersFile, std::string &myPrIpFile,
+                 unsigned _listenerPort, std::string &configFileName,
+                 unsigned _serverPort, std::string &tmpFileName);
     ~WeightServer();
 
     // Runs the weightserver, start a bunch of worker threads and create a proxy through frontend to backend.
@@ -54,18 +54,18 @@ public:
     std::condition_variable servers_updates_cv;
     bool servers_updates_done = true;
 
-private:
+  private:
 
     // For debugging.
     void serverLog(std::string info);
 
-	// Use dsh file to open sockets to other weight servers for aggregation.
-	void initializeWeightServerComms(std::string& weightServersFile, std::string& myPrIpFile);
-	std::string parseNodeConfig(std::string& weightServersFile, std::string& myPrIpFile, std::string& myIp);
+    // Use dsh file to open sockets to other weight servers for aggregation.
+    void initializeWeightServerComms(std::string &weightServersFile, std::string &myPrIpFile);
+    std::string parseNodeConfig(std::string &weightServersFile, std::string &myPrIpFile, std::string &myIp);
 
     // Read in layer configurations. The master constructs the weight matrices and then sends them
     // to the workers.
-    void initializeWeightMatrices(std::string& configFileName);
+    void initializeWeightMatrices(std::string &configFileName);
 
     // Variations of weight matrix initialization
     Matrix xavierInitialization(unsigned dim1, unsigned dim2);

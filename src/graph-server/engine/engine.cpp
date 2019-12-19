@@ -97,7 +97,17 @@ Engine::init(int argc, char *argv[]) {
     graph.compactGraph();
 
     setUpCommInfo();
-    resComm = createResourceComm(gpuEnabled ? "GPU" : "Lambda", commInfo);
+    switch(mode) {
+    case 0:
+        resComm = createResourceComm("Lambda", commInfo);
+        break;
+    case 1:
+        resComm = createResourceComm("GPU", commInfo);
+        break;
+    case 2:
+        resComm = createResourceComm("CPU", commInfo);
+        break;
+    }
 
     timeForwardProcess = 0.0;
     timeInit += getTimer();
@@ -124,7 +134,18 @@ Engine::destroy() {
 
     resComm->sendShutdownMessage();
 
-    destroyResourceComm(gpuEnabled ? "GPU" : "Lambda", resComm);
+    switch(mode) {
+    case 0:
+        destroyResourceComm("Lambda", resComm);
+        break;
+    case 1:
+        destroyResourceComm("GPU", resComm);
+        break;
+    case 2:
+        destroyResourceComm("CPU", resComm);
+        break;
+    }
+
 
     delete[] forwardGhostsList;
     delete[] backwardGhostsList;
@@ -164,16 +185,6 @@ Engine::setUpCommInfo() {
 bool
 Engine::master() {
     return nodeManager.amIMaster();
-}
-
-/**
- *
- * Whether GPU is enabled or not
- *
- */
-bool
-Engine::isGPUEnabled() {
-    return Engine::gpuEnabled;
 }
 
 void
@@ -444,10 +455,8 @@ Engine::invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     // Start a new lambda communication context.
     resComm->newContextForward(iteration, vtcsTensor, zTensor, outputTensor, vtcsCnt, inFeatDim, outFeatDim);
 
-    // if in GPU mode we launch gpu computation here and wait the results
-    if (gpuEnabled) {
-        resComm->requestForward(iteration, iteration == numLayers - 1);
-    } else {
+
+    if(mode == 0) {
         unsigned availLambdaId = 0;
         while(availLambdaId < numLambdasForward) {
             resComm->invokeLambdaForward(iteration, availLambdaId, iteration == numLayers - 1);
@@ -455,6 +464,9 @@ Engine::invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
         }
         resComm->waitLambdaForward(iteration, iteration == numLayers - 1);
     }
+    // if in GPU mode we launch gpu computation here and wait the results
+    else
+        resComm->requestForward(iteration, iteration == numLayers - 1);
 
     bool saveOutput = true;
     if (saveOutput) {
@@ -1089,7 +1101,7 @@ Engine::parseArgs(int argc, char *argv[]) {
     ("numEpochs", boost::program_options::value<unsigned>(), "Number of epochs to run")
     ("validationFrequency", boost::program_options::value<unsigned>(), "Number of epochs to run before validation")
 
-    ("GPU", boost::program_options::value<unsigned>(), "Enable GPU or not")
+    ("MODE", boost::program_options::value<unsigned>(), "0: Lambda,1: GPU, 2: CPU")
     ;
 
     boost::program_options::variables_map vm;
@@ -1173,8 +1185,8 @@ Engine::parseArgs(int argc, char *argv[]) {
     assert(vm.count("validationFrequency"));
     //    valFreq = vm["validationFrequency"].as<unsigned>();
 
-    assert(vm.count("GPU"));
-    gpuEnabled = vm["GPU"].as<unsigned>();
+    assert(vm.count("MODE"));
+    mode = vm["MODE"].as<unsigned>();
 
     printLog(404, "Parsed configuration: dThreads = %u, cThreads = %u, graphFile = %s, featuresFile = %s, dshMachinesFile = %s, "
              "myPrIpFile = %s, myPubIpFile = %s, undirected = %s, data port set -> %u, control port set -> %u, node port set -> %u",
