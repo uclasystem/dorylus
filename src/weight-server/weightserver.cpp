@@ -13,7 +13,7 @@ static std::ofstream outfile;
 // set true to write weights to `output_0` for correctness checking.
 static bool checkCorrectnessFlag = true;
 
-#define NUM_LISTENERS 5
+#define NUM_LISTENERS 2
 
 
 /** Logging utility. */
