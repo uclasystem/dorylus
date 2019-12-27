@@ -106,8 +106,9 @@ callback(const Aws::Lambda::LambdaClient *client, const Aws::Lambda::Model::Invo
  *
  */
 static void
-invokeFunction(Aws::String funcName, char *dataserver, char *dport, char *weightserver, char *wport,
-               unsigned layer, unsigned id, bool lastLayer) {
+invokeFunction(Aws::String funcName, char *dataserver, char *dport,
+               char *weightserver, char *wport, unsigned layer, unsigned id,
+               bool lastLayer) {
     Aws::Lambda::Model::InvokeRequest invReq;
     invReq.SetFunctionName(funcName);
     invReq.SetInvocationType(Aws::Lambda::Model::InvocationType::RequestResponse);
@@ -132,7 +133,8 @@ invokeFunction(Aws::String funcName, char *dataserver, char *dport, char *weight
  * CoordServer constructor.
  *
  */
-CoordServer::CoordServer(char *coordserverPort_, char *weightserverFile_, char *weightserverPort_, char *dataserverPort_)
+CoordServer::CoordServer(char *coordserverPort_, char *weightserverFile_,
+                         char *weightserverPort_, char *dataserverPort_)
     : coordserverPort(coordserverPort_), weightserverFile(weightserverFile_),
       weightserverPort(weightserverPort_), dataserverPort(dataserverPort_), ctx(1) {
     loadWeightServers(weightserverAddrs,weightserverFile);
@@ -155,8 +157,8 @@ CoordServer::run() {
     datasocket.setsockopt(ZMQ_RCVHWM, 5000);
     datasocket.bind(dhost_port);
 
-    // Connect weightserver sockets. Since sockets on weightserver are DEALERs, so we also have to create DEALERs and
-    // set a socket identity.
+    // Connect weightserver sockets. Since sockets on weightserver are DEALERs
+    // we also have to create DEALERs and set a socket identity.
     std::vector<zmq::socket_t> weightsockets;
     std::cout << "Connecting to all weightservers..." << std::endl;
     for (unsigned i = 0; i < weightserverAddrs.size(); ++i) {
@@ -318,8 +320,9 @@ CoordServer::sendShutdownMessage(zmq::socket_t& weightsocket) {
     populateHeader((char *) header.data(), OP::TERM);
     weightsocket.send(header);
 
-    // Set receive timeou 1s property on this weightsocket, in case that a weightserver is dying too quickly that it's
-    // confirm message it not sent from buffer yet. Using timeout here because shutdown is not a big deal.
+    // Set receive timeou 1s property on this weightsocket, in case that a
+    // weightserver is dying too quickly that it's confirm message it not sent
+    // from buffer yet. Using timeout here because shutdown is not a big deal.
     weightsocket.setsockopt(ZMQ_RCVTIMEO, 500);
 
     // Wait for termination confirmed reply.
@@ -328,7 +331,8 @@ CoordServer::sendShutdownMessage(zmq::socket_t& weightsocket) {
 }
 
 
-/** Main entrance: Starts a coordserver instance and run a single listener, until termination msg received. */
+/** Main entrance: Starts a coordserver instance and run a single listener,
+    until termination msg received. */
 int
 main(int argc, char *argv[]) {
 
