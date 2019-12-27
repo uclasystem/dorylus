@@ -19,7 +19,7 @@ main(int argc, char *argv[]) {
     // The engine object is static and has been substantiated in Engine.cpp.
     engine.init(argc, argv);
 
-    unsigned numEpochs = 30;
+    unsigned numEpochs = 1;
     unsigned valFreq = 1;
 
     if (engine.master())
@@ -27,7 +27,9 @@ main(int argc, char *argv[]) {
                     numEpochs, valFreq);
 
     // Do specified number of epochs.
+    Timer epochTimer;
     for (unsigned epoch = 0; epoch < numEpochs; ++epoch) {
+        epochTimer.start();
         printLog(engine.getNodeId(), "Starting Epoch %u", epoch+1);
         if (epoch != 0 && (epoch % valFreq == 0 || epoch == 1)) {
             if (engine.master())
@@ -43,6 +45,10 @@ main(int argc, char *argv[]) {
                 engine.runBackward(predictData);
             }
         }
+        epochTimer.stop();
+
+        printLog(engine.getNodeId(), "Time for epoch %u: %f ms",
+                 epoch+1, epochTimer.getTime());
     }
 
     // Procude the output files.
