@@ -19,7 +19,7 @@ main(int argc, char *argv[]) {
     // The engine object is static and has been substantiated in Engine.cpp.
     engine.init(argc, argv);
 
-    unsigned numEpochs = 1;
+    unsigned numEpochs = 30;
     unsigned valFreq = 1;
 
     if (engine.master())
@@ -32,10 +32,6 @@ main(int argc, char *argv[]) {
         epochTimer.start();
         printLog(engine.getNodeId(), "Starting Epoch %u", epoch+1);
         if (epoch != 0 && (epoch % valFreq == 0 || epoch == 1)) {
-            if (engine.master())
-                printLog(engine.getNodeId(), "Time for some validation");
-
-            // Boolean of whether or not to run evaluation
             FeatType *predictData = engine.runForward();
             engine.runBackward(predictData);
         } else {
@@ -49,6 +45,7 @@ main(int argc, char *argv[]) {
 
         printLog(engine.getNodeId(), "Time for epoch %u: %f ms",
                  epoch+1, epochTimer.getTime());
+        engine.addEpochTime(epochTimer.getTime());
     }
 
     // Procude the output files.

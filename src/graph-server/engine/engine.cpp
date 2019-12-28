@@ -193,6 +193,16 @@ Engine::getNumEpochs() {
 
 /**
  *
+ * Add a new epoch time to the list of epoch times
+ *
+ */
+void
+Engine::addEpochTime(double epochTime) {
+    epochTimes.push_back(epochTime);
+}
+
+/**
+ *
  * How many epochs to run before validation
  *
  */
@@ -342,6 +352,10 @@ Engine::output() {
         outStream << outBuf << std::endl;
     }
     sprintf(outBuf, "<EM>: Backward-prop takes %.3lf ms", timeBackwardProcess);
+
+    double sum = 0.0;
+    for (double& d : epochTimes) sum += d;
+    sprintf(outBuf, "<EM>: Average epoch time %.3lf ms", sum / (float)epochTimes.size());
     outStream << outBuf << std::endl;
 
     // Write benchmarking results to log file.
@@ -1172,6 +1186,10 @@ Engine::printEngineMetrics() {
         printLog(nodeId, "<EM>    Ghost update  %2u  %.3lf ms", i, vecTimeSendout[i]);
     }
     printLog(nodeId, "<EM>: Backward-prop takes %.3lf ms", timeBackwardProcess);
+
+    double sum = 0.0;
+    for (double& d : epochTimes) sum += d;
+    printLog(nodeId, "<EM>: Average epoch time %.3lf ms", sum / (float)epochTimes.size());
 }
 
 
