@@ -4,7 +4,7 @@
 ## Run the system on the given context. TO be invoked on only MASTER node.
 ## Must be invoked after a proper `setuup-cluster` & `bld-system`!!!
 ##
-## Usage: $ ./gnnman/run-onnode <Context> [Dataset]
+## Usage: $ ./gnnman/run-onnode <Context> [Dataset] [#Lambdas]
 ##
 ## Arguments:
 ##      Context: Run which part of the system.
@@ -22,7 +22,7 @@ case $1 in
     #
     "graph")
         if [[ $# -lt 2 ]]; then
-            echo "Usage: run-onnode graph [dataset]"
+            echo "Usage: run-onnode graph <dataset> [#lambdas]"
             exit
         fi
 
@@ -34,8 +34,13 @@ case $1 in
         CTRLPORT=$( < ../ctrlport )
         NODEPORT=$( < ../nodeport )
 
-        NUM_LAMBDAS_FORWARD=$( < ../numlambdasforward )
-        NUM_LAMBDAS_BACKWARD=$( < ../numlambdasbackward )
+        if [[ $# -lt 3 ]]; then
+            NUM_LAMBDAS_FORWARD=$( < ../numlambdasforward )
+            NUM_LAMBDAS_BACKWARD=$( < ../numlambdasbackward )
+        else
+            NUM_LAMBDAS_FORWARD=$3
+            NUM_LAMBDAS_BACKWARD=$3
+        fi
 
         MYPRIPFILE=${HOME}/myprip
         MYPUBIPFILE=${HOME}/mypubip
