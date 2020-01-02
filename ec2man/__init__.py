@@ -161,7 +161,7 @@ def process_target(ctx, target, args):
             inst = ctx.instances[i]
             response = ec2_cli.describe_instances(InstanceIds=[inst.id])
             state = response['Reservations'][0]['Instances'][0]['State']['Name']
-            print("\t{:2d}  {}  {}\t{}".format(i, inst.id, inst.pr_ip, state))
+            print("\t{:2d}  {}  {}  {}\t{}".format(i, inst.id, inst.type, inst.pr_ip, state))
 
     # Dump the dshmachines file for the given context.
     elif target == 'dshfile':
