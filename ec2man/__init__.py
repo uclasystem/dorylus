@@ -21,6 +21,7 @@ help_str = ("Usage: python3 -m ec2man help\n"
             "       python3 -m ec2man <Context> all <Operation> [Args]\n"
             "\nOperations:\n"
             "\tid:\tGet the instance ID string of the node\n"
+            "\ttype:\tCheck the type of the instance\n"
             "\tprip:\tGet the private ip address of the node\n"
             "\tpubip:\tGet the public ip address of the node\n"
             "\tssh:\tConnect to a node through SSH; Can append with command\n"
@@ -100,11 +101,12 @@ def get_instances_info(id_list):
     for res in responses['Reservations']:
         for inst in reversed(res['Instances']):
             inst_id = inst['InstanceId']
+            inst_type = inst['InstanceType']
             prip = inst['PrivateIpAddress']
             pubip = '0'
             if inst['State']['Name'] == 'running':
                 pubip = inst['PublicIpAddress']
-            instances.append(Instance(inst_id, prip, pubip))
+            instances.append(Instance(inst_id, inst_type, prip, pubip))
 
     return instances
 
