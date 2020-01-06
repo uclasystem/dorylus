@@ -97,7 +97,7 @@ Engine::init(int argc, char *argv[]) {
     graph.compactGraph();
 
     setUpCommInfo();
-    switch(mode) {
+    switch (mode) {
     case 0:
         resComm = createResourceComm("Lambda", commInfo);
         break;
@@ -134,7 +134,7 @@ Engine::destroy() {
 
     resComm->sendShutdownMessage();
 
-    switch(mode) {
+    switch (mode) {
     case 0:
         destroyResourceComm("Lambda", resComm);
         break;
@@ -456,9 +456,9 @@ Engine::invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     resComm->newContextForward(iteration, vtcsTensor, zTensor, outputTensor, vtcsCnt, inFeatDim, outFeatDim);
 
 
-    if(mode == 0) {
+    if (mode == 0) {
         unsigned availLambdaId = 0;
-        while(availLambdaId < numLambdasForward) {
+        while (availLambdaId < numLambdasForward) {
             resComm->invokeLambdaForward(iteration, availLambdaId, iteration == numLayers - 1);
             availLambdaId++;
         }
@@ -1506,7 +1506,7 @@ Engine::readGraphBS(std::string &fileName) {
     // Read in the binary snap edge file.
     std::string edgeFileName = fileName + EDGES_EXT;
     std::ifstream infile(edgeFileName.c_str(), std::ios::binary);
-    if(!infile.good())
+    if (!infile.good())
         printLog(nodeId, "Cannot open BinarySnap file: %s", edgeFileName.c_str());
 
     assert(infile.good());

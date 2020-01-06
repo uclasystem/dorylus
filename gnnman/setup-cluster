@@ -41,7 +41,8 @@ for i in $( seq 0 $(( ${NUM_GRAPH_NODES} - 1 )) ); do
     ${EC2MAN_CMD} graph $i put myprip mypubip
     rm -f myprip mypubip
 done
-
+${EC2MAN_CMD} weight all prip > wserverip
+${EC2MAN_CMD} graph all put wserverip run/wserverport
 
 # For weight servers.
 echo "Processing context 'weight'..."

@@ -11,9 +11,15 @@
 ##      Dataset: Only needed for graphservers.
 ##
 
+let MODE=0;
+for var in "$@"
+do
+    if [ $var = "GPU" ] || [ $var = "gpu" ]; then
+        let MODE=1;
+    fi
+done
 
 cd ${HOME}/gnn-lambda/
-
 
 case $1 in
 
@@ -104,7 +110,7 @@ case $1 in
             --numlambdasbackward ${NUM_LAMBDAS_BACKWARD} \
             --numEpoch 5 \
             --validationFrequency 1 \
-            --GPU 0"
+            --MODE ${MODE}"
         dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ${DSH_COMMAND}" 2>&1 | tee ${LOGFILE}
 
 
