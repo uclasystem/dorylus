@@ -2,7 +2,8 @@ import subprocess as sp
 import sys
 
 logs_command = ["awslogs", "get", "/aws/lambda/",
-                        "--start=" + sys.argv[-1]]
+                "--start=" + sys.argv[-2],
+                "--end=" + sys.argv[-1]]
 
 ## Retrieve a list of times for either the forward or backward lambdas
 ## based on the `log_type` parameter
