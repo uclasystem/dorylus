@@ -8,9 +8,13 @@
 cd ${HOME}/gnn-lambda/
 
 build_GPU='no'
-
 if [[ $1 == "GPU" || $1 == "gpu" ]]; then
 	build_GPU='yes'
+fi
+
+build_type='Release'
+if [[ $2 == "d" ]]; then
+    build_type='Debug'
 fi
 
 if [ ! -d build ]; then
@@ -18,7 +22,7 @@ if [ ! -d build ]; then
 fi
 
 cd build
-cmake .. -DBUILD_GRAPH=yes -DBUILD_GPU=$build_GPU
+cmake .. -DBUILD_GRAPH=yes -DBUILD_GPU=$build_GPU -DCMAKE_BUILD_TYPE=${build_type}
 make
 
 mv graph-server/graphserver .
