@@ -32,7 +32,7 @@ def handle_command(ec2_cli, ctx, instance, op, args):
     if op == "id":
         print(instance.id)
 
-    if op == "type":
+    elif op == "type":
         print(instance.type)
 
     # Get instance private ip.
