@@ -337,6 +337,9 @@ Engine::output() {
     // outStream << "B: " << timeBackwardProcess << std::endl;
 
     char outBuf[1024];
+    sprintf(outBuf, "<EM>: Using %u forward lambdas and %u backward lambdas",
+            numLambdasForward, numLambdasBackward);
+    outStream << outBuf << std::endl;
     sprintf(outBuf, "<EM>: Initialization takes %.3lf ms", timeInit);
     outStream << outBuf << std::endl;
     sprintf(outBuf, "<EM>: Forward:  Time per stage:");
@@ -1182,6 +1185,8 @@ Engine::calcAcc(FeatType *predicts, FeatType *labels, unsigned vtcsCnt, unsigned
  */
 void
 Engine::printEngineMetrics() {
+    printLog(nodeId, "<EM>: Using %u forward lambdas and %u bacward lambdas",
+             numLambdasForward, numLambdasBackward);
     printLog(nodeId, "<EM>: Initialization takes %.3lf ms", timeInit);
     printLog(nodeId, "<EM>: Forward:  Time per stage:");
     for (unsigned i = 0; i < numLayers; ++i) {
