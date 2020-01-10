@@ -404,7 +404,6 @@ forward_prop_layer(std::string dataserver, std::string weightserver, std::string
         // Multiplication.
         computationTimer.start();
         z = feats.dot(weights);
-        computationTimer.stop();
 
 
         if (lastLayer) {
@@ -412,6 +411,8 @@ forward_prop_layer(std::string dataserver, std::string weightserver, std::string
         } else {
             activations = activate(z);
         }
+        computationTimer.stop();
+
         sendResTimer.start();
         sendMatrices(z, activations, data_socket, id);
         sendResTimer.stop();
