@@ -31,7 +31,7 @@ echo "Processing context 'graph'..."
 
 ${EC2MAN_CMD} graph dshfile > dshmachines
 ${EC2MAN_CMD} coord 0 pubip > cserverip
-${EC2MAN_CMD} graph all put cserverip dshmachines run/layerconfig run/cserverport run/gserverport run/dataport run/ctrlport run/nodeport run/numlambdasforward run/numlambdasbackward
+${EC2MAN_CMD} graph all put cserverip dshmachines run/*.config run/cserverport run/gserverport run/dataport run/ctrlport run/nodeport run/numlambdasforward run/numlambdasbackward
 rm -f dshmachines cserverip
 
 NUM_GRAPH_NODES=$(( $( ${EC2MAN_CMD} graph info | wc -l | awk '{print $1}' ) - 1 ))
@@ -55,7 +55,7 @@ for i in $( seq 0 $(( ${NUM_GRAPH_NODES} - 1 )) ); do
 done
 
 ${EC2MAN_CMD} weight dshfile > dshmachines
-${EC2MAN_CMD} weight all put dshmachines run/dataport run/layerconfig run/wserverport
+${EC2MAN_CMD} weight all put dshmachines run/dataport run/*.config run/wserverport
 rm -f dshmachines
 
 

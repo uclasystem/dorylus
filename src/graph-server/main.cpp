@@ -27,13 +27,11 @@ main(int argc, char *argv[]) {
                     numEpochs, valFreq);
 
     // Do specified number of epochs.
+    Timer epochTimer;
     for (unsigned epoch = 0; epoch < numEpochs; ++epoch) {
+        epochTimer.start();
         printLog(engine.getNodeId(), "Starting Epoch %u", epoch+1);
         if (epoch != 0 && (epoch % valFreq == 0 || epoch == 1)) {
-            if (engine.master())
-                printLog(engine.getNodeId(), "Time for some validation");
-
-            // Boolean of whether or not to run evaluation
             FeatType *predictData = engine.runForward();
             engine.runBackward(predictData);
         } else {
@@ -41,6 +39,11 @@ main(int argc, char *argv[]) {
             // Do a backward-prop phase.
             engine.runBackward(predictData);
         }
+        epochTimer.stop();
+
+        printLog(engine.getNodeId(), "Time for epoch %u: %f ms",
+                 epoch+1, epochTimer.getTime());
+        engine.addEpochTime(epochTimer.getTime());
     }
 
     // Procude the output files.

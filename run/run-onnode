@@ -4,7 +4,7 @@
 ## Run the system on the given context. TO be invoked on only MASTER node.
 ## Must be invoked after a proper `setuup-cluster` & `bld-system`!!!
 ##
-## Usage: $ ./gnnman/run-onnode <Context> [Dataset]
+## Usage: $ ./gnnman/run-onnode <Context> [Dataset] [#Lambdas]
 ##
 ## Arguments:
 ##      Context: Run which part of the system.
@@ -27,6 +27,11 @@ case $1 in
     # Run graphserver.
     #
     "graph")
+        if [[ $# -lt 2 ]]; then
+            echo "Usage: run-onnode graph <dataset> [#lambdas]"
+            exit
+        fi
+
         CPORT=$( < ../cserverport )
         GPORT=$( < ../gserverport )
         CSERVERIP=$( < ../cserverip )
@@ -35,8 +40,13 @@ case $1 in
         CTRLPORT=$( < ../ctrlport )
         NODEPORT=$( < ../nodeport )
 
-		NUM_LAMBDAS_FORWARD=$( < ../numlambdasforward )
-        NUM_LAMBDAS_BACKWARD=$( < ../numlambdasbackward )
+        if [[ $# -lt 3 ]]; then
+            NUM_LAMBDAS_FORWARD=$( < ../numlambdasforward )
+            NUM_LAMBDAS_BACKWARD=$( < ../numlambdasbackward )
+        else
+            NUM_LAMBDAS_FORWARD=$3
+            NUM_LAMBDAS_BACKWARD=$3
+        fi
 
         MYPRIPFILE=${HOME}/myprip
         MYPUBIPFILE=${HOME}/mypubip
@@ -61,7 +71,7 @@ case $1 in
 
         DATASET=/filepool/$2
 
-        LAYERFILE=${HOME}/layerconfig
+        LAYERFILE=${HOME}/$2.config
 
         # Minor options.
         UNDIRECTED=0    # Currently are all directed graphs.
@@ -135,11 +145,17 @@ case $1 in
     # Run weightserver.
     #
     "weight")
+        if [[ $# -lt 2 ]]; then
+            echo "Usage: run-onnode weight [dataset]"
+            exit
+        fi
+
         WPORT=$( < ../wserverport )
         DATAPORT=$( < ../dataport )
 
         MYPRIPFILE=${HOME}/myprip
         DSHMACHINESFILE=${HOME}/dshmachines
+        LAYERCONFIGFILE=${HOME}/$2.config
 
         # Kill running weightservers.
         echo -e "\e[33;1mKilling existing 'weightserver' processes...\e[0m"
@@ -169,7 +185,7 @@ case $1 in
             ${MYPRIPFILE} \
             ${DATAPORT} \
             ${WPORT} \
-            ../layerconfig \
+            ${LAYERCONFIGFILE} \
             ${TMPFILEDIR}"
         dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ${DSH_COMMAND}"
 

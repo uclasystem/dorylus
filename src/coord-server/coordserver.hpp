@@ -27,14 +27,16 @@ class CoordServer {
 
 public:
 
-    CoordServer(char *coordserverPort_, char *weightserverFile_, char *weightserverPort_, char *dataserverPort_);
+    CoordServer(char *coordserverPort_, char *weightserverFile_,
+                char *weightserverPort_, char *dataserverPort_);
 
     // Runs the coordserver, keeps listening on dataserver's requests for lambda threads invocation.
     void run();
 
 private:
 
-    void loadWeightServers(std::vector<char *>& addresses, const std::string& wServersFile);
+    void loadWeightServers(std::vector<char *>& addresses,
+                           const std::string& wServersFile);
     void sendInfoMessage(zmq::socket_t& weightsocket, unsigned numLambdas);
     void sendShutdownMessage(zmq::socket_t& weightsocket);
 

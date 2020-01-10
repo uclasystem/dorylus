@@ -65,14 +65,16 @@ class Engine {
     void output();
     void destroy();
     bool master();
+    
+    FeatType* aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
+    FeatType* invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim);
+    FeatType* fusedGatherApply(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim);
+    FeatType* scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
 
-    FeatType *aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
-    FeatType *invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim);
-    FeatType *scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
-
-    FeatType *aggregateBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim);
-    FeatType *invokeLambdaBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim);
-    FeatType *scatterBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim);
+    FeatType* aggregateBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim);
+    FeatType* invokeLambdaBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim);
+    FeatType* fusedGatherApplyBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim);
+    FeatType* scatterBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim);
 
     void makeBarrier();
 
@@ -80,15 +82,7 @@ class Engine {
     unsigned getValFreq();
     unsigned getNodeId();
 
-    // For now, split is at a partition granularity
-    // For this node, will simply split the data into training data and validaiton data
-    // at the partition level (trainPortion = 1/3 means 1/3 of data will be training data
-    // and 2/3 will be validation
-    // TODO:
-    //  optimize this as ML might require things such as random sampling etc for training
-    //  QUESTION: Is it beneficial to go beyond parition level for individual vertices
-    //      as this will incur serialization overhead
-    void setTrainValidationSplit(float trainPortion);
+    void addEpochTime(double epochTime);
 
   private:
 
@@ -168,6 +162,7 @@ class Engine {
     std::vector<double> vecTimeAggregate;
     std::vector<double> vecTimeLambda;
     std::vector<double> vecTimeSendout;
+    std::vector<double> epochTimes;
 
     Barrier barComp;
 
@@ -181,6 +176,9 @@ class Engine {
 
     void aggregateCompute(unsigned tid, void *args);
     void aggregateBPCompute(unsigned tid, void *args);
+
+    void gatherApplyCompute(unsigned tid, void *args);
+    void gatherApplyBPCompute(unsigned tid, void *args);
 
     // About the global data arrays.
     inline unsigned getFeatDim(unsigned layer) {

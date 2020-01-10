@@ -117,7 +117,7 @@ LambdaComm::requestForward(unsigned layer, bool lastLayer) {
 void
 LambdaComm::invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer) { // another option is to keep states in coordserver
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::REQ_FORWARD, layer, lambdaId, lastLayer);
+    populateHeader((char *) header.data(), OP::REQ_FORWARD, layer, nodeId * numLambdasForward + lambdaId, lambdaId, lastLayer);
     coordsocket.send(header, ZMQ_SNDMORE);
 
     forwardLambdaTable[lambdaId] = true;
@@ -206,7 +206,7 @@ LambdaComm::requestBackward(unsigned layer, bool lastLayer) {
 void
 LambdaComm::invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLayer) {
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::REQ_BACKWARD, layer, lambdaId, lastLayer);
+    populateHeader((char *) header.data(), OP::REQ_BACKWARD, layer, nodeId * numLambdasBackward + lambdaId, lambdaId, lastLayer);
     coordsocket.send(header, ZMQ_SNDMORE);
 
     backwardLambdaTable[lambdaId] = true;
