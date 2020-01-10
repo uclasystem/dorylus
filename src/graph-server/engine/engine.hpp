@@ -166,7 +166,8 @@ class Engine {
 
     Barrier barComp;
 
-    void calcAcc(FeatType *predicts, FeatType *labels, unsigned vtcsCnt, unsigned featDim);
+    float calcAcc(FeatType *predicts, FeatType *labels, unsigned vtcsCnt,
+                  unsigned featDim);
 
     // Worker and communicator thread function.
     void forwardWorker(unsigned tid, void *args);
@@ -192,12 +193,18 @@ class Engine {
     void sendForwardGhostUpdates(FeatType *inputTensor, unsigned featDim);
     void sendBackwardGhostGradients(FeatType *gradTensor, unsigned featDim);
     // Ghost update operation, send vertices to other nodes
-    void forwardVerticesPushOut(unsigned receiver, unsigned totCnt, unsigned *lvids, FeatType *inputTensor, unsigned featDim);
-    void backwardVerticesPushOut(unsigned receiver, unsigned totCnt, unsigned *lvids, FeatType *gradTensor, unsigned featDim);
+    void forwardVerticesPushOut(unsigned receiver, unsigned totCnt,
+                                unsigned *lvids, FeatType *inputTensor,
+                                unsigned featDim);
+    void backwardVerticesPushOut(unsigned receiver, unsigned totCnt,
+                                 unsigned *lvids, FeatType *gradTensor,
+                                 unsigned featDim);
 
     // Aggregation operation (along with normalization).
-    void forwardAggregateFromNeighbors(unsigned lvid, FeatType *outputTensor, FeatType *inputTensor, unsigned featDim);
-    void backwardAggregateFromNeighbors(unsigned lvid, FeatType *nextGradTensor, FeatType *gradTensor, unsigned featDim);
+    void forwardAggregateFromNeighbors(unsigned lvid, FeatType *outputTensor,
+                                       FeatType *inputTensor, unsigned featDim);
+    void backwardAggregateFromNeighbors(unsigned lvid, FeatType *nextGradTensor,
+                                        FeatType *gradTensor, unsigned featDim);
 
     // For initialization.
     void parseArgs(int argc, char *argv[]);
@@ -205,7 +212,8 @@ class Engine {
     void readFeaturesFile(std::string &featuresFileName);
     void readLabelsFile(std::string &labelsFileName);
     void readPartsFile(std::string &partsFileName, Graph &lGraph);
-    void processEdge(unsigned &from, unsigned &to, Graph &lGraph, bool **forwardGhostVTables, bool **backwardGhostVTables);
+    void processEdge(unsigned &from, unsigned &to, Graph &lGraph, bool
+                     **forwardGhostVTables, bool **backwardGhostVTables);
     void findGhostDegrees(std::string &fileName);
     void setEdgeNormalizations();
     void readGraphBS(std::string &fileName);
