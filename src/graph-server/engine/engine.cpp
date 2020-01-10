@@ -261,7 +261,8 @@ Engine::runForward() {
 
     timeForwardProcess += getTimer();
     printLog(nodeId, "Engine completes FORWARD at iter %u.", iteration);
-    calcAcc(inputTensor, localVerticesLabels, graphLocalVerticesNum, getFeatDim(numLayers));
+    calcAcc(inputTensor, localVerticesLabels, graphLocalVerticesNum,
+                        getFeatDim(numLayers));
 
     return inputTensor;
 }
@@ -370,6 +371,8 @@ Engine::output() {
     double sum = 0.0;
     for (double& d : epochTimes) sum += d;
     sprintf(outBuf, "<EM>: Average epoch time %.3lf ms", sum / (float)epochTimes.size());
+    outStream << outBuf << std::endl;
+    sprintf(outBuf, "<EM>: Final accuracy %.3lf", accuracy);
     outStream << outBuf << std::endl;
 
     // Write benchmarking results to log file.
@@ -1175,6 +1178,8 @@ Engine::calcAcc(FeatType *predicts, FeatType *labels, unsigned vtcsCnt, unsigned
     acc /= vtcsCnt;
     loss /= vtcsCnt;
     printLog(getNodeId(), "batch loss %f, batch acc %f", loss, acc);
+
+    accuracy = acc;
 }
 
 
@@ -1207,6 +1212,7 @@ Engine::printEngineMetrics() {
     double sum = 0.0;
     for (double& d : epochTimes) sum += d;
     printLog(nodeId, "<EM>: Average epoch time %.3lf ms", sum / (float)epochTimes.size());
+    printLog(nodeId, "<EM>: Final accuracy %.3lf", accuracy);
 }
 
 

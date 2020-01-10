@@ -139,6 +139,8 @@ class Engine {
     unsigned numEpochs = 0;
     unsigned valFreq = 0;
 
+    float accuracy = 0.0;
+
     // table representing whether the partition id is a training set or not
     std::vector<bool> trainPartition;
 
@@ -166,7 +168,7 @@ class Engine {
 
     Barrier barComp;
 
-    float calcAcc(FeatType *predicts, FeatType *labels, unsigned vtcsCnt,
+    void calcAcc(FeatType *predicts, FeatType *labels, unsigned vtcsCnt,
                   unsigned featDim);
 
     // Worker and communicator thread function.
