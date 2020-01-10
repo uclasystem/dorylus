@@ -11,9 +11,7 @@
 ##      Dataset: Only needed for graphservers.
 ##
 
-
 cd ${HOME}/gnn-lambda/
-
 
 case $1 in
 
@@ -28,11 +26,13 @@ case $1 in
 
         CPORT=$( < ../cserverport )
         GPORT=$( < ../gserverport )
+        WPORT=$( < ../wserverport)
         CSERVERIP=$( < ../cserverip )
 
         DATAPORT=$( < ../dataport )
         CTRLPORT=$( < ../ctrlport )
         NODEPORT=$( < ../nodeport )
+        WSERVERIP=$HOME/wserverip
 
         if [[ $# -lt 3 ]]; then
             NUM_LAMBDAS_FORWARD=$( < ../numlambdasforward )
@@ -41,6 +41,16 @@ case $1 in
             NUM_LAMBDAS_FORWARD=$3
             NUM_LAMBDAS_BACKWARD=$3
         fi
+
+        let MODE=0;
+        for var in "$@"
+        do
+            if [ $var = "GPU" ] || [ $var = "gpu" ]; then
+                let MODE=1;
+                NUM_LAMBDAS_FORWARD=1
+                NUM_LAMBDAS_BACKWARD=1
+            fi
+        done
 
         MYPRIPFILE=${HOME}/myprip
         MYPUBIPFILE=${HOME}/mypubip
@@ -99,8 +109,8 @@ case $1 in
             --pubipfile ${MYPUBIPFILE} \
             --pripfile ${MYPRIPFILE} \
             --dataserverport ${GPORT} \
-            --weightserverport 0 \
-            --wserveripfile "placeholder" \
+            --weightserverport ${WPORT} \
+            --wserveripfile ${WSERVERIP} \
             --coordserverip ${CSERVERIP} \
             --coordserverport ${CPORT} \
             --undirected ${UNDIRECTED} \
@@ -114,7 +124,8 @@ case $1 in
             --numlambdasbackward ${NUM_LAMBDAS_BACKWARD} \
             --numEpoch 5 \
             --validationFrequency 1 \
-            --GPU 0"
+            --MODE ${MODE}"
+        echo ${DSH_COMMAND}
         dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ${DSH_COMMAND}" 2>&1 | tee ${LOGFILE}
 
 

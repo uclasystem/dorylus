@@ -97,7 +97,17 @@ Engine::init(int argc, char *argv[]) {
     graph.compactGraph();
 
     setUpCommInfo();
-    resComm = createResourceComm(gpuEnabled ? "GPU" : "Lambda", commInfo);
+    switch (mode) {
+    case 0:
+        resComm = createResourceComm("Lambda", commInfo);
+        break;
+    case 1:
+        resComm = createResourceComm("GPU", commInfo);
+        break;
+    case 2:
+        resComm = createResourceComm("CPU", commInfo);
+        break;
+    }
 
     timeForwardProcess = 0.0;
     timeInit += getTimer();
@@ -124,7 +134,18 @@ Engine::destroy() {
 
     resComm->sendShutdownMessage();
 
-    destroyResourceComm(gpuEnabled ? "GPU" : "Lambda", resComm);
+    switch (mode) {
+    case 0:
+        destroyResourceComm("Lambda", resComm);
+        break;
+    case 1:
+        destroyResourceComm("GPU", resComm);
+        break;
+    case 2:
+        destroyResourceComm("CPU", resComm);
+        break;
+    }
+
 
     delete[] forwardGhostsList;
     delete[] backwardGhostsList;
@@ -164,16 +185,6 @@ Engine::setUpCommInfo() {
 bool
 Engine::master() {
     return nodeManager.amIMaster();
-}
-
-/**
- *
- * Whether GPU is enabled or not
- *
- */
-bool
-Engine::isGPUEnabled() {
-    return Engine::gpuEnabled;
 }
 
 void
@@ -460,17 +471,18 @@ Engine::invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     // Start a new lambda communication context.
     resComm->newContextForward(iteration, vtcsTensor, zTensor, outputTensor, vtcsCnt, inFeatDim, outFeatDim);
 
-    // if in GPU mode we launch gpu computation here and wait the results
-    if (gpuEnabled) {
-        resComm->requestForward(iteration, iteration == numLayers - 1);
-    } else {
+
+    if (mode == 0) {
         unsigned availLambdaId = 0;
-        while(availLambdaId < numLambdasForward) {
+        while (availLambdaId < numLambdasForward) {
             resComm->invokeLambdaForward(iteration, availLambdaId, iteration == numLayers - 1);
             availLambdaId++;
         }
         resComm->waitLambdaForward(iteration, iteration == numLayers - 1);
     }
+    // if in GPU mode we launch gpu computation here and wait the results
+    else
+        resComm->requestForward(iteration, iteration == numLayers - 1);
 
     bool saveOutput = true;
     if (saveOutput) {
@@ -519,7 +531,7 @@ Engine::fusedGatherApply(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeat
 
     // Start applyVertex phase
     unsigned currLambdaId = 0;
-    if (!gpuEnabled) {
+    if (mode == 0) {
         const unsigned lambdaChunkSize = (vtcsCnt + numLambdasForward - 1) / numLambdasForward;
         unsigned availChunkSize = lambdaChunkSize;
         while (currId < vtcsCnt) {
@@ -533,7 +545,7 @@ Engine::fusedGatherApply(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeat
         }
     }
     computePool->sync();
-    if (gpuEnabled) {
+    if (mode != 0) {
         resComm->requestForward(iteration, iteration == numLayers - 1);
     } else {
         while (currLambdaId < numLambdasForward) {
@@ -894,7 +906,7 @@ Engine::fusedGatherApplyBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigne
 
     // Start applyVertex phase
     unsigned currLambdaId = 0;
-    if (!gpuEnabled) {
+    if (mode != 0) {
         const unsigned lambdaChunkSize = (vtcsCnt + numLambdasForward - 1) / numLambdasBackward;
         unsigned availChunkSize = lambdaChunkSize;
         while (currId < vtcsCnt) {
@@ -908,7 +920,7 @@ Engine::fusedGatherApplyBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigne
         }
     }
     computePool->sync();
-    if (gpuEnabled) {
+    if (mode != 0) {
         resComm->requestBackward(iteration - 1, iteration - 1 == numLayers - 1);
     } else {
         while (currLambdaId < numLambdasBackward) {
@@ -1247,7 +1259,7 @@ Engine::parseArgs(int argc, char *argv[]) {
     ("numEpochs", boost::program_options::value<unsigned>(), "Number of epochs to run")
     ("validationFrequency", boost::program_options::value<unsigned>(), "Number of epochs to run before validation")
 
-    ("GPU", boost::program_options::value<unsigned>(), "Enable GPU or not")
+    ("MODE", boost::program_options::value<unsigned>(), "0: Lambda,1: GPU, 2: CPU")
     ;
 
     boost::program_options::variables_map vm;
@@ -1331,8 +1343,8 @@ Engine::parseArgs(int argc, char *argv[]) {
     assert(vm.count("validationFrequency"));
     //    valFreq = vm["validationFrequency"].as<unsigned>();
 
-    assert(vm.count("GPU"));
-    gpuEnabled = vm["GPU"].as<unsigned>();
+    assert(vm.count("MODE"));
+    mode = vm["MODE"].as<unsigned>();
 
     printLog(404, "Parsed configuration: dThreads = %u, cThreads = %u, graphFile = %s, featuresFile = %s, dshMachinesFile = %s, "
              "myPrIpFile = %s, myPubIpFile = %s, undirected = %s, data port set -> %u, control port set -> %u, node port set -> %u",
@@ -1652,7 +1664,7 @@ Engine::readGraphBS(std::string &fileName) {
     // Read in the binary snap edge file.
     std::string edgeFileName = fileName + EDGES_EXT;
     std::ifstream infile(edgeFileName.c_str(), std::ios::binary);
-    if(!infile.good())
+    if (!infile.good())
         printLog(nodeId, "Cannot open BinarySnap file: %s", edgeFileName.c_str());
 
     assert(infile.good());

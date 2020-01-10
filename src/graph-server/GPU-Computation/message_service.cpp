@@ -66,6 +66,8 @@ void MessageService::setUpWeightSocket(char *addr) {
     weightSocket->connect(whost_port);
 }
 
+// This retrieve all weights at the beginning
+// TODO: This can be improved by making it layer-wise prefectching
 void MessageService::prefetchWeightsMatrix(unsigned totalLayers) {
     if (wSndThread.joinable()) {
         auto t1 = std::chrono::high_resolution_clock::now();

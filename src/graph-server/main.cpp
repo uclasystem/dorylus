@@ -37,9 +37,7 @@ main(int argc, char *argv[]) {
         } else {
             FeatType *predictData = engine.runForward();
             // Do a backward-prop phase.
-            if (engine.isGPUEnabled() == 0) {
-                engine.runBackward(predictData);
-            }
+            engine.runBackward(predictData);
         }
         epochTimer.stop();
 

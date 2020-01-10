@@ -100,7 +100,7 @@ void ComputingServer::processBackward(unsigned layer, bool lastLayer) {
     } else {
         gradLayer(layer);
         if(layer == 0)
-            msgService.prefetchWeightsMatrix(totalLayers);; //***CAUTION only works for one weight server
+            msgService.prefetchWeightsMatrix(totalLayers);
     }
 }
 
