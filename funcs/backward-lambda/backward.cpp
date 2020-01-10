@@ -31,6 +31,14 @@ using namespace std::chrono;
 
 bool lastLayer = false;
 
+Timer getPredsTimer;
+Timer getLabelsTimer;
+Timer getWeightsTimer;
+Timer getTensorTimer;
+Timer computationTimer;
+Timer sendGradsTimer;
+Timer sendDeltaTimer;
+
 static Matrix
 requestTensor(zmq::socket_t& socket, OP op, unsigned partId, TYPE type = TYPE::AH, unsigned layer = 0) {
     zmq::message_t header(HEADER_SIZE);
@@ -171,27 +179,40 @@ gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, 
     Matrix ah;
 
     std::cout << "< BACKWARD > Getting predictions" << std::endl;
+    getPredsTimer.start();
     do {
         predictions = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::ACT, layer);
     } while (predictions.empty());
+    getPredsTimer.stop();
+
     std::cout << "< BACKWARD > Getting labels" << std::endl;
+    getLabelsTimer.start();
     do {
         labels = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::LAB, layer);
     } while (labels.empty());
+    getLabelsTimer.stop();
+
     std::thread weightsThd([&] {
+        getWeightsTimer.start();
         std::cout << "< BACKWARD > Getting weights" << std::endl;
         do {
             weights = requestTensor(weight_socket, OP::PULL_BACKWARD, layer);
         } while (weights.empty());
+        getWeightsTimer.stop();
     });
+
+
     std::thread ahThd([&] {
+        getTensorTimer.start();
         std::cout << "< BACKWARD > Requesting AH" << std::endl;
         do {
             ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::AH, layer);
         } while (ah.empty());
+        getTensorTimer.stop();
     });
 
     // derivative of softmax
+    computationTimer.start();
     std::cout << "< BACKWARD > Calculating cross entropy" << std::endl;
     Matrix d_output = predictions - labels;
     delete[] predictions.getData();
@@ -209,14 +230,20 @@ gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, 
     Matrix weightUpdates = ah.dot(d_output, true, false);
     delete[] ah.getData();
     delete[] d_output.getData();
+    computationTimer.stop();
 
     std::thread wThd([&] {
+        sendDeltaTimer.start();
         std::cout << "< BACKWARD > Sending weight updates" << std::endl;
         sendMatrix(weightUpdates, weight_socket, layer);
+        sendDeltaTimer.stop();
         delete[] weightUpdates.getData();
     });
+
     std::cout << "< BACKWARD > Sending gradient to graph server" << std::endl;
+    sendGradsTimer.start();
     sendMatrix(interGrad, data_socket, id);
+    sendGradsTimer.stop();
     delete[] interGrad.getData();
     wThd.join();
 }
@@ -313,10 +340,6 @@ backward_prop(std::string dataserver, std::string weightserver, std::string dpor
     *(unsigned *)(identity + sizeof(unsigned) * 2) = rand();
     memcpy(identity + sizeof(unsigned) * 3, (char *) dataserver.c_str(), dataserver.length());
 
-    Timer getWeightsTimer;
-    Timer getFeatsTimer;
-    Timer computationTimer;
-    Timer sendResTimer;
 
     try {
         zmq::socket_t weights_socket(ctx, ZMQ_DEALER);
@@ -346,10 +369,13 @@ backward_prop(std::string dataserver, std::string weightserver, std::string dpor
     // Couldn't parse JSON with AWS SDK from ptree.
     // For now creating a string with the times to be parsed on server.
     std::string res = "[ BACKWARD ] " + std::to_string(id) + ": " +
+                      std::to_string(getPredsTimer.getTime()) + " " +       \
+                      std::to_string(getLabelsTimer.getTime()) + " " +      \
                       std::to_string(getWeightsTimer.getTime()) + " " +     \
-                      std::to_string(getFeatsTimer.getTime())  + " " +      \
+                      std::to_string(getTensorTimer.getTime()) + " " +      \
                       std::to_string(computationTimer.getTime()) + " " +    \
-                      std::to_string(sendResTimer.getTime());
+                      std::to_string(sendGradsTimer.getTime()) + " " +      \
+                      std::to_string(sendDeltaTimer.getTime());
 
     return invocation_response::success(res, "application/json");
 }

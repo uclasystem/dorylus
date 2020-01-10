@@ -429,7 +429,7 @@ forward_prop_layer(std::string dataserver, std::string weightserver, std::string
 
     // Couldn't parse JSON with AWS SDK from ptree.
     // For now creating a string with the times to be parsed on server.
-    std::string res = std::to_string(id) + ": " +
+    std::string res = "[ FORWARD ] " + std::to_string(id) + ": " +
                       std::to_string(getWeightsTimer.getTime()) + " " +     \
                       std::to_string(getFeatsTimer.getTime())  + " " +      \
                       std::to_string(computationTimer.getTime()) + " " +    \
