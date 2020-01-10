@@ -3,13 +3,15 @@
 
 
 #include <algorithm>
-#include <cstdio>
-#include <map>
-#include <cstring>
-#include <string>
-#include <typeinfo>
+#include <chrono>
 #include <climits>
 #include <cstdarg>
+#include <cstdio>
+#include <cstring>
+#include <ctime>
+#include <map>
+#include <string>
+#include <typeinfo>
 #include <vector>
 
 
@@ -29,6 +31,7 @@ void printLog(const unsigned nodeId, const char *format, ...);
 
 /** Acquire timer value using this one. */
 double getTimer();
+std::time_t getCurrentTime();
 
 
 void getPrIP(std::string& myPrIpFile, std::string& ip);

@@ -25,6 +25,7 @@
  */
 void
 Engine::init(int argc, char *argv[]) {
+    start_time = getCurrentTime();
     printLog(404, "Engine starts initialization...");
     timeInit = -getTimer();
 
@@ -337,10 +338,18 @@ Engine::output() {
     // }
     // outStream << "B: " << timeBackwardProcess << std::endl;
 
+    std::time_t end_time = getCurrentTime();
+
     char outBuf[1024];
+    sprintf(outBuf, "<EM>: Run start time: ");
+    outStream << outBuf << std::ctime(&start_time);
+    sprintf(outBuf, "<EM>: Run end time: ");
+    outStream << outBuf << std::ctime(&end_time);
+
     sprintf(outBuf, "<EM>: Using %u forward lambdas and %u backward lambdas",
             numLambdasForward, numLambdasBackward);
     outStream << outBuf << std::endl;
+
     sprintf(outBuf, "<EM>: Initialization takes %.3lf ms", timeInit);
     outStream << outBuf << std::endl;
     sprintf(outBuf, "<EM>: Forward:  Time per stage:");
