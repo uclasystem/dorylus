@@ -531,7 +531,7 @@ Engine::fusedGatherApply(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeat
 
     // Start applyVertex phase
     unsigned currLambdaId = 0;
-    if (!gpuEnabled) {
+    if (mode == 0) {
         const unsigned lambdaChunkSize = (vtcsCnt + numLambdasForward - 1) / numLambdasForward;
         unsigned availChunkSize = lambdaChunkSize;
         while (currId < vtcsCnt) {
@@ -545,7 +545,7 @@ Engine::fusedGatherApply(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeat
         }
     }
     computePool->sync();
-    if (gpuEnabled) {
+    if (mode != 0) {
         resComm->requestForward(iteration, iteration == numLayers - 1);
     } else {
         while (currLambdaId < numLambdasForward) {
@@ -906,7 +906,7 @@ Engine::fusedGatherApplyBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigne
 
     // Start applyVertex phase
     unsigned currLambdaId = 0;
-    if (!gpuEnabled) {
+    if (mode != 0) {
         const unsigned lambdaChunkSize = (vtcsCnt + numLambdasForward - 1) / numLambdasBackward;
         unsigned availChunkSize = lambdaChunkSize;
         while (currId < vtcsCnt) {
@@ -920,7 +920,7 @@ Engine::fusedGatherApplyBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigne
         }
     }
     computePool->sync();
-    if (gpuEnabled) {
+    if (mode != 0) {
         resComm->requestBackward(iteration - 1, iteration - 1 == numLayers - 1);
     } else {
         while (currLambdaId < numLambdasBackward) {
