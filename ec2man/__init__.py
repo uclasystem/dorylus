@@ -43,12 +43,15 @@ if not os.path.isfile(EC2_DIR + "profile"):
     print("ERROR: Not providing a `profile` file in the module directory.")
     exit(1)
 
-arn, profile_name = '', ''
+profile_name = ''
+user_name = ''
 with open(EC2_DIR + "profile", 'r') as fprofile:
-    arn = fprofile.readline().strip().split()[0]
     profile_name = fprofile.readline().strip().split()[0]
     if profile_name.lower() == 'default':   # If given as default, then set to None so that boto3 session uses the default profile.
         profile_name = None
+
+    user_name = fprofile.readline().strip().split()[0]
+    ssh_key = fprofile.readline().strip().split()[0]
 
 
 # Initialize the EC2 client.
@@ -72,11 +75,11 @@ def process_setup():
         for line in fconfig.readlines():
             line = line.strip()
             if len(line) > 0:
-                inst_id, role, user, key = tuple(line.split()[:4])
+                inst_id, role = tuple(line.split()[:2])
                 if role not in contexts:
                     contexts[role] = dict()
                     print("Context for '" + role + "' created.")
-                contexts[role][inst_id] = (user, key)
+                contexts[role][inst_id] = (user_name, ssh_key)
 
     # For every context, get its instances' info through its id_list. Create the context object, and dump
     # into a binary context file.
