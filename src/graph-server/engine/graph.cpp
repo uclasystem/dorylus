@@ -68,11 +68,11 @@ void Graph::init(std::string graphFile) {
     infile.read(reinterpret_cast<char *>(&forwardAdj.nnz), sizeof(unsigned long long));
     forwardAdj.values = new EdgeType[forwardAdj.nnz];
     forwardAdj.locations = new char[forwardAdj.nnz];
-    forwardAdj.columnPtrs = new unsigned[localVtxCnt + 1];
+    forwardAdj.columnPtrs = new unsigned long long[localVtxCnt + 1];
     forwardAdj.rowIdxs = new unsigned[forwardAdj.nnz];
     infile.read(reinterpret_cast<char *>(forwardAdj.values), sizeof(EdgeType) * forwardAdj.nnz);
     // infile.read(reinterpret_cast<char *>(forwardAdj.locations), sizeof(char) * forwardAdj.nnz);
-    infile.read(reinterpret_cast<char *>(forwardAdj.columnPtrs), sizeof(unsigned) * (localVtxCnt + 1));
+    infile.read(reinterpret_cast<char *>(forwardAdj.columnPtrs), sizeof(unsigned long long) * (localVtxCnt + 1));
     infile.read(reinterpret_cast<char *>(forwardAdj.rowIdxs), sizeof(unsigned) * forwardAdj.nnz);
 
     // CSR representation of grpah
@@ -80,11 +80,11 @@ void Graph::init(std::string graphFile) {
     infile.read(reinterpret_cast<char *>(&backwardAdj.nnz), sizeof(unsigned long long));
     backwardAdj.values = new EdgeType[backwardAdj.nnz];
     backwardAdj.locations = new char[backwardAdj.nnz];
-    backwardAdj.rowPtrs = new unsigned[localVtxCnt + 1];
+    backwardAdj.rowPtrs = new unsigned long long[localVtxCnt + 1];
     backwardAdj.columnIdxs = new unsigned[backwardAdj.nnz];
     infile.read(reinterpret_cast<char *>(backwardAdj.values), sizeof(EdgeType) * backwardAdj.nnz);
     // infile.read(reinterpret_cast<char *>(backwardAdj.locations), sizeof(char) * backwardAdj.nnz);
-    infile.read(reinterpret_cast<char *>(backwardAdj.rowPtrs), sizeof(unsigned) * (localVtxCnt + 1));
+    infile.read(reinterpret_cast<char *>(backwardAdj.rowPtrs), sizeof(unsigned long long) * (localVtxCnt + 1));
     infile.read(reinterpret_cast<char *>(backwardAdj.columnIdxs), sizeof(unsigned) * backwardAdj.nnz);
 
     infile.close();
@@ -232,7 +232,7 @@ RawGraph::dump(std::string filename, unsigned numNodes) {
     outfile.write(reinterpret_cast<const char *>(&forwardAdj.nnz), sizeof(unsigned long long));
     outfile.write(reinterpret_cast<const char *>(forwardAdj.values), sizeof(EdgeType) * forwardAdj.nnz);
     // outfile.write(reinterpret_cast<const char *>(forwardAdj.locations), sizeof(char) * forwardAdj.nnz);
-    outfile.write(reinterpret_cast<const char *>(forwardAdj.columnPtrs), sizeof(unsigned) * (numLocalVertices + 1));
+    outfile.write(reinterpret_cast<const char *>(forwardAdj.columnPtrs), sizeof(unsigned long long) * (numLocalVertices + 1));
     outfile.write(reinterpret_cast<const char *>(forwardAdj.rowIdxs), sizeof(unsigned) * forwardAdj.nnz);
 
     // CSR representation of graph
@@ -240,7 +240,7 @@ RawGraph::dump(std::string filename, unsigned numNodes) {
     outfile.write(reinterpret_cast<const char *>(&backwardAdj.nnz), sizeof(unsigned long long));
     outfile.write(reinterpret_cast<const char *>(backwardAdj.values), sizeof(EdgeType) * backwardAdj.nnz);
     // outfile.write(reinterpret_cast<const char *>(backwardAdj.locations), sizeof(char) * backwardAdj.nnz);
-    outfile.write(reinterpret_cast<const char *>(backwardAdj.rowPtrs), sizeof(unsigned) * (numLocalVertices + 1));
+    outfile.write(reinterpret_cast<const char *>(backwardAdj.rowPtrs), sizeof(unsigned long long) * (numLocalVertices + 1));
     outfile.write(reinterpret_cast<const char *>(backwardAdj.columnIdxs), sizeof(unsigned) * backwardAdj.nnz);
 
     outfile.close();

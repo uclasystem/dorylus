@@ -25,11 +25,11 @@ public:
     void init(RawGraph &rgraph);
 
     unsigned columnCnt;
-    unsigned long long nnz; // number of non-zero elements
-    T *values;              // non-zero elements
-    char *locations;        // edge locations vector
-    unsigned *columnPtrs;   // pointers to the start of each column
-    unsigned *rowIdxs;      // indices of nz elements in each column
+    unsigned long long nnz;         // number of non-zero elements
+    T *values;                      // non-zero elements
+    char *locations;                // edge locations vector
+    unsigned long long *columnPtrs; // pointers to the start of each column
+    unsigned *rowIdxs;              // indices of nz elements in each column
 };
 
 template<typename T>
@@ -45,11 +45,11 @@ public:
     void init(RawGraph &rgraph);
 
     unsigned rowCnt;
-    unsigned long long nnz; // number of non-zero elements
-    T *values;              // non-zero elements
-    char *locations;        // edge locations vector
-    unsigned *rowPtrs;      // pointers to the start of each row
-    unsigned *columnIdxs;   // indices of nz elements in each row
+    unsigned long long nnz;      // number of non-zero elements
+    T *values;                   // non-zero elements
+    char *locations;             // edge locations vector
+    unsigned long long *rowPtrs; // pointers to the start of each row
+    unsigned *columnIdxs;        // indices of nz elements in each row
 };
 
 /**
@@ -165,7 +165,7 @@ void CSCMatrix<T>::init(RawGraph &rgraph) {
 
     values = new T[nnz];
     locations = new char[nnz];
-    columnPtrs = new unsigned[columnCnt + 1];
+    columnPtrs = new unsigned long long[columnCnt + 1];
     rowIdxs = new unsigned [nnz];
 
     columnPtrs[0] = 0;
@@ -190,7 +190,7 @@ void CSRMatrix<T>::init(RawGraph &rgraph) {
 
     values = new T[nnz];
     locations = new char[nnz];
-    rowPtrs = new unsigned[rowCnt + 1];
+    rowPtrs = new unsigned long long[rowCnt + 1];
     columnIdxs = new unsigned[nnz];
 
     rowPtrs[0] = 0;

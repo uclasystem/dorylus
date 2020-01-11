@@ -49,8 +49,9 @@ Engine::init(int argc, char *argv[]) {
     std::string graphFile = datasetDir + "graph." + std::to_string(nodeId) + ".bin";
     // detect whether preprocessed
     {
+        bool forcePreprocess = false;
         std::ifstream gfile(graphFile.c_str(), std::ios::binary);
-        if (!gfile.good()) {
+        if (!gfile.good() || forcePreprocess) {
             DataLoader dl(datasetDir, nodeId, numNodes, undirected);
             dl.preprocess();
         }
