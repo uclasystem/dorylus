@@ -98,17 +98,8 @@ Engine::init(int argc, char *argv[]) {
     graph.compactGraph();
 
     setUpCommInfo();
-    switch (mode) {
-    case 0:
-        resComm = createResourceComm("Lambda", commInfo);
-        break;
-    case 1:
-        resComm = createResourceComm("GPU", commInfo);
-        break;
-    case 2:
-        resComm = createResourceComm("CPU", commInfo);
-        break;
-    }
+
+    resComm = createResourceComm(mode, commInfo);
 
     timeForwardProcess = 0.0;
     timeInit += getTimer();
@@ -135,18 +126,7 @@ Engine::destroy() {
 
     resComm->sendShutdownMessage();
 
-    switch (mode) {
-    case 0:
-        destroyResourceComm("Lambda", resComm);
-        break;
-    case 1:
-        destroyResourceComm("GPU", resComm);
-        break;
-    case 2:
-        destroyResourceComm("CPU", resComm);
-        break;
-    }
-
+    destroyResourceComm(mode, resComm);
 
     delete[] forwardGhostsList;
     delete[] backwardGhostsList;
@@ -487,7 +467,7 @@ Engine::invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     resComm->newContextForward(iteration, vtcsTensor, zTensor, outputTensor, vtcsCnt, inFeatDim, outFeatDim);
 
 
-    if (mode == 0) {
+    if (mode == LAMBDA) {
         unsigned availLambdaId = 0;
         while (availLambdaId < numLambdasForward) {
             resComm->invokeLambdaForward(iteration, availLambdaId, iteration == numLayers - 1);
@@ -546,7 +526,7 @@ Engine::fusedGatherApply(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeat
 
     // Start applyVertex phase
     unsigned currLambdaId = 0;
-    if (mode == 0) {
+    if (mode == LAMBDA) {
         const unsigned lambdaChunkSize = (vtcsCnt + numLambdasForward - 1) / numLambdasForward;
         unsigned availChunkSize = lambdaChunkSize;
         while (currId < vtcsCnt) {
@@ -560,7 +540,7 @@ Engine::fusedGatherApply(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeat
         }
     }
     computePool->sync();
-    if (mode != 0) {
+    if (mode != LAMBDA) {
         resComm->requestForward(iteration, iteration == numLayers - 1);
     } else {
         while (currLambdaId < numLambdasForward) {
@@ -921,7 +901,7 @@ Engine::fusedGatherApplyBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigne
 
     // Start applyVertex phase
     unsigned currLambdaId = 0;
-    if (mode != 0) {
+    if (mode == LAMBDA) {
         const unsigned lambdaChunkSize = (vtcsCnt + numLambdasForward - 1) / numLambdasBackward;
         unsigned availChunkSize = lambdaChunkSize;
         while (currId < vtcsCnt) {
@@ -935,7 +915,7 @@ Engine::fusedGatherApplyBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigne
         }
     }
     computePool->sync();
-    if (mode != 0) {
+    if (mode != LAMBDA) {
         resComm->requestBackward(iteration - 1, iteration - 1 == numLayers - 1);
     } else {
         while (currLambdaId < numLambdasBackward) {
