@@ -29,7 +29,7 @@ void destroyResourceComm(const unsigned &type, ResourceComm *resComm) {
         hndl = dlopen("./build/graph-server/commmanager/libgpu_comm.so", RTLD_NOW);
     if (type == LAMBDA)
         hndl = dlopen("./build/graph-server/commmanager/liblambda_comm.so", RTLD_NOW);
-    
+
     if (hndl == NULL) {
         std::cerr << dlerror() << std::endl;
         exit(-1);

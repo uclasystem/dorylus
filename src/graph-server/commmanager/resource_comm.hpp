@@ -10,8 +10,6 @@ enum{
     LAMBDA, GPU, CPU
 };
 
-class Lock;
-
 struct CommInfo {
     std::string nodeIp;
     unsigned nodeId;
