@@ -21,6 +21,7 @@ help_str = ("Usage: python3 -m ec2man help\n"
             "       python3 -m ec2man <Context> all <Operation> [Args]\n"
             "\nOperations:\n"
             "\tid:\tGet the instance ID string of the node\n"
+            "\ttype:\tCheck the type of the instance\n"
             "\tprip:\tGet the private ip address of the node\n"
             "\tpubip:\tGet the public ip address of the node\n"
             "\tssh:\tConnect to a node through SSH; Can append with command\n"
@@ -42,12 +43,15 @@ if not os.path.isfile(EC2_DIR + "profile"):
     print("ERROR: Not providing a `profile` file in the module directory.")
     exit(1)
 
-arn, profile_name = '', ''
+profile_name = ''
+user_name = ''
 with open(EC2_DIR + "profile", 'r') as fprofile:
-    arn = fprofile.readline().strip().split()[0]
     profile_name = fprofile.readline().strip().split()[0]
     if profile_name.lower() == 'default':   # If given as default, then set to None so that boto3 session uses the default profile.
         profile_name = None
+
+    user_name = fprofile.readline().strip().split()[0]
+    ssh_key = fprofile.readline().strip().split()[0]
 
 
 # Initialize the EC2 client.
@@ -71,11 +75,11 @@ def process_setup():
         for line in fconfig.readlines():
             line = line.strip()
             if len(line) > 0:
-                inst_id, role, user, key = tuple(line.split()[:4])
+                inst_id, role = tuple(line.split()[:2])
                 if role not in contexts:
                     contexts[role] = dict()
                     print("Context for '" + role + "' created.")
-                contexts[role][inst_id] = (user, key)
+                contexts[role][inst_id] = (user_name, ssh_key)
 
     # For every context, get its instances' info through its id_list. Create the context object, and dump
     # into a binary context file.
@@ -100,11 +104,12 @@ def get_instances_info(id_list):
     for res in responses['Reservations']:
         for inst in reversed(res['Instances']):
             inst_id = inst['InstanceId']
+            inst_type = inst['InstanceType']
             prip = inst['PrivateIpAddress']
             pubip = '0'
             if inst['State']['Name'] == 'running':
                 pubip = inst['PublicIpAddress']
-            instances.append(Instance(inst_id, prip, pubip))
+            instances.append(Instance(inst_id, inst_type, prip, pubip))
 
     return instances
 
@@ -159,7 +164,7 @@ def process_target(ctx, target, args):
             inst = ctx.instances[i]
             response = ec2_cli.describe_instances(InstanceIds=[inst.id])
             state = response['Reservations'][0]['Instances'][0]['State']['Name']
-            print("\t{:2d}  {}  {}\t{}".format(i, inst.id, inst.pr_ip, state))
+            print("\t{:2d}  {}  {}  {:15}  {}".format(i, inst.id, inst.type, inst.pr_ip, state))
 
     # Dump the dshmachines file for the given context.
     elif target == 'dshfile':

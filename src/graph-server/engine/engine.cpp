@@ -25,6 +25,7 @@
  */
 void
 Engine::init(int argc, char *argv[]) {
+    start_time = getCurrentTime();
     printLog(404, "Engine starts initialization...");
     timeInit = -getTimer();
 
@@ -261,7 +262,8 @@ Engine::runForward() {
 
     timeForwardProcess += getTimer();
     printLog(nodeId, "Engine completes FORWARD at iter %u.", iteration);
-    calcAcc(inputTensor, localVerticesLabels, graphLocalVerticesNum, getFeatDim(numLayers));
+    calcAcc(inputTensor, localVerticesLabels, graphLocalVerticesNum,
+                        getFeatDim(numLayers));
 
     return inputTensor;
 }
@@ -336,7 +338,18 @@ Engine::output() {
     // }
     // outStream << "B: " << timeBackwardProcess << std::endl;
 
+    std::time_t end_time = getCurrentTime();
+
     char outBuf[1024];
+    sprintf(outBuf, "<EM>: Run start time: ");
+    outStream << outBuf << std::ctime(&start_time);
+    sprintf(outBuf, "<EM>: Run end time: ");
+    outStream << outBuf << std::ctime(&end_time);
+
+    sprintf(outBuf, "<EM>: Using %u forward lambdas and %u backward lambdas",
+            numLambdasForward, numLambdasBackward);
+    outStream << outBuf << std::endl;
+
     sprintf(outBuf, "<EM>: Initialization takes %.3lf ms", timeInit);
     outStream << outBuf << std::endl;
     sprintf(outBuf, "<EM>: Forward:  Time per stage:");
@@ -367,6 +380,8 @@ Engine::output() {
     double sum = 0.0;
     for (double& d : epochTimes) sum += d;
     sprintf(outBuf, "<EM>: Average epoch time %.3lf ms", sum / (float)epochTimes.size());
+    outStream << outBuf << std::endl;
+    sprintf(outBuf, "<EM>: Final accuracy %.3lf", accuracy);
     outStream << outBuf << std::endl;
 
     // Write benchmarking results to log file.
@@ -1172,6 +1187,8 @@ Engine::calcAcc(FeatType *predicts, FeatType *labels, unsigned vtcsCnt, unsigned
     acc /= vtcsCnt;
     loss /= vtcsCnt;
     printLog(getNodeId(), "batch loss %f, batch acc %f", loss, acc);
+
+    accuracy = acc;
 }
 
 
@@ -1182,6 +1199,8 @@ Engine::calcAcc(FeatType *predicts, FeatType *labels, unsigned vtcsCnt, unsigned
  */
 void
 Engine::printEngineMetrics() {
+    printLog(nodeId, "<EM>: Using %u forward lambdas and %u bacward lambdas",
+             numLambdasForward, numLambdasBackward);
     printLog(nodeId, "<EM>: Initialization takes %.3lf ms", timeInit);
     printLog(nodeId, "<EM>: Forward:  Time per stage:");
     for (unsigned i = 0; i < numLayers; ++i) {
@@ -1202,6 +1221,7 @@ Engine::printEngineMetrics() {
     double sum = 0.0;
     for (double& d : epochTimes) sum += d;
     printLog(nodeId, "<EM>: Average epoch time %.3lf ms", sum / (float)epochTimes.size());
+    printLog(nodeId, "<EM>: Final accuracy %.3lf", accuracy);
 }
 
 

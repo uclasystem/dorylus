@@ -8,8 +8,9 @@ class Instance:
     Class for an AWS EC2 node.
     """
 
-    def __init__(self, _id='', _pr_ip='', _pub_ip='0', _user='', _key=''):
+    def __init__(self, _id='', _type='', _pr_ip='', _pub_ip='0', _user='', _key=''):
         self.id = _id
+        self.type = _type
         self.pr_ip = _pr_ip
         self.pub_ip = _pub_ip
         self.user = _user

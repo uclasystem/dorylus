@@ -32,6 +32,9 @@ def handle_command(ec2_cli, ctx, instance, op, args):
     if op == "id":
         print(instance.id)
 
+    elif op == "type":
+        print(instance.type)
+
     # Get instance private ip.
     elif op == "prip":
         print(instance.pr_ip)
@@ -50,7 +53,7 @@ def handle_command(ec2_cli, ctx, instance, op, args):
         if instance.pub_ip == '0':
             print("Public IP address not yet defined. Make sure the instance is 'running'.")
         else:
-            ssh_command = ['ssh'] + remote_access_opts + [instance.user + '@' + instance.pub_ip]
+            ssh_command = ['ssh', '-t'] + remote_access_opts + [instance.user + '@' + instance.pub_ip]
             if len(args) != 0:
                 ssh_command += args
             subprocess.run(ssh_command)

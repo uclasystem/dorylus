@@ -39,6 +39,17 @@ double getTimer() {
     return t.tv_sec * 1000 + t.tv_usec / 1000.0;
 }
 
+/**
+ *
+ * Get current date and time
+ *
+ */
+std::time_t getCurrentTime() {
+    auto time_now = std::chrono::system_clock::now();
+
+    std::time_t current_time = std::chrono::system_clock::to_time_t(time_now);
+    return current_time;
+}
 
 /**
  *

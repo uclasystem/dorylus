@@ -19,8 +19,8 @@
 #include "../utils/utils.hpp"
 #include "../../common/matrix.hpp"
 
-
-#define MAX_MSG_SIZE (1024 * 1024)   // Max size (bytes) for a message received by the data communicator.
+// Max size (bytes) for a message received by the data communicator.
+#define MAX_MSG_SIZE (1024 * 1024)
 #define NODE_ID_DIGITS 8 // Digits num of node id.
 #define NODE_ID_HEADER "%8X" // Header for node id. For communication.
 #define DATA_HEADER_SIZE (NODE_ID_DIGITS + sizeof(unsigned) + sizeof(unsigned))
@@ -66,15 +66,22 @@ class Engine {
     void destroy();
     bool master();
     
-    FeatType* aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
-    FeatType* invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim);
-    FeatType* fusedGatherApply(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim);
+    FeatType* aggregate(FeatType *vtcsTensor, unsigned vtcsCnt,
+                        unsigned featDim);
+    FeatType* invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt,
+                           unsigned inFeatDim, unsigned outFeatDim);
+    FeatType* fusedGatherApply(FeatType *vtcsTensor, unsigned vtcsCnt,
+                               unsigned inFeatDim, unsigned outFeatDim);
     FeatType* scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
 
-    FeatType* aggregateBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim);
-    FeatType* invokeLambdaBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim);
-    FeatType* fusedGatherApplyBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim);
-    FeatType* scatterBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim);
+    FeatType* aggregateBackward(FeatType *gradTensor, unsigned vtcsCnt,
+                                unsigned featDim);
+    FeatType* invokeLambdaBackward(FeatType *gradTensor, unsigned vtcsCnt,
+                                   unsigned inFeatDim, unsigned outFeatDim);
+    FeatType* fusedGatherApplyBackward(FeatType *gradTensor, unsigned vtcsCnt,
+                                       unsigned inFeatDim, unsigned outFeatDim);
+    FeatType* scatterBackward(FeatType *gradTensor, unsigned vtcsCnt,
+                              unsigned featDim);
 
     void makeBarrier();
 
@@ -97,10 +104,12 @@ class Engine {
     unsigned cThreads;
     ThreadPool *computePool = NULL;
 
-    std::vector<unsigned> layerConfig;      // Config of number of features in each layer.
+    // Config of number of features in each layer.
+    std::vector<unsigned> layerConfig;
     unsigned numLayers = 0;
 
-    std::vector<Matrix> *savedTensors; // intermediate data for backward computation.
+    // intermediate data for backward computation.
+    std::vector<Matrix> *savedTensors;
 
     FeatType *forwardVerticesInitData;
     FeatType *forwardGhostInitData;
@@ -108,7 +117,8 @@ class Engine {
     FeatType *forwardGhostVerticesData;
     FeatType *backwardGhostVerticesData;
 
-    FeatType *localVerticesLabels = NULL;   // Labels one-hot storage array.
+    // Labels one-hot storage array.
+    FeatType *localVerticesLabels = NULL;
 
     std::vector<unsigned> *forwardGhostsList;
     std::vector<unsigned> *backwardGhostsList;
@@ -128,6 +138,8 @@ class Engine {
     std::string myPrIpFile;
     std::string myPubIpFile;
 
+    std::time_t start_time;
+
     unsigned dataserverPort;
     unsigned weightserverPort;
     std::string weightserverIPFile;
@@ -139,10 +151,10 @@ class Engine {
     unsigned numEpochs = 0;
     unsigned valFreq = 0;
 
-    // table representing whether the partition id is a training set or not
-    std::vector<bool> trainPartition;
+    float accuracy = 0.0;
 
-    unsigned mode = 0; //0: Lambda, 1:GPU, 2: CPU
+    //0: Lambda, 1:GPU, 2: CPU
+    unsigned mode = 0;
 
     ResourceComm *resComm = NULL;
     CommInfo commInfo;
@@ -166,7 +178,8 @@ class Engine {
 
     Barrier barComp;
 
-    void calcAcc(FeatType *predicts, FeatType *labels, unsigned vtcsCnt, unsigned featDim);
+    void calcAcc(FeatType *predicts, FeatType *labels, unsigned vtcsCnt,
+                  unsigned featDim);
 
     // Worker and communicator thread function.
     void forwardWorker(unsigned tid, void *args);
@@ -192,12 +205,18 @@ class Engine {
     void sendForwardGhostUpdates(FeatType *inputTensor, unsigned featDim);
     void sendBackwardGhostGradients(FeatType *gradTensor, unsigned featDim);
     // Ghost update operation, send vertices to other nodes
-    void forwardVerticesPushOut(unsigned receiver, unsigned totCnt, unsigned *lvids, FeatType *inputTensor, unsigned featDim);
-    void backwardVerticesPushOut(unsigned receiver, unsigned totCnt, unsigned *lvids, FeatType *gradTensor, unsigned featDim);
+    void forwardVerticesPushOut(unsigned receiver, unsigned totCnt,
+                                unsigned *lvids, FeatType *inputTensor,
+                                unsigned featDim);
+    void backwardVerticesPushOut(unsigned receiver, unsigned totCnt,
+                                 unsigned *lvids, FeatType *gradTensor,
+                                 unsigned featDim);
 
     // Aggregation operation (along with normalization).
-    void forwardAggregateFromNeighbors(unsigned lvid, FeatType *outputTensor, FeatType *inputTensor, unsigned featDim);
-    void backwardAggregateFromNeighbors(unsigned lvid, FeatType *nextGradTensor, FeatType *gradTensor, unsigned featDim);
+    void forwardAggregateFromNeighbors(unsigned lvid, FeatType *outputTensor,
+                                       FeatType *inputTensor, unsigned featDim);
+    void backwardAggregateFromNeighbors(unsigned lvid, FeatType *nextGradTensor,
+                                        FeatType *gradTensor, unsigned featDim);
 
     // For initialization.
     void parseArgs(int argc, char *argv[]);
@@ -205,7 +224,8 @@ class Engine {
     void readFeaturesFile(std::string &featuresFileName);
     void readLabelsFile(std::string &labelsFileName);
     void readPartsFile(std::string &partsFileName, Graph &lGraph);
-    void processEdge(unsigned &from, unsigned &to, Graph &lGraph, bool **forwardGhostVTables, bool **backwardGhostVTables);
+    void processEdge(unsigned &from, unsigned &to, Graph &lGraph, bool
+                     **forwardGhostVTables, bool **backwardGhostVTables);
     void findGhostDegrees(std::string &fileName);
     void setEdgeNormalizations();
     void readGraphBS(std::string &fileName);
@@ -219,7 +239,7 @@ class Engine {
 // Fetch vertex feature from vtx feats array
 #define getVtxFeat(dataBuf, lvid, featDim) ((dataBuf) + (lvid) * (featDim))
 
-// Every one includes this file can access the static engine object now. For TF integration.
+// Every one includes this file can access the static engine object now
 extern Engine engine;
 
 #endif //__ENGINE_HPP__
