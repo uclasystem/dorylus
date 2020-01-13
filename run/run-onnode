@@ -101,7 +101,7 @@ case $1 in
 
         # Run the command on all dsh machines.
         DSH_COMMAND="./build/graphserver \
-            --datasetdir ${DATASET}/parts_${NDS}/ \
+            --graphfile ${DATASET}/parts_${NDS}/graph.bsnap \
             --featuresfile ${DATASET}/features.bsnap \
             --labelsfile ${DATASET}/labels.bsnap \
             --dshmachinesfile ${DSHMACHINESFILE} \

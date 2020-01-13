@@ -15,7 +15,7 @@ typedef char VertexLocationType;
 #define BOUNDARY_VERTEX 'B'
 
 
-class RawGraph;
+class Graph;
 
 
 /**
@@ -53,8 +53,8 @@ public:
     EdgeType getNormFactor() { return normFactor; }
     void setNormFactor(EdgeType factor) { normFactor = factor; }
 
-    RawGraph *getGraphPtr() { return graph_ptr; }
-    void setGraphPtr(RawGraph *ptr) { graph_ptr = ptr; }
+    Graph *getGraphPtr() { return graph_ptr; }
+    void setGraphPtr(Graph *ptr) { graph_ptr = ptr; }
 
     unsigned getParent() { return parentId; }
     void setParent(unsigned p) { parentId = p; }
@@ -82,7 +82,7 @@ private:
 
     unsigned parentId;
 
-    RawGraph *graph_ptr;
+    Graph *graph_ptr;
 
     RWLock lock;
 };
