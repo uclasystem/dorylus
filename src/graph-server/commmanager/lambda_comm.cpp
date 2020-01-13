@@ -120,8 +120,7 @@ LambdaComm::invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLaye
     populateHeader((char *) header.data(), OP::REQ_FORWARD, layer, nodeId * numLambdasForward + lambdaId, lambdaId, lastLayer);
     coordsocket.send(header, ZMQ_SNDMORE);
 
-    // forwardLambdaTable[lambdaId] = true;
-    __sync_bool_compare_and_swap(forwardLambdaTable + lambdaId, false, true);
+    forwardLambdaTable[lambdaId] = true;
     if (lambdaId == 0) {
         forwardTimer = getTimer();
     }
@@ -210,8 +209,7 @@ LambdaComm::invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLay
     populateHeader((char *) header.data(), OP::REQ_BACKWARD, layer, nodeId * numLambdasBackward + lambdaId, lambdaId, lastLayer);
     coordsocket.send(header, ZMQ_SNDMORE);
 
-    // backwardLambdaTable[lambdaId] = true;
-    __sync_bool_compare_and_swap(backwardLambdaTable + lambdaId, false, true);
+    backwardLambdaTable[lambdaId] = true;
     if (lambdaId == 0) {
         backwardTimer = getTimer();
     }
@@ -250,7 +248,7 @@ void
 LambdaComm::relaunchLambda(bool forward, unsigned layer, unsigned lambdaId, bool lastLayer) {
     printLog(nodeId, "Relaunch %s lambda %u...", (forward ? "FORWARD" : "BACKWARD"), lambdaId);
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), forward ? OP::REQ_FORWARD : OP::REQ_BACKWARD, layer, nodeId * numLambdasBackward, lambdaId, lastLayer);
+    populateHeader((char *) header.data(), forward ? OP::REQ_FORWARD : OP::REQ_BACKWARD, layer, lambdaId, lastLayer);
     coordsocket.send(header, ZMQ_SNDMORE);
 
     zmq::message_t ip_msg(nodeIp.size());

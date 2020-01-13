@@ -26,8 +26,8 @@
 
 
 #define SLEEP_PERIOD 5000   // sleep 5000us and then check the condition.
-#define TIMEOUT_PERIOD 10000 // wait for up to TIMEOUT_PERIOD ms before relaunching
-#define MIN_TIMEOUT 500     // at least wait for MIN_TIMEOUT ms before relaunching
+#define TIMEOUT_PERIOD 5000 // wait for up to 5000ms before relaunching
+#define MIN_TIMEOUT 500     // at least wait for 500ms before relaunching
 #define EXP_BACKOFF_FACTOR 1.5 // base of exponential backoff
 
 class LambdaWorker;

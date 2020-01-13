@@ -60,17 +60,7 @@ LambdaWorker::work() {
                 zmq::message_t header(HEADER_SIZE);
                 populateHeader((char *) header.data(), -2, -2, -2, -2);
                 workersocket.send(header);
-                printLog(manager->nodeId, "Discard an old lambda execution");
-
-                // fake recv chunk
-                if (op == OP::PUSH_FORWARD) {
-                    zmq::message_t data;
-                    workersocket.recv(&data);
-                    workersocket.recv(&data);
-                } else if (op == OP::PUSH_BACKWARD) {
-                    zmq::message_t data;
-                    workersocket.recv(&data);
-                }
+                printLog(manager->nodeId, "Discard a old lambda execution");
                 continue;
             }
 
@@ -89,7 +79,7 @@ LambdaWorker::work() {
                         zmq::message_t header(HEADER_SIZE);
                         populateHeader((char *) header.data(), -2, -2, -2, -2);
                         workersocket.send(header);
-                        printLog(manager->nodeId, "Discard old lambda %u execution", partId);
+                        printLog(manager->nodeId, "Discard a lambda execution");
                     }
                     break;
                 }
@@ -127,7 +117,7 @@ LambdaWorker::work() {
                         zmq::message_t header(HEADER_SIZE);
                         populateHeader((char *) header.data(), -2, -2, -2, -2);
                         workersocket.send(header);
-                        printLog(manager->nodeId, "Discard old lambda %u execution", partId);
+                        printLog(manager->nodeId, "Discard a lambda execution");
                     }
                     break;
                 }
@@ -241,10 +231,8 @@ LambdaWorker::recvLambdaResults(zmq::message_t& client_id, unsigned partId) {
     workersocket.send(confirm);
 
     // Check for total number of partitions received. If all partitions received, wake up lambdaComm.
-    // manager->forwardLambdaTable[partId] = false;
-    // ++(manager->countForward);
-    __sync_bool_compare_and_swap(manager->forwardLambdaTable + partId, true, false);
-    __sync_fetch_and_add(&(manager->countForward), 1);
+    manager->forwardLambdaTable[partId] = false;
+    ++(manager->countForward);
 }
 
 void
@@ -311,16 +299,11 @@ LambdaWorker::recvChunk(Matrix &dstMat, zmq::message_t &client_id, unsigned part
 
     // Check for total number of partitions received. If all partitions received, wake up lambdaComm.
     if (forward) {
-        // manager->forwardLambdaTable[partId] = false;
-        // ++(manager->countForward);
-        __sync_bool_compare_and_swap(manager->forwardLambdaTable + partId, true, false);
-        __sync_fetch_and_add(&(manager->countForward), 1);
-    }
-    else{
-        // manager->backwardLambdaTable[partId] = false;
-        // ++(manager->countBackward);
-        __sync_bool_compare_and_swap(manager->backwardLambdaTable + partId, true, false);
-        __sync_fetch_and_add(&(manager->countBackward), 1);
+        manager->forwardLambdaTable[partId] = false;
+        ++(manager->countForward);
+    } else {
+        manager->backwardLambdaTable[partId] = false;
+        ++(manager->countBackward);
     }
 }
 
