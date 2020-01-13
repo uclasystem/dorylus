@@ -1,9 +1,7 @@
 import subprocess as sp
 import sys
 
-logs_command = ["awslogs", "get", "/aws/lambda/",
-                "--start=" + sys.argv[-2],
-                "--end=" + sys.argv[-1]]
+logs_command = []
 
 ## Retrieve a list of times for either the forward or backward lambdas
 ## based on the `log_type` parameter
@@ -21,10 +19,17 @@ def get_logs(log_type):
 
 
 if __name__ == '__main__':
-    forward_times = get_logs("forward")
-    backward_times = get_logs("backward")
+    if len(sys.argv) < 3:
+        print("Usage: python sum_lambda_time.py <start> <end>")
+        exit()
+    logs_command = ["awslogs", "get", "/aws/lambda/",
+                    "--start='" + sys.argv[-2] + "'",
+                    "--end='" + sys.argv[-1] + "'"]
 
-    all_times = forward_times + backward_times
+    forward_times = get_logs("eval-forward-gcn")
+    backward_times = get_logs("eval-backward-gcn")
+
+    all_times = (forward_times + backward_times) / 100
 
     print("Number of forward lambdas counted:", len(forward_times))
     print("Number of backward lambdas counted:", len(backward_times))
