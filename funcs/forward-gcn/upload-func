@@ -11,7 +11,7 @@ if [[ ! -d build ]]; then
 	mkdir build
 fi
 
-FUNC_NAME=forward
+FUNC_NAME=forward-gcn
 ZIP_FILE=${FUNC_NAME}.zip
 
 

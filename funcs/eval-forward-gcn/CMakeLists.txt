@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 11)
 
 
 # Project name.
-project(forward LANGUAGES CXX)
+project(eval-forward-gcn LANGUAGES CXX)
 
 
 # Include ZeroMQ.

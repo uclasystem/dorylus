@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 11)
 
 
 # Project name.
-project(backward LANGUAGES CXX)
+project(backward-gcn LANGUAGES CXX)
 
 
 # Include ZeroMQ.
