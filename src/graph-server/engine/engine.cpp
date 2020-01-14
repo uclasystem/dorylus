@@ -29,7 +29,6 @@ static CuMatrix *NormAdjMatrixOut = NULL;
  */
 void
 Engine::init(int argc, char *argv[]) {
-    start_time = getCurrentTime();
     printLog(404, "Engine starts initialization...");
     timeInit = -getTimer();
 
@@ -107,6 +106,7 @@ Engine::init(int argc, char *argv[]) {
     timeForwardProcess = 0.0;
     timeInit += getTimer();
     printLog(nodeId, "Engine initialization complete.");
+    start_time = getCurrentTime();
 }
 
 
