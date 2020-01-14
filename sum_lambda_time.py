@@ -29,9 +29,9 @@ if __name__ == '__main__':
     forward_times = get_logs("eval-forward-gcn")
     backward_times = get_logs("eval-backward-gcn")
 
-    all_times = (forward_times + backward_times) / 100
+    all_times = forward_times + backward_times
 
     print("Number of forward lambdas counted:", len(forward_times))
     print("Number of backward lambdas counted:", len(backward_times))
 
-    print("Total number of miliseconds billed by lambdas:", sum(all_times))
+    print("Total number of miliseconds billed by lambdas:", (sum(all_times) / 100))
