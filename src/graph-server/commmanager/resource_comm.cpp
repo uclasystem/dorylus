@@ -1,13 +1,13 @@
 #include "resource_comm.hpp"
 #include <iostream>
 
-ResourceComm *createResourceComm(const std::string &type, CommInfo &commInfo) {
+ResourceComm *createResourceComm(const unsigned &type, CommInfo &commInfo) {
     void *hndl = NULL;
-    if (type == "CPU")
+    if (type == CPU)
         hndl = dlopen("./build/graph-server/commmanager/libcpu_comm.so", RTLD_NOW);
-    if (type == "GPU")
+    if (type == GPU)
         hndl = dlopen("./build/graph-server/commmanager/libgpu_comm.so", RTLD_NOW);
-    if (type == "Lambda")
+    if (type == LAMBDA)
         hndl = dlopen("./build/graph-server/commmanager/liblambda_comm.so", RTLD_NOW);
 
     if (hndl == NULL) {
@@ -20,13 +20,13 @@ ResourceComm *createResourceComm(const std::string &type, CommInfo &commInfo) {
     return resComm;
 }
 
-void destroyResourceComm(const std::string &type, ResourceComm *resComm) {
+void destroyResourceComm(const unsigned &type, ResourceComm *resComm) {
     void *hndl = NULL;
-    if (type == "CPU")
+    if (type == CPU)
         hndl = dlopen("./build/graph-server/commmanager/libcpu_comm.so", RTLD_NOW);
-    if (type == "GPU")
+    if (type == GPU)
         hndl = dlopen("./build/graph-server/commmanager/libgpu_comm.so", RTLD_NOW);
-    if (type == "Lambda")
+    if (type == LAMBDA)
         hndl = dlopen("./build/graph-server/commmanager/liblambda_comm.so", RTLD_NOW);
     
     if (hndl == NULL) {

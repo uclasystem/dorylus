@@ -5,6 +5,11 @@
 #include "../../common/matrix.hpp"
 #include <dlfcn.h>
 
+/** For Mode*/
+enum{
+    LAMBDA, GPU, CPU
+};
+
 struct CommInfo {
     std::string nodeIp;
     unsigned nodeId;
@@ -48,7 +53,7 @@ public:
     virtual void sendShutdownMessage() = 0;
 };
 
-ResourceComm* createResourceComm(const std::string& type, CommInfo& commInfo);
-void destroyResourceComm(const std::string& type, ResourceComm *resourceComm);
+ResourceComm* createResourceComm(const unsigned& type, CommInfo& commInfo);
+void destroyResourceComm(const unsigned& type, ResourceComm *resourceComm);
 
 #endif // __RESOURCE_COMM_HPP__
