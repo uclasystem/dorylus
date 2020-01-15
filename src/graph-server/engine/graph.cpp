@@ -2,6 +2,7 @@
 #include "graph.hpp"
 #include <fstream>
 #include <iostream>
+#include <sys/stat.h>
 
 void Graph::init(std::string graphFile) {
     std::ifstream infile(graphFile.c_str(), std::ios::binary);
@@ -244,4 +245,5 @@ RawGraph::dump(std::string filename, unsigned numNodes) {
     outfile.write(reinterpret_cast<const char *>(backwardAdj.columnIdxs), sizeof(unsigned) * backwardAdj.nnz);
 
     outfile.close();
+    chmod(filename.c_str(), S_IRWXU | S_IRWXG | S_IRWXO);
 }
