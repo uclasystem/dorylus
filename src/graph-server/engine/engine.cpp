@@ -12,10 +12,14 @@
 #include <cstdlib>
 #include <omp.h>
 #include <cerrno>
+
 #include "engine.hpp"
+#include "dataloader.hpp"
 
 #ifdef _GPU_ENABLED_
 #include "../GPU-Computation/comp_unit.cuh"
+static CuMatrix *NormAdjMatrixIn = NULL;
+static CuMatrix *NormAdjMatrixOut = NULL;
 #endif
 
 /**
@@ -44,35 +48,37 @@ Engine::init(int argc, char *argv[]) {
     readLayerConfigFile(layerConfigFile);
     numLayers = layerConfig.size() - 1;
 
-    // Leave buf for myself empty, which is a little wasting.
-    forwardGhostsList = new std::vector<unsigned> [numNodes];
-    backwardGhostsList = new std::vector<unsigned> [numNodes];
+    std::string graphFile = datasetDir + "graph." + std::to_string(nodeId) + ".bin";
+    // detect whether preprocessed
+    {
+        bool forcePreprocess = false;
+        std::ifstream gfile(graphFile.c_str(), std::ios::binary);
+        if (!gfile.good() || forcePreprocess) {
+            DataLoader dl(datasetDir, nodeId, numNodes, undirected);
+            dl.preprocess();
+        }
+    }
+    graph.init(graphFile);
+#ifdef _GPU_ENABLED_
+    printLog(nodeId, "Loading SparseMatrices for GPU");
+    ComputingUnit cu = ComputingUnit::getInstance();
+    NormAdjMatrixIn = new CuMatrix();
+    NormAdjMatrixOut = new CuMatrix();
+    NormAdjMatrixIn->loadSpCSC(cu.spHandle, graph);
+    NormAdjMatrixOut->loadSpCSR(cu.spHandle, graph);
+#endif
 
-    // Read in the graph and subscribe vertex global ID topics.
-    readGraphBS(graphFile);
     printGraphMetrics();
 
-    // save intermediate tensors during forward phase for backward computation.
+
+    // Save intermediate tensors during forward phase for backward computation.
     savedTensors = new std::vector<Matrix> [numLayers];
 
     // Init it here for collecting data when reading files
-    forwardVerticesInitData = new FeatType[getFeatDim(0) * graph.getNumLocalVertices()];
-    forwardGhostInitData = new FeatType[getFeatDim(0) * graph.getNumInEdgeGhostVertices()];
+    forwardVerticesInitData = new FeatType[getFeatDim(0) * graph.localVtxCnt];
+    forwardGhostInitData = new FeatType[getFeatDim(0) * graph.srcGhostCnt];
     // Create labels storage area. Read in labels and store as one-hot format.
-    localVerticesLabels = new FeatType[layerConfig[numLayers] * graph.getNumLocalVertices()];
-
-
-    // Set a local index for all ghost vertices along the way. This index is used for indexing within the ghost data arrays.
-    unsigned ghostCount = 0;
-
-    for (auto it = graph.getInEdgeGhostVertices().begin(); it != graph.getInEdgeGhostVertices().end(); it++) {
-        it->second.setLocalId(ghostCount++);
-    }
-    ghostCount = 0;
-    for (auto it = graph.getOutEdgeGhostVertices().begin(); it != graph.getOutEdgeGhostVertices().end(); it++) {
-        it->second.setLocalId(ghostCount++);
-    }
-
+    localVerticesLabels = new FeatType[layerConfig[numLayers] * graph.localVtxCnt];
 
     // Read in initial feature values (input features) & labels.
     readFeaturesFile(featuresFile);
@@ -93,9 +99,6 @@ Engine::init(int argc, char *argv[]) {
     dataPool = new ThreadPool(dThreads);
     dataPool->createPool();
     printLog(nodeId, "Created %u data communicator threads.", dThreads);
-
-    // Compact the graph.
-    graph.compactGraph();
 
     setUpCommInfo();
 
@@ -127,9 +130,6 @@ Engine::destroy() {
     resComm->sendShutdownMessage();
 
     destroyResourceComm(mode, resComm);
-
-    delete[] forwardGhostsList;
-    delete[] backwardGhostsList;
 
     delete[] forwardVerticesInitData;
     delete[] forwardGhostInitData;
@@ -227,23 +227,21 @@ Engine::runForward() {
 
     timeForwardProcess -= getTimer();
 
-    const unsigned graphLocalVerticesNum = graph.getNumLocalVertices();
     // Create buffer for first-layer aggregation.
     FeatType *inputTensor = forwardVerticesInitData;
     forwardGhostVerticesData = forwardGhostInitData;
     for (iteration = 0; iteration < numLayers; iteration++) {
-        // inputTensor = aggregate(inputTensor, graphLocalVerticesNum, getFeatDim(iteration));
-        // inputTensor = invokeLambda(inputTensor, graphLocalVerticesNum, getFeatDim(iteration), getFeatDim(iteration + 1));
-        inputTensor = fusedGatherApply(inputTensor, graphLocalVerticesNum, getFeatDim(iteration), getFeatDim(iteration + 1));
+        inputTensor = aggregate(inputTensor, graph.localVtxCnt, getFeatDim(iteration));
+        inputTensor = invokeLambda(inputTensor, graph.localVtxCnt, getFeatDim(iteration), getFeatDim(iteration + 1));
+        // inputTensor = fusedGatherApply(inputTensor, graph.localVtxCnt, getFeatDim(iteration), getFeatDim(iteration + 1));
         if (iteration < numLayers - 1) { // don't need scatter at the last layer.
-            inputTensor = scatter(inputTensor, graphLocalVerticesNum, getFeatDim(iteration + 1));
+            inputTensor = scatter(inputTensor, graph.localVtxCnt, getFeatDim(iteration + 1));
         }
     }
 
     timeForwardProcess += getTimer();
     printLog(nodeId, "Engine completes FORWARD at iter %u.", iteration);
-    calcAcc(inputTensor, localVerticesLabels, graphLocalVerticesNum,
-                        getFeatDim(numLayers));
+    calcAcc(inputTensor, localVerticesLabels, graph.localVtxCnt, getFeatDim(numLayers));
 
     return inputTensor;
 }
@@ -262,17 +260,16 @@ Engine::runBackward(FeatType *initGradTensor) {
 
     timeBackwardProcess -= getTimer();
 
-    const unsigned graphLocalVerticesNum = graph.getNumLocalVertices();
     // Create buffer for first-layer aggregation.
     FeatType *gradTensor = initGradTensor;
     // TODO: (YIFAN) this backward flow is correct but weird. I know you have thought for a long time, but try again to refine it.
     iteration = numLayers;
-    gradTensor = invokeLambdaBackward(gradTensor, graphLocalVerticesNum, getFeatDim(numLayers - 1), getFeatDim(numLayers));
+    gradTensor = invokeLambdaBackward(gradTensor, graph.localVtxCnt, getFeatDim(numLayers - 1), getFeatDim(numLayers));
     for (iteration = numLayers - 1; iteration > 0; iteration--) {
-        gradTensor = scatterBackward(gradTensor, graphLocalVerticesNum, getFeatDim(iteration));
-        // gradTensor = aggregateBackward(gradTensor, graphLocalVerticesNum, getFeatDim(iteration));
-        // gradTensor = invokeLambdaBackward(gradTensor, graphLocalVerticesNum, getFeatDim(iteration - 1), getFeatDim(iteration));
-        gradTensor = fusedGatherApplyBackward(gradTensor, graphLocalVerticesNum, getFeatDim(iteration - 1), getFeatDim(iteration));
+        gradTensor = scatterBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration));
+        gradTensor = aggregateBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration));
+        gradTensor = invokeLambdaBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration - 1), getFeatDim(iteration));
+        // gradTensor = fusedGatherApplyBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration - 1), getFeatDim(iteration));
     }
 
     delete[] gradTensor;
@@ -383,21 +380,13 @@ struct AggOPArgs {
 
 
 #ifdef _GPU_ENABLED_
-static CuMatrix *NormAdjMatrixIn = NULL;
 FeatType *Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim) {
-    ComputingUnit cu = ComputingUnit::getInstance();
-    if (NormAdjMatrixIn == NULL) {
-        NormAdjMatrixIn = new CuMatrix();
-        NormAdjMatrixIn->loadSpCsrForward(cu.spHandle,
-                                          graph.getNumLocalVertices(),
-                                          graph.getVertices(),
-                                          graph.getNumInEdgeGhostVertices());
-    }
     double sttTimer = getTimer();
+    ComputingUnit cu = ComputingUnit::getInstance();
     FeatType *outputTensor = new FeatType [(vtcsCnt) * featDim];
     CuMatrix feat;
     feat.loadSpDense(vtcsTensor, forwardGhostVerticesData,
-                     graph.getNumLocalVertices(), graph.getNumInEdgeGhostVertices(),
+                     graph.localVtxCnt, graph.srcGhostCnt,
                      featDim);
     CuMatrix out = cu.aggregate(*NormAdjMatrixIn, feat);
     out = out.transpose();
@@ -452,7 +441,7 @@ FeatType *Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned fea
 FeatType *
 Engine::invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim) {
     double sttTimer = getTimer();
-    assert(vtcsCnt == graph.getNumLocalVertices());
+    assert(vtcsCnt == graph.localVtxCnt);
 
     FeatType *outputTensor = new FeatType [vtcsCnt * outFeatDim];
     FeatType *zTensor = new FeatType [vtcsCnt * outFeatDim];
@@ -583,7 +572,7 @@ Engine::scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim) {
 
     // Start data communicators.
     commHalt = false;
-    forwardGhostVerticesData = new FeatType [featDim * graph.getNumInEdgeGhostVertices()];
+    forwardGhostVerticesData = new FeatType [featDim * graph.srcGhostCnt];
     auto fgc_fp = std::bind(&Engine::forwardGhostCommunicator, this, std::placeholders::_1, std::placeholders::_2);
     dataPool->perform(fgc_fp);
 
@@ -638,22 +627,23 @@ Engine::forwardAggregateFromNeighbors(unsigned lvid, FeatType *outputTensor, Fea
     memcpy(currDataDst, currDataPtr, featDim * sizeof(FeatType));
 
     // Apply normalization factor on the current data.
-    Vertex &v = graph.getVertex(lvid);
-    for (unsigned i = 0; i < featDim; ++i) {
-        currDataDst[i] *= v.getNormFactor();
+    {
+        const EdgeType normFactor = graph.vtxDataVec[lvid];
+        for (unsigned i = 0; i < featDim; ++i) {
+            currDataDst[i] *= normFactor;
+        }
     }
 
     // Aggregate from incoming neighbors.
-    for (unsigned i = 0; i < v.getNumInEdges(); ++i) {
+    for (unsigned eid = graph.forwardAdj.columnPtrs[lvid]; eid < graph.forwardAdj.columnPtrs[lvid + 1]; ++eid) {
         FeatType *otherDataPtr;
-        EdgeType normFactor = v.getInEdge(i).getData();
-
-        if (v.getInEdge(i).getEdgeLocation() == LOCAL_EDGE_TYPE) {    // Local vertex.
-            otherDataPtr = getVtxFeat(inputTensor, v.getSourceVertexLocalId(i), featDim);
-        } else {                                                      // Ghost vertex.
-            otherDataPtr = getVtxFeat(forwardGhostVerticesData, v.getSourceVertexLocalId(i), featDim);
+        EdgeType normFactor = graph.forwardAdj.values[eid];
+        unsigned srcVId = graph.forwardAdj.rowIdxs[eid];
+        if (srcVId < graph.localVtxCnt) { // local vertex.
+            otherDataPtr = getVtxFeat(inputTensor, srcVId, featDim);
+        } else {                          // ghost vertex.
+            otherDataPtr = getVtxFeat(forwardGhostVerticesData, srcVId - graph.localVtxCnt, featDim);
         }
-        // TODO: Locks on the data array area is not properly set yet. But does not affect forward prop.
         for (unsigned j = 0; j < featDim; ++j) {
             currDataDst[j] += otherDataPtr[j] * normFactor;
         }
@@ -673,11 +663,11 @@ Engine::sendForwardGhostUpdates(FeatType *inputTensor, unsigned featDim) {
         if (nid == nodeId) {
             continue;
         }
-        unsigned forwardGhostVCnt = forwardGhostsList[nid].size();
+        unsigned forwardGhostVCnt = graph.forwardLocalVtxDsts[nid].size();
         for (unsigned ib = 0; ib < forwardGhostVCnt; ib += BATCH_SIZE) {
             unsigned sendBatchSize = (forwardGhostVCnt - ib) < BATCH_SIZE ? (forwardGhostVCnt - ib) : BATCH_SIZE;
 
-            forwardVerticesPushOut(nid, sendBatchSize, forwardGhostsList[nid].data() + ib, inputTensor, featDim);
+            forwardVerticesPushOut(nid, sendBatchSize, graph.forwardLocalVtxDsts[nid].data() + ib, inputTensor, featDim);
             lockRecvCnt.lock();
             recvCnt++;
             lockRecvCnt.unlock();
@@ -756,7 +746,7 @@ Engine::forwardGhostCommunicator(unsigned tid, void *args) {
                 for (unsigned i = 0; i < recvGhostVCnt; ++i) {
                     unsigned gvid = *(unsigned *)bufPtr;
                     bufPtr += sizeof(unsigned);
-                    FeatType *dataPtr = getVtxFeat(forwardGhostVerticesData, graph.getInEdgeGhostVertex(gvid).getLocalId(), featDim);
+                    FeatType *dataPtr = getVtxFeat(forwardGhostVerticesData, graph.srcGhostVtcs[gvid] - graph.localVtxCnt, featDim);
                     memcpy(dataPtr, bufPtr, sizeof(FeatType) * featDim);
                     bufPtr += sizeof(FeatType) * featDim;
                 }
@@ -787,25 +777,15 @@ Engine::forwardGhostCommunicator(unsigned tid, void *args) {
  *
  */
 #ifdef _GPU_ENABLED_
-static CuMatrix *NormAdjMatrixOut = NULL;
 FeatType *
 Engine::aggregateBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim) {
+    double sttTimer = getTimer();
+    ComputingUnit cu = ComputingUnit::getInstance();
     currId = 0;
     FeatType *outputTensor = new FeatType [vtcsCnt * featDim];
-
-    ComputingUnit cu = ComputingUnit::getInstance();
-    if (NormAdjMatrixOut == NULL) {
-        NormAdjMatrixOut = new CuMatrix();
-        NormAdjMatrixOut->loadSpCsrBackward(cu.spHandle,
-                                            graph.getNumLocalVertices(),
-                                            graph.getVertices(),
-                                            graph.getNumOutEdgeGhostVertices());
-    }
-
-    double sttTimer = getTimer();
     CuMatrix feat;
     feat.loadSpDense(gradTensor, backwardGhostVerticesData,
-                     graph.getNumLocalVertices(), graph.getNumOutEdgeGhostVertices(),
+                     graph.localVtxCnt, graph.dstGhostCnt,
                      featDim);
     CuMatrix out = cu.aggregate(*NormAdjMatrixOut, feat);
     out = out.transpose();
@@ -859,7 +839,7 @@ FeatType *
 Engine::invokeLambdaBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim) {
     double sttTimer = getTimer();
 
-    assert(vtcsCnt == graph.getNumLocalVertices());
+    assert(vtcsCnt == graph.localVtxCnt);
 
     FeatType *outputTensor = new FeatType [vtcsCnt * inFeatDim];
 
@@ -952,7 +932,7 @@ Engine::scatterBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim
 
     // Start data communicators.
     commHalt = false;
-    backwardGhostVerticesData = new FeatType [featDim * graph.getNumOutEdgeGhostVertices()];
+    backwardGhostVerticesData = new FeatType [featDim * graph.dstGhostCnt];
     auto fgc_fp = std::bind(&Engine::backwardGhostCommunicator, this, std::placeholders::_1, std::placeholders::_2);
     dataPool->perform(fgc_fp);
 
@@ -1007,22 +987,23 @@ Engine::backwardAggregateFromNeighbors(unsigned lvid, FeatType *nextGradTensor, 
     memcpy(currDataDst, currDataPtr, featDim * sizeof(FeatType));
 
     // Apply normalization factor on the current data.
-    Vertex &v = graph.getVertex(lvid);
-    for (unsigned i = 0; i < featDim; ++i) {
-        currDataDst[i] *= v.getNormFactor();
+    {
+        const EdgeType normFactor = graph.vtxDataVec[lvid];
+        for (unsigned i = 0; i < featDim; ++i) {
+            currDataDst[i] *= normFactor;
+        }
     }
 
     // Aggregate from incoming neighbors.
-    for (unsigned i = 0; i < v.getNumOutEdges(); ++i) {
+    for (unsigned eid = graph.backwardAdj.rowPtrs[lvid]; eid < graph.backwardAdj.rowPtrs[lvid + 1]; ++eid) {
         FeatType *otherDataPtr;
-        EdgeType normFactor = v.getOutEdge(i).getData();
-
-        if (v.getOutEdge(i).getEdgeLocation() == LOCAL_EDGE_TYPE) {    // Local vertex.
-            otherDataPtr = getVtxFeat(gradTensor, v.getDestVertexLocalId(i), featDim);
-        } else {                                                       // Ghost vertex.
-            otherDataPtr = getVtxFeat(backwardGhostVerticesData, v.getDestVertexLocalId(i), featDim);
+        EdgeType normFactor = graph.backwardAdj.values[eid];
+        unsigned dstVId = graph.backwardAdj.columnIdxs[eid];
+        if (dstVId < graph.localVtxCnt) { // local vertex.
+            otherDataPtr = getVtxFeat(gradTensor, dstVId, featDim);
+        } else {                          // ghost vertex.
+            otherDataPtr = getVtxFeat(backwardGhostVerticesData, dstVId - graph.localVtxCnt, featDim);
         }
-        // TODO: Locks on the data array area is not properly set yet. But does not affect forward prop.
         for (unsigned j = 0; j < featDim; ++j) {
             currDataDst[j] += otherDataPtr[j] * normFactor;
         }
@@ -1042,11 +1023,11 @@ Engine::sendBackwardGhostGradients(FeatType *gradTensor, unsigned featDim) {
         if (nid == nodeId) {
             continue;
         }
-        unsigned backwardGhostVCnt = backwardGhostsList[nid].size();
+        unsigned backwardGhostVCnt = graph.backwardLocalVtxDsts[nid].size();
         for (unsigned ib = 0; ib < backwardGhostVCnt; ib += BATCH_SIZE) {
             unsigned sendBatchSize = (backwardGhostVCnt - ib) < BATCH_SIZE ? (backwardGhostVCnt - ib) : BATCH_SIZE;
 
-            backwardVerticesPushOut(nid, sendBatchSize, backwardGhostsList[nid].data() + ib, gradTensor, featDim);
+            backwardVerticesPushOut(nid, sendBatchSize, graph.backwardLocalVtxDsts[nid].data() + ib, gradTensor, featDim);
             lockRecvCnt.lock();
             recvCnt++;
             lockRecvCnt.unlock();
@@ -1126,7 +1107,7 @@ Engine::backwardGhostCommunicator(unsigned tid, void *args) {
                 for (unsigned i = 0; i < recvGhostVCnt; ++i) {
                     unsigned gvid = *(unsigned *)bufPtr;
                     bufPtr += sizeof(unsigned);
-                    FeatType *dataPtr = getVtxFeat(backwardGhostVerticesData, graph.getOutEdgeGhostVertex(gvid).getLocalId(), featDim);
+                    FeatType *dataPtr = getVtxFeat(backwardGhostVerticesData, graph.dstGhostVtcs[gvid] - graph.localVtxCnt, featDim);
                     memcpy(dataPtr, bufPtr, sizeof(FeatType) * featDim);
                     bufPtr += sizeof(FeatType) * featDim;
                 }
@@ -1213,7 +1194,7 @@ Engine::printEngineMetrics() {
 void
 Engine::printGraphMetrics() {
     printLog(nodeId, "<GM>: %u global vertices, %llu global edges, %u local vertices.",
-             graph.getNumGlobalVertices(), graph.getNumGlobalEdges(), graph.getNumLocalVertices());
+             graph.globalVtxCnt, graph.globalEdgeCnt, graph.localVtxCnt);
 }
 
 
@@ -1228,7 +1209,7 @@ Engine::parseArgs(int argc, char *argv[]) {
     desc.add_options()
     ("help", "Produce help message")
 
-    ("graphfile", boost::program_options::value<std::string>(), "Path to the binary file contatining the edge list")
+    ("datasetdir", boost::program_options::value<std::string>(), "Path to the dataset")
     ("featuresfile", boost::program_options::value<std::string>(), "Path to the file containing the vertex features")
     ("layerfile", boost::program_options::value<std::string>(), "Layer configuration file")
     ("labelsfile", boost::program_options::value<std::string>(), "Target labels file")
@@ -1277,8 +1258,8 @@ Engine::parseArgs(int argc, char *argv[]) {
     assert(vm.count("cthreads"));
     cThreads = vm["cthreads"].as<unsigned>();   // Computation threads.
 
-    assert(vm.count("graphfile"));
-    graphFile = vm["graphfile"].as<std::string>();
+    assert(vm.count("datasetdir"));
+    datasetDir = vm["datasetdir"].as<std::string>();
 
     assert(vm.count("featuresfile"));
     featuresFile = vm["featuresfile"].as<std::string>();
@@ -1346,9 +1327,9 @@ Engine::parseArgs(int argc, char *argv[]) {
     assert(vm.count("MODE"));
     mode = vm["MODE"].as<unsigned>();
 
-    printLog(404, "Parsed configuration: dThreads = %u, cThreads = %u, graphFile = %s, featuresFile = %s, dshMachinesFile = %s, "
+    printLog(404, "Parsed configuration: dThreads = %u, cThreads = %u, datasetDir = %s, featuresFile = %s, dshMachinesFile = %s, "
              "myPrIpFile = %s, myPubIpFile = %s, undirected = %s, data port set -> %u, control port set -> %u, node port set -> %u",
-             dThreads, cThreads, graphFile.c_str(), featuresFile.c_str(), dshMachinesFile.c_str(),
+             dThreads, cThreads, datasetDir.c_str(), featuresFile.c_str(), dshMachinesFile.c_str(),
              myPrIpFile.c_str(), myPubIpFile.c_str(), undirected ? "true" : "false", data_port, ctrl_port, node_port);
 }
 
@@ -1405,17 +1386,17 @@ Engine::readFeaturesFile(std::string &featuresFileName) {
     feature_vec.resize(featDim);
     while (infile.read(reinterpret_cast<char *> (&feature_vec[0]), sizeof(FeatType) * featDim)) {
         // Set the vertex's initial values, if it is one of my local vertices / ghost vertices.
-        if (graph.containsInEdgeGhostVertex(gvid)) {      // Global vertex.
-            FeatType *actDataPtr = getVtxFeat(forwardGhostInitData, graph.getInEdgeGhostVertex(gvid).getLocalId(), featDim);
+        if (graph.containsSrcGhostVtx(gvid)) { // Ghost vertex.
+            FeatType *actDataPtr = getVtxFeat(forwardGhostInitData, graph.srcGhostVtcs[gvid] - graph.localVtxCnt, featDim);
             memcpy(actDataPtr, feature_vec.data(), featDim * sizeof(FeatType));
-        } else if (graph.containsVertex(gvid)) {    // Local vertex.
-            FeatType *actDataPtr = getVtxFeat(forwardVerticesInitData, graph.getVertexByGlobal(gvid).getLocalId(), featDim);
+        } else if (graph.containsVtx(gvid)) {  // Local vertex.
+            FeatType *actDataPtr = getVtxFeat(forwardVerticesInitData, graph.globaltoLocalId[gvid], featDim);
             memcpy(actDataPtr, feature_vec.data(), featDim * sizeof(FeatType));
         }
         ++gvid;
     }
     infile.close();
-    assert(gvid == graph.getNumGlobalVertices());
+    assert(gvid == graph.globalVtxCnt);
 }
 
 
@@ -1443,16 +1424,14 @@ Engine::readLabelsFile(std::string &labelsFileName) {
     FeatType one_hot_arr[lKinds] = {0};
 
     while (infile.read(reinterpret_cast<char *> (&curr), sizeof(unsigned))) {
-
         // Set the vertex's label values, if it is one of my local vertices & is labeled.
-        if (graph.containsVertex(gvid)) {
-
+        if (graph.containsVtx(gvid)) {
             // Convert into a one-hot array.
             assert(curr < lKinds);
             memset(one_hot_arr, 0, lKinds * sizeof(FeatType));
             one_hot_arr[curr] = 1.0;
 
-            FeatType *labelPtr = localVertexLabelsPtr(graph.getVertexByGlobal(gvid).getLocalId());
+            FeatType *labelPtr = localVertexLabelsPtr(graph.globaltoLocalId[gvid]);
             memcpy(labelPtr, one_hot_arr, lKinds * sizeof(FeatType));
         }
 
@@ -1460,273 +1439,7 @@ Engine::readLabelsFile(std::string &labelsFileName) {
     }
 
     infile.close();
-    assert(gvid == graph.getNumGlobalVertices());
+    assert(gvid == graph.globalVtxCnt);
 }
 
-
-/**
- *
- * Read in the partition file.
- *
- */
-void
-Engine::readPartsFile(std::string &partsFileName, Graph &lGraph) {
-    std::ifstream infile(partsFileName.c_str());
-    if (!infile.good())
-        printLog(nodeId, "Cannot open patition file: %s [Reason: %s]", partsFileName.c_str(), std::strerror(errno));
-
-    assert(infile.good());
-
-    short partId;
-    unsigned lvid = 0;
-    unsigned gvid = 0;
-
-    std::string line;
-    while (std::getline(infile, line)) {
-        if (line.size() == 0 || (line[0] < '0' || line[0] > '9'))
-            continue;
-
-        std::istringstream iss(line);
-        if (!(iss >> partId))
-            break;
-
-        lGraph.appendVertexPartitionId(partId);
-
-        if (partId == nodeId) {
-            lGraph.localToGlobalId[lvid] = gvid;
-            lGraph.globalToLocalId[gvid] = lvid;
-
-            ++lvid;
-        }
-        ++gvid;
-    }
-
-    lGraph.setNumGlobalVertices(gvid);
-    lGraph.setNumLocalVertices(lvid);
-}
-
-
-/**
- *
- * Process an edge read from the binary snap file.
- *
- */
-void
-Engine::processEdge(unsigned &from, unsigned &to, Graph &lGraph, bool **forwardGhostVTables, bool **backwardGhostVTables) {
-    if (lGraph.getVertexPartitionId(from) == nodeId) {
-        unsigned lFromId = lGraph.globalToLocalId[from];
-        unsigned toId;
-        EdgeLocationType eLocation;
-
-        unsigned toPartition = lGraph.getVertexPartitionId(to);
-        if (toPartition == nodeId) {
-            toId = lGraph.globalToLocalId[to];
-            eLocation = LOCAL_EDGE_TYPE;
-        } else {
-            toId = to;
-            eLocation = REMOTE_EDGE_TYPE;
-            lGraph.getVertex(lFromId).setVertexLocation(BOUNDARY_VERTEX);
-
-            if (!lGraph.containsOutEdgeGhostVertex(to)) {
-                lGraph.getOutEdgeGhostVertices()[to] = GhostVertex();
-            }
-            lGraph.getOutEdgeGhostVertex(to).addAssocEdge(lFromId);
-
-            forwardGhostVTables[toPartition][lFromId] = true;
-        }
-
-        lGraph.getVertex(lFromId).addOutEdge(OutEdge(toId, eLocation, EdgeType()));
-    }
-
-    if (lGraph.getVertexPartitionId(to) == nodeId) {
-        unsigned lToId = lGraph.globalToLocalId[to];
-        unsigned fromId;
-        EdgeLocationType eLocation;
-
-        unsigned fromPartition = lGraph.getVertexPartitionId(from);
-        if (fromPartition == nodeId) {
-            fromId = lGraph.globalToLocalId[from];
-            eLocation = LOCAL_EDGE_TYPE;
-        } else {
-            fromId = from;
-            eLocation = REMOTE_EDGE_TYPE;
-
-            if (!lGraph.containsInEdgeGhostVertex(from)) {
-                lGraph.getInEdgeGhostVertices()[from] = GhostVertex();
-            }
-            lGraph.getInEdgeGhostVertex(from).addAssocEdge(lToId);
-
-            backwardGhostVTables[fromPartition][lToId] = true;
-        }
-
-        lGraph.getVertex(lToId).addInEdge(InEdge(fromId, eLocation, EdgeType()));
-    }
-}
-
-
-/**
- *
- * Set the normalization factors on all edges.
- *
- */
-void
-Engine::setEdgeNormalizations() {
-    for (Vertex &vertex : graph.getVertices()) {
-        unsigned vtxDeg = vertex.getNumInEdges() + 1;
-        float vtxNorm = std::pow(vtxDeg, -.5);
-        vertex.setNormFactor(vtxNorm * vtxNorm);
-        for (unsigned i = 0; i < vertex.getNumInEdges(); ++i) {
-            InEdge &e = vertex.getInEdge(i);
-            unsigned vid = e.getSourceId();
-            if (e.getEdgeLocation() == LOCAL_EDGE_TYPE) {
-                unsigned srcDeg = graph.getVertex(vid).getNumInEdges() + 1;
-                float srcNorm = std::pow(srcDeg, -.5);
-                e.setData(srcNorm * vtxNorm);
-            } else {
-                unsigned ghostDeg = graph.getInEdgeGhostVertex(vid).getDegree() + 1;
-                float ghostNorm = std::pow(ghostDeg, -.5);
-                e.setData(ghostNorm * vtxNorm);
-            }
-        }
-        for (unsigned i = 0; i < vertex.getNumOutEdges(); ++i) {
-            OutEdge &e = vertex.getOutEdge(i);
-            unsigned vid = e.getDestId();
-            if (e.getEdgeLocation() == LOCAL_EDGE_TYPE) {
-                unsigned dstDeg = graph.getVertex(vid).getNumInEdges() + 1;
-                float dstNorm = std::pow(dstDeg, -.5);
-                e.setData(vtxNorm * dstNorm);
-            } else {
-                unsigned ghostDeg = graph.getOutEdgeGhostVertex(vid).getDegree() + 1;
-                float ghostNorm = std::pow(ghostDeg, -.5);
-                e.setData(vtxNorm * ghostNorm);
-            }
-        }
-    }
-}
-
-
-/**
- *
- * Finds the in degree of all ghost vertices.
- *
- */
-void
-Engine::findGhostDegrees(std::string &fileName) {
-    std::ifstream infile(fileName.c_str(), std::ios::binary);
-    if (!infile.good())
-        printLog(nodeId, "Cannot open BinarySnap file: %s", fileName.c_str());
-
-    assert(infile.good());
-
-    BSHeaderType bsHeader;
-    infile.read((char *) &bsHeader, sizeof(bsHeader));
-
-    unsigned srcdst[2];
-    while (infile.read((char *) srcdst, bsHeader.sizeOfVertexType * 2)) {
-        if (srcdst[0] == srcdst[1]) {
-            continue;
-        }
-
-        // YIFAN: we count in degree for both outEdgeGhosts and inEdgeGhosts
-        if (graph.containsOutEdgeGhostVertex(srcdst[1])) {
-            graph.getOutEdgeGhostVertex(srcdst[1]).incrementDegree();
-        }
-        if (graph.containsInEdgeGhostVertex(srcdst[1])) {
-            graph.getInEdgeGhostVertex(srcdst[1]).incrementDegree();
-        }
-    }
-
-    infile.close();
-}
-
-
-/**
- *
- * Read and parse the graph from the graph binary snap file.
- *
- */
-void
-Engine::readGraphBS(std::string &fileName) {
-
-    // Read in the partition file.
-    std::string partsFileName = fileName + PARTS_EXT;
-    readPartsFile(partsFileName, graph);
-
-    // Initialize the graph based on the partition info.
-    graph.getVertices().resize(graph.getNumLocalVertices());
-    for (unsigned i = 0; i < graph.getNumLocalVertices(); ++i) {
-        graph.getVertex(i).setLocalId(i);
-        graph.getVertex(i).setGlobalId(graph.localToGlobalId[i]);
-        graph.getVertex(i).setVertexLocation(INTERNAL_VERTEX);
-        graph.getVertex(i).setGraphPtr(&graph);
-    }
-
-    // Read in the binary snap edge file.
-    std::string edgeFileName = fileName + EDGES_EXT;
-    std::ifstream infile(edgeFileName.c_str(), std::ios::binary);
-    if (!infile.good())
-        printLog(nodeId, "Cannot open BinarySnap file: %s", edgeFileName.c_str());
-
-    assert(infile.good());
-
-    BSHeaderType bSHeader;
-    infile.read((char *) &bSHeader, sizeof(bSHeader));
-    assert(bSHeader.sizeOfVertexType == sizeof(unsigned));
-
-    bool **forwardGhostVTables = new bool* [numNodes];
-    bool **backwardGhostVTables = new bool* [numNodes];
-    for (unsigned i = 0; i < numNodes; ++i) {
-        if (i == nodeId) {
-            continue;
-        }
-        forwardGhostVTables[i] = new bool [graph.getNumLocalVertices()];
-        memset(forwardGhostVTables[i], 0, sizeof(bool) * graph.getNumLocalVertices());
-        backwardGhostVTables[i] = new bool [graph.getNumLocalVertices()];
-        memset(backwardGhostVTables[i], 0, sizeof(bool) * graph.getNumLocalVertices());
-    }
-
-    // Loop through all edges and process them.
-    unsigned srcdst[2];
-    while (infile.read((char *) srcdst, bSHeader.sizeOfVertexType * 2)) {
-        if (srcdst[0] == srcdst[1])
-            continue;
-
-        processEdge(srcdst[0], srcdst[1], graph, forwardGhostVTables, backwardGhostVTables);
-        if (undirected)
-            processEdge(srcdst[1], srcdst[0], graph, forwardGhostVTables, backwardGhostVTables);
-        graph.incrementNumGlobalEdges();
-    }
-
-    for (unsigned i = 0; i < numNodes; ++i) {
-        if (i == nodeId) {
-            continue;
-        }
-        forwardGhostsList[i].reserve(graph.getNumLocalVertices());
-        backwardGhostsList[i].reserve(graph.getNumLocalVertices());
-        for (unsigned j = 0; j < graph.getNumLocalVertices(); ++j) {
-            if (forwardGhostVTables[i][j]) {
-                forwardGhostsList[i].push_back(j);
-            }
-            if (backwardGhostVTables[i][j]) {
-                backwardGhostsList[i].push_back(j);
-            }
-        }
-        forwardGhostsList[i].shrink_to_fit();
-        backwardGhostsList[i].shrink_to_fit();
-        delete[] forwardGhostVTables[i];
-        delete[] backwardGhostVTables[i];
-    }
-    delete[] forwardGhostVTables;
-    delete[] backwardGhostVTables;
-
-    infile.close();
-
-    // Extra works added.
-    graph.setNumInEdgeGhostVertices(graph.getInEdgeGhostVertices().size());
-    graph.setNumOutEdgeGhostVertices(graph.getOutEdgeGhostVertices().size());
-    findGhostDegrees(edgeFileName);
-    setEdgeNormalizations();
-}
-
-// Substantiate an Engine object here for TF aggregators
 Engine engine;

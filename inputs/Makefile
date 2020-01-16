@@ -4,6 +4,8 @@ CFLAGS=-std=c++11 -O3
 
 all: partitioner graphtobinary featurestobinary labelstobinary
 
+convert2csc: convert2csc.cpp
+	$(CPP) $< -o $@ ${CFLAGS}
 partitioner: partitioner.cpp
 	${CPP} $< -o $@ ${CFLAGS} -lmetis
 

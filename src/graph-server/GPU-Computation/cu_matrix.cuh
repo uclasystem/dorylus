@@ -10,8 +10,7 @@
 #include <map>
 #include "../../common/matrix.hpp"
 #include "../../common/utils.hpp"
-#include "../engine/edge.hpp"
-#include "../engine/vertex.hpp"
+#include "../engine/graph.hpp"
 #include "cusparse.h"
 
 
@@ -25,8 +24,8 @@ class CuMatrix : public Matrix {
     CuMatrix( Matrix M, const cublasHandle_t &handle_);
     ~CuMatrix();
 
-    void loadSpCsrForward(cusparseHandle_t &handle, unsigned numLocalVertices, std::vector<Vertex> &vertices, unsigned numGhostVertices);
-    void loadSpCsrBackward(cusparseHandle_t &handle, unsigned numLocalVertices, std::vector<Vertex> &vertices, unsigned numGhostVertices);
+    void loadSpCSR(cusparseHandle_t &handle, Graph& graph);
+    void loadSpCSC(cusparseHandle_t &handle, Graph& graph);
 
     void loadSpDense(FeatType *vtcsTensor, FeatType *ghostTensor,
                      unsigned numLocalVertices, unsigned numGhostVertices,
@@ -51,12 +50,11 @@ class CuMatrix : public Matrix {
     float *devPtr;
 
     //For sparse matrix
-    //the memory will live throughout the lifespan of the program (I didn't release them)
-    unsigned nnz;
+    //the memory will live throughout the lifespan of the program (I don't release them)
+    unsigned long long nnz;
     EdgeType *csrVal;
-    int *csrColInd;
-    int *cooRowInd;
-    int *csrRowPtr;
+    unsigned *csrColInd;
+    unsigned long long *csrRowPtr;
 
 };
 

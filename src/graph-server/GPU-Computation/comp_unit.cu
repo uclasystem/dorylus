@@ -44,7 +44,7 @@ CuMatrix ComputingUnit::aggregate(CuMatrix &sparse, CuMatrix &dense) {
                                      sparse.csrRowPtr, sparse.csrColInd, sparse.csrVal,
                                      CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
                                      CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F
-                                    );
+                                    );  
     assert(CUSPARSE_STATUS_SUCCESS == cusparseStat);
     cusparseStat = cusparseCreateDnMat(&desB, dense.getCols(), dense.getRows(), dense.getCols(), dense.devPtr,
                                        CUDA_R_32F, CUSPARSE_ORDER_COL);
@@ -52,7 +52,7 @@ CuMatrix ComputingUnit::aggregate(CuMatrix &sparse, CuMatrix &dense) {
     cusparseStat = cusparseCreateDnMat(&desC, sparse.getRows(), dense.getCols(), sparse.getRows(), C.devPtr,
                                        CUDA_R_32F, CUSPARSE_ORDER_COL);
     assert(CUSPARSE_STATUS_SUCCESS == cusparseStat);
-
+    
     std::size_t buffer_size;
     cusparseStat = cusparseSpMM_bufferSize(spHandle, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
                                            &alpha, desA, desB, &beta,

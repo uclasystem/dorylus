@@ -58,17 +58,20 @@ main(int argc, char *argv[]) {
 
     assert(belHeader.sizeOfVertexType == sizeof(unsigned));
 
-	idx_t nvtxs = belHeader.numVertices;
-	std::cout << "Number of vertices: " << nvtxs << std::endl;
+    idx_t nvtxs = belHeader.numVertices;
+    std::cout << "Number of vertices: " << nvtxs << std::endl;
 
     std::set<idx_t> *edgeLists = new std::set<idx_t>[nvtxs];
-	std::cout << "Number of edges: " << belHeader.numEdges << std::endl;
-	
+    std::cout << "Number of edges: " << belHeader.numEdges << std::endl;
+
     unsigned from, to;
     unsigned count;
 
-    while (infile.read((char *) &from, belHeader.sizeOfVertexType))
-		infile.read((char *) &to, belHeader.sizeOfVertexType);
+    while (infile.read((char *) &from, belHeader.sizeOfVertexType)) {
+        infile.read((char *) &to, belHeader.sizeOfVertexType);
+        edgeLists[to].insert(from);
+        edgeLists[from].insert(to);
+    }
 
     infile.close();
 
@@ -78,7 +81,7 @@ main(int argc, char *argv[]) {
     idx_t numEdges = 0;
 
     for (idx_t i = 0; i < nvtxs; ++i)
-        numEdges += edgeLists[i].size();  
+        numEdges += edgeLists[i].size();
 
     idx_t ncon = 1;
     idx_t *xadj = new idx_t[nvtxs + 1];
@@ -89,7 +92,7 @@ main(int argc, char *argv[]) {
         std::set<idx_t>::iterator it = edgeLists[i].begin();
         while (it != edgeLists[i].end()) {
             adjncy[adj_i++] = *it;
-            ++it;    
+            ++it;
         }
     }
     xadj[nvtxs] = adj_i;
@@ -108,13 +111,13 @@ main(int argc, char *argv[]) {
     std::cout << "Partitioning the graph..." << std::endl;
 
     METIS_PartGraphKway(&nvtxs, &ncon, xadj, adjncy, vwgt, vsize, NULL, &nparts, NULL, NULL, NULL, &objval, parts);
-    
+
     std::cout << "Writing partitioning results..." << std::endl;
 
     std::string commPath = partsDir + graphName + COMM_EXT;
     std::ofstream commFile;
     commFile.open(commPath.c_str());
-    commFile << "Communication cost: " << objval << std::endl; 
+    commFile << "Communication cost: " << objval << std::endl;
     commFile.close();
 
     std::string partPath = partsDir + graphName + PART_EXT;

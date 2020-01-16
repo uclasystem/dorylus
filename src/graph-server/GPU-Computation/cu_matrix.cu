@@ -14,7 +14,7 @@ CuMatrix::CuMatrix( Matrix M, const cublasHandle_t &handle_)
     csrColInd = NULL;
     isSparse = 0;
     deviceMalloc();
-    if(getData() != NULL)
+    if (getData() != NULL)
         deviceSetMatrix();
 }
 
@@ -24,123 +24,63 @@ Matrix CuMatrix::getMatrix() {
 }
 
 void CuMatrix::freeGPU() {
-    for(auto ptr : MemoryPool)
+    for (auto ptr : MemoryPool)
         cudaFree (ptr);
 }
 
-void CuMatrix::loadSpCsrForward(cusparseHandle_t &handle, unsigned numLocalVertices, std::vector<Vertex> &vertices, unsigned numGhostVertices) {
-    unsigned total = numGhostVertices + numLocalVertices;
+void CuMatrix::loadSpCSR(cusparseHandle_t &handle, Graph &graph) {
+    unsigned total = graph.dstGhostCnt + graph.localVtxCnt;
     isSparse = true;
+    nnz = graph.backwardAdj.nnz;
 
-    //GET COO FORMAT FIRST
-    unsigned count = 0;
-    std::set<triplet> links;
-    for(auto &v : vertices) {
-        links.insert(triplet(v.getLocalId(), v.getLocalId(), v.getNormFactor()));
-        count++;
-        for(unsigned i = 0; i <  v.getNumInEdges(); ++i) {
-            InEdge &ie = v.getInEdge(i);
-            if(ie.getEdgeLocation() == LOCAL_EDGE_TYPE)
-                links.insert(triplet(v.getLocalId(), ie.getSourceId(), ie.getData()));
-            else
-                links.insert(triplet(v.getLocalId(), v.getSourceVertexLocalId(i) + numLocalVertices,  ie.getData()));
-            count++;
-        }
+    cudaStat = cudaMalloc ((void **)&csrVal, nnz * sizeof(EdgeType));
+    assert(cudaStat == cudaSuccess);
+    cudaStat = cudaMalloc ((void **)&csrColInd, nnz * sizeof(unsigned));
+    assert(cudaStat == cudaSuccess);
+    cudaStat = cudaMalloc ((void **)&csrRowPtr, (graph.localVtxCnt + 1) * sizeof(unsigned long long));
+    assert(cudaStat == cudaSuccess);
+    cudaStat = cudaMemcpy(csrVal, graph.backwardAdj.values, sizeof(EdgeType) * nnz, cudaMemcpyHostToDevice);
+    assert(cudaStat == cudaSuccess);
+    cudaStat = cudaMemcpy(csrColInd, graph.backwardAdj.columnIdxs , sizeof(unsigned) * nnz, cudaMemcpyHostToDevice);
+    assert(cudaStat == cudaSuccess);
+    unsigned* rowPtrs= new unsigned[graph.localVtxCnt + 1];
+    for(unsigned i = 0;i <graph.localVtxCnt + 1;++i){
+        rowPtrs[i]=(unsigned)(graph.backwardAdj.rowPtrs[i]);
     }
-
-    nnz = count;
-    EdgeType *norms  = new EdgeType[count];
-    int *rowInd = new int[count];
-    int *colInd = new int[count];
-
-    unsigned i = 0;
-    for(auto link : links) {
-        rowInd[i] = std::get<0>(link);
-        colInd[i] = std::get<1>(link);
-        norms[i] = std::get<2>(link);
-        i++;
-    }
-    //coo device pointer
-    cudaStat = cudaMalloc ((void **)&csrVal, count * sizeof(EdgeType));
-    assert(cudaStat == cudaSuccess);
-    cudaStat = cudaMalloc ((void **)&cooRowInd, count * sizeof(int));
-    assert(cudaStat == cudaSuccess);
-    cudaStat = cudaMalloc ((void **)&csrColInd, count * sizeof(int));
-    assert(cudaStat == cudaSuccess);
-    cudaStat = cudaMalloc ((void **)&csrRowPtr, (numLocalVertices + 1) * sizeof(int));
-    assert(cudaStat == cudaSuccess);
-    cudaStat = cudaMemcpy(csrVal, norms, sizeof(EdgeType) * count, cudaMemcpyHostToDevice);
-    assert(cudaStat == cudaSuccess);
-    cudaStat = cudaMemcpy(cooRowInd, rowInd, sizeof(int) * count, cudaMemcpyHostToDevice);
-    assert(cudaStat == cudaSuccess);
-    cudaStat = cudaMemcpy(csrColInd, colInd, sizeof(int) * count, cudaMemcpyHostToDevice);
+    cudaStat = cudaMemcpy(csrRowPtr, rowPtrs , sizeof(unsigned) * (graph.localVtxCnt + 1), cudaMemcpyHostToDevice);
     assert(cudaStat == cudaSuccess);
 
-    cusparseXcoo2csr(handle, cooRowInd, nnz, numLocalVertices, csrRowPtr, CUSPARSE_INDEX_BASE_ZERO);
+    
 
-
-    setRows(numLocalVertices);
+    setRows(graph.localVtxCnt);
     setCols(total);
-    delete[] rowInd;
-    delete[] colInd;
-    delete[] norms;
 }
 
-void CuMatrix::loadSpCsrBackward(cusparseHandle_t &handle, unsigned numLocalVertices, std::vector<Vertex> &vertices, unsigned numGhostVertices) {
-    unsigned total = numGhostVertices + numLocalVertices;
+void CuMatrix::loadSpCSC(cusparseHandle_t &handle, Graph &graph) {
+    unsigned total = graph.srcGhostCnt + graph.localVtxCnt;
     isSparse = true;
+    nnz = graph.forwardAdj.nnz;
 
-    //GET COO FORMAT FIRST
-    unsigned count = 0;
-    std::set<triplet> links;
-    for(auto &v : vertices) {
-        links.insert(triplet(v.getLocalId(), v.getLocalId(), v.getNormFactor()));
-        count++;
-        for(unsigned i = 0; i <  v.getNumOutEdges(); ++i) {
-            OutEdge &oe = v.getOutEdge(i);
-            if(oe.getEdgeLocation() == LOCAL_EDGE_TYPE)
-                links.insert(triplet(v.getLocalId(), v.getDestVertexLocalId(i), oe.getData()));
-            else
-                links.insert(triplet(v.getLocalId(), v.getDestVertexLocalId(i) + numLocalVertices, oe.getData()));
-            count++;
-        }
+    cudaStat = cudaMalloc ((void **)&csrVal, nnz * sizeof(EdgeType));
+    assert(cudaStat == cudaSuccess);
+    cudaStat = cudaMalloc ((void **)&csrColInd, nnz * sizeof(unsigned));
+    assert(cudaStat == cudaSuccess);
+    cudaStat = cudaMalloc ((void **)&csrRowPtr, (graph.localVtxCnt + 1) * sizeof(unsigned long long));
+    assert(cudaStat == cudaSuccess);
+    cudaStat = cudaMemcpy(csrVal, graph.forwardAdj.values, sizeof(EdgeType) * nnz, cudaMemcpyHostToDevice);
+    assert(cudaStat == cudaSuccess);
+    cudaStat = cudaMemcpy(csrColInd, graph.forwardAdj.rowIdxs, sizeof(unsigned) * nnz, cudaMemcpyHostToDevice);
+    assert(cudaStat == cudaSuccess);
+    unsigned* columnPtrs= new unsigned[graph.localVtxCnt + 1];
+    for(unsigned i = 0;i <graph.localVtxCnt + 1;++i){
+        columnPtrs[i]=(unsigned)(graph.forwardAdj.columnPtrs[i]);
+        // printLog(0,"%u\n",columnPtrs[i]);
     }
-
-    nnz = count;
-    EdgeType *norms  = new EdgeType[count];
-    int *rowInd = new int[count];
-    int *colInd = new int[count];
-
-    unsigned i = 0;
-    for(auto link : links) {
-        rowInd[i] = std::get<0>(link);
-        colInd[i] = std::get<1>(link);
-        norms[i] = std::get<2>(link);
-        i++;
-    }
-    //coo device pointer
-    cudaStat = cudaMalloc ((void **)&csrVal, count * sizeof(EdgeType));
-    assert(cudaStat == cudaSuccess);
-    cudaStat = cudaMalloc ((void **)&cooRowInd, count * sizeof(int));
-    assert(cudaStat == cudaSuccess);
-    cudaStat = cudaMalloc ((void **)&csrColInd, count * sizeof(int));
-    assert(cudaStat == cudaSuccess);
-    cudaStat = cudaMalloc ((void **)&csrRowPtr, (numLocalVertices + 1) * sizeof(int));
-    assert(cudaStat == cudaSuccess);
-    cudaStat = cudaMemcpy(csrVal, norms, sizeof(EdgeType) * count, cudaMemcpyHostToDevice);
-    assert(cudaStat == cudaSuccess);
-    cudaStat = cudaMemcpy(cooRowInd, rowInd, sizeof(int) * count, cudaMemcpyHostToDevice);
-    assert(cudaStat == cudaSuccess);
-    cudaStat = cudaMemcpy(csrColInd, colInd, sizeof(int) * count, cudaMemcpyHostToDevice);
+    cudaStat = cudaMemcpy(csrRowPtr, columnPtrs, sizeof(unsigned) * (graph.localVtxCnt + 1), cudaMemcpyHostToDevice);
     assert(cudaStat == cudaSuccess);
 
-    cusparseXcoo2csr(handle, cooRowInd, nnz, numLocalVertices, csrRowPtr, CUSPARSE_INDEX_BASE_ZERO);
-
-    setRows(numLocalVertices);
+    setRows(graph.localVtxCnt);
     setCols(total);
-    delete[] rowInd;
-    delete[] colInd;
-    delete[] norms;
 }
 
 void CuMatrix::loadSpDense(FeatType *vtcsTensor, FeatType *ghostTensor,
@@ -210,7 +150,7 @@ void CuMatrix::deviceSetMatrix() {
 void CuMatrix::updateMatrixFromGPU() {
     unsigned rows = this->getRows();
     unsigned cols = this->getCols();
-    if(getData() == NULL)
+    if (getData() == NULL)
         setData(new FeatType[getNumElemts()]);
     FeatType *data = this->getData();
     stat = cublasGetMatrix (rows, cols, sizeof(float), devPtr, rows, data, rows );
@@ -240,7 +180,7 @@ void CuMatrix::scale(const float &alpha) {
 }
 
 CuMatrix CuMatrix::dot(CuMatrix &B, bool A_trans, bool B_trans, float alpha, float beta) {
-    if(handle != B.handle) {
+    if (handle != B.handle) {
         std::cout << "Handle don't match\n";
         exit(EXIT_FAILURE);
     }

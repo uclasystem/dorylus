@@ -26,18 +26,6 @@
 #define DATA_HEADER_SIZE (NODE_ID_DIGITS + sizeof(unsigned) + sizeof(unsigned))
 
 
-/** For files cli options. */
-#define PARTS_EXT ".parts"
-#define EDGES_EXT ".edges"
-
-
-/** Binary snap file header struct. */
-struct BSHeaderType {
-    int sizeOfVertexType;
-    unsigned numVertices;
-    unsigned long long numEdges;
-};
-
 /** Binary features file header struct. */
 struct FeaturesHeaderType {
     unsigned numFeatures;
@@ -65,7 +53,7 @@ class Engine {
     void output();
     void destroy();
     bool master();
-    
+
     FeatType* aggregate(FeatType *vtcsTensor, unsigned vtcsCnt,
                         unsigned featDim);
     FeatType* invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt,
@@ -120,16 +108,13 @@ class Engine {
     // Labels one-hot storage array.
     FeatType *localVerticesLabels = NULL;
 
-    std::vector<unsigned> *forwardGhostsList;
-    std::vector<unsigned> *backwardGhostsList;
-
     unsigned currId = 0;
 
     int recvCnt = 0;
     Lock lockRecvCnt;
     Cond condRecvCnt;
 
-    std::string graphFile;
+    std::string datasetDir;
     std::string outFile;
     std::string featuresFile;
     std::string layerConfigFile;
@@ -219,16 +204,11 @@ class Engine {
                                         FeatType *gradTensor, unsigned featDim);
 
     // For initialization.
-    void parseArgs(int argc, char *argv[]);
-    void readLayerConfigFile(std::string &layerConfigFileName);
-    void readFeaturesFile(std::string &featuresFileName);
-    void readLabelsFile(std::string &labelsFileName);
-    void readPartsFile(std::string &partsFileName, Graph &lGraph);
-    void processEdge(unsigned &from, unsigned &to, Graph &lGraph, bool
-                     **forwardGhostVTables, bool **backwardGhostVTables);
-    void findGhostDegrees(std::string &fileName);
-    void setEdgeNormalizations();
-    void readGraphBS(std::string &fileName);
+    void parseArgs(int argc, char* argv[]);
+    void readLayerConfigFile(std::string& layerConfigFileName);
+    void readFeaturesFile(std::string& featuresFileName);
+    void readLabelsFile(std::string& labelsFileName);
+
     void setUpCommInfo();
 
     // Metric printing.
