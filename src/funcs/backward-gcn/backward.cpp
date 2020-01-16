@@ -147,7 +147,7 @@ static int
 sendMatrix(Matrix& matrix, zmq::socket_t& socket, unsigned id) {
     // Send push header.
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::PUSH_BACKWARD, id, matrix.getRows(),
+    populateHeader((char *) header.data(), OP::PUSH_VTX_BACKWARD, id, matrix.getRows(),
                     matrix.getCols());
     socket.send(header, ZMQ_SNDMORE);
 
@@ -165,7 +165,7 @@ sendMatrix(Matrix& matrix, zmq::socket_t& socket, unsigned id) {
     //     usleep(SLEEP_PERIOD);
     //     if (sndTimer.peek() > TIMEOUT_PERIOD) {
     //         // zmq::message_t _hdr(HEADER_SIZE);
-    //         // populateHeader((char *) _hdr.data(), OP::PUSH_BACKWARD, id, matrix.getRows(), matrix.getCols());
+    //         // populateHeader((char *) _hdr.data(), OP::PUSH_VTX_BACKWARD, id, matrix.getRows(), matrix.getCols());
     //         zmq::message_t _hdr;
     //         _hdr.copy(&header);
     //         socket.send(_hdr, ZMQ_SNDMORE);
@@ -190,7 +190,7 @@ static int
 sendWeightUpdate(Matrix& matrix, zmq::socket_t& socket, unsigned id) {
     // Send push header.
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::PUSH_BACKWARD, id, matrix.getRows(),
+    populateHeader((char *) header.data(), OP::PUSH_VTX_BACKWARD, id, matrix.getRows(),
                     matrix.getCols());
     socket.send(header, ZMQ_SNDMORE);
 
@@ -249,14 +249,14 @@ gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, 
         std::thread wReqThd([&] {
             __sync_synchronize();
             std::cout << "< BACKWARD > Requesting weights" << std::endl;
-            weights = requestWeight(weight_socket, OP::PULL_BACKWARD, layer);
+            weights = requestWeight(weight_socket, OP::PULL_VTX_BACKWARD, layer);
             std::cout << "< BACKWARD > Got weights" << std::endl;
         });
 
         std::cout << "< BACKWARD > Getting savedTensors" << std::endl;
         int ret = 0;
         set_timestamp();
-        ret = requestTensors(data_socket, OP::PULL_BACKWARD, id, layer, savedTensors);
+        ret = requestTensors(data_socket, OP::PULL_VTX_BACKWARD, id, layer, savedTensors);
         set_timestamp();
         std::cout << "< BACKWARD > Got feats" << std::endl;
 
@@ -337,14 +337,14 @@ gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id,
         std::thread wReqThd([&] {
             __sync_synchronize();
             std::cout << "< BACKWARD > Requesting weights" << std::endl;
-            weights = requestWeight(weight_socket, OP::PULL_BACKWARD, layer);
+            weights = requestWeight(weight_socket, OP::PULL_VTX_BACKWARD, layer);
             std::cout << "< BACKWARD > Got weights" << std::endl;
         });
 
         std::cout << "< BACKWARD > Requesting savedTensors" << std::endl;
         set_timestamp();
         int ret = 0;
-        ret = requestTensors(data_socket, OP::PULL_BACKWARD, id, layer, savedTensors);
+        ret = requestTensors(data_socket, OP::PULL_VTX_BACKWARD, id, layer, savedTensors);
         set_timestamp();
         std::cout << "< BACKWARD > Got feats" << std::endl;
 

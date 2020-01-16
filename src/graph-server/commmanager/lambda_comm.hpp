@@ -43,8 +43,8 @@
 #define MIN_TIMEOUT 500     // at least wait for MIN_TIMEOUT ms before relaunching
 #define EXP_BACKOFF_FACTOR 1.5 // base of exponential backoff
 
-#define FORWARD_FUNC "forward"
-#define BACKWARD_FUNC "backward"
+#define FORWARD_FUNC "yifan-forward"
+#define BACKWARD_FUNC "yifan-backward"
 
 
 class LambdaWorker;
@@ -85,7 +85,7 @@ public:
     void requestForward(unsigned layer, bool lastLayer);
 
     void applyVertexForward(unsigned layer, unsigned lambdaId, bool lastLayer);
-    void applyEdgeForward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
+    void applyEdgeForward(unsigned layer, unsigned lambdaId, bool lastLayer);
     void waitResForward(unsigned layer, bool lastLayer);
 
     // For backward-prop.
@@ -93,7 +93,7 @@ public:
     void requestBackward(unsigned layer, bool lastLayer);
 
     void applyVertexBackward(unsigned layer, unsigned lambdaId, bool lastLayer);
-    void applyEdgeBackward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
+    void applyEdgeBackward(unsigned layer, unsigned lambdaId, bool lastLayer);
     void waitResBackward(unsigned layer, bool lastLayer);
 
     void relaunchLambda(bool forward, unsigned layer, unsigned lambdaId, bool lastLayer);

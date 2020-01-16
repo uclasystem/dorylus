@@ -64,28 +64,30 @@ LambdaWorker::work() {
             unsigned layer = parse<unsigned>((char *) identity.data(), 1);
 
             switch (op) {
-                case (OP::PULL_FORWARD): {
+                case (OP::PULL_VTX_FORWARD): {
                     sendChunk(manager->inputTensor, identity, partId, layer, true);
                     break;
                 }
-                case (OP::PUSH_FORWARD): {
+                case (OP::PUSH_VTX_FORWARD): {
                     recvLambdaResults(identity, partId, layer);
                     break;
                 }
-                case (OP::PULL_BACKWARD): {
+                case (OP::PULL_VTX_BACKWARD): {
                     sendGCNChunks(identity, partId, layer);
                     break;
                 }
-                case (OP::PULL_EVAL): {
-                    sendTargetMatrix(identity, partId);
-                    break;
-                }
-                case (OP::PUSH_EVAL):
-                    break;
-                case (OP::PUSH_BACKWARD): {
+                case (OP::PUSH_VTX_BACKWARD): {
                     recvChunk(manager->outputTensor, identity, partId, layer, false);
                     break;
                 }
+                case (OP::PULL_VTX_EVAL): {
+                    sendTargetMatrix(identity, partId);
+                    break;
+                }
+                case (OP::PUSH_VTX_EVAL):
+                case (OP::PULL_EDG_EVAL):
+                case (OP::PUSH_EDG_EVAL):
+                    break;
                 case (OP::PULL): {
                     sendTensors(partId, layer, identity);
                     break;
@@ -94,6 +96,10 @@ LambdaWorker::work() {
                     recvTensors(partId, layer, identity);
                     break;
                 }
+                case (OP::PULL_EDG_FORWARD):
+                case (OP::PULL_EDG_BACKWARD):
+                case (OP::PUSH_EDG_FORWARD):
+                case (OP::PUSH_EDG_BACKWARD):
                 default: {
                     printLog(manager->nodeId, "unknown op %d, part id %d", op, partId);
                     break;  /** Not an op that I care about. */
@@ -159,6 +165,43 @@ LambdaWorker::sendChunk(Matrix &srcMat, zmq::message_t& client_id, unsigned part
     }
 }
 
+// TODO: (YIFAN) This is outdated.
+void
+LambdaWorker::sendRefChunk(Matrix &srcMat, zmq::message_t& client_id, unsigned partId, bool forward) {
+    // Reject a send request if the partition id is invalid.
+    unsigned numLambdas = forward ? (manager->numLambdasForward) : (manager->numLambdasBackward);
+    if (partId >= numLambdas) {
+        workersocket.send(client_id, ZMQ_SNDMORE);
+        zmq::message_t header(HEADER_SIZE);
+        populateHeader((char *) header.data(), ERR_HEADER_FIELD, ERR_HEADER_FIELD, ERR_HEADER_FIELD, ERR_HEADER_FIELD);
+        workersocket.send(header);
+
+        printLog(manager->nodeId, "[ERROR] Got a request for partition %u, but number of lambdas is %u", partId, numLambdas);
+    // Partition id is valid, so send the matrix segment.
+    } else {
+        workersocket.send(client_id, ZMQ_SNDMORE);
+
+        // Check to make sure that the bounds of this partition do not exceed the bounds of the data array.
+        // If they do, set partition end to the end of the array.
+        unsigned partRows = (srcMat.getRows() + numLambdas - 1) / numLambdas;
+        unsigned thisPartRows = std::min(partRows, srcMat.getRows() - partId * partRows);
+        unsigned featDim = srcMat.getCols();
+        FeatType **chunk = (FeatType **)srcMat.getData() + partId * partRows;
+
+        zmq::message_t header(HEADER_SIZE);
+        populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, featDim);
+        workersocket.send(header, ZMQ_SNDMORE);
+
+        zmq::message_t chunkMsg(thisPartRows * featDim * sizeof(FeatType));
+        for (unsigned i = 0; i < thisPartRows; ++i) {
+            memcpy((FeatType *)chunkMsg.data() + i * featDim, chunk[i], sizeof(FeatType) * featDim);
+        }
+
+        workersocket.send(chunkMsg);
+    }
+}
+
+// TODO: (YIFAN) there is no reason to receive all data together. We should receive one chunk per time.
 void
 LambdaWorker::recvLambdaResults(zmq::message_t& client_id, unsigned partId, unsigned layer) {
     // Partition id is valid, so send the matrix segment.

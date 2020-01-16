@@ -73,6 +73,8 @@ public:
     void recvTensors(unsigned partId, unsigned layer, zmq::message_t& client_id);
     // end named-tensors
 
+    void sendRefChunk(Matrix &srcMat, zmq::message_t& client_id, unsigned partId, bool forward);
+
     // Partitions the label matrix given a partition id and
     // and send that partition to the lambda thread for validation
     void sendTargetMatrix(zmq::message_t& client_id, unsigned partId);

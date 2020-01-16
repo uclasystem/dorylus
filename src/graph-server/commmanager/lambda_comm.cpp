@@ -335,6 +335,8 @@ LambdaComm::applyVertexForward(unsigned layer, unsigned lambdaId, bool lastLayer
     invokeLambda(FORWARD_FUNC, nodeIp.c_str(), dataserverPort, weightServerIp, weightserverPort, layer, lambdaId, lastLayer);
 }
 
+void
+LambdaComm::applyEdgeForward(unsigned layer, unsigned lambdaId, bool lastLayer) {}
 
 void
 LambdaComm::waitResForward(unsigned layer, bool lastLayer) {
@@ -387,6 +389,9 @@ LambdaComm::applyVertexBackward(unsigned layer, unsigned lambdaId, bool lastLaye
     char* weightServerIp = weightservers[(nodeId * numLambdasForward + lambdaId) % weightservers.size()];
     invokeLambda(BACKWARD_FUNC, nodeIp.c_str(), dataserverPort, weightServerIp, weightserverPort, layer, lambdaId, lastLayer);
 }
+
+void
+LambdaComm::applyEdgeBackward(unsigned layer, unsigned lambdaId, bool lastLayer) {}
 
 void
 LambdaComm::waitResBackward(unsigned layer, bool lastLayer) {

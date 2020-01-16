@@ -58,7 +58,7 @@ requestWeightsMatrix(zmq::socket_t& socket, unsigned layer) {
 
     // send pull request.
     zmq::message_t header(header_size);
-    populateheader((char *) header.data(), OP::PULL_FORWARD, layer);
+    populateheader((char *) header.data(), OP::PULL_VTX_FORWARD, layer);
     socket.send(header);
 
     // Listen on respond.
@@ -95,7 +95,7 @@ sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned
 
     // Send push header.
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::PUSH_FORWARD, id, zResult.getRows(), zResult.getCols());
+    populateHeader((char *) header.data(), OP::PUSH_VTX_FORWARD, id, zResult.getRows(), zResult.getCols());
     socket.send(header, ZMQ_SNDMORE);
 
     // Send zData and actData.

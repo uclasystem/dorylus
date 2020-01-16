@@ -102,7 +102,7 @@ sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned
 
     // Send push header.
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::PUSH_FORWARD, id, zResult.getRows(), zResult.getCols());
+    populateHeader((char *) header.data(), OP::PUSH_VTX_FORWARD, id, zResult.getRows(), zResult.getCols());
     socket.send(header, ZMQ_SNDMORE);
 
     // Send zData and actData.
@@ -141,7 +141,7 @@ sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned
 static void
 sendWeightUpdates(zmq::socket_t& socket, Matrix& weightUpdates, unsigned layer) {
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char*) header.data(), OP::PUSH_BACKWARD, layer);
+    populateHeader((char*) header.data(), OP::PUSH_VTX_BACKWARD, layer);
     socket.send(header, ZMQ_SNDMORE);
 
     zmq::message_t updateMsg(weightUpdates.getDataSize());
@@ -282,7 +282,7 @@ checkLoss(Matrix& preds, Matrix& labels) {
  */
 static void
 evaluateModel(Matrix& activations, zmq::socket_t& datasocket, unsigned partId) {
-    Matrix labels = requestMatrix(datasocket, OP::PULL_EVAL, partId);
+    Matrix labels = requestMatrix(datasocket, OP::PULL_VTX_EVAL, partId);
     Matrix predictions = softmax(activations);
 
     // Check if the label with the highest probability after softmax is equal to the
@@ -293,7 +293,7 @@ evaluateModel(Matrix& activations, zmq::socket_t& datasocket, unsigned partId) {
     float lossThisPart = checkLoss(predictions, labels);
 
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char*)header.data(), OP::PUSH_EVAL, partId, totalCorrect);
+    populateHeader((char*)header.data(), OP::PUSH_VTX_EVAL, partId, totalCorrect);
     serialize<float>((char*)header.data(), 3, lossThisPart);
 
     datasocket.send(header);
@@ -306,7 +306,7 @@ evaluateModel(Matrix& activations, zmq::socket_t& datasocket, unsigned partId) {
 static Matrix
 gradLoss(Matrix& z, Matrix& weights, Matrix& AH, zmq::socket_t& datasocket, zmq::socket_t& weightSocket,
          unsigned partId, unsigned layer) {
-    Matrix labels = requestMatrix(datasocket, OP::PULL_EVAL, partId);
+    Matrix labels = requestMatrix(datasocket, OP::PULL_VTX_EVAL, partId);
     Matrix predictions = softmax(z);
 
     Matrix d_out = predictions - labels;
@@ -378,14 +378,14 @@ forward_prop_layer(std::string dataserver, std::string weightserver, unsigned dp
         std::thread t([&] {     // Weight requests run in a separate thread.
             std::cout << "< FORWARD > Asking weightserver at " << whost_port << "..." << std::endl;
             do {
-                weights = requestMatrix(weights_socket, OP::PULL_FORWARD, layer);
+                weights = requestMatrix(weights_socket, OP::PULL_VTX_FORWARD, layer);
             } while (weights.empty());
         });
 
         // Request feature activation matrix of the current layer.
         std::cout << "< FORWARD > Asking dataserver at " << dhost_port << "..." << std::endl;
         do {
-            feats = requestMatrix(data_socket, OP::PULL_FORWARD, id, true);
+            feats = requestMatrix(data_socket, OP::PULL_VTX_FORWARD, id, true);
         } while (feats.empty());
         std::cout << "< FORWARD > Got data from dataserver." << std::endl;
 
