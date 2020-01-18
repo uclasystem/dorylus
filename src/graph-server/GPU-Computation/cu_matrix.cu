@@ -46,7 +46,6 @@ void CuMatrix::loadSpCSR(cusparseHandle_t &handle, Graph &graph) {
     cudaStat = cudaMemcpy(csrRowPtr, rowPtrs , sizeof(unsigned) * (graph.localVtxCnt + 1), cudaMemcpyHostToDevice);
     assert(cudaStat == cudaSuccess);
 
-    
 
     setRows(graph.localVtxCnt);
     setCols(total);
