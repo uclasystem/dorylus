@@ -1,7 +1,5 @@
 #include "cu_matrix.cuh"
 
-typedef std::tuple<int, int, EdgeType> triplet;
-
 std::set<FeatType *> CuMatrix::MemoryPool;
 CuMatrix::CuMatrix( Matrix M, const cublasHandle_t &handle_)
     : Matrix(M.getRows(), M.getCols(), M.getData()) {
@@ -228,7 +226,6 @@ CuMatrix CuMatrix::transpose() {
                 devPtr, getRows(),
                 res.devPtr, getRows());
     if (stat != CUBLAS_STATUS_SUCCESS) {
-        printf ("SGEAM %s\n",_cudaGetErrorEnum(stat));
         cublasDestroy(handle);
         exit (EXIT_FAILURE);
     }
