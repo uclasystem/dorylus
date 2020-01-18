@@ -34,11 +34,9 @@ CuMatrix ComputingUnit::wrapMatrix(Matrix m) {
 CuMatrix ComputingUnit::aggregate(CuMatrix &sparse, CuMatrix &dense) {
     CuMatrix C(Matrix(dense.getCols(), sparse.getRows(), (FeatType *) NULL), handle);
 
-    cudaDeviceSynchronize();
     cusparseSpMatDescr_t desA;
     cusparseDnMatDescr_t desB;
     cusparseDnMatDescr_t desC;
-
     auto
     cusparseStat = cusparseCreateCsr(&desA, sparse.getRows(), sparse.getCols(), sparse.nnz,
                                      sparse.csrRowPtr, sparse.csrColInd, sparse.csrVal,

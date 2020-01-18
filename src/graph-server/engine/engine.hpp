@@ -44,7 +44,7 @@ struct LabelsHeaderType {
  */
 class Engine {
 
-  public:
+public:
 
     // Public APIs for benchmarks.
     void init(int argc, char *argv[]);
@@ -79,7 +79,7 @@ class Engine {
 
     void addEpochTime(double epochTime);
 
-  private:
+private:
 
     NodeManager nodeManager;
     CommManager commManager;
@@ -164,7 +164,7 @@ class Engine {
     Barrier barComp;
 
     void calcAcc(FeatType *predicts, FeatType *labels, unsigned vtcsCnt,
-                  unsigned featDim);
+                 unsigned featDim);
 
     // Worker and communicator thread function.
     void forwardWorker(unsigned tid, void *args);

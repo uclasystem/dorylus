@@ -54,7 +54,7 @@ class CuMatrix : public Matrix {
     unsigned long long nnz;
     EdgeType *csrVal;
     unsigned *csrColInd;
-    unsigned long long *csrRowPtr;
+    unsigned *csrRowPtr;
 
 };
 

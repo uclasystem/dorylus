@@ -1,6 +1,4 @@
 #include "cu_matrix.cuh"
-#include <tuple>
-
 
 typedef std::tuple<int, int, EdgeType> triplet;
 
@@ -37,7 +35,7 @@ void CuMatrix::loadSpCSR(cusparseHandle_t &handle, Graph &graph) {
     assert(cudaStat == cudaSuccess);
     cudaStat = cudaMalloc ((void **)&csrColInd, nnz * sizeof(unsigned));
     assert(cudaStat == cudaSuccess);
-    cudaStat = cudaMalloc ((void **)&csrRowPtr, (graph.localVtxCnt + 1) * sizeof(unsigned long long));
+    cudaStat = cudaMalloc ((void **)&csrRowPtr, (graph.localVtxCnt + 1) * sizeof(unsigned));
     assert(cudaStat == cudaSuccess);
     cudaStat = cudaMemcpy(csrVal, graph.backwardAdj.values, sizeof(EdgeType) * nnz, cudaMemcpyHostToDevice);
     assert(cudaStat == cudaSuccess);
@@ -65,7 +63,7 @@ void CuMatrix::loadSpCSC(cusparseHandle_t &handle, Graph &graph) {
     assert(cudaStat == cudaSuccess);
     cudaStat = cudaMalloc ((void **)&csrColInd, nnz * sizeof(unsigned));
     assert(cudaStat == cudaSuccess);
-    cudaStat = cudaMalloc ((void **)&csrRowPtr, (graph.localVtxCnt + 1) * sizeof(unsigned long long));
+    cudaStat = cudaMalloc ((void **)&csrRowPtr, (graph.localVtxCnt + 1) * sizeof(unsigned));
     assert(cudaStat == cudaSuccess);
     cudaStat = cudaMemcpy(csrVal, graph.forwardAdj.values, sizeof(EdgeType) * nnz, cudaMemcpyHostToDevice);
     assert(cudaStat == cudaSuccess);
@@ -74,7 +72,6 @@ void CuMatrix::loadSpCSC(cusparseHandle_t &handle, Graph &graph) {
     unsigned* columnPtrs= new unsigned[graph.localVtxCnt + 1];
     for(unsigned i = 0;i <graph.localVtxCnt + 1;++i){
         columnPtrs[i]=(unsigned)(graph.forwardAdj.columnPtrs[i]);
-        // printLog(0,"%u\n",columnPtrs[i]);
     }
     cudaStat = cudaMemcpy(csrRowPtr, columnPtrs, sizeof(unsigned) * (graph.localVtxCnt + 1), cudaMemcpyHostToDevice);
     assert(cudaStat == cudaSuccess);
@@ -219,16 +216,22 @@ CuMatrix CuMatrix::dot(CuMatrix &B, bool A_trans, bool B_trans, float alpha, flo
 }
 
 CuMatrix CuMatrix::transpose() {
-    CuMatrix res(Matrix(getCols(), getRows(), (char *) NULL), handle);
+    CuMatrix res(Matrix(getCols(), getRows(), (char *) malloc(getNumElemts()*sizeof(FeatType))), handle);
     float alpha = 1.0;
     float beta = 0.;
 
-    cublasSgeam(handle, CUBLAS_OP_T, CUBLAS_OP_N,
+    stat =cublasSgeam(handle, CUBLAS_OP_T, CUBLAS_OP_N,
                 getRows(), getCols(),
                 &alpha,
                 devPtr, getCols(),
                 &beta,
-                devPtr, getCols(),
+                devPtr, getRows(),
                 res.devPtr, getRows());
+    if (stat != CUBLAS_STATUS_SUCCESS) {
+        printf ("SGEAM %s\n",_cudaGetErrorEnum(stat));
+        cublasDestroy(handle);
+        exit (EXIT_FAILURE);
+    }
+
     return res;
 }
