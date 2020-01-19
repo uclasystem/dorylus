@@ -34,7 +34,8 @@ find_package(Threads REQUIRED)
 # Include AWS Lambda runtime.
 find_package(aws-lambda-runtime REQUIRED)
 
-add_subdirectory($ENV{HOME}/gnn-lambda/src/common common)
+
+add_subdirectory(../../common common)
 
 # Create the executable target.
 aux_source_directory(. FUNC_SRC)
