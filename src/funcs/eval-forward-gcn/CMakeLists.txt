@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 11)
 
 
 # Project name.
-project(eval-backward-gcn LANGUAGES CXX)
+project(eval-forward-gcn LANGUAGES CXX)
 
 
 # Include ZeroMQ.
@@ -35,10 +35,12 @@ find_package(Threads REQUIRED)
 find_package(aws-lambda-runtime REQUIRED)
 
 
+add_subdirectory($ENV{HOME}/gnn-lambda/src/common common)
+
 # Create the executable target.
 aux_source_directory(. FUNC_SRC)
-add_executable(${PROJECT_NAME} ${FUNC_SRC} "../../src/common/matrix.cpp")
-target_link_libraries(${PROJECT_NAME} PUBLIC ${Boost_LIBRARIES} Threads::Threads AWS::aws-lambda-runtime ${OBLIB} ${CBLIB} ${ZMQ_LIB})
+add_executable(${PROJECT_NAME} ${FUNC_SRC})
+target_link_libraries(${PROJECT_NAME} PUBLIC common ${Boost_LIBRARIES} Threads::Threads AWS::aws-lambda-runtime ${OBLIB} ${CBLIB} ${ZMQ_LIB})
 
 
 # Create the packaging target.

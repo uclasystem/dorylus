@@ -13,8 +13,8 @@
 #include <zmq.hpp>
 #include <aws/lambda-runtime/runtime.h>
 
-#include "../../src/common/matrix.hpp"
-#include "../../src/common/utils.hpp"
+#include "../../../src/common/matrix.hpp"
+#include "../../../src/common/utils.hpp"
 
 #define SLEEP_PERIOD 1000
 #define TIMEOUT_PERIOD 500
