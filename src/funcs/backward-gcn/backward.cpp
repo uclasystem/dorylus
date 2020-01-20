@@ -31,11 +31,13 @@ using namespace std::chrono;
 
 bool lastLayer = false;
 
-Timer getPredsTimer;
-Timer getLabelsTimer;
+Timer getTensor0Timer;
+Timer getTensor1Timer;
+Timer getTensor2Timer;
 Timer getWeightsTimer;
-Timer getTensorTimer;
+
 Timer computationTimer;
+
 Timer sendGradsTimer;
 Timer sendDeltaTimer;
 
@@ -179,18 +181,18 @@ gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, 
     Matrix ah;
 
     std::cout << "< BACKWARD > Getting predictions" << std::endl;
-    getPredsTimer.start();
+    getTensor0Timer.start();
     do {
         predictions = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::ACT, layer);
     } while (predictions.empty());
-    getPredsTimer.stop();
+    getTensor0Timer.stop();
 
     std::cout << "< BACKWARD > Getting labels" << std::endl;
-    getLabelsTimer.start();
+    getTensor1Timer.start();
     do {
         labels = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::LAB, layer);
     } while (labels.empty());
-    getLabelsTimer.stop();
+    getTensor1Timer.stop();
 
     std::thread weightsThd([&] {
         getWeightsTimer.start();
@@ -203,12 +205,12 @@ gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, 
 
 
     std::thread ahThd([&] {
-        getTensorTimer.start();
+        getTensor2Timer.start();
         std::cout << "< BACKWARD > Requesting AH" << std::endl;
         do {
             ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::AH, layer);
         } while (ah.empty());
-        getTensorTimer.stop();
+        getTensor2Timer.stop();
     });
 
     // derivative of softmax
@@ -255,58 +257,86 @@ gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id,
     Matrix weights;
     Matrix ah;
 
+    // REQUESTING ALL NEEDED TENSORS FOR COMPUTATION
+    getTensor0Timer.start();
     do {
         std::cout << "< BACKWARD > Requesting Z values" << std::endl;
         z = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::Z, layer);
     } while (z.empty());
-    std::cout << "< BACKWARD > Calculating derivative of activation " << z.shape() << std::endl;
-    Matrix actDeriv = activateDerivative(z);
-    delete[] z.getData();
+    getTensor0Timer.stop();
 
+    getTensor1Timer.start();
     do {
         std::cout << "< BACKWARD > Requesting gradient from graph server" << std::endl;
         grad = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::GRAD, layer);
     } while (grad.empty());
-    std::cout << "< BACKWARD > Hadamard multiplication" << grad.shape() << " " << actDeriv.shape() << std::endl;
-    Matrix interGrad = grad * actDeriv;
-    delete[] grad.getData();
-    delete[] actDeriv.getData();
-
+    getTensor1Timer.stop();
 
     std::thread weightsThd([&] {
+        getWeightsTimer.start();
         std::cout << "< BACKWARD > Requesting weights" << std::endl;
         do {
             weights = requestTensor(weight_socket, OP::PULL_BACKWARD, layer);
         } while (weights.empty());
+        getWeightsTimer.stop();
     });
     weightsThd.join();
+
+    std::thread ahThd([&] {
+        getTensor2Timer.start();
+        std::cout << "< BACKWARD > Requesting AH" << std::endl;
+        do {
+            ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::AH, layer);
+        } while (ah.empty());
+        getTensor2Timer.stop();
+    });
+    ahThd.join();
+    // END REQUESTING ALL NEEDED TENSORS FOR COMPUTATION
+
+
+    // BACKWARDS COMPUTATION
+    computationTimer.start();
+    std::cout << "< BACKWARD > Calculating derivative of activation "
+              << z.shape() << std::endl;
+    Matrix actDeriv = activateDerivative(z);
+    delete[] z.getData();
+
+    std::cout << "< BACKWARD > Hadamard multiplication" << grad.shape() << " "
+              << actDeriv.shape() << std::endl;
+    Matrix interGrad = grad * actDeriv;
+    delete[] grad.getData();
+    delete[] actDeriv.getData();
+
     std::cout << "< BACKWARD > MatMul(gradient, weights) " << interGrad.shape() << " "
               << weights.shape() << std::endl;
     Matrix resultGrad = interGrad.dot(weights, false, true);
     delete[] weights.getData();
 
-    std::thread ahThd([&] {
-        std::cout << "< BACKWARD > Requesting AH" << std::endl;
-        do {
-            ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::AH, layer);
-        } while (ah.empty());
-    });
-
-    ahThd.join();
-    std::cout << "< BACKWARD > Computing weight updates " << ah.shape() << " " << interGrad.shape() << std::endl;
+    std::cout << "< BACKWARD > Computing weight updates " << ah.shape() << " "
+              << interGrad.shape() << std::endl;
     Matrix weightUpdates = ah.dot(interGrad, true, false);
     delete[] ah.getData();
     delete[] interGrad.getData();
+    computationTimer.stop();
+    // END BACKWARDS COMPUTATION
 
+
+    // SENDING BACKWARDS RESULTS
     std::thread wThd([&] {
+        sendGradsTimer.start();
         std::cout << "< BACKWARD > Sending weight updates" << std::endl;
         sendMatrix(weightUpdates, weight_socket, layer);
         delete[] weightUpdates.getData();
+        sendGradsTimer.stop();
     });
+
+    sendDeltaTimer.start();
     std::cout << "< BACKWARD > Sending gradient to graph server" << std::endl;
     sendMatrix(resultGrad, data_socket, id);
     delete[] resultGrad.getData();
+    sendDeltaTimer.stop();
     wThd.join();
+    // END SENDING BACKWARDS RESULTS
 }
 
 
@@ -368,11 +398,11 @@ backward_prop(std::string dataserver, std::string weightserver, std::string dpor
 
     // Couldn't parse JSON with AWS SDK from ptree.
     // For now creating a string with the times to be parsed on server.
-    std::string res = "[ BACKWARD ] " + std::to_string(id) + ": " +
-                      std::to_string(getPredsTimer.getTime()) + " " +       \
-                      std::to_string(getLabelsTimer.getTime()) + " " +      \
+    std::string res = "[ BACKWARD " + std::to_string(layer) + "] " + std::to_string(id) + ": " +
+                      std::to_string(getTensor0Timer.getTime()) + " " +     \
+                      std::to_string(getTensor1Timer.getTime()) + " " +     \
+                      std::to_string(getTensor2Timer.getTime()) + " " +     \
                       std::to_string(getWeightsTimer.getTime()) + " " +     \
-                      std::to_string(getTensorTimer.getTime()) + " " +      \
                       std::to_string(computationTimer.getTime()) + " " +    \
                       std::to_string(sendGradsTimer.getTime()) + " " +      \
                       std::to_string(sendDeltaTimer.getTime());
