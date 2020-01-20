@@ -28,7 +28,7 @@ fi
 if [[ -z $1 ]] || [[ $1 == "graph" ]]; then
     echo "Processing context 'graph'..."
     # ${EC2MAN_CMD} graph 0 ssh -t "cd gnn-lambda && ./gnnman/helpers/graphserver.bld && ./gnnman/helpers/send-folder build/graph-server"
-    ${EC2MAN_CMD} graph 0 ssh -t "cd gnn-lambda && ./gnnman/helpers/graphserver.bld && ./gnnman/helpers/send-file build/graphserver && ./gnnman/helpers/send-file build/graph-server/commmanager/liblambda_comm.so && ./gnnman/helpers/send-file build/src/common/libmatrix.so"
+    ${EC2MAN_CMD} graph 0 ssh -t "cd gnn-lambda && ./gnnman/helpers/graphserver.bld && ./gnnman/helpers/send-file build/graphserver && ./gnnman/helpers/send-file build/graph-server/commmanager/liblambda_comm.so && ./gnnman/helpers/send-file build/src/common/libcommon.so"
 fi
 
 
