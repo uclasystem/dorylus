@@ -11,7 +11,7 @@ if [[ ! -d build ]]; then
 	mkdir build
 fi
 
-FUNC_NAME=backward
+FUNC_NAME=eval-backward-gcn
 ZIP_FILE=${FUNC_NAME}.zip
 
 
