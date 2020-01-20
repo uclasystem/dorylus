@@ -398,7 +398,7 @@ backward_prop(std::string dataserver, std::string weightserver, std::string dpor
 
     // Couldn't parse JSON with AWS SDK from ptree.
     // For now creating a string with the times to be parsed on server.
-    std::string res = "[ BACKWARD " + std::to_string(layer) + "] " + std::to_string(id) + ": " +
+    std::string res = "[ BACKWARD " + std::to_string(layer) + " ] " + std::to_string(id) + ": " +
                       std::to_string(getTensor0Timer.getTime()) + " " +     \
                       std::to_string(getTensor1Timer.getTime()) + " " +     \
                       std::to_string(getTensor2Timer.getTime()) + " " +     \
