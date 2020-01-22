@@ -95,7 +95,7 @@ def handle_command(ec2_cli, ctx, instance, op, args):
         if instance.pub_ip == '0':
             print("Public IP address not yet defined. Make sure the instance is 'running'.")
         else:
-            scp_command = ['scp'] + remote_access_opts
+            scp_command = ['scp', '-r'] + remote_access_opts
             if len(args) != 0:
                 scp_command += [instance.user + '@' + instance.pub_ip + ':./' + args[0]]
                 scp_command += ['.']
