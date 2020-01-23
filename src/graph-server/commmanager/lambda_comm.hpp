@@ -18,6 +18,16 @@
 #include <vector>
 #include <zmq.hpp>
 
+#include <aws/core/Aws.h>
+#include <aws/core/utils/json/JsonSerializer.h>
+#include <aws/core/utils/Outcome.h>
+#include <aws/core/utils/logging/DefaultLogSystem.h>
+#include <aws/core/utils/logging/AWSLogging.h>
+#include <aws/core/utils/HashingUtils.h>
+#include <aws/lambda/LambdaClient.h>
+#include <aws/lambda/model/InvokeRequest.h>
+
+
 #include "resource_comm.hpp"
 #include "lambdaworker.hpp"
 #include "../utils/utils.hpp"

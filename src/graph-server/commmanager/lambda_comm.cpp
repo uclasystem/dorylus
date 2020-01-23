@@ -99,8 +99,6 @@ LambdaComm::newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData
     // Refresh workers' members, and connect their worker sockets to the backend.
     for (auto&& worker : workers)
         worker->refreshState(actMatrix, zData, actData, numFeatsNext);
-
-    // printLog(nodeId, "Lambda FORWARD context created.");
 }
 
 // deprecated.
@@ -164,8 +162,7 @@ LambdaComm::waitLambdaForward(unsigned layer, bool lastLayer) {
  *
  */
 void
-LambdaComm::newContextBackward(unsigned layer, FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
-                                unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim) {
+LambdaComm::newContextBackward(unsigned layer, FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf, unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim) {
     countBackward = 0;
 
     currLayer = layer;
@@ -270,7 +267,6 @@ LambdaComm::relaunchLambda(bool forward, unsigned layer, unsigned lambdaId, bool
  */
 void
 LambdaComm::sendShutdownMessage() {
-
     // Send kill message.
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char *) header.data(), OP::TERM);
