@@ -1,0 +1,22 @@
+#! /bin/bash
+
+##
+## Install AWS Lambda Runtime
+##
+
+sudo apt install libcurl4-openssl-dev libssl-dev
+
+cd ${HOME}
+
+# Install AWS-Lambda C++ runtime.
+if [[ ! -d /usr/local/include/aws/lambda-runtime ]]; then
+    git clone https://github.com/awslabs/aws-lambda-cpp.git
+    cd aws-lambda-cpp
+    mkdir build
+    cd build
+    cmake .. -DCMAKE_BUILD_TYPE=Release
+    make
+    sudo make install
+    cd ../..
+    rm -rf aws-lambda-cpp
+fi
