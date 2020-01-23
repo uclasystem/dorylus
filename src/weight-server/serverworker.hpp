@@ -58,6 +58,8 @@ private:
     std::vector<Matrix>& weightMats;
     std::vector<Matrix>& updateMats;
 
+    Timer opTimer;
+
     unsigned& numLambdas;
     unsigned& lambdaRecved;
 
