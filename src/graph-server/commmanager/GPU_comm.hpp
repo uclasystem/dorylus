@@ -83,7 +83,6 @@ class GPUComm : public ResourceComm {
     std::vector<Matrix> *savedTensors;
 
     ComputingServer *comp_server;
-
 };
 
 
