@@ -9,7 +9,9 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Include AWSSDK
-find_package(AWSSDK REQUIRED COMPONENTS lambda)
+if (NOT BUILD_GPU)
+    find_package(AWSSDK REQUIRED COMPONENTS lambda)
+endif()
 
 
 # Subdirectories, each needs a CMakeLists.txt.
@@ -28,6 +30,6 @@ aux_source_directory(. GRAPH_SRCS)
 add_executable(graphserver ${GRAPH_SRCS})
 
 target_link_libraries(graphserver PRIVATE commmanager resource_comm edge vertex graph engine nodemanager threadpool utils common
-                                  PUBLIC ${ZMQ_LIB} ${AWSSDK_LINK_LIBRARIES} Threads::Threads ${Boost_LIBRARIES}
+                                  PUBLIC ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES}
                                         ${OBLIB} ${CBLIB})
 target_compile_options(graphserver PRIVATE "-Wall" "-Werror" "-Wno-reorder" "-MMD")
