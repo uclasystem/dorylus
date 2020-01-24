@@ -160,9 +160,6 @@ ServerWorker::recvUpdate(zmq::message_t& client_id, unsigned layer) {
  */
 void
 ServerWorker::setBackpropNumLambdas(zmq::message_t& client_id, unsigned numLambdas_) {
-    // This is not a thread-safe call, but as the coordination server should
-    // only send one info message per server, it should be fine.
-
     std::lock_guard<std::mutex> update_lock(update_mutex);
     numLambdas = numLambdas_;
     std::cout << "[  INFO  ] Number of lambdas set to " << numLambdas << "." << std::endl;
@@ -177,7 +174,7 @@ ServerWorker::setBackpropNumLambdas(zmq::message_t& client_id, unsigned numLambd
 
 /**
  *
- * After receiving the termination message from the coordination server alert
+ * After receiving the termination message from the graph server alert
  * the main thread that it can shutdown.
  *
  */

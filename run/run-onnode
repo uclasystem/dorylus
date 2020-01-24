@@ -111,8 +111,6 @@ case $1 in
             --dataserverport ${GPORT} \
             --weightserverport ${WPORT} \
             --wserveripfile ${WSERVERIP} \
-            --coordserverip ${CSERVERIP} \
-            --coordserverport ${CPORT} \
             --undirected ${UNDIRECTED} \
             --tmpdir=${TMPFILEDIR} \
             --cthreads ${COMP_THREADS} \
@@ -204,47 +202,8 @@ case $1 in
         echo "Check the output results in \"~/outfiles/\" folder."
         ;;
 
-    #
-    # Run coordserver.
-    #
-    "coord")
-        CPORT=$( < ../cserverport )
-        GPORT=$( < ../gserverport )
-        WPORT=$( < ../wserverport )
-
-        LAMBDA_REGION=
-        LAMBDA_TIMEOUT=
-
-        # Kill running coordserver.
-        echo -e "\e[33;1mKilling existing 'coordserver' processes...\e[0m"
-        killall -u $( whoami ) coordserver
-
-        # Increment the running mark.
-        if [[ ! -f run/run-mark ]]; then
-            touch run/run-mark
-        fi
-        RUN_MARK=$(( $( cat run/run-mark ) + 1 ))
-        echo ${RUN_MARK} > run/run-mark
-        echo -e "\e[33;1mRunning COORD server with: [ MARK # ${RUN_MARK} ]...\e[0m"
-
-        # Set output file directory.
-        OUTFILEDIR=${HOME}/outfiles/${RUN_MARK}.coord
-        mkdir -p ${OUTFILEDIR}
-
-        # Run coordserver.
-        RUN_COMMAND="./build/coordserver \
-            ${CPORT} \
-            ../wserverip \
-            ${WPORT} \
-            ${GPORT} \
-            ${OUTFILEDIR}"
-        ${RUN_COMMAND}
-
-        echo "Check the output results in \"~/outfiles/\" folder."
-        ;;
-
     *)
-        echo "Must specify a valid context 'graph' / 'weight' / 'coord'."
+        echo "Must specify a valid context 'graph' / 'weight'"
         echo "Usage: ./run/run-onnode <Context>"
         exit 1
         ;;

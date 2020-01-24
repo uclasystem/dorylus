@@ -25,8 +25,7 @@ static unsigned globalNodeId = -1;
 LambdaComm::LambdaComm(CommInfo &commInfo) :
         ResourceComm(), nodeIp(commInfo.nodeIp), dataserverPort(commInfo.dataserverPort),
         wServersFile(commInfo.wServersFile), weightserverPort(commInfo.weightserverPort),
-        coordserverIp(commInfo.coordserverIp), coordserverPort(commInfo.coordserverPort),
-        nodeId(commInfo.nodeId), numNodes(commInfo.numNodes), ctx(1), halt(false), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), coordsocket(ctx, ZMQ_REQ),
+        nodeId(commInfo.nodeId), numNodes(commInfo.numNodes), ctx(1), halt(false), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
         numLambdasForward(commInfo.numLambdasForward), numLambdasBackward(commInfo.numLambdasBackward), numListeners(numLambdasBackward), // TODO: Decide numListeners.
         countForward(0), countBackward(0), timeoutPeriod(0.0), currLayer(0) {
     // If master, establish connections to weight servers
@@ -45,10 +44,6 @@ LambdaComm::LambdaComm(CommInfo &commInfo) :
     sprintf(dhost_port, "tcp://*:%u", dataserverPort);
     frontend.bind(dhost_port);
     backend.bind("inproc://backend");
-
-    char chost_port[50];
-    sprintf(chost_port, "tcp://%s:%u", coordserverIp.c_str(), coordserverPort);
-    coordsocket.connect(chost_port);
 
     // Create 'numListeners' workers and detach them.
     for (unsigned i = 0; i < numListeners; ++i) {
@@ -91,7 +86,6 @@ LambdaComm::~LambdaComm() {
 
     frontend.close();
     backend.close();
-    coordsocket.close();
 
     ctx.close();
 }
@@ -180,8 +174,7 @@ void LambdaComm::callback(const Aws::Lambda::LambdaClient *client,
 
 /**
  *
- * Call 'newContext()' before the lambda invokation to refresh the parameters, then call `requestLambdas()` to tell the coordserver to
- * trigger lambda threads.
+ * Call 'newContext()' before the lambda invokation to refresh the parameters, then call `requestLambdas()`
  *
  */
 void
@@ -247,8 +240,7 @@ LambdaComm::waitLambdaForward(unsigned layer, bool lastLayer) {
 
 /**
  *
- * Call 'newContext()' before the lambda invokation to refresh the parameters, then call `requestLambdas()` to tell the coordserver to
- * trigger lambda threads.
+ * Call 'newContext()' before the lambda invokation to refresh the parameters, then call `requestLambdas()`
  *
  */
 void
@@ -267,7 +259,6 @@ LambdaComm::newContextBackward(unsigned layer, FeatType *oldGradBuf, FeatType *n
     for (auto&& worker : workers)
         worker->refreshState(oldGradMatrix, newGradMatrix, targetMatrix, savedTensors);
 
-    // sending backward lambda number to coord server and finally set up weight server.
     if (nodeId == 0) { // I am master and master will send the total number of lambdas of all graph servers.
         unsigned numLambdas = numNodes * numLambdasBackward;
 
@@ -351,7 +342,7 @@ LambdaComm::relaunchLambda(bool forward, unsigned layer, unsigned lambdaId, bool
 
 /**
  *
- * Send message to the coordination server to shutdown.
+ * Send shutdown messages to the weight servers
  *
  */
 void

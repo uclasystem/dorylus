@@ -128,8 +128,6 @@ private:
     unsigned dataserverPort;
     unsigned weightserverPort;
     std::string weightserverIPFile;
-    std::string coordserverIp;
-    unsigned coordserverPort;
 
     unsigned numLambdasForward = 0;
     unsigned numLambdasBackward = 0;

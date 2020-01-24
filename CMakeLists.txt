@@ -44,14 +44,6 @@ else()
 endif()
 
 
-# Coordination server.
-if(BUILD_COORD)
-    message("Coord server:  YES")
-    add_subdirectory(src/coord-server ${PROJECT_SOURCE_DIR}/build/coord-server)
-else()
-    message("Coord server:  NO")
-endif()
-
 
 # Weight server.
 if(BUILD_WEIGHT)

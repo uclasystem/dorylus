@@ -21,4 +21,4 @@ source blas.install
 
 # AWSSDK Install
 cd ${HOME}/gnn-lambda/gnnman/helpers/
-source aws-sdk-cpp.install
+source aws-cpp-sdk.install

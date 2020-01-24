@@ -14,8 +14,6 @@ struct CommInfo {
     std::string nodeIp;
     unsigned nodeId;
     unsigned dataserverPort;
-    std::string coordserverIp;
-    unsigned coordserverPort;
     unsigned numLambdasForward;
     unsigned numLambdasBackward;
 
@@ -49,7 +47,6 @@ public:
     virtual void invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLayer) = 0;
     virtual void waitLambdaBackward(unsigned layer, bool lastLayer) = 0;
 
-    // Send a message to the coordination server to shutdown.
     virtual void sendShutdownMessage() = 0;
 };
 
