@@ -31,8 +31,15 @@ echo "Processing context 'graph'..."
 
 ${EC2MAN_CMD} graph dshfile > dshmachines
 ${EC2MAN_CMD} coord 0 pubip > cserverip
-${EC2MAN_CMD} graph all put cserverip dshmachines run/*.config run/cserverport run/gserverport run/dataport run/ctrlport run/nodeport run/numlambdasforward run/numlambdasbackward
-rm -f dshmachines cserverip
+${EC2MAN_CMD} weight all pubip > wserverip
+
+## Create `kill-all` file
+cp run/kill-all .
+sed -i s/{{WSERVER0}}/$( ./manage-ec2 weight 0 prip )/ kill-all
+sed -i s/{{GSERVER0}}/$( ./manage-ec2 graph 0 prip )/ kill-all
+
+${EC2MAN_CMD} graph all put wserverip run/wserverport cserverip dshmachines run/*.config run/cserverport run/gserverport run/dataport run/ctrlport run/nodeport run/numlambdasforward run/numlambdasbackward kill-all
+rm -f dshmachines cserverip kill-all
 
 NUM_GRAPH_NODES=$(( $( ${EC2MAN_CMD} graph info | wc -l | awk '{print $1}' ) - 1 ))
 for i in $( seq 0 $(( ${NUM_GRAPH_NODES} - 1 )) ); do
@@ -41,8 +48,6 @@ for i in $( seq 0 $(( ${NUM_GRAPH_NODES} - 1 )) ); do
     ${EC2MAN_CMD} graph $i put myprip mypubip
     rm -f myprip mypubip
 done
-${EC2MAN_CMD} weight all prip > wserverip
-${EC2MAN_CMD} graph all put wserverip run/wserverport
 
 # For weight servers.
 echo "Processing context 'weight'..."

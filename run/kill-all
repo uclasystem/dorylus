@@ -1,0 +1,8 @@
+#! /bin/bash
+
+WEIGHTSERVER=jothor@{{WSERVER0}}
+GRAPHSERVER=jothor@{{GSERVER0}}
+
+cd ${HOME}
+dsh -m ${GRAPHSERVER} "./gnn-lambda/run/kill-zombies graph"
+dsh -m ${WEIGHTSERVER} "./gnn-lambda/run/kill-zombies weight"
