@@ -47,12 +47,13 @@ LambdaWorker::work() {
                 continue;
             }
 
-            unsigned op = parse<unsigned>((char *) header.data(), 0);
+            OP op = parse<OP>((char *) header.data(), 0);
             unsigned partId2 = parse<unsigned>((char *) header.data(), 1);
             unsigned partId = parse<unsigned>((char *) identity.data(), 0);
             if (partId != partId2) {
                 printLog(manager->nodeId, "partIds don't match! op %u, partId: %u, %u; %u %u", op, partId, partId2, identity.size(), header.size());
             }
+
             unsigned layer = parse<unsigned>((char *) identity.data(), 1);
             if (layer != manager->currLayer) {
                 printLog(manager->nodeId, "layer %u %u", layer, manager->currLayer);
@@ -81,9 +82,7 @@ LambdaWorker::work() {
                         break;
                     }
                     if (manager->forwardLambdaTable[partId]) {
-                        // printLog(manager->nodeId, "recv req from %d", partId);
                         sendAggregatedChunk(identity, partId);
-                        // printLog(manager->nodeId, "send chunk to %d", partId);
                     } else {
                         workersocket.send(identity, ZMQ_SNDMORE);
                         zmq::message_t header(HEADER_SIZE);
@@ -231,8 +230,9 @@ LambdaWorker::recvLambdaResults(zmq::message_t& client_id, unsigned partId) {
     // Receive the pushed-back results.
     zmq::message_t data;
     workersocket.recv(&data);
-    std::memcpy(partitionZStart, data.data(), data.size());
     workersocket.recv(&data);
+
+    std::memcpy(partitionZStart, data.data(), data.size());
     std::memcpy(partitionActStart, data.data(), data.size());
 
     // Send confirm ACK message.
