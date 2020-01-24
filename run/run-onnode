@@ -24,10 +24,8 @@ case $1 in
             exit
         fi
 
-        CPORT=$( < ../cserverport )
         GPORT=$( < ../gserverport )
         WPORT=$( < ../wserverport)
-        CSERVERIP=$( < ../cserverip )
 
         DATAPORT=$( < ../dataport )
         CTRLPORT=$( < ../ctrlport )
