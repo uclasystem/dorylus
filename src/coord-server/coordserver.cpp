@@ -221,7 +221,7 @@ CoordServer::run() {
 
                 // Issue the lambda thread to serve the request.
                 char *weightserverIp = weightserverAddrs[globalLambdaId % weightserverAddrs.size()];
-                invokeFunction("eval-forward-gcn", dataserverIpCopy, dataserverPort,
+                invokeFunction("forward-gcn", dataserverIpCopy, dataserverPort,
                                weightserverIp, weightserverPort, layer, lambdaId, (bool) lastLayer);
             // This is backward.
             } else if (op == OP::REQ_BACKWARD) {
@@ -236,7 +236,7 @@ CoordServer::run() {
 
                 // Issue the lambda thread to serve the request.
                 char *weightserverIp = weightserverAddrs[globalLambdaId % weightserverAddrs.size()];
-                invokeFunction("eval-backward-gcn", dataserverIpCopy, dataserverPort,
+                invokeFunction("backward-gcn", dataserverIpCopy, dataserverPort,
                                weightserverIp, weightserverPort, layer, lambdaId, (bool) lastLayer);
             } else if (op == OP::INFO) {
                 unsigned numLambda = parse<unsigned>((char *) header.data(), 1);

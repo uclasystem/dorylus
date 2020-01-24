@@ -8,6 +8,11 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
+# Include AWSSDK
+if (NOT BUILD_GPU)
+    find_package(AWSSDK REQUIRED COMPONENTS lambda)
+endif()
+
 
 # Subdirectories, each needs a CMakeLists.txt.
 if(BUILD_GPU)

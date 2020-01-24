@@ -166,6 +166,9 @@ def process_target(ctx, target, args):
             state = response['Reservations'][0]['Instances'][0]['State']['Name']
             print("\t{:2d}  {}  {}  {:15}  {}".format(i, inst.id, inst.type, inst.pr_ip, state))
 
+    elif target == 'user':
+        print(user_name)
+
     # Dump the dshmachines file for the given context.
     elif target == 'dshfile':
         for inst in ctx.instances:

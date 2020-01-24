@@ -1,12 +1,13 @@
 #!/bin/bash
 
 ##
-## Install AWS SDK & Lambda API dependencies. TO be invoked on the remote machine.
+## Install AWS SDK
 ##
 
 
 cd ${HOME}
 
+sudo apt install libcurl4-openssl-dev libssl-dev
 
 # Install AWS-SDK.
 if [[ ! $( ldconfig -p | grep aws-cpp-sdk ) ]]; then    # Only install if not installed yet.
@@ -19,18 +20,4 @@ if [[ ! $( ldconfig -p | grep aws-cpp-sdk ) ]]; then    # Only install if not in
     sudo make install
     cd ../..
     rm -rf aws-sdk-cpp
-fi
-
-
-# Install AWS-Lambda C++ runtime.
-if [[ ! -d /usr/local/include/aws/lambda-runtime ]]; then
-    git clone https://github.com/awslabs/aws-lambda-cpp.git
-    cd aws-lambda-cpp
-    mkdir build
-    cd build
-    cmake .. -DCMAKE_BUILD_TYPE=Release
-    make
-    sudo make install
-    cd ../..
-    rm -rf aws-lambda-cpp
 fi

@@ -46,7 +46,7 @@ ServerWorker::work() {
             workersocket.recv(&identity);
             workersocket.recv(&header);
 
-            unsigned op = parse<unsigned>((char *) header.data(), 0);
+            OP op = parse<OP>((char *) header.data(), 0);
             unsigned arg = parse<unsigned>((char *) header.data(), 1);
 
             // std::string accMsg;
@@ -61,13 +61,19 @@ ServerWorker::work() {
 
             switch (op) {
                 case (OP::PULL_FORWARD):
+                    opTimer.start();
                     sendWeights(identity, arg);
+                    opTimer.stop();
                     break;
                 case (OP::PULL_BACKWARD):
+                    opTimer.start();
                     sendWeights(identity, arg);
+                    opTimer.stop();
                     break;
                 case (OP::PUSH_BACKWARD):
+                    opTimer.start();
                     recvUpdate(identity, arg);
+                    opTimer.stop();
                     break;
                 case (OP::INFO):    // Used to tell how many lambda threads it should expect for this round.
                     setBackpropNumLambdas(identity, arg);
@@ -80,6 +86,7 @@ ServerWorker::work() {
                     header.size() << std::endl;
                     break;  /** Not an op that I care about. */
             }
+            ws.addOpTime(op, opTimer.getTime());
         }
     } catch (std::exception& ex) { /** Context Termintated. */ }
 }

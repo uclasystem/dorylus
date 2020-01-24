@@ -10,12 +10,13 @@ add_library(resource_comm "resource_comm.cpp")
 target_link_libraries(resource_comm PRIVATE utils libdl.so)
 target_compile_options(resource_comm PRIVATE "-Wall" "-Werror" "-Wno-unused-but-set-variable" "-MMD")
 
-
-add_library(lambda_comm SHARED "lambda_comm.cpp" "lambdaworker.cpp")
-set_property(TARGET lambda_comm PROPERTY POSITION_INDEPENDENT_CODE ON)
-target_link_libraries(lambda_comm PRIVATE utils resource_comm common
-                                  PUBLIC  ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES})
-target_compile_options(lambda_comm PRIVATE "-Wall" "-Werror" "-Wno-reorder" "-MMD")
+if (NOT BUILD_GPU)
+    add_library(lambda_comm SHARED "lambda_comm.cpp" "lambdaworker.cpp")
+    set_property(TARGET lambda_comm PROPERTY POSITION_INDEPENDENT_CODE ON)
+    target_link_libraries(lambda_comm PRIVATE utils resource_comm common
+                                      PUBLIC  ${AWSSDK_LINK_LIBRARIES} ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES})
+    target_compile_options(lambda_comm PRIVATE "-Wall" "-Werror" "-Wno-reorder" "-MMD")
+endif()
 
 
 find_package(OpenMP REQUIRED)
