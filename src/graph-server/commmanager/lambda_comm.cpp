@@ -1,5 +1,4 @@
 #include "lambda_comm.hpp"
-#include <thread>
 
 
 static std::vector<LambdaWorker *> workers;
@@ -14,6 +13,10 @@ extern "C" void destroyComm(LambdaComm *lambdaComm) {
     delete lambdaComm;
 }
 
+const char* ALLOCATION_TAG = "LambdaComm";
+static std::shared_ptr<Aws::Lambda::LambdaClient> m_client;
+static unsigned globalNodeId = -1;
+
 /**
  *
  * Lambda communication manager constructor & destructor.
@@ -21,10 +24,21 @@ extern "C" void destroyComm(LambdaComm *lambdaComm) {
  */
 LambdaComm::LambdaComm(CommInfo &commInfo) :
         ResourceComm(), nodeIp(commInfo.nodeIp), dataserverPort(commInfo.dataserverPort),
+        wServersFile(commInfo.wServersFile), weightserverPort(commInfo.weightserverPort),
         coordserverIp(commInfo.coordserverIp), coordserverPort(commInfo.coordserverPort),
         nodeId(commInfo.nodeId), numNodes(commInfo.numNodes), ctx(1), halt(false), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), coordsocket(ctx, ZMQ_REQ),
         numLambdasForward(commInfo.numLambdasForward), numLambdasBackward(commInfo.numLambdasBackward), numListeners(numLambdasBackward), // TODO: Decide numListeners.
         countForward(0), countBackward(0), timeoutPeriod(0.0), currLayer(0) {
+    // If master, establish connections to weight servers
+    connectToWeightServers();
+
+    Aws::InitAPI(options);
+    Aws::Client::ClientConfiguration clientConfig;
+    clientConfig.requestTimeoutMs = 900000;
+    clientConfig.region = "us-east-2";
+    m_client = Aws::MakeShared<Aws::Lambda::LambdaClient>(ALLOCATION_TAG,
+                                                          clientConfig);
+    globalNodeId = nodeId;
 
     // Bind the proxy sockets.
     char dhost_port[50];
@@ -65,6 +79,9 @@ LambdaComm::~LambdaComm() {
         delete worker_threads[i];
     }
 
+    m_client = nullptr;
+    Aws::ShutdownAPI(options);
+
     if (forwardLambdaTable) {
         delete[] forwardLambdaTable;
     }
@@ -78,6 +95,88 @@ LambdaComm::~LambdaComm() {
 
     ctx.close();
 }
+
+void LambdaComm::connectToWeightServers() {
+    std::ifstream infile(wServersFile);
+    if (!infile.good())
+        printLog(nodeId, "Cannot open weight server file: %s [Reason: %s]\n",
+                 wServersFile.c_str(), std::strerror(errno));
+
+    assert(infile.good());
+
+    std::string line;
+    while (!infile.eof()) {
+        std::getline(infile, line);
+        boost::algorithm::trim(line);
+
+        if (line.length() == 0)
+            continue;
+
+        char *addr = strdup(line.c_str());
+
+        if (nodeId == 0) {
+            // While reading in string, also initialize connection if master
+            unsigned ind = weightservers.size();
+            weightsockets.push_back(zmq::socket_t(ctx, ZMQ_DEALER));
+            char identity[] = "graph-master";
+            weightsockets[ind].setsockopt(ZMQ_IDENTITY, identity, strlen(identity) + 1);
+            char whost_port[50];
+            sprintf(whost_port, "tcp://%s:%u", addr, weightserverPort);
+            weightsockets[ind].connect(whost_port);
+        }
+
+        weightservers.push_back(addr);
+    }
+}
+
+// LAMBDA INVOCATION AND RETURN FUNCTIONS
+void LambdaComm::invokeLambda(Aws::String funcName, const char* dataserver, unsigned dport,
+  char* weightserver, unsigned wport, unsigned layer, unsigned id,
+  bool lastLayer) {
+    Aws::Lambda::Model::InvokeRequest invReq;
+    invReq.SetFunctionName(funcName);
+    invReq.SetInvocationType(Aws::Lambda::Model::InvocationType::RequestResponse);
+    invReq.SetLogType(Aws::Lambda::Model::LogType::Tail);
+    std::shared_ptr<Aws::IOStream> payload = Aws::MakeShared<Aws::StringStream>("LambdaInvoke");
+
+    Aws::Utils::Json::JsonValue jsonPayload;
+    jsonPayload.WithString("dataserver", dataserver);
+    jsonPayload.WithString("weightserver", weightserver);
+    jsonPayload.WithInteger("wport", wport);
+    jsonPayload.WithInteger("dport", dport);
+    jsonPayload.WithInteger("layer", layer);    // For forward-prop: layer-ID; For backward-prop: numLayers.
+    jsonPayload.WithInteger("id", id);
+    jsonPayload.WithBool("lastLayer", lastLayer);
+    *payload << jsonPayload.View().WriteReadable();
+    invReq.SetBody(payload);
+    m_client->InvokeAsync(invReq, callback);
+}
+
+
+void LambdaComm::callback(const Aws::Lambda::LambdaClient *client,
+  const Aws::Lambda::Model::InvokeRequest &invReq,
+  const Aws::Lambda::Model::InvokeOutcome &outcome,
+  const std::shared_ptr<const Aws::Client::AsyncCallerContext> &context) {
+    if (outcome.IsSuccess()) {
+        Aws::Lambda::Model::InvokeResult& result = const_cast<Aws::Lambda::Model::InvokeResult&>(outcome.GetResult());
+
+        // JSON Parsing not working from Boost to AWS.
+        Aws::IOStream& payload = result.GetPayload();
+        Aws::String functionResult;
+        std::getline(payload, functionResult);
+
+        // No error found means a successful respond.
+        if (functionResult.find("error") != std::string::npos) {
+            std::cout << "\033[1;31m[ ERROR ]\033[0m\t" << functionResult << std::endl;
+        }
+    // Lambda returns error.
+    } else {
+        std::cout << "\033[1;31m[ ERROR ]\033[0m\t";
+    }
+
+}
+// END LAMBDA INVOCATION AND RETURN FUNCTIONS
+
 
 /**
  *
@@ -113,24 +212,15 @@ LambdaComm::requestForward(unsigned layer, bool lastLayer) {
 
 
 void
-LambdaComm::invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer) { // another option is to keep states in coordserver
-    zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::REQ_FORWARD, layer, nodeId * numLambdasForward + lambdaId, lambdaId, lastLayer);
-    coordsocket.send(header, ZMQ_SNDMORE);
-
+LambdaComm::invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer) {
     // forwardLambdaTable[lambdaId] = true;
     __sync_bool_compare_and_swap(forwardLambdaTable + lambdaId, false, true);
     if (lambdaId == 0) {
         forwardTimer = getTimer();
     }
 
-    zmq::message_t ip_msg(nodeIp.size());
-    std::memcpy(ip_msg.data(), nodeIp.c_str(), nodeIp.size());
-    coordsocket.send(ip_msg);
-
-    // Wait for a confirm ACK message.
-    zmq::message_t confirm;
-    coordsocket.recv(&confirm);
+    char* weightServerIp = weightservers[(nodeId * numLambdasForward + lambdaId) % weightservers.size()];
+    invokeLambda("eval-forward-gcn", nodeIp.c_str(), dataserverPort, weightServerIp, weightserverPort, layer, lambdaId, lastLayer);
 }
 
 
@@ -179,16 +269,29 @@ LambdaComm::newContextBackward(unsigned layer, FeatType *oldGradBuf, FeatType *n
 
     // sending backward lambda number to coord server and finally set up weight server.
     if (nodeId == 0) { // I am master and master will send the total number of lambdas of all graph servers.
-        zmq::message_t header(HEADER_SIZE);
-        populateHeader((char *)header.data(), OP::INFO, numNodes * numLambdasBackward);
-        coordsocket.send(header, ZMQ_SNDMORE);
-        zmq::message_t dummyIp;
-        coordsocket.send(dummyIp);
-        zmq::message_t confirm;
-        coordsocket.recv(&confirm);
-    }
+        unsigned numLambdas = numNodes * numLambdasBackward;
 
-    // printLog(nodeId, "Lambda BACKWARD context created.");
+        unsigned baseNumThreads = numLambdas / weightservers.size();
+        unsigned remainder = numLambdas % weightservers.size();
+
+        for (unsigned u = 0; u < remainder; ++u) {
+            sendInfoMessage(weightsockets[u % weightservers.size()], baseNumThreads + 1);
+        }
+
+        for (unsigned u = remainder; u < weightservers.size(); ++u) {
+            sendInfoMessage(weightsockets[u % weightservers.size()], baseNumThreads);
+        }
+    }
+}
+
+void
+LambdaComm::sendInfoMessage(zmq::socket_t& wsocket, unsigned numLambdas) {
+    zmq::message_t info_header(HEADER_SIZE);
+    populateHeader((char*) info_header.data(), OP::INFO, numLambdas);
+    wsocket.send(info_header);
+
+    zmq::message_t ack;
+    wsocket.recv(&ack);
 }
 
 
@@ -203,23 +306,14 @@ LambdaComm::requestBackward(unsigned layer, bool lastLayer) {
 
 void
 LambdaComm::invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLayer) {
-    zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::REQ_BACKWARD, layer, nodeId * numLambdasBackward + lambdaId, lambdaId, lastLayer);
-    coordsocket.send(header, ZMQ_SNDMORE);
-
     // backwardLambdaTable[lambdaId] = true;
     __sync_bool_compare_and_swap(backwardLambdaTable + lambdaId, false, true);
     if (lambdaId == 0) {
         backwardTimer = getTimer();
     }
 
-    zmq::message_t ip_msg(nodeIp.size());
-    std::memcpy(ip_msg.data(), nodeIp.c_str(), nodeIp.size());
-    coordsocket.send(ip_msg);
-
-    // Wait for a confirm ACK message.
-    zmq::message_t confirm;
-    coordsocket.recv(&confirm);
+    char* weightServerIp = weightservers[(nodeId * numLambdasForward + lambdaId) % weightservers.size()];
+    invokeLambda("eval-backward-gcn", nodeIp.c_str(), dataserverPort, weightServerIp, weightserverPort, layer, lambdaId, lastLayer);
 }
 
 void
@@ -246,17 +340,12 @@ LambdaComm::waitLambdaBackward(unsigned layer, bool lastLayer) {
 void
 LambdaComm::relaunchLambda(bool forward, unsigned layer, unsigned lambdaId, bool lastLayer) {
     printLog(nodeId, "Relaunch %s lambda %u...", (forward ? "FORWARD" : "BACKWARD"), lambdaId);
-    zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), forward ? OP::REQ_FORWARD : OP::REQ_BACKWARD, layer, nodeId * numLambdasBackward, lambdaId, lastLayer);
-    coordsocket.send(header, ZMQ_SNDMORE);
 
-    zmq::message_t ip_msg(nodeIp.size());
-    std::memcpy(ip_msg.data(), nodeIp.c_str(), nodeIp.size());
-    coordsocket.send(ip_msg);
-
-    // Wait for a confirm ACK message.
-    zmq::message_t confirm;
-    coordsocket.recv(&confirm);
+    Aws::String funcName = forward ? "eval-forward-gcn" : "eval-backward-gcn";
+    unsigned numLambdas = forward ? numLambdasForward : numLambdasBackward;
+    char* weightServerIp = weightservers[(nodeId * numLambdas + lambdaId) % weightservers.size()];
+    invokeLambda(funcName, nodeIp.c_str(), dataserverPort, weightServerIp,
+                 weightserverPort, layer, lambdaId, lastLayer);
 }
 
 
@@ -268,15 +357,16 @@ LambdaComm::relaunchLambda(bool forward, unsigned layer, unsigned lambdaId, bool
 void
 LambdaComm::sendShutdownMessage() {
     // Send kill message.
-    zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::TERM);
-    coordsocket.send(header, ZMQ_SNDMORE);
+    if (nodeId == 0) {
+        printLog(nodeId, "Terminating weight servers");
 
-    // Send dummy message since coordination server expects an IP as well.
-    zmq::message_t dummyIP;
-    coordsocket.send(dummyIP);
+        for (zmq::socket_t& wsocket : weightsockets) {
+            zmq::message_t header(HEADER_SIZE);
+            populateHeader((char*) header.data(), OP::TERM);
+            wsocket.send(header);
 
-    zmq::message_t confirm;
-    coordsocket.setsockopt(ZMQ_RCVTIMEO, 500);
-    coordsocket.recv(&confirm);
+            zmq::message_t ack;
+            wsocket.recv(&ack);
+        }
+    }
 }

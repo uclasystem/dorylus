@@ -18,6 +18,8 @@
 #include <vector>
 #include <zmq.hpp>
 
+#include <boost/algorithm/string/trim.hpp>
+
 #include <aws/core/Aws.h>
 #include <aws/core/utils/json/JsonSerializer.h>
 #include <aws/core/utils/Outcome.h>
@@ -53,18 +55,31 @@ public:
 
     LambdaComm(CommInfo &commInfo);
     ~LambdaComm();
+    void connectToWeightServers();
+
+    // Invoke lambda function
+    void invokeLambda(Aws::String funcName, const char* dataserver,
+      unsigned dport, char* weightserver, unsigned wport, unsigned layer,
+      unsigned id, bool lastLayer);
+    static void callback(const Aws::Lambda::LambdaClient *client,
+      const Aws::Lambda::Model::InvokeRequest &invReq,
+      const Aws::Lambda::Model::InvokeOutcome &outcome,
+      const std::shared_ptr<const Aws::Client::AsyncCallerContext> &context);
 
     // For forward-prop.
     void newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData,
-        FeatType *actData, unsigned numLocalVertices, unsigned numFeats,
-        unsigned numFeatsNext);
+      FeatType *actData, unsigned numLocalVertices, unsigned numFeats,
+      unsigned numFeatsNext);
     void requestForward(unsigned layer, bool lastLayer);
     void invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer);
     void waitLambdaForward(unsigned layer, bool lastLayer);
 
     // For backward-prop.
-    void newContextBackward(unsigned layer, FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
-                            unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim);
+    void newContextBackward(unsigned layer, FeatType *oldGradBuf,
+      FeatType *newGradBuf, std::vector<Matrix> *savedTensors,
+      FeatType *targetBuf, unsigned numLocalVertices, unsigned inFeatDim,
+      unsigned outFeatDim, unsigned targetDim);
+    void sendInfoMessage(zmq::socket_t& wsocket, unsigned numLambdas);
     void requestBackward(unsigned layer, bool lastLayer);
     void invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLayer);
     void waitLambdaBackward(unsigned layer, bool lastLayer);
@@ -78,11 +93,18 @@ public:
     friend LambdaWorker::LambdaWorker(LambdaComm *manager);
 
 // private:
+    // AWSSDK Members
+    Aws::SDKOptions options;
+
     unsigned numLambdasForward;
     unsigned numLambdasBackward;
     unsigned numListeners;
 
     unsigned currLayer;
+
+    std::string wServersFile;
+    std::vector<char*> weightservers;
+    unsigned weightserverPort;
 
     bool halt;
     std::vector<bool> trainPartitions;
@@ -101,6 +123,7 @@ public:
     zmq::socket_t frontend;
     zmq::socket_t backend;
     zmq::socket_t coordsocket;
+    std::vector<zmq::socket_t> weightsockets;
 
     unsigned nodeId;
     unsigned numNodes;
