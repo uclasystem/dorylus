@@ -35,6 +35,7 @@ ${EC2MAN_CMD} weight all pubip > wserverip
 
 ## Create `kill-all` file
 cp run/kill-all .
+sed -i s/{{user}}/$( python3 -m ec2man graph user )/ kill-all
 sed -i s/{{WSERVER0}}/$( ./manage-ec2 weight 0 prip )/ kill-all
 sed -i s/{{GSERVER0}}/$( ./manage-ec2 graph 0 prip )/ kill-all
 
