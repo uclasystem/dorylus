@@ -1,10 +1,7 @@
 #ifndef __COMP_SERVER_HPP__
 #define __COMP_SERVER_HPP__
 
-
-
 #include "../commmanager/GPU_comm.hpp"
-
 #include <chrono>
 #include <iostream>
 #include <fstream>
@@ -46,7 +43,7 @@ class ComputingServer {
     ComputingUnit cu;
     GPUComm *gpuComm;
     unsigned totalLayers;
-
+    CuMatrix weights;
 
 };
 
