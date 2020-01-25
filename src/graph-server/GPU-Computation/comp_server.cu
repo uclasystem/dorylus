@@ -1,4 +1,5 @@
 #include "comp_server.cuh"
+#include "../../common/utils.hpp"
 
 void loadWeightServers(std::vector<char *> &addresses, const std::string &wServersFile) {
     std::ifstream infile(wServersFile);
@@ -31,10 +32,10 @@ ComputingServer::ComputingServer(GPUComm *gpu_comm): cu(ComputingUnit::getInstan
 
     //send INFO to weight server
     unsigned numNodes = gpuComm->numNodes;
-    if(nodeId < weightServerAddrs.size()) {
+    if (nodeId < weightServerAddrs.size()) {
         unsigned count = 0;
         for (size_t i = 0; i < numNodes; ++i) {
-            if(i % weightServerAddrs.size() == nodeId)
+            if (i % weightServerAddrs.size() == nodeId)
                 count += 1;
         }
         msgService.sendInfoMessage(count);
@@ -48,36 +49,40 @@ void ComputingServer::terminate() {
 }
 
 void ComputingServer::processForward(unsigned layer, bool lastLayer) {
-    if(layer == 0)
+    if (layer == 0)
         CuMatrix::freeGPU();
     Matrix feats = gpuComm->actMatrix;
     FeatType *z_data = gpuComm->zData;
     FeatType *act_z = gpuComm->actData;
 
-    auto t1 = std::chrono::high_resolution_clock::now();
+    auto tw = gtimers.getTimer("WeightFetchWait");
+    auto tz = gtimers.getTimer("CopyZ");
+    auto ta = gtimers.getTimer("CopyA");
+    auto tc = gtimers.getTimer("ComputeForward");
+    tc->start();
+    tw->start();
     Matrix weight = msgService.getWeightMatrix(layer);
-    auto t2 = std::chrono::high_resolution_clock::now();
-    std::cout << "Forward Network "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count()
-              << " milliseconds\n";
+    tw->stop();
     CuMatrix z = cu.dot(feats, weight);
+    tz->start();
     memcpy(z_data, z.getData(), z.getDataSize());
-
-    if(!lastLayer) {
+    tz->stop();
+    if (!lastLayer) {
         cu.activate(z);//z data get activated ...
+        ta->start();
+        z.updateMatrixFromGPU();
         memcpy(act_z, z.getData(), z.getDataSize());
+        ta->stop();
     } else {
         CuMatrix cuPredictions = cu.softmaxRows(z);
+        ta->start();
         cuPredictions.updateMatrixFromGPU();
         memcpy(act_z, cuPredictions.getData(), z.getDataSize());
+        ta->stop();
         delete[] cuPredictions.getData();
     }
+    tc->stop();
     delete[] z.getData();
-    auto t3 = std::chrono::high_resolution_clock::now();
-    std::cout << "Forward Compute "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t2).count()
-              << " milliseconds\n";
-
 }
 
 
@@ -99,18 +104,25 @@ void ComputingServer::processBackward(unsigned layer, bool lastLayer) {
         gradLoss(layer);
     } else {
         gradLayer(layer);
-        if(layer == 0)
+        if (layer == 0)
             msgService.prefetchWeightsMatrix(totalLayers);
     }
 }
 
 void
 ComputingServer::gradLayer(unsigned layer) {
-    auto t3 = std::chrono::high_resolution_clock::now();
+    auto tw = gtimers.getTimer("WeightUpdateLayerWait");
+    auto tc = gtimers.getTimer("ComputeGradLayer");
+    auto tm = gtimers.getTimer("MemcpyBackward2GPU");
+
+    tm->start();
     Matrix grad = gpuComm->oldGradMatrix;
     CuMatrix cuGrad = cu.wrapMatrix(grad);
     Matrix z = gpuComm->savedTensors[layer][TYPE::Z - 1];
     CuMatrix cuZ = cu.wrapMatrix(z);
+    tm->stop();
+
+    tc->start();
     CuMatrix interGrad = cu.activateBackward(cuZ, cuGrad);
 
     Matrix weight = msgService.getWeightMatrix(layer);
@@ -122,25 +134,28 @@ ComputingServer::gradLayer(unsigned layer) {
     CuMatrix cuAh = cu.wrapMatrix(ah);
     CuMatrix cuWeightUpdates = cuAh.dot(interGrad, true, false);
     Matrix weightUpdates = cuWeightUpdates.getMatrix();
-
-    auto t2 = std::chrono::high_resolution_clock::now();
-    std::cout << "Backward Compute "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t3).count()
-              << " milliseconds\n";
-
+    tc->stop();
+    tw->start();
     msgService.sendWeightUpdate(weightUpdates, layer);
+    tw->stop();
 }
 
 
 void
 ComputingServer::gradLoss(unsigned layer) {
-    auto t3 = std::chrono::high_resolution_clock::now();
+    auto tw = gtimers.getTimer("WeightUpdateLossWait");
+    auto tc = gtimers.getTimer("ComputeGradLoss");
+    auto tm = gtimers.getTimer("MemcpyBackward2GPU");
+
+    tm->start();
     Matrix predictions = gpuComm->savedTensors[layer][TYPE::ACT - 1];
     Matrix labels = gpuComm->targetMatrix;
 
     CuMatrix cuPredictions = cu.wrapMatrix(predictions);
     CuMatrix cuLabels = cu.wrapMatrix(labels);
+    tm->stop();
 
+    tc->start();
     CuMatrix d_output = cu.hadamardSub(cuPredictions, cuLabels);
     Matrix weight = msgService.getWeightMatrix(layer);
     CuMatrix cuWeights = cu.wrapMatrix(weight);
@@ -152,12 +167,11 @@ ComputingServer::gradLoss(unsigned layer) {
     CuMatrix cuAh = cu.wrapMatrix(ah);
     CuMatrix cuWeightUpdates = cuAh.dot(d_output, true, false);
     Matrix weightUpdates = cuWeightUpdates.getMatrix();
+    tc->stop();
 
-    auto t2 = std::chrono::high_resolution_clock::now();
-    std::cout << "Backward(Loss) Compute "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t3).count()
-              << " milliseconds\n";
+    tw->start();
     msgService.sendWeightUpdate(weightUpdates, layer);
+    tw->stop();
 }
 
 
