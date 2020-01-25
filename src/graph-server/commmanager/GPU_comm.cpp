@@ -40,7 +40,7 @@ void GPUComm::newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zDa
 }
 
 void GPUComm::requestForward(unsigned layer, bool lastLayer){
-        comp_server->processForward(layer,lastLayer);
+    comp_server->processForward(layer,lastLayer);
 }
 
 

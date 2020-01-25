@@ -33,16 +33,8 @@ case $1 in
         dsh -f ${DSHMACHINESFILE} -c "killall -u $( whoami ) weightserver"
         ;;
 
-    #
-    # Kill coordserver.
-    #
-    "coord")
-        echo "Killing existing 'coordserver' processes..."
-        killall -u $( whoami ) coordserver
-        ;;
-
     *)
-        echo "Must specify a valid context 'graph' / 'weight' / 'coord'."
+        echo "Must specify a valid context 'graph' / 'weight'"
         echo "Usage: ./run/kill-zombies <Context>"
         exit 1
         ;;

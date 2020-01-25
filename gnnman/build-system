@@ -17,7 +17,7 @@ cd $( dirname $0 )/..
 EC2MAN_CMD="python3 -m ec2man"
 
 
-if [[ ! -z $1 ]] && [[ $1 != "graph" ]] && [[ $1 != "weight" ]] && [[ $1 != "coord" ]]; then
+if [[ ! -z $1 ]] && [[ $1 != "graph" ]] && [[ $1 != "weight" ]]; then
     echo "Context '$1' not recognized."
     echo "Usage: ./gnnman/build-system [Context]    # Empty means build all."
     exit 1
@@ -36,11 +36,4 @@ fi
 if [[ -z $1 ]] || [[ $1 == "weight" ]]; then
     echo "Processing context 'weight'..."
     ${EC2MAN_CMD} weight 0 ssh -t "cd gnn-lambda && ./gnnman/helpers/weightserver.bld && ./gnnman/helpers/send-folder build"
-fi
-
-
-# For coordination servers. Normally only one coordination server, so no need to send out.
-if [[ -z $1 ]] || [[ $1 == "coord" ]]; then
-    echo "Processing context 'coord'..."
-    ${EC2MAN_CMD} coord 0 ssh -t "cd gnn-lambda && ./gnnman/helpers/coordserver.bld"
 fi

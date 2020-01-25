@@ -48,7 +48,6 @@ class GPUComm : public ResourceComm {
     //cannot be called if newContextBackward is never called due to the assignment of targetmatrix
     void sendTargetMatrix();
 
-    // Send a message to the coordination server to shutdown.
     void sendShutdownMessage();
 
     friend class ComputingServer;

@@ -2,7 +2,7 @@
 
 ##
 ## Start all the machines listed in the manager. Generates proper dshmachine files and put them on to the machines.
-## Generates weightserver info file (send to coordserver) and coordserver info file (send to graphserver) as well.
+## Generates weightserver info file
 ## Also, the `layerconfig` file is sent to all graphservers and weightservers.
 ##
 ## Usage: $ ./gnnman/setup-cluster
@@ -22,7 +22,6 @@ EC2MAN_CMD="python3 -m ec2man"
 
 # Start all machines...
 ${EC2MAN_CMD} graph all start
-${EC2MAN_CMD} coord all start
 ${EC2MAN_CMD} weight all start
 
 
@@ -30,17 +29,16 @@ ${EC2MAN_CMD} weight all start
 echo "Processing context 'graph'..."
 
 ${EC2MAN_CMD} graph dshfile > dshmachines
-${EC2MAN_CMD} coord 0 pubip > cserverip
 ${EC2MAN_CMD} weight all pubip > wserverip
 
 ## Create `kill-all` file
 cp run/kill-all .
 sed -i s/{{user}}/$( python3 -m ec2man graph user )/ kill-all
-sed -i s/{{WSERVER0}}/$( ./manage-ec2 weight 0 prip )/ kill-all
-sed -i s/{{GSERVER0}}/$( ./manage-ec2 graph 0 prip )/ kill-all
+sed -i s/{{WSERVER0}}/$( python3 -m ec2man weight 0 prip )/ kill-all
+sed -i s/{{GSERVER0}}/$( python3 -m ec2man graph 0 prip )/ kill-all
 
-${EC2MAN_CMD} graph all put wserverip run/wserverport cserverip dshmachines run/*.config run/cserverport run/gserverport run/dataport run/ctrlport run/nodeport run/numlambdasforward run/numlambdasbackward kill-all
-rm -f dshmachines cserverip kill-all
+${EC2MAN_CMD} graph all put wserverip run/wserverport dshmachines run/*.config run/gserverport run/dataport run/ctrlport run/nodeport run/numlambdasforward run/numlambdasbackward kill-all ~/.aws
+rm -f dshmachines kill-all wserverip
 
 NUM_GRAPH_NODES=$(( $( ${EC2MAN_CMD} graph info | wc -l | awk '{print $1}' ) - 1 ))
 for i in $( seq 0 $(( ${NUM_GRAPH_NODES} - 1 )) ); do
@@ -63,11 +61,3 @@ done
 ${EC2MAN_CMD} weight dshfile > dshmachines
 ${EC2MAN_CMD} weight all put dshmachines run/dataport run/*.config run/wserverport
 rm -f dshmachines
-
-
-# For coordination servers.
-echo "Processing context 'coord'..."
-
-${EC2MAN_CMD} weight all pubip > wserverip
-${EC2MAN_CMD} coord all put wserverip run/cserverport run/gserverport run/wserverport
-rm -f wserverip

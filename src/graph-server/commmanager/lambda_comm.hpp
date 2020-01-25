@@ -86,7 +86,7 @@ public:
 
     void relaunchLambda(bool forward, unsigned layer, unsigned lambdaId, bool lastLayer);
 
-    // Send a message to the coordination server to shutdown.
+    // Send shutdown messages to the weight servers
     void sendShutdownMessage();
 
     // simple LambdaWorker initialization
@@ -122,16 +122,12 @@ public:
     zmq::context_t ctx;
     zmq::socket_t frontend;
     zmq::socket_t backend;
-    zmq::socket_t coordsocket;
     std::vector<zmq::socket_t> weightsockets;
 
     unsigned nodeId;
     unsigned numNodes;
     std::string nodeIp;
     unsigned dataserverPort;
-
-    std::string coordserverIp;
-    unsigned coordserverPort;
 };
 
 

@@ -148,8 +148,6 @@ Engine::setUpCommInfo() {
     commInfo.nodeIp = nodeManager.getNode(nodeId).pubip;
     commInfo.nodeId = nodeId;
     commInfo.dataserverPort = dataserverPort;
-    commInfo.coordserverIp = coordserverIp;
-    commInfo.coordserverPort = coordserverPort;
     commInfo.numLambdasForward = numLambdasForward;
     commInfo.numLambdasBackward = numLambdasBackward;
     commInfo.numNodes = numNodes;
@@ -1219,11 +1217,9 @@ Engine::parseArgs(int argc, char *argv[]) {
 
     ("tmpdir", boost::program_options::value<std::string>(), "Temporary directory")
 
-    ("dataserverport", boost::program_options::value<unsigned>(), "The port exposing to the coordination server")
-    ("weightserverport", boost::program_options::value<unsigned>(), "The port of the listener on the coordination server")
+    ("dataserverport", boost::program_options::value<unsigned>(), "The port exposing to the lambdas")
+    ("weightserverport", boost::program_options::value<unsigned>(), "The port of the listener on the lambdas")
     ("wserveripfile", boost::program_options::value<std::string>(), "The file contains the public IP addresses of the weight server")
-    ("coordserverip", boost::program_options::value<std::string>(), "The private IP address of the coordination server")
-    ("coordserverport", boost::program_options::value<unsigned>(), "The port of the listener on the coordination server")
 
     // Default is directed graph!
     ("undirected", boost::program_options::value<unsigned>()->default_value(unsigned(0), "0"), "Graph type is undirected or not")
@@ -1290,12 +1286,6 @@ Engine::parseArgs(int argc, char *argv[]) {
 
     assert(vm.count("wserveripfile"));
     weightserverIPFile = vm["wserveripfile"].as<std::string>();
-
-    assert(vm.count("coordserverip"));
-    coordserverIp = vm["coordserverip"].as<std::string>();
-
-    assert(vm.count("coordserverport"));
-    coordserverPort = vm["coordserverport"].as<unsigned>();
 
     assert(vm.count("undirected"));
     undirected = (vm["undirected"].as<unsigned>() == 0) ? false : true;
