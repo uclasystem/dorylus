@@ -15,12 +15,16 @@
 
 #include "engine.hpp"
 #include "dataloader.hpp"
+#include <unordered_set>
 
 #ifdef _GPU_ENABLED_
 #include "../GPU-Computation/comp_unit.cuh"
+#include "../../common/utils.hpp"
 static CuMatrix *NormAdjMatrixIn = NULL;
 static CuMatrix *NormAdjMatrixOut = NULL;
+static ComputingUnit cu = ComputingUnit::getInstance();
 #endif
+
 
 /**
  *
@@ -60,7 +64,6 @@ Engine::init(int argc, char *argv[]) {
     graph.init(graphFile);
 #ifdef _GPU_ENABLED_
     printLog(nodeId, "Loading SparseMatrices for GPU");
-    ComputingUnit cu = ComputingUnit::getInstance();
     NormAdjMatrixIn = new CuMatrix();
     NormAdjMatrixOut = new CuMatrix();
     NormAdjMatrixIn->loadSpCSC(cu.spHandle, graph);
@@ -68,7 +71,20 @@ Engine::init(int argc, char *argv[]) {
 #endif
 
     printGraphMetrics();
+    std::unordered_set<unsigned> sendForward;
+    std::unordered_set<unsigned> sendBackward;
 
+    for (unsigned i=0;i<numNodes;++i){
+        for(unsigned j=0;j<graph.forwardLocalVtxDsts[i].size();++j){
+            sendForward.insert((graph.forwardLocalVtxDsts[i])[j]);
+        }
+        for(unsigned j=0;j<graph.forwardLocalVtxDsts[i].size();++j){
+            sendBackward.insert((graph.backwardLocalVtxDsts[i])[j]);
+        }
+    }
+    printLog(nodeId,"push forward cnt %lu",sendForward.size());
+    printLog(nodeId,"push backward cnt %lu",sendBackward.size());
+    
 
     // Save intermediate tensors during forward phase for backward computation.
     savedTensors = new std::vector<Matrix> [numLayers];
@@ -381,18 +397,33 @@ struct AggOPArgs {
 
 #ifdef _GPU_ENABLED_
 FeatType *Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim) {
+
+    auto t0 = gtimers.getTimer("Memcpy2GPUForwardTimer");
+    auto t1 = gtimers.getTimer("AggForwardTimer");
+    auto t2 = gtimers.getTimer("ComputeTransForwardTimer");
+    auto t3 = gtimers.getTimer("Memcpy2RAMForwardTimer");
+
     double sttTimer = getTimer();
-    ComputingUnit cu = ComputingUnit::getInstance();
     FeatType *outputTensor = new FeatType [(vtcsCnt) * featDim];
     CuMatrix feat;
+    t0->start();
     feat.loadSpDense(vtcsTensor, forwardGhostVerticesData,
                      graph.localVtxCnt, graph.srcGhostCnt,
                      featDim);
+    cudaDeviceSynchronize();
+    t0->stop();
+    t1->start();
     CuMatrix out = cu.aggregate(*NormAdjMatrixIn, feat);
+    cudaDeviceSynchronize();
+    t1->stop();
+    t2->start();
     out = out.transpose();
     cudaDeviceSynchronize();
+    t2->stop();
+    t3->start();
     out.setData(outputTensor);
     out.updateMatrixFromGPU();
+    t3->stop();
 
     currId = vtcsCnt;
 
@@ -779,18 +810,32 @@ Engine::forwardGhostCommunicator(unsigned tid, void *args) {
 #ifdef _GPU_ENABLED_
 FeatType *
 Engine::aggregateBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim) {
+    auto t0 = gtimers.getTimer("Memcpy2GPUBackwardTimer");
+    auto t1 = gtimers.getTimer("AggBackwardTimer");
+    auto t2 = gtimers.getTimer("ComputeTransBackwardTimer");
+    auto t3 = gtimers.getTimer("Memcpy2RAMBackwardTimer");
     double sttTimer = getTimer();
-    ComputingUnit cu = ComputingUnit::getInstance();
     currId = 0;
     FeatType *outputTensor = new FeatType [vtcsCnt * featDim];
     CuMatrix feat;
+    t0->start();
     feat.loadSpDense(gradTensor, backwardGhostVerticesData,
                      graph.localVtxCnt, graph.dstGhostCnt,
                      featDim);
+    cudaDeviceSynchronize();
+    t0->stop();
+    t1->start();
     CuMatrix out = cu.aggregate(*NormAdjMatrixOut, feat);
+    cudaDeviceSynchronize();
+    t1->stop();
+    t2->start();
     out = out.transpose();
+    cudaDeviceSynchronize();
+    t2->stop();
+    t3->start();
     out.setData(outputTensor);
     out.updateMatrixFromGPU();
+    t3->stop();
 
     currId = vtcsCnt;
 
@@ -1160,6 +1205,7 @@ Engine::calcAcc(FeatType *predicts, FeatType *labels, unsigned vtcsCnt, unsigned
  */
 void
 Engine::printEngineMetrics() {
+    gtimers.report();
     printLog(nodeId, "<EM>: Using %u forward lambdas and %u bacward lambdas",
              numLambdasForward, numLambdasBackward);
     printLog(nodeId, "<EM>: Initialization takes %.3lf ms", timeInit);

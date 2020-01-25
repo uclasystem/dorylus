@@ -4,25 +4,14 @@ static void doNotFreeBuffer(void *data, void *hint) {}
 void
 MessageService::sendWeightUpdate(Matrix &matrix, unsigned layer) {
     if (wSndThread.joinable()) {
-        auto t1 = std::chrono::high_resolution_clock::now();
         wSndThread.join();
-        auto t2 = std::chrono::high_resolution_clock::now();
-        std::cout << "sendWeightUpdate wait "
-                  << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count()
-                  << " milliseconds\n";
     }
     if (wReqThread.joinable()) {
-        auto t2 = std::chrono::high_resolution_clock::now();
         wReqThread.join();
-        auto t3 = std::chrono::high_resolution_clock::now();
-        std::cout << "sendWeightUpdate wait 2 "
-                  << std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t2).count()
-                  << " milliseconds\n";
     }
 
     wSndThread = std::thread(
     [&](Matrix matrix, unsigned layer) {
-        auto t1 = std::chrono::high_resolution_clock::now();
         // Send push header.
         zmq::message_t header(HEADER_SIZE);
         populateHeader((char *) header.data(), OP::PUSH_BACKWARD, layer, matrix.getRows(),
@@ -34,11 +23,6 @@ MessageService::sendWeightUpdate(Matrix &matrix, unsigned layer) {
         // Wait for updates settled reply.
         zmq::message_t confirm;
         weightSocket->recv(&confirm);
-
-        auto t2 = std::chrono::high_resolution_clock::now();
-        std::cout << "sendWeightUpdate [NETWORK] "
-                  << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count()
-                  << " milliseconds\n";
     }, matrix, layer);
 }
 
@@ -70,34 +54,18 @@ void MessageService::setUpWeightSocket(char *addr) {
 // TODO: This can be improved by making it layer-wise prefectching
 void MessageService::prefetchWeightsMatrix(unsigned totalLayers) {
     if (wSndThread.joinable()) {
-        auto t1 = std::chrono::high_resolution_clock::now();
         wSndThread.join();
-        auto t2 = std::chrono::high_resolution_clock::now();
-        std::cout << "sendWeightUpdate wait "
-                  << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count()
-                  << " milliseconds\n";
     }
     if (wReqThread.joinable()) {
-        auto t2 = std::chrono::high_resolution_clock::now();
         wReqThread.join();
-        auto t3 = std::chrono::high_resolution_clock::now();
-        std::cout << "requestWeightsMatrix Wait "
-                  << std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t2).count()
-                  << " milliseconds\n";
     }
     if (infoThread.joinable()) {
-        auto t2 = std::chrono::high_resolution_clock::now();
         infoThread.join();
-        auto t3 = std::chrono::high_resolution_clock::now();
-        std::cout << "Info Wait "
-                  << std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t2).count()
-                  << " milliseconds\n";
     }
 
     weights = std::vector<Matrix *>(totalLayers, 0);
     wReqThread = std::thread(
     [ &, totalLayers]() {
-        auto t1 = std::chrono::high_resolution_clock::now();
         if (wSndThread.joinable())
             wSndThread.join();
 
@@ -132,11 +100,6 @@ void MessageService::prefetchWeightsMatrix(unsigned totalLayers) {
                 weights[j] = new Matrix(m.getRows(), m.getCols(), m.getData());
             }
         }
-        auto t2 = std::chrono::high_resolution_clock::now();
-        std::cout << "prefetchWeightsMatrix [NETWORK] "
-                  << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count()
-                  << " milliseconds\n";
-
     });
 }
 
@@ -149,7 +112,6 @@ Matrix MessageService::getWeightMatrix(unsigned layer) {
 }
 
 void MessageService::sendInfoMessage(unsigned numLambdas) {
-    printf("sendInfoMessage \n");
     infoThread = std::thread(
     [ &, numLambdas]() {
         zmq::message_t header(HEADER_SIZE);

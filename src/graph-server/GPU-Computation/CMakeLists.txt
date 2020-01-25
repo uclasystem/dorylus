@@ -19,6 +19,7 @@ if(BUILD_GPU)
 	cuda_add_library(ComputingServer SHARED "comp_server.cu")
 	set_property(TARGET ComputingServer PROPERTY POSITION_INDEPENDENT_CODE ON)
 	target_link_libraries(ComputingServer
+						common
 						MessageService
 						${Boost_LIBRARIES}
 						ComputingUnit CuMatrix utils)
