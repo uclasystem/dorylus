@@ -230,9 +230,8 @@ LambdaWorker::recvLambdaResults(zmq::message_t& client_id, unsigned partId) {
     // Receive the pushed-back results.
     zmq::message_t data;
     workersocket.recv(&data);
-    workersocket.recv(&data);
-
     std::memcpy(partitionZStart, data.data(), data.size());
+    workersocket.recv(&data);
     std::memcpy(partitionActStart, data.data(), data.size());
 
     // Send confirm ACK message.
