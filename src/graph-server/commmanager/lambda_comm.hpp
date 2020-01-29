@@ -38,10 +38,14 @@
 #include "../../common/utils.hpp"
 
 
-#define SLEEP_PERIOD 5000   // sleep 5000us and then check the condition.
+#define SLEEP_PERIOD 5000   // sleep SLEEP_PERIOD us and then check the condition.
 #define TIMEOUT_PERIOD 10000 // wait for up to TIMEOUT_PERIOD ms before relaunching
 #define MIN_TIMEOUT 500     // at least wait for MIN_TIMEOUT ms before relaunching
 #define EXP_BACKOFF_FACTOR 1.5 // base of exponential backoff
+
+#define FORWARD_FUNC "forward-gcn"
+#define BACKWARD_FUNC "backward-gcn"
+
 
 class LambdaWorker;
 
@@ -87,6 +91,8 @@ public:
 
     void relaunchLambda(bool forward, unsigned layer, unsigned lambdaId, bool lastLayer);
 
+    virtual unsigned getRelaunchCnt() { return relaunchCnt; };
+
     // Send shutdown messages to the weight servers
     void sendShutdownMessage();
 
@@ -120,6 +126,8 @@ public:
     bool *backwardLambdaTable;
     double backwardTimer;
 
+    unsigned relaunchCnt;
+
     zmq::context_t ctx;
     zmq::socket_t frontend;
     zmq::socket_t backend;
@@ -130,6 +138,5 @@ public:
     std::string nodeIp;
     unsigned dataserverPort;
 };
-
 
 #endif // LAMBDA_COMM_HPP

@@ -50,6 +50,8 @@ public:
       Matrix targetMatrix_, std::vector<Matrix> *savedTensors,
       bool _pipeline = false);
 
+    unsigned tid;
+
 protected:
     LambdaComm *manager;
 
@@ -78,6 +80,7 @@ private:
     //
     // Backward-prop stuff.
     //
+    void sendGCNChunks(zmq::message_t &client_id, unsigned partId, unsigned layer);
 
     // Partitions the needed matrices according to the partition id and
     // send that partition to the lambda thread for computation.
@@ -99,6 +102,26 @@ private:
     // Callback when lambda results are returned
     bool pipeline;
     PairQueue* q_ptr;
+
+    // timing info for profiling
+    unsigned recvTS;
+    unsigned sendTS;
+
+    unsigned currTS() {
+        auto now = std::chrono::system_clock::now().time_since_epoch();
+        unsigned ts = std::chrono::duration_cast<std::chrono::milliseconds>(now).count() - BASE_TMSP;
+        return ts;
+    }
+    void setTSinHdr(void *hdr_buf) {
+        sendTS = currTS();
+        *((unsigned *)hdr_buf + 5) = recvTS;
+        *((unsigned *)hdr_buf + 6) = sendTS;
+    }
+    void setTSinCfm(void *cfm_buf) {
+        sendTS = currTS();
+        *((unsigned *)cfm_buf) = recvTS;
+        *((unsigned *)cfm_buf + 1) = sendTS;
+    }
 };
 
 

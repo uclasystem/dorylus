@@ -1,6 +1,8 @@
 #include "lambdaworker.hpp"
 #include "lambda_comm.hpp"
 
+#include <chrono>
+#include <iomanip>
 
 
 extern std::mutex producerQueueLock;
@@ -29,6 +31,8 @@ LambdaWorker::~LambdaWorker() {
  */
 void
 LambdaWorker::work() {
+    double serveTimer = getTimer();
+
     try {
         while (!(manager->halt)) {
             zmq::message_t identity;
@@ -45,10 +49,13 @@ LambdaWorker::work() {
             if (!workersocket.recv(&header)) {
                 continue;
             }
-            if (header.size() != HEADER_SIZE) {
+            if (header.size() != HEADER_SIZE && header.size() != 20) {
                 printLog(manager->nodeId, "header size %u", header.size());
                 continue;
             }
+
+            double sttTimer = getTimer() - serveTimer;
+            recvTS = currTS();
 
             OP op = parse<OP>((char *) header.data(), 0);
             unsigned partId2 = parse<unsigned>((char *) header.data(), 1);
@@ -113,17 +120,7 @@ LambdaWorker::work() {
                         break;
                     }
                     if (manager->backwardLambdaTable[partId]) {
-                        // printLog(manager->nodeId, "recv req from %d", partId);
-                        unsigned matType = parse<unsigned>((char *) header.data(), 2);
-                        if (matType == TYPE::GRAD) {
-                            sendChunk(oldGradMatrix, identity, partId, false);
-                        } else if (matType == TYPE::AH || matType == TYPE::Z || matType == TYPE::ACT) {
-                            unsigned layer = parse<unsigned>((char *) header.data(), 3);
-                            sendChunk(savedTensors[layer][matType - 1], identity, partId, false);
-                        } else if (matType == TYPE::LAB) {
-                            sendChunk(targetMatrix, identity, partId, false);
-                        }
-                        // printLog(manager->nodeId, "send chunk to %d", partId);
+                        sendGCNChunks(identity, partId, layer);
                     } else {
                         workersocket.send(identity, ZMQ_SNDMORE);
                         zmq::message_t header(HEADER_SIZE);
@@ -157,6 +154,12 @@ LambdaWorker::work() {
                         printLog(manager->nodeId, "unknown op %d, part id %d", op, partId);
                     }
                     break;  /** Not an op that I care about. */
+            }
+            double endTimer = getTimer() - serveTimer;
+            if (false && manager->nodeId == 0 && layer == 0 && (op == OP::PULL_BACKWARD ||op == OP::PUSH_BACKWARD)) {
+                unsigned me = currTS();
+                unsigned lambdaTime = parse<unsigned>((char *)header.data(), 4);
+                printLog(manager->nodeId, "tid %u, op %u, stt: %.3lf, end: %.3lf, lambda: %u, me: %u", tid, op, sttTimer, endTimer, lambdaTime, me);
             }
         }
     } catch (std::exception& ex) { /** Context Termintated. */ }
@@ -199,14 +202,13 @@ LambdaWorker::sendAggregatedChunk(zmq::message_t& client_id, unsigned partId) {
         workersocket.send(client_id, ZMQ_SNDMORE);
         zmq::message_t header(HEADER_SIZE);
         populateHeader((char *) header.data(), ERR_HEADER_FIELD, ERR_HEADER_FIELD, ERR_HEADER_FIELD, ERR_HEADER_FIELD);
+        setTSinHdr(header.data());
         workersocket.send(header);
 
         printLog(manager->nodeId, "[ERROR] Got a request for partition %u, but number of lambdas is %u", partId, manager->numLambdasForward);
 
     // Partition id is valid, so send the matrix segment.
     } else {
-        workersocket.send(client_id, ZMQ_SNDMORE);
-
         // Check to make sure that the bounds of this partition do not exceed the bounds of the data array.
         // If they do, set partition end to the end of the array.
         unsigned partRows = std::ceil((float) actMatrix.getRows() / (float) manager->numLambdasForward);
@@ -218,10 +220,13 @@ LambdaWorker::sendAggregatedChunk(zmq::message_t& client_id, unsigned partId) {
 
         zmq::message_t header(HEADER_SIZE);
         populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, actMatrix.getCols());
-        workersocket.send(header, ZMQ_SNDMORE);
+        setTSinHdr(header.data());
 
         zmq::message_t partitionData(bufSize);
         std::memcpy(partitionData.data(), partitionStart, bufSize);
+
+        workersocket.send(client_id, ZMQ_SNDMORE);
+        workersocket.send(header, ZMQ_SNDMORE);
         workersocket.send(partitionData);
     }
 }
@@ -240,7 +245,8 @@ LambdaWorker::recvLambdaResults(zmq::message_t& client_id, unsigned partId) {
     std::memcpy(partitionActStart, data.data(), data.size());
 
     // Send confirm ACK message.
-    zmq::message_t confirm;
+    zmq::message_t confirm(2 * sizeof(unsigned));
+    setTSinCfm(confirm.data());
     workersocket.send(client_id, ZMQ_SNDMORE);
     workersocket.send(confirm);
 
@@ -271,6 +277,100 @@ LambdaWorker::fakeRecvChunks(zmq::message_t& client_id, unsigned chunkCnt) {
 }
 
 void
+LambdaWorker::sendGCNChunks(zmq::message_t& client_id, unsigned partId, unsigned layer) {
+    // Reject a send request if the partition id is invalid.
+    unsigned numLambdas = manager->numLambdasBackward;
+    if (partId >= numLambdas) {
+        workersocket.send(client_id, ZMQ_SNDMORE);
+        zmq::message_t header(HEADER_SIZE);
+        populateHeader((char *) header.data(), ERR_HEADER_FIELD, ERR_HEADER_FIELD, ERR_HEADER_FIELD, ERR_HEADER_FIELD);
+        setTSinHdr(header.data());
+        workersocket.send(header);
+
+        printLog(manager->nodeId, "[ERROR] Got a request for partition %u, but number of lambdas is %u", partId, numLambdas);
+    // Partition id is valid, so send the matrix segment.
+    } else {
+        // Check to make sure that the bounds of this partition do not exceed the bounds of the data array.
+        // If they do, set partition end to the end of the array.
+        unsigned partRows;
+        unsigned thisPartRows;
+        unsigned bufSize;
+        FeatType *partitionStart;
+        if (layer == 0) { // gradLayer
+            // grad mat
+            Matrix &gradMat = oldGradMatrix;
+            partRows = (gradMat.getRows() + numLambdas - 1) / numLambdas;
+            thisPartRows = std::min(partRows, gradMat.getRows() - partId * partRows);
+            bufSize = thisPartRows * gradMat.getCols() * sizeof(FeatType);
+            partitionStart = gradMat.getData() + (partId * partRows * gradMat.getCols());
+            zmq::message_t gradData(bufSize);
+            memcpy(gradData.data(), partitionStart, bufSize);
+            // z mat
+            Matrix &zMat = savedTensors[layer][TYPE::Z - 1];
+            partRows = (zMat.getRows() + numLambdas - 1) / numLambdas;
+            thisPartRows = std::min(partRows, zMat.getRows() - partId * partRows);
+            bufSize = thisPartRows * zMat.getCols() * sizeof(FeatType);
+            partitionStart = zMat.getData() + (partId * partRows * zMat.getCols());
+            zmq::message_t zData(bufSize);
+            memcpy(zData.data(), partitionStart, bufSize);
+            // ah mat
+            Matrix &ahMat = savedTensors[layer][TYPE::AH - 1];
+            partRows = (ahMat.getRows() + numLambdas - 1) / numLambdas;
+            thisPartRows = std::min(partRows, ahMat.getRows() - partId * partRows);
+            bufSize = thisPartRows * ahMat.getCols() * sizeof(FeatType);
+            partitionStart = ahMat.getData() + (partId * partRows * ahMat.getCols());
+            zmq::message_t ahData(bufSize);
+            memcpy(ahData.data(), partitionStart, bufSize);
+
+            // prepare header and send
+            zmq::message_t header(HEADER_SIZE);
+            populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, zMat.getCols());
+            setTSinHdr(header.data());
+            workersocket.send(client_id, ZMQ_SNDMORE);
+            workersocket.send(header, ZMQ_SNDMORE);
+            workersocket.send(gradData, ZMQ_SNDMORE);
+            workersocket.send(zData, ZMQ_SNDMORE);
+            workersocket.send(ahData);
+        } else if (layer == 1) { // gradLoss
+            // act mat
+            Matrix &actMat = savedTensors[layer][TYPE::ACT - 1];
+            partRows = (actMat.getRows() + numLambdas - 1) / numLambdas;
+            thisPartRows = std::min(partRows, actMat.getRows() - partId * partRows);
+            bufSize = thisPartRows * actMat.getCols() * sizeof(FeatType);
+            partitionStart = actMat.getData() + (partId * partRows * actMat.getCols());
+            zmq::message_t actData(bufSize);
+            memcpy(actData.data(), partitionStart, bufSize);
+            // lab mat
+            Matrix &labMat = targetMatrix;
+            partRows = (labMat.getRows() + numLambdas - 1) / numLambdas;
+            thisPartRows = std::min(partRows, labMat.getRows() - partId * partRows);
+            bufSize = thisPartRows * labMat.getCols() * sizeof(FeatType);
+            partitionStart = labMat.getData() + (partId * partRows * labMat.getCols());
+            zmq::message_t labData(bufSize);
+            memcpy(labData.data(), partitionStart, bufSize);
+            // ah mat
+            Matrix &ahMat = savedTensors[layer][TYPE::AH - 1];
+            partRows = (ahMat.getRows() + numLambdas - 1) / numLambdas;
+            thisPartRows = std::min(partRows, ahMat.getRows() - partId * partRows);
+            bufSize = thisPartRows * ahMat.getCols() * sizeof(FeatType);
+            partitionStart = ahMat.getData() + (partId * partRows * ahMat.getCols());
+            zmq::message_t ahData(bufSize);
+            memcpy(ahData.data(), partitionStart, bufSize);
+
+            // prepare header and send
+            zmq::message_t header(HEADER_SIZE);
+            populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, actMat.getCols());
+            setTSinHdr(header.data());
+            workersocket.send(client_id, ZMQ_SNDMORE);
+            workersocket.send(header, ZMQ_SNDMORE);
+            workersocket.send(actData, ZMQ_SNDMORE);
+            workersocket.send(labData, ZMQ_SNDMORE);
+            workersocket.send(ahData);
+        }
+    }
+}
+
+void
 LambdaWorker::sendChunk(Matrix &srcMat, zmq::message_t& client_id, unsigned partId, bool forward) {
     // Reject a send request if the partition id is invalid.
     unsigned numLambdas = forward ? (manager->numLambdasForward) : (manager->numLambdasBackward);
@@ -278,13 +378,12 @@ LambdaWorker::sendChunk(Matrix &srcMat, zmq::message_t& client_id, unsigned part
         workersocket.send(client_id, ZMQ_SNDMORE);
         zmq::message_t header(HEADER_SIZE);
         populateHeader((char *) header.data(), ERR_HEADER_FIELD, ERR_HEADER_FIELD, ERR_HEADER_FIELD, ERR_HEADER_FIELD);
+        setTSinHdr(header.data());
         workersocket.send(header);
 
         printLog(manager->nodeId, "[ERROR] Got a request for partition %u, but number of lambdas is %u", partId, numLambdas);
     // Partition id is valid, so send the matrix segment.
     } else {
-        workersocket.send(client_id, ZMQ_SNDMORE);
-
         // Check to make sure that the bounds of this partition do not exceed the bounds of the data array.
         // If they do, set partition end to the end of the array.
         unsigned partRows = (srcMat.getRows() + numLambdas - 1) / numLambdas;
@@ -294,10 +393,13 @@ LambdaWorker::sendChunk(Matrix &srcMat, zmq::message_t& client_id, unsigned part
 
         zmq::message_t header(HEADER_SIZE);
         populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, srcMat.getCols());
-        workersocket.send(header, ZMQ_SNDMORE);
+        setTSinHdr(header.data());
 
         zmq::message_t partitionData(bufSize);
         std::memcpy(partitionData.data(), partitionStart, bufSize);
+
+        workersocket.send(client_id, ZMQ_SNDMORE);
+        workersocket.send(header, ZMQ_SNDMORE);
         workersocket.send(partitionData);
     }
 }
@@ -311,10 +413,10 @@ LambdaWorker::recvChunk(Matrix &dstMat, zmq::message_t &client_id, unsigned part
     // Receive the pushed-back results.
     zmq::message_t msg;
     workersocket.recv(&msg);
-    std::memcpy(partitionStart, msg.data(), msg.size());
 
     // Send confirm ACK message.
-    zmq::message_t confirm;
+    zmq::message_t confirm(2 * sizeof(unsigned));
+    setTSinCfm(confirm.data());
     workersocket.send(client_id, ZMQ_SNDMORE);
     workersocket.send(confirm);
 
@@ -323,6 +425,7 @@ LambdaWorker::recvChunk(Matrix &dstMat, zmq::message_t &client_id, unsigned part
         q_ptr->push(std::make_pair(partId, partRows));
     }
     producerQueueLock.unlock();
+    std::memcpy(partitionStart, msg.data(), msg.size());
 
     // Check for total number of partitions received. If all partitions received, wake up lambdaComm.
     if (forward) {
@@ -352,11 +455,12 @@ LambdaWorker::sendTargetMatrix(zmq::message_t& client_id, unsigned partId) {
 
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char*) header.data(), OP::RESP, 0, thisPartRows, targetMatrix.getCols());
-
-    workersocket.send(client_id, ZMQ_SNDMORE);
-    workersocket.send(header, ZMQ_SNDMORE);
+    setTSinHdr(header.data());
 
     zmq::message_t partitionData(bufSize);
     std::memcpy(partitionData.data(), partitionStart, bufSize);
+
+    workersocket.send(client_id, ZMQ_SNDMORE);
+    workersocket.send(header, ZMQ_SNDMORE);
     workersocket.send(partitionData);
 }

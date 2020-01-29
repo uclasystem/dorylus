@@ -13,8 +13,11 @@
 #include <zmq.hpp>
 #include <aws/lambda-runtime/runtime.h>
 
-#include "../../../src/common/matrix.hpp"
-#include "../../../src/common/utils.hpp"
+#include <time.h>
+#include <iomanip>
+
+#include "../../common/matrix.hpp"
+#include "../../common/utils.hpp"
 
 #define SLEEP_PERIOD 1000
 #define TIMEOUT_PERIOD 500
@@ -22,6 +25,15 @@
 #define SND_MORE true
 #define NO_MORE false
 
+// timestamp for profiling
+unsigned timestamps[30];
+unsigned tsidx = 0;
+
+void set_timestamp() {
+    auto now = std::chrono::system_clock::now().time_since_epoch();
+    unsigned me = std::chrono::duration_cast<std::chrono::milliseconds>(now).count() - BASE_TMSP;
+    timestamps[tsidx++] = me;
+}
 
 using boost::property_tree::ptree;
 using boost::property_tree::read_json;
@@ -40,6 +52,61 @@ Timer computationTimer;
 
 Timer sendGradsTimer;
 Timer sendDeltaTimer;
+
+int
+requestTensors(zmq::socket_t& socket, OP op, unsigned partId, unsigned layer, std::vector<Matrix> &mats) {
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader((char*) header.data(), op, partId, layer);
+    socket.send(header);
+
+    Timer reqTimer;
+    reqTimer.start();
+
+    zmq::message_t respHeader;
+    while(!socket.recv(&respHeader, ZMQ_DONTWAIT)) {
+        usleep(SLEEP_PERIOD);
+        if (reqTimer.peek() > TIMEOUT_PERIOD) {
+            // zmq::message_t _hdr(HEADER_SIZE);
+            // populateHeader((char *) _hdr.data(), op, partId, type, layer);
+            zmq::message_t _hdr;
+            _hdr.copy(&header);
+            socket.send(_hdr);
+            reqTimer.start();
+        }
+    }
+
+    unsigned layerResp = parse<unsigned>((char*) respHeader.data(), 1);
+    if (layerResp == -2) {
+        std::cerr << "[ ERROR ] Discard execution." << std::endl;
+        exit(0);
+    } else if (layerResp == -1) {
+        std::cerr << "[ ERROR ] No corresponding matrix" << std::endl;
+        return -1;
+    } else {
+        unsigned rows = parse<unsigned>((char*) respHeader.data(), 2);
+        unsigned cols;
+
+        {
+            unsigned recv_ts = *((unsigned *)respHeader.data() + 5);
+            timestamps[tsidx++] = recv_ts;
+            unsigned send_ts = *((unsigned *)respHeader.data() + 6);
+            timestamps[tsidx++] = send_ts;
+        }
+
+        zmq::message_t matxData;
+        for (unsigned i = 0; i < 3; ++i) {
+            socket.recv(&matxData);
+            cols = matxData.size() / sizeof(FeatType) / rows;
+            printf("recved %u matrix: (%u, %u)\n", i, rows, cols);
+            FeatType *matxBuffer = new FeatType[rows * cols];
+            std::memcpy(matxBuffer, matxData.data(), matxData.size());
+            mats.push_back(Matrix(rows, cols, matxBuffer));
+        }
+
+        return 0;
+    }
+}
+
 
 static Matrix
 requestTensor(zmq::socket_t& socket, OP op, unsigned partId, TYPE type = TYPE::AH, unsigned layer = 0) {
@@ -92,7 +159,7 @@ requestTensor(zmq::socket_t& socket, OP op, unsigned partId, TYPE type = TYPE::A
  *
  */
 static void
-sendMatrix(Matrix& matrix, zmq::socket_t& socket, unsigned id) {
+sendMatrix(Matrix& matrix, zmq::socket_t& socket, unsigned id, bool data = false) {
 
     // Send push header.
     zmq::message_t header(HEADER_SIZE);
@@ -109,22 +176,29 @@ sendMatrix(Matrix& matrix, zmq::socket_t& socket, unsigned id) {
 
     // Wait for updates settled reply.
     zmq::message_t confirm;
-    // socket.recv(&confirm);
-    while(!socket.recv(&confirm, ZMQ_DONTWAIT)) {
-        usleep(SLEEP_PERIOD);
-        if (sndTimer.peek() > TIMEOUT_PERIOD) {
-            // zmq::message_t _hdr(HEADER_SIZE);
-            // populateHeader((char *) _hdr.data(), OP::PUSH_BACKWARD, id, matrix.getRows(), matrix.getCols());
-            zmq::message_t _hdr;
-            _hdr.copy(&header);
-            socket.send(_hdr, ZMQ_SNDMORE);
-            // zmq::message_t _updMsg(matrix.getDataSize());
-            // std::memcpy(_updMsg.data(), matrix.getData(), matrix.getDataSize());
-            zmq::message_t _updMsg;
-            _updMsg.copy(&updateMsg);
-            socket.send(_updMsg);
-            sndTimer.start();
-        }
+    socket.recv(&confirm);
+    // while(!socket.recv(&confirm, ZMQ_DONTWAIT)) {
+    //     usleep(SLEEP_PERIOD);
+    //     if (sndTimer.peek() > TIMEOUT_PERIOD) {
+    //         // zmq::message_t _hdr(HEADER_SIZE);
+    //         // populateHeader((char *) _hdr.data(), OP::PUSH_BACKWARD, id, matrix.getRows(), matrix.getCols());
+    //         zmq::message_t _hdr;
+    //         _hdr.copy(&header);
+    //         socket.send(_hdr, ZMQ_SNDMORE);
+    //         // zmq::message_t _updMsg(matrix.getDataSize());
+    //         // std::memcpy(_updMsg.data(), matrix.getData(), matrix.getDataSize());
+    //         zmq::message_t _updMsg;
+    //         _updMsg.copy(&updateMsg);
+    //         socket.send(_updMsg);
+    //         sndTimer.start();
+    //     }
+    // }
+
+    if (data) {
+        unsigned recv_ts = *((unsigned *)confirm.data());
+        timestamps[tsidx++] = recv_ts;
+        unsigned send_ts = *((unsigned *)confirm.data() + 1);
+        timestamps[tsidx++] = send_ts;
     }
 }
 
@@ -175,24 +249,8 @@ activateDerivative(Matrix& mat) {
 
 static void
 gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, unsigned layer) {
-    Matrix predictions;
-    Matrix labels;
     Matrix weights;
-    Matrix ah;
-
-    std::cout << "< BACKWARD > Getting predictions" << std::endl;
-    getTensor0Timer.start();
-    do {
-        predictions = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::ACT, layer);
-    } while (predictions.empty());
-    getTensor0Timer.stop();
-
-    std::cout << "< BACKWARD > Getting labels" << std::endl;
-    getTensor1Timer.start();
-    do {
-        labels = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::LAB, layer);
-    } while (labels.empty());
-    getTensor1Timer.stop();
+    std::vector<Matrix> savedTensors;
 
     std::thread weightsThd([&] {
         getWeightsTimer.start();
@@ -203,15 +261,18 @@ gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, 
         getWeightsTimer.stop();
     });
 
-
-    std::thread ahThd([&] {
-        getTensor2Timer.start();
-        std::cout << "< BACKWARD > Requesting AH" << std::endl;
-        do {
-            ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::AH, layer);
-        } while (ah.empty());
-        getTensor2Timer.stop();
-    });
+    std::cout << "< BACKWARD > Getting savedTensors" << std::endl;
+    int ret = 0;
+    getTensor0Timer.start();
+    set_timestamp();
+    do {
+        ret = requestTensors(data_socket, OP::PULL_BACKWARD, id, layer, savedTensors);
+    } while (ret);
+    set_timestamp();
+    getTensor0Timer.stop();
+    Matrix &predictions = savedTensors[0];
+    Matrix &labels = savedTensors[1];
+    Matrix &ah = savedTensors[2];
 
     // derivative of softmax
     computationTimer.start();
@@ -227,7 +288,6 @@ gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, 
     delete[] weights.getData();
 
     // AH^T * d_out
-    ahThd.join();
     std::cout << "< BACKWARD > Computing weight updates" << std::endl;
     Matrix weightUpdates = ah.dot(d_output, true, false);
     delete[] ah.getData();
@@ -244,7 +304,9 @@ gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, 
 
     std::cout << "< BACKWARD > Sending gradient to graph server" << std::endl;
     sendGradsTimer.start();
-    sendMatrix(interGrad, data_socket, id);
+    set_timestamp();
+    sendMatrix(interGrad, data_socket, id, true);
+    set_timestamp();
     sendGradsTimer.stop();
     delete[] interGrad.getData();
     wThd.join();
@@ -252,26 +314,10 @@ gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, 
 
 static void
 gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, unsigned layer) {
-    Matrix grad;
-    Matrix z;
     Matrix weights;
-    Matrix ah;
+    std::vector<Matrix> savedTensors;
 
     // REQUESTING ALL NEEDED TENSORS FOR COMPUTATION
-    getTensor0Timer.start();
-    do {
-        std::cout << "< BACKWARD > Requesting Z values" << std::endl;
-        z = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::Z, layer);
-    } while (z.empty());
-    getTensor0Timer.stop();
-
-    getTensor1Timer.start();
-    do {
-        std::cout << "< BACKWARD > Requesting gradient from graph server" << std::endl;
-        grad = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::GRAD, layer);
-    } while (grad.empty());
-    getTensor1Timer.stop();
-
     std::thread weightsThd([&] {
         getWeightsTimer.start();
         std::cout << "< BACKWARD > Requesting weights" << std::endl;
@@ -282,17 +328,19 @@ gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id,
     });
     weightsThd.join();
 
-    std::thread ahThd([&] {
-        getTensor2Timer.start();
-        std::cout << "< BACKWARD > Requesting AH" << std::endl;
-        do {
-            ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::AH, layer);
-        } while (ah.empty());
-        getTensor2Timer.stop();
-    });
-    ahThd.join();
+    std::cout << "< BACKWARD > Requesting savedTensors" << std::endl;
+    getTensor0Timer.start();
+    set_timestamp();
+    int ret = 0;
+    do {
+        ret = requestTensors(data_socket, OP::PULL_BACKWARD, id, layer, savedTensors);
+    } while (ret);
+    set_timestamp();
+    getTensor0Timer.stop();
+    Matrix &grad = savedTensors[0];
+    Matrix &z = savedTensors[1];
+    Matrix &ah = savedTensors[2];
     // END REQUESTING ALL NEEDED TENSORS FOR COMPUTATION
-
 
     // BACKWARDS COMPUTATION
     computationTimer.start();
@@ -330,9 +378,11 @@ gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id,
         sendGradsTimer.stop();
     });
 
-    sendDeltaTimer.start();
     std::cout << "< BACKWARD > Sending gradient to graph server" << std::endl;
-    sendMatrix(resultGrad, data_socket, id);
+    sendDeltaTimer.start();
+    set_timestamp();
+    sendMatrix(resultGrad, data_socket, id, true);
+    set_timestamp();
     delete[] resultGrad.getData();
     sendDeltaTimer.stop();
     wThd.join();
@@ -354,6 +404,7 @@ static invocation_response
 backward_prop(std::string dataserver, std::string weightserver, std::string dport,
               std::string wport, unsigned id, unsigned layer, bool lastLayer) {
     zmq::context_t ctx(1);
+    tsidx = 0;
 
     //
     // Lambda socket identity is set to:
@@ -398,14 +449,18 @@ backward_prop(std::string dataserver, std::string weightserver, std::string dpor
 
     // Couldn't parse JSON with AWS SDK from ptree.
     // For now creating a string with the times to be parsed on server.
-    std::string res = "[ BACKWARD " + std::to_string(layer) + " ] " + std::to_string(id) + ": " +
-                      std::to_string(getTensor0Timer.getTime()) + " " +     \
-                      std::to_string(getTensor1Timer.getTime()) + " " +     \
-                      std::to_string(getTensor2Timer.getTime()) + " " +     \
-                      std::to_string(getWeightsTimer.getTime()) + " " +     \
-                      std::to_string(computationTimer.getTime()) + " " +    \
-                      std::to_string(sendGradsTimer.getTime()) + " " +      \
-                      std::to_string(sendDeltaTimer.getTime());
+    // std::string res = "[ BACKWARD " + std::to_string(layer) + " ] " + std::to_string(id) + ": " +
+    //                   std::to_string(getTensor0Timer.getTime()) + " " +     \
+    //                   std::to_string(getTensor1Timer.getTime()) + " " +     \
+    //                   std::to_string(getTensor2Timer.getTime()) + " " +     \
+    //                   std::to_string(getWeightsTimer.getTime()) + " " +     \
+    //                   std::to_string(computationTimer.getTime()) + " " +    \
+    //                   std::to_string(sendGradsTimer.getTime()) + " " +      \
+    //                   std::to_string(sendDeltaTimer.getTime());
+    std::string res = "[ BACKWARD " + std::to_string(layer) + " ] " + std::to_string(id) + ": ";
+    for (unsigned i = 0; i < tsidx; i++) {
+        res += std::to_string(timestamps[i]) + " ";
+    }
 
     return invocation_response::success(res, "application/json");
 }

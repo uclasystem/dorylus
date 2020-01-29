@@ -18,6 +18,7 @@ extern "C" void destroyComm(LambdaComm *lambdaComm) {
 const char* ALLOCATION_TAG = "LambdaComm";
 static std::shared_ptr<Aws::Lambda::LambdaClient> m_client;
 static unsigned globalNodeId = -1;
+static std::ofstream lambdaOut;
 
 /**
  *
@@ -27,8 +28,8 @@ static unsigned globalNodeId = -1;
 LambdaComm::LambdaComm(CommInfo &commInfo) :
         ResourceComm(), nodeIp(commInfo.nodeIp), dataserverPort(commInfo.dataserverPort),
         wServersFile(commInfo.wServersFile), weightserverPort(commInfo.weightserverPort),
-        nodeId(commInfo.nodeId), numNodes(commInfo.numNodes), ctx(1), halt(false), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
-        numLambdasForward(commInfo.numLambdasForward), numLambdasBackward(commInfo.numLambdasBackward), numListeners(numLambdasBackward), // TODO: Decide numListeners.
+        nodeId(commInfo.nodeId), numNodes(commInfo.numNodes), ctx(4), halt(false), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
+        numLambdasForward(commInfo.numLambdasForward), numLambdasBackward(commInfo.numLambdasBackward), numListeners(4), // TODO: Decide numListeners.
         countForward(0), countBackward(0), timeoutPeriod(0.0), currLayer(0) {
     // If master, establish connections to weight servers
     connectToWeightServers();
@@ -36,6 +37,7 @@ LambdaComm::LambdaComm(CommInfo &commInfo) :
     Aws::InitAPI(options);
     Aws::Client::ClientConfiguration clientConfig;
     clientConfig.requestTimeoutMs = 900000;
+    clientConfig.maxConnections = 100;
     clientConfig.region = "us-east-2";
     m_client = Aws::MakeShared<Aws::Lambda::LambdaClient>(ALLOCATION_TAG,
                                                           clientConfig);
@@ -65,9 +67,12 @@ LambdaComm::LambdaComm(CommInfo &commInfo) :
         } catch (std::exception& ex) { /** Context termintated. */ }
     });
     tproxy.detach();
+
+    lambdaOut = std::ofstream(std::string("lambdats") + std::to_string(numLambdasForward) + std::string(".txt"), std::ofstream::out);
 }
 
 LambdaComm::~LambdaComm() {
+    lambdaOut.close();
     // Delete allocated resources.
     halt = true;
     for (unsigned i = 0; i < numListeners; ++i) {
@@ -218,7 +223,7 @@ LambdaComm::invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLaye
     }
 
     char* weightServerIp = weightservers[(nodeId * numLambdasForward + lambdaId) % weightservers.size()];
-    invokeLambda("eval-forward-gcn", nodeIp.c_str(), dataserverPort, weightServerIp, weightserverPort, layer, lambdaId, lastLayer);
+    invokeLambda(FORWARD_FUNC, nodeIp.c_str(), dataserverPort, weightServerIp, weightserverPort, layer, lambdaId, lastLayer);
 }
 
 
@@ -309,12 +314,13 @@ LambdaComm::invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLay
     }
 
     char* weightServerIp = weightservers[(nodeId * numLambdasForward + lambdaId) % weightservers.size()];
-    invokeLambda("eval-backward-gcn", nodeIp.c_str(), dataserverPort, weightServerIp, weightserverPort, layer, lambdaId, lastLayer);
+    invokeLambda(BACKWARD_FUNC, nodeIp.c_str(), dataserverPort, weightServerIp, weightserverPort, layer, lambdaId, lastLayer);
 }
 
 void
 LambdaComm::waitLambdaBackward(unsigned layer, bool lastLayer) {
     // Block until all parts have been handled.
+    unsigned prevCnt = 0;
     while (countBackward < numLambdasBackward) {
         if (countBackward >= 0.8 * numLambdasBackward && timeoutPeriod < 1e-8) {
             timeoutPeriod = std::fmax(MIN_TIMEOUT, 2 * (getTimer() - backwardTimer));
@@ -328,7 +334,15 @@ LambdaComm::waitLambdaBackward(unsigned layer, bool lastLayer) {
             backwardTimer = getTimer();
             timeoutPeriod *= EXP_BACKOFF_FACTOR;
         }
+        if (false && nodeId == 0 && countBackward > prevCnt) {
+            printLog(nodeId, "%u backward lambdas takes %.3lf", countBackward, getTimer() - backwardTimer);
+            prevCnt = countBackward;
+        }
         usleep(SLEEP_PERIOD);
+    }
+    if (false && nodeId == 0 && countBackward > prevCnt) {
+        printLog(nodeId, "%u backward lambdas takes %.3lf", countBackward, getTimer() - backwardTimer);
+        prevCnt = countBackward;
     }
 }
 
@@ -337,11 +351,13 @@ void
 LambdaComm::relaunchLambda(bool forward, unsigned layer, unsigned lambdaId, bool lastLayer) {
     printLog(nodeId, "Relaunch %s lambda %u...", (forward ? "FORWARD" : "BACKWARD"), lambdaId);
 
-    Aws::String funcName = forward ? "eval-forward-gcn" : "eval-backward-gcn";
+    Aws::String funcName = forward ? FORWARD_FUNC : BACKWARD_FUNC;
     unsigned numLambdas = forward ? numLambdasForward : numLambdasBackward;
     char* weightServerIp = weightservers[(nodeId * numLambdas + lambdaId) % weightservers.size()];
     invokeLambda(funcName, nodeIp.c_str(), dataserverPort, weightServerIp,
                  weightserverPort, layer, lambdaId, lastLayer);
+
+    ++relaunchCnt;
 }
 
 
