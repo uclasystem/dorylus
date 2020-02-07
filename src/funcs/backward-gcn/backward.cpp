@@ -63,17 +63,18 @@ requestTensors(zmq::socket_t& socket, OP op, unsigned partId, unsigned layer, st
     reqTimer.start();
 
     zmq::message_t respHeader;
-    while(!socket.recv(&respHeader, ZMQ_DONTWAIT)) {
-        usleep(SLEEP_PERIOD);
-        if (reqTimer.peek() > TIMEOUT_PERIOD) {
-            // zmq::message_t _hdr(HEADER_SIZE);
-            // populateHeader((char *) _hdr.data(), op, partId, type, layer);
-            zmq::message_t _hdr;
-            _hdr.copy(&header);
-            socket.send(_hdr);
-            reqTimer.start();
-        }
-    }
+    socket.recv(&respHeader);
+    // while(!socket.recv(&respHeader, ZMQ_DONTWAIT)) {
+    //     usleep(SLEEP_PERIOD);
+    //     if (reqTimer.peek() > TIMEOUT_PERIOD) {
+    //         // zmq::message_t _hdr(HEADER_SIZE);
+    //         // populateHeader((char *) _hdr.data(), op, partId, type, layer);
+    //         zmq::message_t _hdr;
+    //         _hdr.copy(&header);
+    //         socket.send(_hdr);
+    //         reqTimer.start();
+    //     }
+    // }
 
     unsigned layerResp = parse<unsigned>((char*) respHeader.data(), 1);
     if (layerResp == -2) {
@@ -118,17 +119,18 @@ requestTensor(zmq::socket_t& socket, OP op, unsigned partId, TYPE type = TYPE::A
     reqTimer.start();
 
     zmq::message_t respHeader;
-    while(!socket.recv(&respHeader, ZMQ_DONTWAIT)) {
-        usleep(SLEEP_PERIOD);
-        if (reqTimer.peek() > TIMEOUT_PERIOD) {
-            // zmq::message_t _hdr(HEADER_SIZE);
-            // populateHeader((char *) _hdr.data(), op, partId, type, layer);
-            zmq::message_t _hdr;
-            _hdr.copy(&header);
-            socket.send(_hdr);
-            reqTimer.start();
-        }
-    }
+    socket.recv(&respHeader);
+    // while(!socket.recv(&respHeader, ZMQ_DONTWAIT)) {
+    //     usleep(SLEEP_PERIOD);
+    //     if (reqTimer.peek() > TIMEOUT_PERIOD) {
+    //         // zmq::message_t _hdr(HEADER_SIZE);
+    //         // populateHeader((char *) _hdr.data(), op, partId, type, layer);
+    //         zmq::message_t _hdr;
+    //         _hdr.copy(&header);
+    //         socket.send(_hdr);
+    //         reqTimer.start();
+    //     }
+    // }
 
     unsigned layerResp = parse<unsigned>((char*) respHeader.data(), 1);
     if (layerResp == -2) {
