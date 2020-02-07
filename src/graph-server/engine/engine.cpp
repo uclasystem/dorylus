@@ -675,10 +675,9 @@ Engine::forwardAggregateFromNeighbors(unsigned lvid, FeatType *outputTensor, Fea
 
 inline void
 Engine::sendForwardGhostUpdates(FeatType *inputTensor, unsigned featDim) {
-    // Loop through all local vertices and do the data send out work. If there are any remote edges for a vertex, should send this vid to
+    // Loop through all local vertices and do the data send out work.
+    // If there are any remote edges for a vertex, should send this vid to
     // other nodes for their ghost's update.
-    // TODO: (YIFAN) process crashes when return if BATCH_SIZE is too large. Weird, to be fixed.
-    // Please decrease BATCH_SIZE if porcess crashed.
     bool batchFlag = true;
     unsigned BATCH_SIZE = std::max(((batchFlag ? MAX_MSG_SIZE : 4096) - DATA_HEADER_SIZE) /
                                    (sizeof(unsigned) + sizeof(FeatType) * featDim), 1ul); // at least send one vertex
@@ -686,14 +685,6 @@ Engine::sendForwardGhostUpdates(FeatType *inputTensor, unsigned featDim) {
         if (nid == nodeId) {
             continue;
         }
-
-        // DEBUGGING
-        std::string out = std::to_string(nid) + ": ";
-        for (unsigned u = 0; u < graph.forwardLocalVtxDsts[nid].size(); ++u) {
-            out += std::to_string(graph.forwardLocalVtxDsts[nid][u]) + " ";
-        }
-        printLog(nodeId, out.c_str());
-        // END DEBUGGING
 
         unsigned forwardGhostVCnt = graph.forwardLocalVtxDsts[nid].size();
         for (unsigned ib = 0; ib < forwardGhostVCnt; ib += BATCH_SIZE) {

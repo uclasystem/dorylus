@@ -18,7 +18,7 @@ main(int argc, char *argv[]) {
     // Initialize the engine.
     // The engine object is static and has been substantiated in Engine.cpp.
     engine.init(argc, argv);
-    unsigned numEpochs = 10;
+    unsigned numEpochs = 5;
     unsigned valFreq = 1;
 
     if (engine.master())

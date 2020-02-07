@@ -84,6 +84,8 @@ public:
     std::vector<std::vector<unsigned>> backwardLocalVtxDsts;
 
     // Outoing dests for pipelining
+    std::map<unsigned, std::vector<unsigned>> forwardGhostMap;
+    std::map<unsigned, std::vector<unsigned>> backwardGhostMap;
 
     // incoming edge ghost vertices
     std::map<unsigned, unsigned> srcGhostVtcs;
