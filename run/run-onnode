@@ -49,6 +49,10 @@ case $1 in
                 let MODE=1;
                 NUM_LAMBDAS_FORWARD=1
                 NUM_LAMBDAS_BACKWARD=1
+            elif [ $var = "CPU" ] || [ $var = "cpu" ]; then
+                let MODE=2;
+                NUM_LAMBDAS_FORWARD=1
+                NUM_LAMBDAS_BACKWARD=1
             fi
 
             if [ $var = "pipe" ] || [ $var = "PIPE" ]; then
