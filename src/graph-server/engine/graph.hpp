@@ -82,6 +82,9 @@ public:
     // local vertex outgoing destinations
     std::vector<std::vector<unsigned>> forwardLocalVtxDsts;
     std::vector<std::vector<unsigned>> backwardLocalVtxDsts;
+
+    // Outoing dests for pipelining
+
     // incoming edge ghost vertices
     std::map<unsigned, unsigned> srcGhostVtcs;
     // std::vector<unsigned> srcGhostDataVec;

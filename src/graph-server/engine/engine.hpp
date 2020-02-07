@@ -61,6 +61,8 @@ public:
     FeatType* fusedGatherApply(FeatType *vtcsTensor, unsigned vtcsCnt,
                                unsigned inFeatDim, unsigned outFeatDim);
     FeatType* scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
+    FeatType* fusedGAS(FeatType* vtcsTensor, unsigned vtcsCnt,
+                       unsigned inFeatDim, unsigned outFeatDim);
 
     FeatType* aggregateBackward(FeatType *gradTensor, unsigned vtcsCnt,
                                 unsigned featDim);

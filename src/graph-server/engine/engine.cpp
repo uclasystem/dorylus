@@ -237,6 +237,7 @@ Engine::runForward() {
         if (iteration < numLayers - 1) { // don't need scatter at the last layer.
             inputTensor = scatter(inputTensor, graph.localVtxCnt, getFeatDim(iteration + 1));
         }
+        //fusedGAS(inputTensor, graph.localVtxCnt, getFeatDim(iteration), getFeatDim(iteration + 1));
     }
 
     timeForwardProcess += getTimer();
@@ -608,6 +609,13 @@ Engine::scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim) {
     return vtcsTensor;
 }
 
+FeatType*
+Engine::fusedGAS(FeatType* vtcsTensor, unsigned vtcsCnt,
+                   unsigned inFeatDim, unsigned outFeatDim) {
+    // TODO: Implement this function
+    return NULL;
+}
+
 
 /////////////////////////////////////////////////
 // Below are private functions for the engine. //
@@ -678,6 +686,15 @@ Engine::sendForwardGhostUpdates(FeatType *inputTensor, unsigned featDim) {
         if (nid == nodeId) {
             continue;
         }
+
+        // DEBUGGING
+        std::string out = std::to_string(nid) + ": ";
+        for (unsigned u = 0; u < graph.forwardLocalVtxDsts[nid].size(); ++u) {
+            out += std::to_string(graph.forwardLocalVtxDsts[nid][u]) + " ";
+        }
+        printLog(nodeId, out.c_str());
+        // END DEBUGGING
+
         unsigned forwardGhostVCnt = graph.forwardLocalVtxDsts[nid].size();
         for (unsigned ib = 0; ib < forwardGhostVCnt; ib += BATCH_SIZE) {
             unsigned sendBatchSize = (forwardGhostVCnt - ib) < BATCH_SIZE ? (forwardGhostVCnt - ib) : BATCH_SIZE;
