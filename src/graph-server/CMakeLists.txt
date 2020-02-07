@@ -9,14 +9,14 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Include AWSSDK
-if (NOT BUILD_GPU)
+if (BACKEND STREQUAL lambda)
     find_package(AWSSDK REQUIRED COMPONENTS lambda)
 endif()
 
 
 # Subdirectories, each needs a CMakeLists.txt.
-if(BUILD_GPU)
-	add_definitions(-D_GPU_ENABLED_)
+if(BACKEND STREQUAL gpu)
+    add_definitions(-D_GPU_ENABLED_)
     add_subdirectory(GPU-Computation)
 endif()
 add_subdirectory(commmanager)

@@ -4,7 +4,7 @@ import os
 import pickle
 import subprocess
 import multiprocessing
-    
+
 import ec2man
 
 
@@ -89,7 +89,7 @@ def process_setup():
             inst.set_user_key(contexts[role][inst.id])
         ctx = Context(role, instances)
         pickle.dump(ctx, open(CTX_DIR + role + ".context", 'wb'))
-    
+
 
 def get_instances_info(id_list):
     """
@@ -111,6 +111,7 @@ def get_instances_info(id_list):
                 pubip = inst['PublicIpAddress']
             instances.append(Instance(inst_id, inst_type, prip, pubip))
 
+    instances = sorted(instances, key=lambda x: x.id)
     return instances
 
 
@@ -131,7 +132,7 @@ def process_target(ctx, target, args):
             show_error("Please specify an operation.")
         op, args = args[0], args[1:]
         ctx.instances[idx] = handle_command(ec2_cli, ctx, ctx.instances[idx], op, args)
-    
+
     # Process all instances in the context.
     elif target == 'all':
         if len(args) < 1:
@@ -173,7 +174,7 @@ def process_target(ctx, target, args):
     elif target == 'dshfile':
         for inst in ctx.instances:
             print(inst.user + "@" + inst.pr_ip)
-    
+
     else:
         print("Option unrecognized. Use `python3 -m ec2man help` for the help message.")
 
@@ -216,7 +217,7 @@ def main(args):
     # Commands all require a corresponding context.
     if not os.path.isfile(ctx_filename):
         show_error("Context for '" + ctx_name + "' not found. Please do proper `setup` first.")
-    
+
     # Context exists. Process the given command.
     ctx = pickle.load(open(ctx_filename, 'rb'))
     ctx = process_target(ctx, target, args[3:])     # The operation may change the context, so needs redump.

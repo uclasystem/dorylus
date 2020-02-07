@@ -25,15 +25,15 @@ fi
 
 let BUILD_GRAPH=0
 let BUILD_WEIGHT=0
-BUILD_GPU_OPT=''
-if [[ $1 == "gpu" ]]; then
+BACKEND_OPT=''
+if [[ $1 == "gpu" ]] || [[ $1 == "cpu" ]]; then
     BUILD_GRAPH=1
     BUILD_WEIGHT=1
-    BUILD_GPU_OPT='gpu'
+    BACKEND_OPT=$1
 elif [[ $1 == "graph" ]]; then
     BUILD_GRAPH=1
-    if [[ $2 == "gpu" ]]; then
-        BUILD_GPU_OPT='gpu'
+    if [[ $2 == "gpu" ]] || [[ $2 == "cpu" ]]; then
+        BACKEND_OPT=$2
     fi
 elif [[ $1 == "weight" ]]; then
     BUILD_WEIGHT=1
@@ -45,7 +45,7 @@ fi
 # For graph servers.
 if [ ${BUILD_GRAPH} -eq 1 ]; then
     echo "Processing context 'graph'..."
-    ${EC2MAN_CMD} graph 0 ssh -t "cd gnn-lambda && ./gnnman/helpers/graphserver.bld ${BUILD_GPU_OPT} && ./gnnman/helpers/send-folder build"
+    ${EC2MAN_CMD} graph 0 ssh -t "cd gnn-lambda && ./gnnman/helpers/graphserver.bld ${BACKEND_OPT} && ./gnnman/helpers/send-folder build"
 fi
 
 
