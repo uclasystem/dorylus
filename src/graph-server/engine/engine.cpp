@@ -231,9 +231,9 @@ Engine::runForward() {
     FeatType *inputTensor = forwardVerticesInitData;
     forwardGhostVerticesData = forwardGhostInitData;
     for (iteration = 0; iteration < numLayers; iteration++) {
-        inputTensor = aggregate(inputTensor, graph.localVtxCnt, getFeatDim(iteration));
-        inputTensor = invokeLambda(inputTensor, graph.localVtxCnt, getFeatDim(iteration), getFeatDim(iteration + 1));
-        // inputTensor = fusedGatherApply(inputTensor, graph.localVtxCnt, getFeatDim(iteration), getFeatDim(iteration + 1));
+//        inputTensor = aggregate(inputTensor, graph.localVtxCnt, getFeatDim(iteration));
+//        inputTensor = invokeLambda(inputTensor, graph.localVtxCnt, getFeatDim(iteration), getFeatDim(iteration + 1));
+        inputTensor = fusedGatherApply(inputTensor, graph.localVtxCnt, getFeatDim(iteration), getFeatDim(iteration + 1));
         if (iteration < numLayers - 1) { // don't need scatter at the last layer.
             inputTensor = scatter(inputTensor, graph.localVtxCnt, getFeatDim(iteration + 1));
         }
@@ -529,6 +529,7 @@ Engine::fusedGatherApply(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeat
     savedTensors[iteration].push_back(Matrix(vtcsCnt, outFeatDim, zTensor));
     resComm->newContextForward(iteration, gatheredTensor, zTensor, outputTensor, vtcsCnt, inFeatDim, outFeatDim);
 
+    printLog(nodeId, "TOTAL NUM LAMBDAS: %u", numLambdasForward);
     // Start applyVertex phase
     unsigned currLambdaId = 0;
     if (mode == LAMBDA) {
@@ -545,6 +546,7 @@ Engine::fusedGatherApply(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeat
         }
     }
     computePool->sync();
+    printLog(nodeId, "AFTER AGG FINISHED ID IS %u", currLambdaId);
     if (mode != LAMBDA) {
         resComm->requestForward(iteration, iteration == numLayers - 1);
     } else {
@@ -554,6 +556,7 @@ Engine::fusedGatherApply(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeat
         }
         resComm->waitLambdaForward(iteration, iteration == numLayers - 1);
     }
+    printLog(nodeId, "AFTER LAMBDA FINISHED ID IS %u", currLambdaId);
 
     // Post-processing for applyVertex phase & clean up
     bool saveOutput = true;
@@ -612,8 +615,84 @@ Engine::scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim) {
 FeatType*
 Engine::fusedGAS(FeatType* vtcsTensor, unsigned vtcsCnt,
                    unsigned inFeatDim, unsigned outFeatDim) {
-    // TODO: Implement this function
-    return NULL;
+    double sttTimer = getTimer();
+    // Start data receivers
+    commHalt = false;
+    //FeatType* forwardGhostVtcsData = new FeatType[outFeatDim * graph.srcGhostCnt];
+    auto fgr_fp = std::bind(&Engine::forwardGhostCommunicator, this,
+                            std::placeholders::_1, std::placeholders::_2);
+    dataPool->perform(fgr_fp);
+
+    // Prepare for gather phase
+    FeatType *gatheredTensor = new FeatType[vtcsCnt * inFeatDim];
+    currId = 0;
+    AggOPArgs args = {gatheredTensor, vtcsTensor, vtcsCnt, inFeatDim};
+    auto computeFn = std::bind(&Engine::aggregateCompute, this, std::placeholders::_1, std::placeholders::_2);
+
+    // Start gathering
+    computePool->perform(computeFn, &args);
+
+    // Prepare for applyVertex phase
+    FeatType *outputTensor = new FeatType[vtcsCnt * outFeatDim];
+    FeatType *zTensor = new FeatType[vtcsCnt * outFeatDim];
+    bool saveInput = true;
+    if (saveInput) {
+        savedTensors[iteration].push_back(Matrix(vtcsCnt, inFeatDim, gatheredTensor));
+    }
+    savedTensors[iteration].push_back(Matrix(vtcsCnt, outFeatDim, zTensor));
+    resComm->newContextForward(iteration, gatheredTensor, zTensor, outputTensor, vtcsCnt, inFeatDim, outFeatDim);
+
+    // Start applyVertex phase
+    unsigned currLambdaId = 0;
+    if (mode == LAMBDA) {
+        const unsigned lambdaChunkSize = (vtcsCnt + numLambdasForward - 1) / numLambdasForward;
+        unsigned availChunkSize = lambdaChunkSize;
+        while (currId < vtcsCnt) {
+            unsigned lvid = currId;
+            while (lvid > availChunkSize) {
+                resComm->invokeLambdaForward(iteration, currLambdaId, iteration == numLayers - 1);
+                ++currLambdaId;
+                availChunkSize += lambdaChunkSize;
+            }
+            usleep(5000); // wait 5ms and then check again
+        }
+    }
+    computePool->sync();
+    if (mode != LAMBDA) {
+        resComm->requestForward(iteration, iteration == numLayers - 1);
+    } else {
+        while (currLambdaId < numLambdasForward) {
+            resComm->invokeLambdaForward(iteration, currLambdaId, iteration == numLayers - 1);
+            ++currLambdaId;
+        }
+        resComm->waitLambdaForward(iteration, iteration == numLayers - 1);
+    }
+
+    // Post-processing for applyVertex phase & clean up
+    bool saveOutput = true;
+    if (saveOutput) {
+        FeatType *outTensorCpy = new FeatType[vtcsCnt * outFeatDim];
+        memcpy(outTensorCpy, outputTensor, vtcsCnt * outFeatDim * sizeof(FeatType));
+        savedTensors[iteration].push_back(Matrix(vtcsCnt, outFeatDim, outTensorCpy));
+    }
+    if (saveInput) {
+        gatheredTensor = NULL;
+    } else {
+        delete[] gatheredTensor;
+    }
+
+    // Clean up the gather phase
+    if (iteration > 0) {
+        delete[] forwardGhostVerticesData;
+        delete[] vtcsTensor;
+    }
+
+    if (vecTimeAggregate.size() < numLayers) {
+        vecTimeAggregate.push_back(getTimer() - sttTimer);
+    } else {
+        vecTimeAggregate[iteration] += getTimer() - sttTimer;
+    }
+    return outputTensor;
 }
 
 
@@ -673,11 +752,11 @@ Engine::forwardAggregateFromNeighbors(unsigned lvid, FeatType *outputTensor, Fea
     }
 }
 
+// Loop through all local vertices and do the data send out work.
+// If there are any remote edges for a vertex, should send this vid to
+// other nodes for their ghost's update.
 inline void
 Engine::sendForwardGhostUpdates(FeatType *inputTensor, unsigned featDim) {
-    // Loop through all local vertices and do the data send out work.
-    // If there are any remote edges for a vertex, should send this vid to
-    // other nodes for their ghost's update.
     bool batchFlag = true;
     unsigned BATCH_SIZE = std::max(((batchFlag ? MAX_MSG_SIZE : 4096) - DATA_HEADER_SIZE) /
                                    (sizeof(unsigned) + sizeof(FeatType) * featDim), 1ul); // at least send one vertex
@@ -705,6 +784,44 @@ Engine::sendForwardGhostUpdates(FeatType *inputTensor, unsigned featDim) {
 }
 
 inline void
+Engine::pipelineForwardGhostUpdates(std::vector<unsigned> partIds,
+  FeatType* inputTensor, unsigned featDim) {
+    std::vector<unsigned>* batchedIds = new std::vector<unsigned>[numNodes];
+    for (unsigned lvids : partIds) {
+        for (unsigned nid : graph.forwardGhostMap[lvids]) {
+            batchedIds[nid].push_back(lvids);
+        }
+    }
+
+    bool batchFlag = true;
+    unsigned BATCH_SIZE = std::max(((batchFlag ? MAX_MSG_SIZE : 4096) - DATA_HEADER_SIZE) /
+                                   (sizeof(unsigned) + sizeof(FeatType) * featDim), 1ul); // at least send one vertex
+    for (unsigned nid = 0; nid < numNodes; ++nid) {
+        if (nid == nodeId) {
+            continue;
+        }
+
+        unsigned forwardGhostVCnt = batchedIds[nid].size();
+        for (unsigned ib = 0; ib < forwardGhostVCnt; ib += BATCH_SIZE) {
+            unsigned sendBatchSize = (forwardGhostVCnt - ib) < BATCH_SIZE ? (forwardGhostVCnt - ib) : BATCH_SIZE;
+
+            forwardVerticesPushOut(nid, sendBatchSize, graph.forwardLocalVtxDsts[nid].data() + ib, inputTensor, featDim);
+            lockRecvCnt.lock();
+            recvCnt++;
+            lockRecvCnt.unlock();
+        }
+    }
+    // Wait for all remote schedulings sent by me to be handled.
+    lockRecvCnt.lock();
+    if (recvCnt > 0) {
+        condRecvCnt.wait();
+    }
+    lockRecvCnt.unlock();
+
+    delete[] batchedIds;
+}
+
+inline void
 Engine::forwardVerticesPushOut(unsigned receiver, unsigned totCnt, unsigned *lvids, FeatType *inputTensor, unsigned featDim) {
     zmq::message_t msg(DATA_HEADER_SIZE + (sizeof(unsigned) + sizeof(FeatType) * featDim) * totCnt);
     char *msgPtr = (char *)(msg.data());
@@ -727,7 +844,8 @@ Engine::forwardVerticesPushOut(unsigned receiver, unsigned totCnt, unsigned *lvi
 
 /**
  *
- * Major part of the engine's communication logic is done by data threads. These threads loop asynchronously with computation workers.
+ * Major part of the engine's communication logic is done by data threads.
+ * These threads loop asynchronously with computation workers.
  *
  */
 void

@@ -138,7 +138,7 @@ private:
 
     float accuracy = 0.0;
 
-    //0: Lambda, 1:GPU, 2: CPU
+    //0: Lambda, 1: GPU, 2: CPU
     unsigned mode = 0;
 
     ResourceComm *resComm = NULL;
@@ -189,6 +189,13 @@ private:
 
     void sendForwardGhostUpdates(FeatType *inputTensor, unsigned featDim);
     void sendBackwardGhostGradients(FeatType *gradTensor, unsigned featDim);
+
+    // Pipelined ghost updates
+    void pipelineForwardGhostUpdates(std::vector<unsigned> partIds,
+      FeatType* inputTensor, unsigned featDim);
+    void pipelineBackwardGhostUpdates(std::vector<unsigned> partIds,
+      FeatType* inputTensor, unsigned featDim);
+
     // Ghost update operation, send vertices to other nodes
     void forwardVerticesPushOut(unsigned receiver, unsigned totCnt,
                                 unsigned *lvids, FeatType *inputTensor,
@@ -196,6 +203,12 @@ private:
     void backwardVerticesPushOut(unsigned receiver, unsigned totCnt,
                                  unsigned *lvids, FeatType *gradTensor,
                                  unsigned featDim);
+
+    // Both data push out funcs have same logic. Plan to replace
+    // them with this one
+    void verticesDataPushOut(unsigned receiver, unsigned totCtn,
+                              unsigned *lvids, FeatType* tensor,
+                              unsigned featDim);
 
     // Aggregation operation (along with normalization).
     void forwardAggregateFromNeighbors(unsigned lvid, FeatType *outputTensor,
