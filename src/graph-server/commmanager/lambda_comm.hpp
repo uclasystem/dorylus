@@ -90,7 +90,7 @@ public:
     void sendShutdownMessage();
 
     // simple LambdaWorker initialization
-    friend LambdaWorker::LambdaWorker(LambdaComm *manager);
+    friend LambdaWorker::LambdaWorker(LambdaComm *manager, FuncPtr _scatterFunc);
 
 // private:
     // AWSSDK Members

@@ -35,7 +35,7 @@ class LambdaWorker {
 
 public:
 
-    LambdaWorker(LambdaComm *manager_);
+    LambdaWorker(LambdaComm *manager_, FuncPtr _scatterFunc);
 
     ~LambdaWorker();
 
@@ -91,6 +91,9 @@ private:
     Matrix newGradMatrix;
     Matrix targetMatrix;
     std::vector<Matrix> *savedTensors;
+
+    // Callback when lambda results are returned
+    FuncPtr scatterFunc;
 };
 
 

@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <functional>
 #include <map>
 #include <string>
 #include <typeinfo>
@@ -23,6 +24,8 @@ typedef float EdgeType;
                                 // From MAX_IDTYPE downto MAX_IDTYPE - numGlobalVertices are receive signals.
 
 extern std::map<size_t, std::string> typeToFormatSpecifier;
+
+typedef std::function<void(unsigned, unsigned, FeatType*, unsigned)> FuncPtr;
 
 
 /** Print to log file using this one. */

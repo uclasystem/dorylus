@@ -26,6 +26,7 @@
 #define DATA_HEADER_SIZE (NODE_ID_DIGITS + sizeof(unsigned) + sizeof(unsigned))
 
 
+
 /** Binary features file header struct. */
 struct FeaturesHeaderType {
     unsigned numFeatures;
@@ -191,9 +192,9 @@ private:
     void sendBackwardGhostGradients(FeatType *gradTensor, unsigned featDim);
 
     // Pipelined ghost updates
-    void pipelineForwardGhostUpdates(std::vector<unsigned> partIds,
+    void pipelineForwardGhostUpdates(unsigned partId, unsigned rowSize,
       FeatType* inputTensor, unsigned featDim);
-    void pipelineBackwardGhostUpdates(std::vector<unsigned> partIds,
+    void pipelineBackwardGhostUpdates(std::vector<unsigned>* partIds,
       FeatType* inputTensor, unsigned featDim);
 
     // Ghost update operation, send vertices to other nodes
@@ -222,7 +223,7 @@ private:
     void readFeaturesFile(std::string& featuresFileName);
     void readLabelsFile(std::string& labelsFileName);
 
-    void setUpCommInfo();
+    void setupCommInfo(FuncPtr _scatterFunc);
 
     // Metric printing.
     void printGraphMetrics();

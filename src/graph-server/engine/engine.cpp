@@ -38,6 +38,7 @@ Engine::init(int argc, char *argv[]) {
 
     parseArgs(argc, argv);
 
+
     // Initialize the node manager and communication manager.
     nodeManager.init(dshMachinesFile, myPrIpFile, myPubIpFile);    // NodeManger should go first.
 
@@ -101,7 +102,12 @@ Engine::init(int argc, char *argv[]) {
     dataPool->createPool();
     printLog(nodeId, "Created %u data communicator threads.", dThreads);
 
-    setUpCommInfo();
+    // Creating a function pointer so lambda workers can call back to scatter
+    // on return
+    using namespace std::placeholders;
+    FuncPtr scatterFunc = std::bind(&Engine::pipelineForwardGhostUpdates, this,
+                                 _1, _2, _3, _4);
+    setupCommInfo(scatterFunc);
 
     resComm = createResourceComm(mode, commInfo);
 
@@ -146,7 +152,7 @@ Engine::destroy() {
 *
 */
 void
-Engine::setUpCommInfo() {
+Engine::setupCommInfo(FuncPtr _scatterFunc) {
     commInfo.nodeIp = nodeManager.getNode(nodeId).pubip;
     commInfo.nodeId = nodeId;
     commInfo.dataserverPort = dataserverPort;
@@ -156,6 +162,7 @@ Engine::setUpCommInfo() {
     commInfo.wServersFile = weightserverIPFile;
     commInfo.weightserverPort = weightserverPort;
     commInfo.totalLayers = numLayers;
+    commInfo.scatterFunc = _scatterFunc;
 }
 
 /**
@@ -529,7 +536,6 @@ Engine::fusedGatherApply(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeat
     savedTensors[iteration].push_back(Matrix(vtcsCnt, outFeatDim, zTensor));
     resComm->newContextForward(iteration, gatheredTensor, zTensor, outputTensor, vtcsCnt, inFeatDim, outFeatDim);
 
-    printLog(nodeId, "TOTAL NUM LAMBDAS: %u", numLambdasForward);
     // Start applyVertex phase
     unsigned currLambdaId = 0;
     if (mode == LAMBDA) {
@@ -539,6 +545,7 @@ Engine::fusedGatherApply(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeat
             unsigned lvid = currId;
             while (lvid > availChunkSize) {
                 resComm->invokeLambdaForward(iteration, currLambdaId, iteration == numLayers - 1);
+                printLog(nodeId, "INVOKE %u", currLambdaId);
                 ++currLambdaId;
                 availChunkSize += lambdaChunkSize;
             }
@@ -546,17 +553,16 @@ Engine::fusedGatherApply(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeat
         }
     }
     computePool->sync();
-    printLog(nodeId, "AFTER AGG FINISHED ID IS %u", currLambdaId);
     if (mode != LAMBDA) {
         resComm->requestForward(iteration, iteration == numLayers - 1);
     } else {
         while (currLambdaId < numLambdasForward) {
             resComm->invokeLambdaForward(iteration, currLambdaId, iteration == numLayers - 1);
+            printLog(nodeId, "INVOKE %u", currLambdaId);
             ++currLambdaId;
         }
         resComm->waitLambdaForward(iteration, iteration == numLayers - 1);
     }
-    printLog(nodeId, "AFTER LAMBDA FINISHED ID IS %u", currLambdaId);
 
     // Post-processing for applyVertex phase & clean up
     bool saveOutput = true;
@@ -784,12 +790,24 @@ Engine::sendForwardGhostUpdates(FeatType *inputTensor, unsigned featDim) {
 }
 
 inline void
-Engine::pipelineForwardGhostUpdates(std::vector<unsigned> partIds,
+Engine::pipelineForwardGhostUpdates(unsigned partId, unsigned rowSize,
   FeatType* inputTensor, unsigned featDim) {
+    // Compute the first and last id for the given partition
+    unsigned startId = partId * rowSize;
+    unsigned endId = (partId + 1) * rowSize;
+    endId = endId > graph.localVtxCnt ? graph.localVtxCnt : endId;
+
+    std::string out = std::to_string(partId) + " :" + std::to_string(startId) + ","
+                      + std::to_string(endId);
+    printLog(nodeId, out.c_str());
+
+    return;
+
+    // Create a series of buckets for batching sendout messages to nodes
     std::vector<unsigned>* batchedIds = new std::vector<unsigned>[numNodes];
-    for (unsigned lvids : partIds) {
-        for (unsigned nid : graph.forwardGhostMap[lvids]) {
-            batchedIds[nid].push_back(lvids);
+    for (unsigned lvid = startId; lvid < endId; ++lvid) {
+        for (unsigned nid : graph.forwardGhostMap[lvid]) {
+            batchedIds[nid].push_back(lvid);
         }
     }
 

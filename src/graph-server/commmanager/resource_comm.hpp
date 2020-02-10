@@ -22,6 +22,8 @@ struct CommInfo {
     unsigned weightserverPort;
 
     unsigned totalLayers; //for weights prefetching
+
+    FuncPtr scatterFunc;
 };
 
 //abstract interface declaration
