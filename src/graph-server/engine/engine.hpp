@@ -63,7 +63,7 @@ public:
                                unsigned inFeatDim, unsigned outFeatDim);
     FeatType* scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
     FeatType* fusedGAS(FeatType* vtcsTensor, unsigned vtcsCnt,
-                       unsigned inFeatDim, unsigned outFeatDim);
+      unsigned inFeatDim, unsigned outFeatDim, bool scatter);
 
     FeatType* aggregateBackward(FeatType *gradTensor, unsigned vtcsCnt,
                                 unsigned featDim);
@@ -105,7 +105,8 @@ private:
     FeatType *forwardVerticesInitData;
     FeatType *forwardGhostInitData;
 
-    FeatType *forwardGhostVerticesData;
+    FeatType *forwardGhostVerticesDataIn;
+    FeatType *forwardGhostVerticesDataOut;
     FeatType *backwardGhostVerticesData;
 
     // Labels one-hot storage array.
@@ -170,8 +171,8 @@ private:
     // Worker and communicator thread function.
     void forwardWorker(unsigned tid, void *args);
     void backwardWorker(unsigned tid, void *args);
-    void forwardGhostCommunicator(unsigned tid, void *args);
-    void backwardGhostCommunicator(unsigned tid, void *args);
+    void forwardGhostReceiver(unsigned tid);
+    void backwardGhostReceiver(unsigned tid);
 
     void aggregateCompute(unsigned tid, void *args);
     void aggregateBPCompute(unsigned tid, void *args);
