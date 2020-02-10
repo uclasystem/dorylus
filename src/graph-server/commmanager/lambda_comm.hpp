@@ -69,7 +69,7 @@ public:
     // For forward-prop.
     void newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData,
       FeatType *actData, unsigned numLocalVertices, unsigned numFeats,
-      unsigned numFeatsNext);
+      unsigned numFeatsNext, bool pipeline = false);
     void requestForward(unsigned layer, bool lastLayer);
     void invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer);
     void waitLambdaForward(unsigned layer, bool lastLayer);

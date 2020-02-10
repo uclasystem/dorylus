@@ -178,8 +178,9 @@ void LambdaComm::callback(const Aws::Lambda::LambdaClient *client,
  *
  */
 void
-LambdaComm::newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData, FeatType *actData,
-    unsigned numLocalVertices, unsigned numFeats, unsigned numFeatsNext) {
+LambdaComm::newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData,
+  FeatType *actData, unsigned numLocalVertices, unsigned numFeats,
+  unsigned numFeatsNext, bool pipeline) {
     countForward = 0;
 
     currLayer = layer;
@@ -190,7 +191,7 @@ LambdaComm::newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData
 
     // Refresh workers' members, and connect their worker sockets to the backend.
     for (auto&& worker : workers)
-        worker->refreshState(actMatrix, zData, actData, numFeatsNext);
+        worker->refreshState(actMatrix, zData, actData, numFeatsNext, pipeline);
 }
 
 // deprecated.

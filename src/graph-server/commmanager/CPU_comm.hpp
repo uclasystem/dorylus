@@ -26,8 +26,9 @@ class CPUComm : public ResourceComm {
     CPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_, const std::string &wServersFile, unsigned wPort_, unsigned totalLayers_);
 
     // For forward-prop.
-    void newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData_, FeatType *actData_,
-                           unsigned numLocalVertices_, unsigned numFeats, unsigned numFeatsNext_);
+    void newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData_,
+      FeatType *actData_, unsigned numLocalVertices_, unsigned numFeats,
+      unsigned numFeatsNext_, bool pipeline = false);
     void requestForward(unsigned layer, bool lastLayer);
     void waitLambdaForward(unsigned layer, bool lastLayer) {};
     void invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer) {};

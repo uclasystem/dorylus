@@ -34,7 +34,7 @@ public:
     // For forward-prop.
     virtual void newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData,
         FeatType *actData, unsigned numLocalVertices, unsigned numFeats,
-        unsigned numFeatsNext) = 0;
+        unsigned numFeatsNext, bool pipeline = false) = 0;
 
     virtual void requestForward(unsigned layer, bool lastLayer) = 0;
 

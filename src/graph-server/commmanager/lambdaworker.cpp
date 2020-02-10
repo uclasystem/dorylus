@@ -167,11 +167,12 @@ LambdaWorker::work() {
  *
  */
 void
-LambdaWorker::refreshState(Matrix actMatrix_, FeatType *zData_, FeatType *actData_, unsigned numFeatsNext_) { // For forward-prop.
+LambdaWorker::refreshState(Matrix actMatrix_, FeatType *zData_, FeatType *actData_, unsigned numFeatsNext_, bool _pipeline) { // For forward-prop.
     actMatrix = actMatrix_;
     zData = zData_;
     actData = actData_;
     numFeatsNext = numFeatsNext_;
+    pipeline = _pipeline;
 }
 
 void
@@ -246,8 +247,10 @@ LambdaWorker::recvLambdaResults(zmq::message_t& client_id, unsigned partId) {
     __sync_bool_compare_and_swap(manager->forwardLambdaTable + partId, true, false);
     __sync_fetch_and_add(&(manager->countForward), 1);
 
-    std::thread scatterThrd(scatterFunc, partId, partRows, actData, numFeatsNext);
-    scatterThrd.detach();
+    if (pipeline) {
+        std::thread scatterThrd(scatterFunc, partId, partRows, actData, numFeatsNext);
+        scatterThrd.detach();
+    }
 }
 
 void

@@ -43,8 +43,10 @@ public:
     void work();
 
     // Used at context creation / destruction.
-    void refreshState(Matrix actMatrix_, FeatType *zData_, FeatType *actData_, unsigned numFeatsNext_);
-    void refreshState(Matrix oldGradMatrix_, Matrix newGradMatrix_, Matrix targetMatrix_, std::vector<Matrix> *savedTensors);
+    void refreshState(Matrix actMatrix_, FeatType *zData_, FeatType *actData_,
+      unsigned numFeatsNext_, bool _pipeline = false);
+    void refreshState(Matrix oldGradMatrix_, Matrix newGradMatrix_,
+      Matrix targetMatrix_, std::vector<Matrix> *savedTensors);
 
 protected:
     LambdaComm *manager;
@@ -93,6 +95,7 @@ private:
     std::vector<Matrix> *savedTensors;
 
     // Callback when lambda results are returned
+    bool pipeline;
     FuncPtr scatterFunc;
 };
 

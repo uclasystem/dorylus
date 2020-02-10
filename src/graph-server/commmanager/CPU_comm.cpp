@@ -116,7 +116,7 @@ CPUComm::CPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,
 
 
 void CPUComm::newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData_, FeatType *actData_,
-                                unsigned numLocalVertices_, unsigned numFeats, unsigned numFeatsNext_) {
+                                unsigned numLocalVertices_, unsigned numFeats, unsigned numFeatsNext_, bool pipeline) {
     // Create a new matrix object for workers to access.
     numLocalVertices = numLocalVertices_;
     currLayer = layer;
