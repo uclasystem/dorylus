@@ -39,11 +39,6 @@ WeightServer::WeightServer(std::string &weightServersFile, std::string &myPrIpFi
     // Hardcoding adam to false for right now
     adam = true;
 
-    // Vars to keep track of op time averages
-    avgPullForwardTime = 0;
-    avgPullBackwardTime = 0;
-    avgPushBackwardTime = 0;
-
     // Read the dsh file to get info about all weight server nodes.
     initializeWeightServerComms(weightServersFile, myPrIpFile);
 
@@ -350,26 +345,6 @@ void WeightServer::applyUpdates() {
 
     // Reset number of lambdas.
     lambdaRecved = 0;
-}
-
-void
-WeightServer::addOpTime(OP op, double opTime) {
-    switch (op) {
-        case OP::PULL_FORWARD:
-            avgPullForwardTime += opTime;
-            pullForwardOpCnt++;
-            break;
-        case OP::PULL_BACKWARD:
-            avgPullBackwardTime += opTime;
-            pullBackwardOpCnt++;
-            break;
-        case OP::PUSH_BACKWARD:
-            avgPushBackwardTime += opTime;
-            pushBackwardOpCnt++;
-            break;
-        default:
-            break;
-    }
 }
 
 

@@ -49,8 +49,6 @@ class WeightServer {
     void applyUpdate(unsigned layer);
     void applyUpdates();
 
-    void addOpTime(OP op, double opTime);
-
     //For sync
     std::mutex servers_updates_mutex;
     std::condition_variable servers_updates_cv;
@@ -118,13 +116,6 @@ class WeightServer {
     zmq::socket_t publisher;
     zmq::socket_t subscriber;
     unsigned serverPort;
-
-    double avgPullForwardTime;
-    unsigned pullForwardOpCnt;
-    double avgPullBackwardTime;
-    unsigned pullBackwardOpCnt;
-    double avgPushBackwardTime;
-    unsigned pushBackwardOpCnt;
 
     AdamOptimizer adamOpt;
 };
