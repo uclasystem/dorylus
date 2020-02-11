@@ -38,7 +38,6 @@ Engine::init(int argc, char *argv[]) {
 
     parseArgs(argc, argv);
 
-
     // Initialize the node manager and communication manager.
     nodeManager.init(dshMachinesFile, myPrIpFile, myPubIpFile);    // NodeManger should go first.
 
@@ -239,15 +238,15 @@ Engine::runForward() {
     forwardGhostVerticesDataIn = forwardGhostInitData;
     for (iteration = 0; iteration < numLayers; iteration++) {
         // For sequential invocation of operations use this block
-        {
-            inputTensor = aggregate(inputTensor, graph.localVtxCnt, getFeatDim(iteration));
-            inputTensor = invokeLambda(inputTensor, graph.localVtxCnt,
-              getFeatDim(iteration), getFeatDim(iteration + 1));
-            if (iteration < numLayers - 1) { // don't need scatter at the last layer.
-                inputTensor = scatter(inputTensor, graph.localVtxCnt, getFeatDim(iteration + 1));
-                forwardGhostVerticesDataIn = forwardGhostVerticesDataOut;
-            }
-        }
+//        {
+//            inputTensor = aggregate(inputTensor, graph.localVtxCnt, getFeatDim(iteration));
+//            inputTensor = invokeLambda(inputTensor, graph.localVtxCnt,
+//              getFeatDim(iteration), getFeatDim(iteration + 1));
+//            if (iteration < numLayers - 1) { // don't need scatter at the last layer.
+//                inputTensor = scatter(inputTensor, graph.localVtxCnt, getFeatDim(iteration + 1));
+//                forwardGhostVerticesDataIn = forwardGhostVerticesDataOut;
+//            }
+//        }
 
         // For fused gather and apply, use this block 
 //        {
@@ -255,13 +254,18 @@ Engine::runForward() {
 //              getFeatDim(iteration), getFeatDim(iteration + 1));
 //            if (iteration < numLayers - 1) { // don't need scatter at the last layer.
 //                inputTensor = scatter(inputTensor, graph.localVtxCnt, getFeatDim(iteration + 1));
+//                forwardGhostVerticesDataIn = forwardGhostVerticesDataOut;
 //            }
 //        }
 
         // For Aggregation -> Apply -> Scatter pipeline use this block
+        {
+            inputTensor = fusedGAS(inputTensor, graph.localVtxCnt, getFeatDim(iteration),
+              getFeatDim(iteration + 1), iteration < numLayers - 1);
+        }
+
+        // TODO: Implement Agg_0 -> Apply_0 -> Scatter_0 -> Agg_1 ... pipeline
 //        {
-//            fusedGAS(inputTensor, graph.localVtxCnt, getFeatDim(iteration),
-//              getFeatDim(iteration + 1), iteration < numLayers - 1);
 //        }
     }
 
@@ -614,13 +618,13 @@ Engine::scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim) {
 
     // Start data communicators.
     commHalt = false;
-    forwardGhostVerticesDataOut = new FeatType [featDim * graph.srcGhostCnt];
+    forwardGhostVerticesDataOut = new FeatType[graph.srcGhostCnt * featDim];
     auto fgc_fp = std::bind(&Engine::forwardGhostReceiver, this, std::placeholders::_1);
     dataPool->perform(fgc_fp);
 
     sendForwardGhostUpdates(vtcsTensor, featDim);
 
-    // TODO: (YIFAN) we can optimize this to extend comm protocal. Mark the last packet sent so this node knows when to exit ghostCommunicator.
+    // TODO: (YIFAN) we can optimize this to extend comm protocol. Mark the last packet sent so this node knows when to exit ghostCommunicator.
     nodeManager.barrier();
 
     commHalt = true;
@@ -632,6 +636,7 @@ Engine::scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim) {
     } else {
         vecTimeSendout[iteration] += getTimer() - sttTimer;
     }
+
     return vtcsTensor;
 }
 
@@ -644,8 +649,9 @@ Engine::fusedGAS(FeatType* vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     // Forward declaration to ensure pointer remains in scope
     auto fgr_fp = std::bind(&Engine::forwardGhostReceiver, this, std::placeholders::_1);
     if (scatter) {
+        partsScattered = 0;
         dataPool->perform(fgr_fp);
-        forwardGhostVerticesDataOut = new FeatType[outFeatDim * graph.srcGhostCnt];
+        forwardGhostVerticesDataOut = new FeatType[graph.srcGhostCnt * outFeatDim];
     }
 
     // Prepare for gather phase
@@ -693,6 +699,14 @@ Engine::fusedGAS(FeatType* vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
         resComm->waitLambdaForward(iteration, iteration == numLayers - 1);
     }
 
+    // Wait for all remote schedulings sent by me to be handled.
+    printLog(nodeId, "WAITING for lambda updates to send");
+    scatterPartsLock.lock();
+    if (partsScattered < numLambdasForward) {
+        scatterPartsCond.wait();
+    }
+    scatterPartsLock.unlock();
+
     nodeManager.barrier();
     commHalt = true;
     dataPool->sync();
@@ -721,6 +735,10 @@ Engine::fusedGAS(FeatType* vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     } else {
         vecTimeAggregate[iteration] += getTimer() - sttTimer;
     }
+
+    // Set the scattered output as the input for next aggregation phase
+    forwardGhostVerticesDataIn = forwardGhostVerticesDataOut;
+
     return outputTensor;
 }
 
@@ -815,7 +833,6 @@ Engine::sendForwardGhostUpdates(FeatType *inputTensor, unsigned featDim) {
 inline void
 Engine::pipelineForwardGhostUpdates(unsigned partId, unsigned rowSize,
   FeatType* inputTensor, unsigned featDim) {
-
     // Compute the first and last id for the given partition
     unsigned startId = partId * rowSize;
     unsigned endId = (partId + 1) * rowSize;
@@ -847,17 +864,16 @@ Engine::pipelineForwardGhostUpdates(unsigned partId, unsigned rowSize,
             lockRecvCnt.unlock();
         }
     }
-    // Wait for all remote schedulings sent by me to be handled.
-    printLog(nodeId, "Waiting on replies");
-    lockRecvCnt.lock();
-    if (recvCnt > 0) {
-        condRecvCnt.wait();
-    }
-    lockRecvCnt.unlock();
-
-    printLog(nodeId, "Done waiting");
 
     delete[] batchedIds;
+
+    scatterPartsLock.lock();
+    partsScattered++;
+    if (partsScattered >= numLambdasForward) {
+        printLog(nodeId, "ALL Lambda UPDATES SENT");
+        scatterPartsCond.signal();
+    }
+    scatterPartsLock.unlock();
 }
 
 inline void
@@ -948,6 +964,8 @@ Engine::forwardGhostReceiver(unsigned tid) {
         }
     }
     delete[] msgBuf;
+
+    printLog(nodeId, "EXITING GhostReceiver");
 }
 
 

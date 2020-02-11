@@ -102,11 +102,13 @@ private:
     // intermediate data for backward computation.
     std::vector<Matrix> *savedTensors;
 
+    // Persistent pointers to original input data
     FeatType *forwardVerticesInitData;
     FeatType *forwardGhostInitData;
 
     FeatType *forwardGhostVerticesDataIn;
     FeatType *forwardGhostVerticesDataOut;
+
     FeatType *backwardGhostVerticesData;
 
     // Labels one-hot storage array.
@@ -117,6 +119,10 @@ private:
     int recvCnt = 0;
     Lock lockRecvCnt;
     Cond condRecvCnt;
+
+    unsigned partsScattered = 0;
+    Lock scatterPartsLock;
+    Cond scatterPartsCond;
 
     std::string datasetDir;
     std::string outFile;
