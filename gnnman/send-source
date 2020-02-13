@@ -29,7 +29,7 @@ for CTX in graph weight; do
 
     # Send repo updates using `rsync`.
     echo "Sending new updates..."
-    ${EC2MAN_CMD} ${CTX} all rsync --exclude ".git*" --exclude "wiki" --exclude "README.md" --exclude "data" ../gnn-lambda &
+    ${EC2MAN_CMD} ${CTX} all rsync  -zz --exclude ".git*" --exclude "wiki" --exclude "README.md" --exclude "data" ../gnn-lambda &
 
 done
 
