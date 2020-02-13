@@ -18,7 +18,7 @@ main(int argc, char *argv[]) {
     // Initialize the engine.
     // The engine object is static and has been substantiated in Engine.cpp.
     engine.init(argc, argv);
-    unsigned numEpochs = 5;
+    unsigned numEpochs = 30;
     unsigned valFreq = 1;
 
     if (engine.master())
@@ -31,10 +31,10 @@ main(int argc, char *argv[]) {
         epochTimer.start();
         printLog(engine.getNodeId(), "Starting Epoch %u", epoch+1);
         if (epoch != 0 && (epoch % valFreq == 0 || epoch == 1)) {
-            FeatType *predictData = engine.runForward();
+            FeatType *predictData = engine.runForward(epoch);
             engine.runBackward(predictData);
         } else {
-            FeatType *predictData = engine.runForward();
+            FeatType *predictData = engine.runForward(epoch);
             // Do a backward-prop phase.
             engine.runBackward(predictData);
         }
