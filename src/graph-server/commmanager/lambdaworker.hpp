@@ -20,6 +20,7 @@
 #include <unistd.h>
 
 #include "../utils/utils.hpp"
+#include "../parallel/lock.hpp"
 #include "../../common/matrix.hpp"
 #include "../../common/utils.hpp"
 
@@ -35,7 +36,7 @@ class LambdaWorker {
 
 public:
 
-    LambdaWorker(LambdaComm *manager_, FuncPtr _scatterFunc);
+    LambdaWorker(LambdaComm *manager_, PairQueue* _q_ptr, Lock* _qLock);
 
     ~LambdaWorker();
 
@@ -96,7 +97,8 @@ private:
 
     // Callback when lambda results are returned
     bool pipeline;
-    FuncPtr scatterFunc;
+    PairQueue* q_ptr;
+    Lock* qLock;
 };
 
 

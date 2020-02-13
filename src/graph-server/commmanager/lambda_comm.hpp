@@ -33,6 +33,7 @@
 #include "resource_comm.hpp"
 #include "lambdaworker.hpp"
 #include "../utils/utils.hpp"
+#include "../parallel/lock.hpp"
 #include "../../common/matrix.hpp"
 #include "../../common/utils.hpp"
 
@@ -90,7 +91,7 @@ public:
     void sendShutdownMessage();
 
     // simple LambdaWorker initialization
-    friend LambdaWorker::LambdaWorker(LambdaComm *manager, FuncPtr _scatterFunc);
+    friend LambdaWorker::LambdaWorker(LambdaComm *manager, PairQueue* _q_ptr, Lock* _qLock);
 
 // private:
     // AWSSDK Members

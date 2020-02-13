@@ -1,13 +1,15 @@
 #ifndef __ENGINE_HPP__
 #define __ENGINE_HPP__
 
-
 #include <set>
 #include <vector>
 #include <climits>
 #include <atomic>
 #include <tuple>
 #include <cstdio>
+#include <mutex>
+#include <condition_variable>
+
 #include "graph.hpp"
 #include "../commmanager/commmanager.hpp"
 #include "../commmanager/resource_comm.hpp"
@@ -49,7 +51,7 @@ public:
 
     // Public APIs for benchmarks.
     void init(int argc, char *argv[]);
-    FeatType *runForward();
+    FeatType *runForward(unsigned epoch);
     void runBackward(FeatType *backwardInitData);
     void output();
     void destroy();
@@ -116,13 +118,15 @@ private:
 
     unsigned currId = 0;
 
-    int recvCnt = 0;
-    Lock lockRecvCnt;
-    Cond condRecvCnt;
+    int fwdRecvCnt = 0;
+    Lock fwdRecvCntLock;
+    Cond fwdRecvCntCond;
+
+    int bkwdRecvCnt = 0;
+    Lock bkwdRecvCntLock;
+    Cond bkwdRecvCntCond;
 
     unsigned partsScattered = 0;
-    Lock scatterPartsLock;
-    Cond scatterPartsCond;
 
     std::string datasetDir;
     std::string outFile;
@@ -198,11 +202,13 @@ private:
     void sendForwardGhostUpdates(FeatType *inputTensor, unsigned featDim);
     void sendBackwardGhostGradients(FeatType *gradTensor, unsigned featDim);
 
-    // Pipelined ghost updates
-    void pipelineForwardGhostUpdates(unsigned partId, unsigned rowSize,
-      FeatType* inputTensor, unsigned featDim);
+    // All pipeline related functions
+    void pipelineForwardGhostUpdates(FeatType* inputTensor, unsigned featDim);
     void pipelineBackwardGhostUpdates(std::vector<unsigned>* partIds,
       FeatType* inputTensor, unsigned featDim);
+
+    PairQueue rangesToScatter;
+    Lock queueLock;
 
     // Ghost update operation, send vertices to other nodes
     void forwardVerticesPushOut(unsigned receiver, unsigned totCnt,
@@ -230,7 +236,7 @@ private:
     void readFeaturesFile(std::string& featuresFileName);
     void readLabelsFile(std::string& labelsFileName);
 
-    void setupCommInfo(FuncPtr _scatterFunc);
+    void setupCommInfo();
 
     // Metric printing.
     void printGraphMetrics();

@@ -47,7 +47,7 @@ LambdaComm::LambdaComm(CommInfo &commInfo) :
 
     // Create 'numListeners' workers and detach them.
     for (unsigned i = 0; i < numListeners; ++i) {
-        workers.push_back(new LambdaWorker(this, commInfo.scatterFunc));
+        workers.push_back(new LambdaWorker(this, commInfo.queuePtr, commInfo.qLock));
         worker_threads.push_back(new std::thread(std::bind(&LambdaWorker::work, workers[i])));
     }
 

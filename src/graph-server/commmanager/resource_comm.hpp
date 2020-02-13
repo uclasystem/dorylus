@@ -10,6 +10,8 @@ enum{
     LAMBDA, GPU, CPU
 };
 
+class Lock;
+
 struct CommInfo {
     std::string nodeIp;
     unsigned nodeId;
@@ -23,7 +25,8 @@ struct CommInfo {
 
     unsigned totalLayers; //for weights prefetching
 
-    FuncPtr scatterFunc;
+    PairQueue* queuePtr;
+    Lock* qLock;
 };
 
 //abstract interface declaration

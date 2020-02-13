@@ -8,8 +8,8 @@
  * LambdaWorker constructor & destructor.
  *
  */
-LambdaWorker::LambdaWorker(LambdaComm *manager_, FuncPtr _scatterFunc) : manager(manager_),
-  workersocket(manager->ctx, ZMQ_DEALER), scatterFunc(_scatterFunc) {
+LambdaWorker::LambdaWorker(LambdaComm *manager_, PairQueue* _q_ptr, Lock* _qLock) : manager(manager_),
+  workersocket(manager->ctx, ZMQ_DEALER), q_ptr(_q_ptr), qLock(_qLock) {
     workersocket.setsockopt(ZMQ_LINGER, 0);
     workersocket.setsockopt(ZMQ_RCVTIMEO, 1000); // Set time out of weight socket to 1s for a graceful shut down.
     workersocket.connect("inproc://backend");
@@ -247,10 +247,9 @@ LambdaWorker::recvLambdaResults(zmq::message_t& client_id, unsigned partId) {
     __sync_bool_compare_and_swap(manager->forwardLambdaTable + partId, true, false);
     __sync_fetch_and_add(&(manager->countForward), 1);
 
-    if (pipeline) {
-        std::thread scatterThrd(scatterFunc, partId, partRows, actData, numFeatsNext);
-        scatterThrd.detach();
-    }
+    qLock->lock();
+    q_ptr->push(std::make_pair(partId, partRows));
+    qLock->unlock();
 }
 
 void

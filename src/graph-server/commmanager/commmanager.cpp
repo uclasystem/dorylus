@@ -218,6 +218,7 @@ CommManager::rawMsgPushOut(zmq::message_t &msg) {
     dataPublisher->ksend(msg, ZMQ_DONTWAIT);
     lockDataPublisher.unlock();
 }
+
 /**
  *
  * Push a value on a certain topic to all the nodes (including myself).
