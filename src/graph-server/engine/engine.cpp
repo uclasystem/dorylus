@@ -71,25 +71,7 @@ Engine::init(int argc, char *argv[]) {
 #endif
 
     printGraphMetrics();
-<<<<<<< HEAD
-    
-=======
-    std::unordered_set<unsigned> sendForward;
-    std::unordered_set<unsigned> sendBackward;
 
-    for (unsigned i=0;i<numNodes;++i){
-        for(unsigned j=0;j<graph.forwardLocalVtxDsts[i].size();++j){
-            sendForward.insert((graph.forwardLocalVtxDsts[i])[j]);
-        }
-        for(unsigned j=0;j<graph.forwardLocalVtxDsts[i].size();++j){
-            sendBackward.insert((graph.backwardLocalVtxDsts[i])[j]);
-        }
-    }
-    printLog(nodeId,"push forward cnt %lu",sendForward.size());
-    printLog(nodeId,"push backward cnt %lu",sendBackward.size());
-    
-
->>>>>>> 2900e66abac9b6c48fe2afbc3983f8da16952671
     // Save intermediate tensors during forward phase for backward computation.
     savedTensors = new std::vector<Matrix> [numLayers];
 

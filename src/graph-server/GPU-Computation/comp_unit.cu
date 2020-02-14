@@ -37,6 +37,7 @@ CuMatrix ComputingUnit::aggregate(CuMatrix &sparse, CuMatrix &dense) {
     cusparseSpMatDescr_t desA;
     cusparseDnMatDescr_t desB;
     cusparseDnMatDescr_t desC;
+
     auto
     cusparseStat = cusparseCreateCsr(&desA, sparse.getRows(), sparse.getCols(), sparse.nnz,
                                      sparse.csrRowPtr, sparse.csrColInd, sparse.csrVal,
@@ -133,7 +134,7 @@ CuMatrix ComputingUnit::softmaxRows( CuMatrix &mat) {
 CuMatrix ComputingUnit::activateBackward( CuMatrix &y, CuMatrix &gradient) {
     cudnnActivationDescriptor_t actDesc;
     cudnnCreateActivationDescriptor(&actDesc);
-    cudnnSetActivationDescriptor(actDesc, CUDNN_ACTIVATION_RELU, CUDNN_NOT_PROPAGATE_NAN, 1.0);
+    cudnnSetActivationDescriptor(actDesc, CUDNN_ACTIVATION_TANH, CUDNN_NOT_PROPAGATE_NAN, 1.0);
 
     cudnnTensorDescriptor_t yDesc, dyDesc;
     cudnnCreateTensorDescriptor(&yDesc);
@@ -178,7 +179,7 @@ void ComputingUnit::activate(CuMatrix &A) {
 
     cudnnActivationDescriptor_t actDesc;
     cudnnCreateActivationDescriptor(&actDesc);
-    cudnnSetActivationDescriptor(actDesc, CUDNN_ACTIVATION_RELU, CUDNN_NOT_PROPAGATE_NAN, 1.0);
+    cudnnSetActivationDescriptor(actDesc, CUDNN_ACTIVATION_TANH, CUDNN_NOT_PROPAGATE_NAN, 1.0);
     cudnnActivationForward(cudnnHandle, actDesc,
                            &alpha, srcTensorDesc, A.devPtr, &beta, srcTensorDesc, A.devPtr);
 }
