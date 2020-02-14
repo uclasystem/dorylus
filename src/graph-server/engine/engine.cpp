@@ -71,21 +71,7 @@ Engine::init(int argc, char *argv[]) {
 #endif
 
     printGraphMetrics();
-    std::unordered_set<unsigned> sendForward;
-    std::unordered_set<unsigned> sendBackward;
-
-    for (unsigned i=0;i<numNodes;++i){
-        for(unsigned j=0;j<graph.forwardLocalVtxDsts[i].size();++j){
-            sendForward.insert((graph.forwardLocalVtxDsts[i])[j]);
-        }
-        for(unsigned j=0;j<graph.forwardLocalVtxDsts[i].size();++j){
-            sendBackward.insert((graph.backwardLocalVtxDsts[i])[j]);
-        }
-    }
-    printLog(nodeId,"push forward cnt %lu",sendForward.size());
-    printLog(nodeId,"push backward cnt %lu",sendBackward.size());
     
-
     // Save intermediate tensors during forward phase for backward computation.
     savedTensors = new std::vector<Matrix> [numLayers];
 
@@ -1407,7 +1393,7 @@ Engine::readFeaturesFile(std::string &featuresFileName) {
     std::ifstream infile(featuresFileName.c_str());
     if (!infile.good())
         printLog(nodeId, "Cannot open features file: %s [Reason: %s]", featuresFileName.c_str(), std::strerror(errno));
-
+    
     assert(infile.good());
 
     FeaturesHeaderType fHeader;

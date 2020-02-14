@@ -37,7 +37,7 @@ CuMatrix ComputingUnit::aggregate(CuMatrix &sparse, CuMatrix &dense) {
     cusparseSpMatDescr_t desA;
     cusparseDnMatDescr_t desB;
     cusparseDnMatDescr_t desC;
-    
+
     auto
     cusparseStat = cusparseCreateCsr(&desA, sparse.getRows(), sparse.getCols(), sparse.nnz,
                                      sparse.csrRowPtr, sparse.csrColInd, sparse.csrVal,

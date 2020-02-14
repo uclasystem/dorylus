@@ -14,6 +14,12 @@ CommManager::init(NodeManager& nodeManager) {
     nodeId = nodeManager.getMyNodeId();
     Node me = nodeManager.getNode(nodeId);
 
+    if(nodeManager.standAloneMode()==true){
+        printLog(nodeId, "CommManager initialization complete.");
+        return;
+    }
+        
+
     // Data publisher & subscriber.
     dataPublisher = new zmq::socket_t(dataContext, ZMQ_PUB);
     dataPublisher->setsockopt(ZMQ_SNDHWM, 0);       // Set no limit on number of message queueing.
@@ -167,6 +173,8 @@ CommManager::init(NodeManager& nodeManager) {
  */
 void
 CommManager::destroy() {
+    
+    if (numNodes == 0) return;
 
     flushControl();
     flushData();
@@ -203,6 +211,9 @@ CommManager::destroy() {
 
 void
 CommManager::rawMsgPushOut(zmq::message_t &msg) {
+    
+    if (numNodes == 0) return;
+    
     lockDataPublisher.lock();
     dataPublisher->ksend(msg, ZMQ_DONTWAIT);
     lockDataPublisher.unlock();
@@ -214,6 +225,9 @@ CommManager::rawMsgPushOut(zmq::message_t &msg) {
  */
 void
 CommManager::dataPushOut(unsigned receiver, unsigned sender, unsigned topic, void *value, unsigned valSize) {
+    
+    if (numNodes == 0) return;
+    
     zmq::message_t outMsg(sizeof(char) * 8 + sizeof(unsigned) + sizeof(unsigned) + valSize);
     char *msgPtr = (char *)outMsg.data();
     sprintf(msgPtr, "%8X", receiver);
@@ -239,6 +253,9 @@ CommManager::dataPushOut(unsigned receiver, unsigned sender, unsigned topic, voi
  */
 bool
 CommManager::dataPullIn(unsigned *sender, unsigned *topic, void *value, unsigned maxValSize) {
+
+    if (numNodes == 0) return true;
+
     zmq::message_t inMsg;
 
     lockDataSubscriber.lock();
@@ -269,6 +286,9 @@ CommManager::dataPullIn(unsigned *sender, unsigned *topic, void *value, unsigned
  */
 void
 CommManager::controlPushOut(unsigned to, void *value, unsigned valSize) {
+
+    if (numNodes == 0) return;
+
     assert(to >= 0 && to < numNodes);
     assert(to != nodeId);
     zmq::message_t outMsg(sizeof(ControlMessage) + valSize);
@@ -290,6 +310,9 @@ CommManager::controlPushOut(unsigned to, void *value, unsigned valSize) {
  */
 bool
 CommManager::controlPullIn(unsigned from, void *value, unsigned maxValSize) {
+
+    if (numNodes == 0) return true;
+
     assert(from >= 0 && from < numNodes);
     assert(from != nodeId);
     zmq::message_t inMsg;

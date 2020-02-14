@@ -55,6 +55,7 @@ public:
 
     void barrier();
     
+    bool standAloneMode();
     Node& getNode(unsigned i);
     unsigned getNumNodes();
     unsigned getMyNodeId();
@@ -66,7 +67,8 @@ private:
 
     Node me;
     unsigned masterId;
-    
+    bool standAlone;
+
     std::vector<Node> allNodes;
 
     bool inBarrier = false;
@@ -75,7 +77,7 @@ private:
     zmq::socket_t *nodePublisher = NULL;
     zmq::socket_t *nodeSubscriber = NULL;
     unsigned nodePort;
-
+    
     void parseNodeConfig(const std::string dshMachinesFile);
 };
 
