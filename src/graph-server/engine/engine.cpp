@@ -28,8 +28,10 @@ static CuMatrix *NormAdjMatrixOut = NULL;
 static ComputingUnit cu = ComputingUnit::getInstance();
 #endif
 
+static int globalEpoch = -1;
 
-std::ofstream debugFile;
+std::ofstream debugFile0;
+std::ofstream debugFile1;
 std::mutex debugFileLock;
 
 bool check_correct(FeatType* fptr1, FeatType* fptr2, unsigned num) {
@@ -41,6 +43,7 @@ bool check_correct(FeatType* fptr1, FeatType* fptr2, unsigned num) {
 }
 
 void outputToFile(std::ofstream& outfile, FeatType* fptr, unsigned r, unsigned c) {
+    std::cerr << "PRINTING TO FILE" << std::endl;
     std::string out = "";
     for (uint32_t u = 0; u < r; ++u) {
         for (uint32_t uj = 0; uj < c; ++uj) {
@@ -259,31 +262,32 @@ Engine::getNodeId() {
  */
 FeatType *
 Engine::runForward(unsigned epoch) {
+    globalEpoch = epoch;
     // Make sure all nodes start running the forward-prop phase.
     nodeManager.barrier();
     printLog(nodeId, "Engine starts running FORWARD...");
 
     timeForwardProcess -= getTimer();
 
-    debugFile("debug.out", std::fstream::out | std::fstream::app);
+    debugFile1.open("debug.out", std::ofstream::out | std::ofstream::app);
 
     // Create buffer for first-layer aggregation.
     FeatType *inputTensor = forwardVerticesInitData;
     forwardGhostVerticesDataIn = forwardGhostInitData;
 
+    debugFile1 << "## EPOCH " << epoch << std::endl;
     for (iteration = 0; iteration < numLayers; iteration++) {
         // For sequential invocation of operations use this block
-        {
-            inputTensor = aggregate(inputTensor, graph.localVtxCnt, getFeatDim(iteration));
-            inputTensor = invokeLambda(inputTensor, graph.localVtxCnt,
-              getFeatDim(iteration), getFeatDim(iteration + 1));
-            if (iteration < numLayers - 1) { // don't need scatter at the last layer.
-                inputTensor = scatter(inputTensor,
-                  graph.localVtxCnt, getFeatDim(iteration + 1));
-                forwardGhostVerticesDataIn = forwardGhostVerticesDataOut;
-            }
-        }
-
+//        {
+//            inputTensor = aggregate(inputTensor, graph.localVtxCnt, getFeatDim(iteration));
+//            inputTensor = invokeLambda(inputTensor, graph.localVtxCnt,
+//              getFeatDim(iteration), getFeatDim(iteration + 1));
+//            if (iteration < numLayers - 1) { // don't need scatter at the last layer.
+//                inputTensor = scatter(inputTensor,
+//                  graph.localVtxCnt, getFeatDim(iteration + 1));
+//                forwardGhostVerticesDataIn = forwardGhostVerticesDataOut;
+//            }
+//        }
 
         // For fused gather and apply, use this block 
 //        {
@@ -296,17 +300,24 @@ Engine::runForward(unsigned epoch) {
 //        }
 
         // For Aggregation -> Apply -> Scatter pipeline use this block
-//        {
-//            inputTensor = fusedGAS(inputTensor, graph.localVtxCnt, getFeatDim(iteration),
-//              getFeatDim(iteration + 1), iteration < numLayers - 1);
-//        }
+        {
+            inputTensor = fusedGAS(inputTensor, graph.localVtxCnt, getFeatDim(iteration),
+              getFeatDim(iteration + 1), iteration < numLayers - 1);
+        }
 
         // TODO: Implement Agg_0 -> Apply_0 -> Scatter_0 -> Agg_1 ... pipeline
 //        {
 //        }
+        debugFile1 << "## LAYER " << iteration << std::endl;
+        outputToFile(debugFile1, inputTensor, graph.localVtxCnt, getFeatDim(iteration+1));
+
+        if (iteration < numLayers - 1) {
+            debugFile1 << "## SCATTER " << epoch << std::endl;
+            outputToFile(debugFile1, forwardGhostVerticesDataOut, graph.srcGhostCnt, getFeatDim(iteration+1));
+        }
     }
 
-    debugFile.close();
+    debugFile1.close();
 
     timeForwardProcess += getTimer();
     printLog(nodeId, "Engine completes FORWARD at iter %u.", iteration);
@@ -522,7 +533,7 @@ FeatType *Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned fea
 }
 #endif // _GPU_ENABLED_
 
-FeatType *
+FeatType*
 Engine::invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim) {
     double sttTimer = getTimer();
     assert(vtcsCnt == graph.localVtxCnt);
@@ -538,7 +549,6 @@ Engine::invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
 
     // Start a new lambda communication context.
     resComm->newContextForward(iteration, vtcsTensor, zTensor, outputTensor, vtcsCnt, inFeatDim, outFeatDim);
-
 
     if (mode == LAMBDA) {
         unsigned availLambdaId = 0;
@@ -618,7 +628,6 @@ Engine::fusedGatherApply(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeat
     } else {
         while (currLambdaId < numLambdasForward) {
             resComm->invokeLambdaForward(iteration, currLambdaId, iteration == numLayers - 1);
-            printLog(nodeId, "INVOKE %u", currLambdaId);
             ++currLambdaId;
         }
         resComm->waitLambdaForward(iteration, iteration == numLayers - 1);
@@ -648,6 +657,7 @@ Engine::fusedGatherApply(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeat
     } else {
         vecTimeAggregate[iteration] += getTimer() - sttTimer;
     }
+
     return outputTensor;
 }
 
@@ -750,6 +760,13 @@ Engine::fusedGAS(FeatType* vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     nodeManager.barrier();
     commHalt = true;
     dataPool->sync();
+
+    if (scatter) {
+//        debugFile0.open("debug.out", std::ofstream::out | std::ofstream::app);
+//        debugFile0 << "## SCATTER " << globalEpoch << std::endl;
+//        outputToFile(debugFile0, forwardGhostVerticesDataOut, graph.srcGhostCnt, outFeatDim);
+//        debugFile0.close();
+    }
 
     // Post-processing for applyVertex phase & clean up
     bool saveOutput = true;
@@ -878,6 +895,9 @@ Engine::pipelineForwardGhostUpdates(FeatType* inputTensor, unsigned featDim) {
     const int MAX_PERIOD = 4096;
     int SLEEP_PERIOD = INIT_PERIOD;
 
+    partsScatteredTable = new bool[numLambdasForward];
+    std::memset(partsScatteredTable, 0, sizeof(bool) * numLambdasForward);
+
     // Check queue to see if partition ready
     while (partsScattered < numLambdasForward) {
         queueLock.lock();
@@ -893,6 +913,12 @@ Engine::pipelineForwardGhostUpdates(FeatType* inputTensor, unsigned featDim) {
         } else {
             std::pair<unsigned, unsigned> partitionInfo = rangesToScatter.front();
             rangesToScatter.pop();
+            // Has this partition already been processed
+            if (partsScatteredTable[partitionInfo.first]) {
+                queueLock.unlock();
+                continue;
+            }
+            partsScatteredTable[partitionInfo.first] = true;
             queueLock.unlock();
 
             // Partition Info: (partId, rowsPerPartition)
@@ -986,6 +1012,12 @@ Engine::forwardGhostReceiver(unsigned tid) {
             // Computation workers done their work, so communicator goes to death as well.
             if (commHalt) {
                 delete[] msgBuf;
+                if (commManager.dataPullIn(&sender, &topic, msgBuf, MAX_MSG_SIZE)) {
+                    printLog(nodeId, "\033[1;31m[ ERROR ]\033[0m Still messages in buffer");
+                } else {
+                    printLog(nodeId, "\033[1;32m[ SUCCESS ]\033[0m All messages processed");
+                }
+
                 return;
             }
 
@@ -1030,6 +1062,13 @@ Engine::forwardGhostReceiver(unsigned tid) {
             failedTrials = 0;
         }
     }
+
+    if (commManager.dataPullIn(&sender, &topic, msgBuf, MAX_MSG_SIZE)) {
+        printLog(nodeId, "\033[1;31m[ ERROR ]\033[0m Still messages in buffer");
+    } else {
+        printLog(nodeId, "\033[1;32m[ SUCCESS ]\033[0m All messages processed");
+    }
+
     delete[] msgBuf;
 }
 
@@ -1211,7 +1250,6 @@ Engine::scatterBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim
     commHalt = false;
     bkwdRecvCnt = 0;
     backwardGhostVerticesData = new FeatType[graph.dstGhostCnt * featDim];
-    printLog(nodeId, "bkwdGhstBuffSize: %u", graph.dstGhostCnt * featDim);
     auto fgc_fp = std::bind(&Engine::backwardGhostReceiver, this, std::placeholders::_1);
     dataPool->perform(fgc_fp);
 

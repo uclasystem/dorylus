@@ -241,15 +241,17 @@ LambdaWorker::recvLambdaResults(zmq::message_t& client_id, unsigned partId) {
     workersocket.send(client_id, ZMQ_SNDMORE);
     workersocket.send(confirm);
 
+    if (manager->forwardLambdaTable[partId]) {
+        qLock->lock();
+        q_ptr->push(std::make_pair(partId, partRows));
+        qLock->unlock();
+    }
+
     // Check for total number of partitions received. If all partitions received, wake up lambdaComm.
     // manager->forwardLambdaTable[partId] = false;
     // ++(manager->countForward);
     __sync_bool_compare_and_swap(manager->forwardLambdaTable + partId, true, false);
     __sync_fetch_and_add(&(manager->countForward), 1);
-
-    qLock->lock();
-    q_ptr->push(std::make_pair(partId, partRows));
-    qLock->unlock();
 }
 
 void

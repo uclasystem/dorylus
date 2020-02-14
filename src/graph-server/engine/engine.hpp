@@ -208,6 +208,7 @@ private:
       FeatType* inputTensor, unsigned featDim);
 
     PairQueue rangesToScatter;
+    bool* partsScatteredTable;
     Lock queueLock;
 
     // Ghost update operation, send vertices to other nodes
