@@ -47,7 +47,8 @@ public:
     void refreshState(Matrix actMatrix_, FeatType *zData_, FeatType *actData_,
       unsigned numFeatsNext_, bool _pipeline = false);
     void refreshState(Matrix oldGradMatrix_, Matrix newGradMatrix_,
-      Matrix targetMatrix_, std::vector<Matrix> *savedTensors);
+      Matrix targetMatrix_, std::vector<Matrix> *savedTensors,
+      bool _pipeline = false);
 
 protected:
     LambdaComm *manager;

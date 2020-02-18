@@ -30,8 +30,7 @@ static ComputingUnit cu = ComputingUnit::getInstance();
 
 static int globalEpoch = -1;
 
-std::ofstream debugFile0;
-std::ofstream debugFile1;
+std::ofstream debugFile;
 std::mutex debugFileLock;
 
 bool check_correct(FeatType* fptr1, FeatType* fptr2, unsigned num) {
@@ -42,10 +41,12 @@ bool check_correct(FeatType* fptr1, FeatType* fptr2, unsigned num) {
     return true;
 }
 
-void outputToFile(std::ofstream& outfile, FeatType* fptr, unsigned r, unsigned c) {
-    std::cerr << "PRINTING TO FILE" << std::endl;
+void outputToFile(std::ofstream& outfile, FeatType* fptr, unsigned start, unsigned end, unsigned c, bool enumerate = false) {
     std::string out = "";
-    for (uint32_t u = 0; u < r; ++u) {
+    for (uint32_t u = start; u < end; ++u) {
+        if (enumerate) {
+            out += std::to_string(u) + ": ";
+        }
         for (uint32_t uj = 0; uj < c; ++uj) {
             out += std::to_string(fptr[u * c + uj]) + " ";
         }
@@ -269,16 +270,13 @@ Engine::runForward(unsigned epoch) {
 
     timeForwardProcess -= getTimer();
 
-    debugFile1.open("debug.out", std::ofstream::out | std::ofstream::app);
-
     // Create buffer for first-layer aggregation.
     FeatType *inputTensor = forwardVerticesInitData;
     forwardGhostVerticesDataIn = forwardGhostInitData;
 
-    debugFile1 << "## EPOCH " << epoch << std::endl;
-    for (iteration = 0; iteration < numLayers; iteration++) {
-        // For sequential invocation of operations use this block
-//        {
+    // For sequential invocation of operations use this block
+//    {
+//        for (iteration = 0; iteration < numLayers; ++iteration) {
 //            inputTensor = aggregate(inputTensor, graph.localVtxCnt, getFeatDim(iteration));
 //            inputTensor = invokeLambda(inputTensor, graph.localVtxCnt,
 //              getFeatDim(iteration), getFeatDim(iteration + 1));
@@ -288,9 +286,11 @@ Engine::runForward(unsigned epoch) {
 //                forwardGhostVerticesDataIn = forwardGhostVerticesDataOut;
 //            }
 //        }
+//    }
 
-        // For fused gather and apply, use this block 
-//        {
+    // For fused gather and apply, use this block 
+//    {
+//        for (iteration = 0; iteration < numLayers; ++iteration) {
 //            inputTensor = fusedGatherApply(inputTensor, graph.localVtxCnt,
 //              getFeatDim(iteration), getFeatDim(iteration + 1));
 //            if (iteration < numLayers - 1) { // don't need scatter at the last layer.
@@ -298,26 +298,21 @@ Engine::runForward(unsigned epoch) {
 //                forwardGhostVerticesDataIn = forwardGhostVerticesDataOut;
 //            }
 //        }
+//    }
 
-        // For Aggregation -> Apply -> Scatter pipeline use this block
-        {
+    // For Aggregation -> Apply -> Scatter pipeline use this block
+    {
+        for (iteration = 0; iteration < numLayers; ++iteration) {
             inputTensor = fusedGAS(inputTensor, graph.localVtxCnt, getFeatDim(iteration),
               getFeatDim(iteration + 1), iteration < numLayers - 1);
         }
-
-        // TODO: Implement Agg_0 -> Apply_0 -> Scatter_0 -> Agg_1 ... pipeline
-//        {
-//        }
-        debugFile1 << "## LAYER " << iteration << std::endl;
-        outputToFile(debugFile1, inputTensor, graph.localVtxCnt, getFeatDim(iteration+1));
-
-        if (iteration < numLayers - 1) {
-            debugFile1 << "## SCATTER " << epoch << std::endl;
-            outputToFile(debugFile1, forwardGhostVerticesDataOut, graph.srcGhostCnt, getFeatDim(iteration+1));
-        }
     }
 
-    debugFile1.close();
+    // TODO: Implement Agg_0 -> Apply_0 -> Scatter_0 -> Agg_1 ... pipeline
+    {
+//    {
+//    }
+    }
 
     timeForwardProcess += getTimer();
     printLog(nodeId, "Engine completes FORWARD at iter %u.", iteration);
@@ -344,12 +339,31 @@ Engine::runBackward(FeatType *initGradTensor) {
     FeatType *gradTensor = initGradTensor;
     // TODO: (YIFAN) this backward flow is correct but weird. I know you have thought for a long time, but try again to refine it.
     iteration = numLayers;
-    gradTensor = invokeLambdaBackward(gradTensor, graph.localVtxCnt, getFeatDim(numLayers - 1), getFeatDim(numLayers));
-    for (iteration = numLayers - 1; iteration > 0; iteration--) {
-        gradTensor = scatterBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration));
-        gradTensor = aggregateBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration));
-        gradTensor = invokeLambdaBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration - 1), getFeatDim(iteration));
-        // gradTensor = fusedGatherApplyBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration - 1), getFeatDim(iteration));
+
+    // Pure sequential
+    {
+        gradTensor = invokeLambdaBackward(gradTensor, graph.localVtxCnt, getFeatDim(numLayers - 1), getFeatDim(numLayers));
+       for (iteration = numLayers - 1; iteration > 0; --iteration) {
+            gradTensor = scatterBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration));
+            gradTensor = aggregateBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration));
+            gradTensor = invokeLambdaBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration - 1), getFeatDim(iteration));
+        } 
+    }
+
+    // Fused Gather-Apply
+    {
+        gradTensor = invokeLambdaBackward(gradTensor, graph.localVtxCnt, getFeatDim(numLayers - 1), getFeatDim(numLayers));
+        for (iteration = numLayers - 1; iteration > 0; --iteration) {
+            gradTensor = scatterBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration));
+            gradTensor = fusedGatherApplyBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration - 1), getFeatDim(iteration));
+        }
+    }
+
+    // Fused GAS Backward
+    {
+        for (iteration = numLayers; iteration > 0; --iteration) {
+            gradTensor = fusedGASBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration - 1), getFeatDim(iteration), iteration < numLayers, iteration > 1);
+        }
     }
 
     delete[] gradTensor;
@@ -584,7 +598,7 @@ Engine::invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     return outputTensor;
 }
 
-FeatType *
+FeatType*
 Engine::fusedGatherApply(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim) {
     double sttTimer = getTimer();
     // Prepare for gather phase
@@ -692,6 +706,12 @@ Engine::scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim) {
 FeatType*
 Engine::fusedGAS(FeatType* vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
   unsigned outFeatDim, bool scatter) {
+    queueLock.lock();
+    // Check just to make sure partition ranges are empty
+    // before starting
+    while (!rangesToScatter.empty()) rangesToScatter.pop();
+    queueLock.unlock();
+
     double sttTimer = getTimer();
     // Start data receivers
     commHalt = false;
@@ -704,7 +724,6 @@ Engine::fusedGAS(FeatType* vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     std::thread scatterThread;
     if (scatter) {
         forwardGhostVerticesDataOut = new FeatType[graph.srcGhostCnt * outFeatDim];
-        partsScattered = 0;
         dataPool->perform(fgr_fp);
         scatterThread = std::thread(fgu_fp, outputTensor, outFeatDim);
     }
@@ -756,17 +775,8 @@ Engine::fusedGAS(FeatType* vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     if (scatter) {
         scatterThread.join();
     }
-
-    nodeManager.barrier();
     commHalt = true;
     dataPool->sync();
-
-    if (scatter) {
-//        debugFile0.open("debug.out", std::ofstream::out | std::ofstream::app);
-//        debugFile0 << "## SCATTER " << globalEpoch << std::endl;
-//        outputToFile(debugFile0, forwardGhostVerticesDataOut, graph.srcGhostCnt, outFeatDim);
-//        debugFile0.close();
-    }
 
     // Post-processing for applyVertex phase & clean up
     bool saveOutput = true;
@@ -800,9 +810,9 @@ Engine::fusedGAS(FeatType* vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
 }
 
 
-/////////////////////////////////////////////////
-// Below are private functions for the engine. //
-/////////////////////////////////////////////////
+/////////////////////////////////////////////////////////
+// Below are private forward functions for the engine. //
+/////////////////////////////////////////////////////////
 void Engine::aggregateCompute(unsigned tid, void *args) {
     FeatType *outputTensor = ((AggOPArgs *) args)->outputTensor;
     FeatType *vtcsTensor = ((AggOPArgs *) args)->inputTensor;
@@ -894,6 +904,7 @@ Engine::pipelineForwardGhostUpdates(FeatType* inputTensor, unsigned featDim) {
     const int INIT_PERIOD = 256;
     const int MAX_PERIOD = 4096;
     int SLEEP_PERIOD = INIT_PERIOD;
+    unsigned partsScattered = 0;
 
     partsScatteredTable = new bool[numLambdasForward];
     std::memset(partsScatteredTable, 0, sizeof(bool) * numLambdasForward);
@@ -925,6 +936,8 @@ Engine::pipelineForwardGhostUpdates(FeatType* inputTensor, unsigned featDim) {
             unsigned startId = partitionInfo.first * partitionInfo.second;
             unsigned endId = (partitionInfo.first + 1) * partitionInfo.second;
             endId = endId > graph.localVtxCnt ? graph.localVtxCnt : endId;
+
+            outputToFile(debugFile, inputTensor, startId, endId, featDim, true);
 
             // Create a series of buckets for batching sendout messages to nodes
             std::vector<unsigned>* batchedIds = new std::vector<unsigned>[numNodes];
@@ -1003,6 +1016,7 @@ Engine::forwardGhostReceiver(unsigned tid) {
     const int MAX_PERIOD = 4096;
     int SLEEP_PERIOD = INIT_PERIOD;
     unsigned sender, topic;
+    unsigned vtcsRecvd = 0;
     FeatType *msgBuf = (FeatType *)new char[MAX_MSG_SIZE];
 
     // While loop, looping infinitely to get the next message.
@@ -1014,8 +1028,6 @@ Engine::forwardGhostReceiver(unsigned tid) {
                 delete[] msgBuf;
                 if (commManager.dataPullIn(&sender, &topic, msgBuf, MAX_MSG_SIZE)) {
                     printLog(nodeId, "\033[1;31m[ ERROR ]\033[0m Still messages in buffer");
-                } else {
-                    printLog(nodeId, "\033[1;32m[ SUCCESS ]\033[0m All messages processed");
                 }
 
                 return;
@@ -1033,6 +1045,7 @@ Engine::forwardGhostReceiver(unsigned tid) {
             if (topic < MAX_IDTYPE - 1) {
                 // Using MAX_IDTYPE - 1 as the receive signal.
                 commManager.dataPushOut(sender, nodeId, MAX_IDTYPE - 1, NULL, 0);
+                vtcsRecvd += topic;
 
                 char *bufPtr = (char *)msgBuf;
                 unsigned recvGhostVCnt = topic;
@@ -1052,11 +1065,13 @@ Engine::forwardGhostReceiver(unsigned tid) {
             } else { // (topic == MAX_IDTYPE - 1)
                 fwdRecvCntLock.lock();
                 fwdRecvCnt--;
-                if (fwdRecvCnt == 0) {
-                    fwdRecvCntCond.signal();
-                }
                 fwdRecvCntLock.unlock();
             }
+            fwdRecvCntLock.lock();
+            if (fwdRecvCnt == 0 && vtcsRecvd == graph.srcGhostCnt) {
+                fwdRecvCntCond.signal();
+            }
+            fwdRecvCntLock.unlock();
 
             SLEEP_PERIOD = INIT_PERIOD;
             failedTrials = 0;
@@ -1065,8 +1080,6 @@ Engine::forwardGhostReceiver(unsigned tid) {
 
     if (commManager.dataPullIn(&sender, &topic, msgBuf, MAX_MSG_SIZE)) {
         printLog(nodeId, "\033[1;31m[ ERROR ]\033[0m Still messages in buffer");
-    } else {
-        printLog(nodeId, "\033[1;32m[ SUCCESS ]\033[0m All messages processed");
     }
 
     delete[] msgBuf;
@@ -1271,8 +1284,103 @@ Engine::scatterBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim
     return gradTensor;
 }
 
-void
-Engine::aggregateBPCompute(unsigned tid, void *args) {
+FeatType*
+Engine::fusedGASBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim, bool aggregate, bool scatter) {
+    double sttTimer = getTimer();
+
+    queueLock.lock();
+    while (!rangesToScatter.empty()) rangesToScatter.pop();
+    queueLock.unlock();
+
+    // Prepare for gather phase
+    FeatType *gatheredTensor = gradTensor;
+    FeatType *outputTensor = new FeatType[vtcsCnt * inFeatDim];
+    auto bgr_fp = std::bind(&Engine::backwardGhostReceiver, this, std::placeholders::_1);
+    auto bgu_fp = std::bind(&Engine::pipelineBackwardGhostGradients, this,
+                    std::placeholders::_1, std::placeholders::_2);
+    commHalt = false;
+    bkwdRecvCnt = 0;
+    std::thread scatterThread;
+    if (scatter) {
+        backwardGhostVerticesDataOut = new FeatType[graph.dstGhostCnt * outFeatDim];
+        dataPool->perform(bgr_fp);
+        scatterThread = std::thread(bgu_fp, outputTensor, outFeatDim);
+    }
+
+    currId = 0;
+
+    // Start gathering
+    AggOPArgs args = {gatheredTensor, gradTensor, vtcsCnt, outFeatDim};
+    auto computeFn = std::bind(&Engine::aggregateBPCompute, this, std::placeholders::_1, std::placeholders::_2);
+    if (iteration < numLayers) {
+        gatheredTensor = new FeatType[vtcsCnt * outFeatDim];
+        computePool->perform(computeFn, &args);
+    }
+
+    // Prepare for applyVertex phase
+    resComm->newContextBackward(iteration - 1, gatheredTensor, outputTensor, savedTensors, localVerticesLabels, vtcsCnt, inFeatDim, outFeatDim, getFeatDim(numLayers), scatter);
+
+    // Start applyVertex phase
+    unsigned currLambdaId = 0;
+    if (mode == LAMBDA) {
+        const unsigned lambdaChunkSize = (vtcsCnt + numLambdasForward - 1) / numLambdasBackward;
+        unsigned availChunkSize = lambdaChunkSize;
+        while (currId < vtcsCnt) {
+            unsigned lvid = currId;
+            if (lvid > availChunkSize) {
+                resComm->invokeLambdaBackward(iteration - 1, currLambdaId, iteration - 1 == numLayers - 1);
+                availChunkSize += lambdaChunkSize;
+                ++currLambdaId;
+            }
+            usleep(2000); // wait for 2ms and check again
+        }
+    }
+    computePool->sync();
+    if (mode != LAMBDA) {
+        resComm->requestBackward(iteration - 1, iteration - 1 == numLayers - 1);
+    } else {
+        while (currLambdaId < numLambdasBackward) {
+            resComm->invokeLambdaBackward(iteration - 1, currLambdaId, iteration - 1 == numLayers - 1);
+            ++currLambdaId;
+        }
+        resComm->waitLambdaBackward(iteration - 1, iteration - 1 == numLayers - 1);
+    }
+
+    if (scatter) {
+        scatterThread.join();
+    }
+    commHalt = true;
+    nodeManager.barrier();
+    dataPool->sync();
+
+    // Clean up applyVertex phase
+    delete[] gatheredTensor;
+    for (auto &sTensor : savedTensors[iteration - 1]) {
+        delete[] sTensor.getData();
+    }
+    savedTensors[iteration - 1].clear();
+
+    // Clean up gather phase
+    delete[] gradTensor;
+    delete[] backwardGhostVerticesDataIn;
+
+    if (vecTimeAggregate.size() < 2 * numLayers) {
+        for (unsigned i = vecTimeAggregate.size(); i < 2 * numLayers; i++) {
+            vecTimeAggregate.push_back(0.0);
+        }
+    }
+    vecTimeAggregate[numLayers + iteration] += getTimer() - sttTimer;
+
+    backwardGhostVerticesDataIn = backwardGhostVerticesDataOut;
+
+    return outputTensor;
+}
+
+
+//////////////////////////////////////////////////////////
+// Below are private backward functions for the engine. //
+//////////////////////////////////////////////////////////
+void Engine::aggregateBPCompute(unsigned tid, void *args) {
     FeatType *nextGradTensor = ((AggOPArgs *) args)->outputTensor;
     FeatType *gradTensor = ((AggOPArgs *) args)->inputTensor;
     const unsigned vtcsCnt = ((AggOPArgs *) args)->vtcsCnt;
@@ -1356,6 +1464,86 @@ Engine::sendBackwardGhostGradients(FeatType *gradTensor, unsigned featDim) {
     bkwdRecvCntLock.unlock();
 }
 
+inline void
+Engine::pipelineBackwardGhostGradients(FeatType* inputTensor, unsigned featDim) {
+    int failedTrials = 0;
+    const int INIT_PERIOD = 256;
+    const int MAX_PERIOD = 4096;
+    int SLEEP_PERIOD = INIT_PERIOD;
+    unsigned partsScattered = 0;
+
+    partsScatteredTable = new bool[numLambdasBackward];
+    std::memset(partsScatteredTable, 0, sizeof(bool) * numLambdasBackward);
+
+    // Check queue to see if partition ready
+    while (partsScattered < numLambdasBackward) {
+        queueLock.lock();
+        if (rangesToScatter.empty()) {
+            queueLock.unlock();
+            // sleep with backoff
+            usleep(SLEEP_PERIOD); // sleep a little and give up CPUs
+            failedTrials++;
+            if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
+                failedTrials = 0;
+                SLEEP_PERIOD *= 2;
+            }
+        } else {
+            std::pair<unsigned, unsigned> partitionInfo = rangesToScatter.front();
+            rangesToScatter.pop();
+            // Has this partition already been processed
+            if (partsScatteredTable[partitionInfo.first]) {
+                queueLock.unlock();
+                continue;
+            }
+            partsScatteredTable[partitionInfo.first] = true;
+            queueLock.unlock();
+
+            // Partition Info: (partId, rowsPerPartition)
+            unsigned startId = partitionInfo.first * partitionInfo.second;
+            unsigned endId = (partitionInfo.first + 1) * partitionInfo.second;
+            endId = endId > graph.localVtxCnt ? graph.localVtxCnt : endId;
+
+            // Create a series of buckets for batching sendout messages to nodes
+            std::vector<unsigned>* batchedIds = new std::vector<unsigned>[numNodes];
+            for (unsigned lvid = startId; lvid < endId; ++lvid) {
+                for (unsigned nid : graph.backwardGhostMap[lvid]) {
+                    batchedIds[nid].push_back(lvid);
+                }
+            }
+
+            // batch sendouts similar to the sequential version
+            bool batchFlag = true;
+            unsigned BATCH_SIZE = std::max(((batchFlag ? MAX_MSG_SIZE : 4096) - DATA_HEADER_SIZE) /
+                                           (sizeof(unsigned) + sizeof(FeatType) * featDim), 1ul); // at least send one vertex
+            for (unsigned nid = 0; nid < numNodes; ++nid) {
+                if (nid == nodeId) {
+                    continue;
+                }
+
+                unsigned backwardGhostVCnt = batchedIds[nid].size();
+                for (unsigned ib = 0; ib < backwardGhostVCnt; ib += BATCH_SIZE) {
+                    unsigned sendBatchSize = (backwardGhostVCnt - ib) < BATCH_SIZE ? (backwardGhostVCnt - ib) : BATCH_SIZE;
+
+                    backwardVerticesPushOut(nid, sendBatchSize, batchedIds[nid].data() + ib, inputTensor, featDim);
+                    bkwdRecvCntLock.lock();
+                    bkwdRecvCnt++;
+                    bkwdRecvCntLock.unlock();
+                }
+            }
+
+            delete[] batchedIds;
+            failedTrials = 0;
+            partsScattered++;
+        }
+    }
+
+    // Once all partitions scattered, wait on all acks
+    bkwdRecvCntLock.lock();
+    if (bkwdRecvCnt > 0) {
+        bkwdRecvCntCond.wait();
+    }
+    bkwdRecvCntLock.unlock();
+}
 
 inline void
 Engine::backwardVerticesPushOut(unsigned receiver, unsigned totCnt, unsigned *lvids, FeatType *gradTensor, unsigned featDim) {

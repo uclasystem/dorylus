@@ -75,6 +75,9 @@ public:
                                        unsigned inFeatDim, unsigned outFeatDim);
     FeatType* scatterBackward(FeatType *gradTensor, unsigned vtcsCnt,
                               unsigned featDim);
+    FeatType* fusedGASBackward(FeatType* gradTensor, unsigned vtcsCnt,
+      unsigned inFeatDim, unsigned outFeatDim,
+      bool aggregate, bool scatter);
 
     void makeBarrier();
 
@@ -110,6 +113,8 @@ private:
 
     FeatType *forwardGhostVerticesDataIn;
     FeatType *forwardGhostVerticesDataOut;
+    FeatType *backwardGhostVerticesDataIn;
+    FeatType *backwardGhostVerticesDataOut;
 
     FeatType *backwardGhostVerticesData;
 
@@ -125,8 +130,6 @@ private:
     int bkwdRecvCnt = 0;
     Lock bkwdRecvCntLock;
     Cond bkwdRecvCntCond;
-
-    unsigned partsScattered = 0;
 
     std::string datasetDir;
     std::string outFile;
@@ -204,8 +207,7 @@ private:
 
     // All pipeline related functions
     void pipelineForwardGhostUpdates(FeatType* inputTensor, unsigned featDim);
-    void pipelineBackwardGhostUpdates(std::vector<unsigned>* partIds,
-      FeatType* inputTensor, unsigned featDim);
+    void pipelineBackwardGhostGradients(FeatType* inputTensor, unsigned featDim);
 
     PairQueue rangesToScatter;
     bool* partsScatteredTable;

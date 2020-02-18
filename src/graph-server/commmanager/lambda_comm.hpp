@@ -79,7 +79,7 @@ public:
     void newContextBackward(unsigned layer, FeatType *oldGradBuf,
       FeatType *newGradBuf, std::vector<Matrix> *savedTensors,
       FeatType *targetBuf, unsigned numLocalVertices, unsigned inFeatDim,
-      unsigned outFeatDim, unsigned targetDim);
+      unsigned outFeatDim, unsigned targetDim, bool pipeline = false);
     void sendInfoMessage(zmq::socket_t& wsocket, unsigned numLambdas);
     void requestBackward(unsigned layer, bool lastLayer);
     void invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLayer);

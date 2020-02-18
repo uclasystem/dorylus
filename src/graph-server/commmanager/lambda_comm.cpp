@@ -245,7 +245,7 @@ LambdaComm::waitLambdaForward(unsigned layer, bool lastLayer) {
  *
  */
 void
-LambdaComm::newContextBackward(unsigned layer, FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf, unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim) {
+LambdaComm::newContextBackward(unsigned layer, FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf, unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim, bool pipeline) {
     countBackward = 0;
 
     currLayer = layer;
@@ -258,7 +258,7 @@ LambdaComm::newContextBackward(unsigned layer, FeatType *oldGradBuf, FeatType *n
 
     // Refresh workers' members, and connect their worker sockets to the backend.
     for (auto&& worker : workers)
-        worker->refreshState(oldGradMatrix, newGradMatrix, targetMatrix, savedTensors);
+        worker->refreshState(oldGradMatrix, newGradMatrix, targetMatrix, savedTensors, pipeline);
 
     if (nodeId == 0) { // I am master and master will send the total number of lambdas of all graph servers.
         unsigned numLambdas = numNodes * numLambdasBackward;

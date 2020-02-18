@@ -176,11 +176,12 @@ LambdaWorker::refreshState(Matrix actMatrix_, FeatType *zData_, FeatType *actDat
 }
 
 void
-LambdaWorker::refreshState(Matrix oldGradMatrix_, Matrix newGradMatrix_, Matrix targetMatrix_, std::vector<Matrix> *savedTensors_) { // For backward-prop.
+LambdaWorker::refreshState(Matrix oldGradMatrix_, Matrix newGradMatrix_, Matrix targetMatrix_, std::vector<Matrix> *savedTensors_, bool _pipeline) { // For backward-prop.
     oldGradMatrix = oldGradMatrix_;
     newGradMatrix = newGradMatrix_;
     targetMatrix = targetMatrix_;
     savedTensors = savedTensors_;
+    pipeline = _pipeline;
 }
 
 
@@ -241,17 +242,16 @@ LambdaWorker::recvLambdaResults(zmq::message_t& client_id, unsigned partId) {
     workersocket.send(client_id, ZMQ_SNDMORE);
     workersocket.send(confirm);
 
-    if (manager->forwardLambdaTable[partId]) {
-        qLock->lock();
-        q_ptr->push(std::make_pair(partId, partRows));
-        qLock->unlock();
-    }
-
     // Check for total number of partitions received. If all partitions received, wake up lambdaComm.
     // manager->forwardLambdaTable[partId] = false;
     // ++(manager->countForward);
+    qLock->lock();
+    if (pipeline && manager->forwardLambdaTable[partId]) {
+        q_ptr->push(std::make_pair(partId, partRows));
+    }
     __sync_bool_compare_and_swap(manager->forwardLambdaTable + partId, true, false);
     __sync_fetch_and_add(&(manager->countForward), 1);
+    qLock->unlock();
 }
 
 void
@@ -305,7 +305,6 @@ LambdaWorker::recvChunk(Matrix &dstMat, zmq::message_t &client_id, unsigned part
     unsigned partRows = (dstMat.getRows() + numLambdas - 1) / numLambdas;
     FeatType *partitionStart = dstMat.getData() + partId * partRows * dstMat.getCols();
 
-
     // Receive the pushed-back results.
     zmq::message_t msg;
     workersocket.recv(&msg);
@@ -315,6 +314,12 @@ LambdaWorker::recvChunk(Matrix &dstMat, zmq::message_t &client_id, unsigned part
     zmq::message_t confirm;
     workersocket.send(client_id, ZMQ_SNDMORE);
     workersocket.send(confirm);
+
+    qLock->lock();
+    if (pipeline && manager->backwardLambdaTable[partId]) {
+        q_ptr->push(std::make_pair(partId, partRows));
+    }
+    qLock->unlock();
 
     // Check for total number of partitions received. If all partitions received, wake up lambdaComm.
     if (forward) {
