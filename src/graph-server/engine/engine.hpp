@@ -85,6 +85,7 @@ public:
     unsigned getValFreq();
     unsigned getNodeId();
 
+    void setPipeline(bool _pipelie);
     void addEpochTime(double epochTime);
 
 private:
@@ -115,8 +116,6 @@ private:
     FeatType *forwardGhostVerticesDataOut;
     FeatType *backwardGhostVerticesDataIn;
     FeatType *backwardGhostVerticesDataOut;
-
-    FeatType *backwardGhostVerticesData;
 
     // Labels one-hot storage array.
     FeatType *localVerticesLabels = NULL;
@@ -185,7 +184,7 @@ private:
     void forwardWorker(unsigned tid, void *args);
     void backwardWorker(unsigned tid, void *args);
     void forwardGhostReceiver(unsigned tid);
-    void backwardGhostReceiver(unsigned tid);
+    void backwardGhostReceiver(unsigned tid, void* _featDim);
 
     void aggregateCompute(unsigned tid, void *args);
     void aggregateBPCompute(unsigned tid, void *args);
@@ -205,13 +204,24 @@ private:
     void sendForwardGhostUpdates(FeatType *inputTensor, unsigned featDim);
     void sendBackwardGhostGradients(FeatType *gradTensor, unsigned featDim);
 
-    // All pipeline related functions
+    // All pipeline related functions/members
     void pipelineForwardGhostUpdates(FeatType* inputTensor, unsigned featDim);
     void pipelineBackwardGhostGradients(FeatType* inputTensor, unsigned featDim);
+
+    // fusedGASBackward phases
+    FeatType* applyScatterPhase(FeatType* gradTensor, unsigned vtcsCnt,
+      unsigned inFeatDim, unsigned outFeatDim, bool scatter);
+    FeatType* aggregateApplyScatterPhase(FeatType* gradTensor, unsigned vtcsCnt,
+      unsigned inFeatDim, unsigned outFeatDim, bool scatter);
+    FeatType* aggregateApplyPhase(FeatType* gradTensor, unsigned vtcsCnt,
+      unsigned inFeatDim, unsigned outFeatDim, bool scatter);
 
     PairQueue rangesToScatter;
     bool* partsScatteredTable;
     Lock queueLock;
+
+    bool pipeline = false;
+    // END Pipeline related functions/members
 
     // Ghost update operation, send vertices to other nodes
     void forwardVerticesPushOut(unsigned receiver, unsigned totCnt,

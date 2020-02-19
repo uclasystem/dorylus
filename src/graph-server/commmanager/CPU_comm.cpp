@@ -152,8 +152,10 @@ void CPUComm::setTrainValidationSplit(float trainPortion, unsigned numLocalVerti
 };
 
 // For backward-prop.
-void CPUComm::newContextBackward(unsigned layer, FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
-                                 unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim) {
+void CPUComm::newContextBackward(unsigned layer, FeatType *oldGradBuf,
+  FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
+  unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim,
+  unsigned targetDim, bool pipeline) {
     currLayer = layer;
     // Create new matrices object for workers to access.
     oldGradMatrix = Matrix(numLocalVertices, outFeatDim, oldGradBuf);

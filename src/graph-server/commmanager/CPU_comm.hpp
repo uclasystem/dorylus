@@ -34,8 +34,10 @@ class CPUComm : public ResourceComm {
     void invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
 
     // For backward-prop.
-    void newContextBackward(unsigned layer, FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
-                            unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim);
+    void newContextBackward(unsigned layer, FeatType *oldGradBuf,
+      FeatType *newGradBuf, std::vector<Matrix> *savedTensors,
+      FeatType *targetBuf, unsigned numLocalVertices, unsigned inFeatDim,
+      unsigned outFeatDim, unsigned targetDim, bool pipeline = false);
     void requestBackward(unsigned layer, bool lastLayer);
     void invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
     void waitLambdaBackward(unsigned layer, bool lastLayer) {}

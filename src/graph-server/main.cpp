@@ -18,8 +18,9 @@ main(int argc, char *argv[]) {
     // Initialize the engine.
     // The engine object is static and has been substantiated in Engine.cpp.
     engine.init(argc, argv);
-    unsigned numEpochs = 3;
+    unsigned numEpochs = 30;
     unsigned valFreq = 1;
+    engine.setPipeline(false);
 
     if (engine.master())
         printLog(engine.getNodeId(),"Number of epochs: %u, validation frequency: %u",
@@ -46,10 +47,13 @@ main(int argc, char *argv[]) {
     }
 
     // Procude the output files.
+    printLog(engine.getNodeId(), "Running output");
     engine.output();
 
     // Destroy the engine.
+    printLog(engine.getNodeId(), "Running destroy");
     engine.destroy();
 
+    printLog(engine.getNodeId(), "Returning");
     return 0;
 }
