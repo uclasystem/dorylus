@@ -218,18 +218,17 @@ Engine::makeBarrier() {
  */
 unsigned
 Engine::getNumEpochs() {
-    return Engine::numEpochs;
+    return numEpochs;
 }
-
 
 /**
  *
- * Set whether to run pipelined version
+ * Run validation every [valFreq] epochs
  *
  */
-void
-Engine::setPipeline(bool _pipeline) {
-    pipeline = _pipeline;
+unsigned
+Engine::getValFreq() {
+    return valFreq;
 }
 
 /**
@@ -436,9 +435,10 @@ Engine::output() {
 
     sprintf(outBuf, "<EM>: Initialization takes %.3lf ms", timeInit);
     outStream << outBuf << std::endl;
-    sprintf(outBuf, "<EM>: Forward:  Time per stage:");
-    outStream << outBuf << std::endl;
+
     if (!pipeline) {
+        sprintf(outBuf, "<EM>: Forward:  Time per stage:");
+        outStream << outBuf << std::endl;
         for (unsigned i = 0; i < numLayers; ++i) {
             sprintf(outBuf, "<EM>    Aggregation   %2u  %.3lf ms", i, vecTimeAggregate[i]);
             outStream << outBuf << std::endl;
@@ -451,9 +451,9 @@ Engine::output() {
     sprintf(outBuf, "<EM>: Total forward-prop time %.3lf ms", timeForwardProcess);
     outStream << outBuf << std::endl;
 
-    sprintf(outBuf, "<EM>: Backward: Time per stage:");
-    outStream << outBuf << std::endl;
     if (!pipeline) {
+        sprintf(outBuf, "<EM>: Backward: Time per stage:");
+        outStream << outBuf << std::endl;
         for (unsigned i = numLayers; i < 2 * numLayers; i++) {
             sprintf(outBuf, "<EM>    Aggregation   %2u  %.3lf ms", i, vecTimeAggregate[i]);
             outStream << outBuf << std::endl;
@@ -1825,19 +1825,24 @@ Engine::printEngineMetrics() {
     printLog(nodeId, "<EM>: Using %u forward lambdas and %u bacward lambdas",
              numLambdasForward, numLambdasBackward);
     printLog(nodeId, "<EM>: Initialization takes %.3lf ms", timeInit);
-    printLog(nodeId, "<EM>: Forward:  Time per stage:");
-    for (unsigned i = 0; i < numLayers; ++i) {
-        printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i, vecTimeAggregate[i]);
-        printLog(nodeId, "<EM>    Lambda        %2u  %.3lf ms", i, vecTimeLambda[i]);
-        printLog(nodeId, "<EM>    Ghost update  %2u  %.3lf ms", i, vecTimeSendout[i]);
+
+    if (!pipeline) {
+        printLog(nodeId, "<EM>: Forward:  Time per stage:");
+        for (unsigned i = 0; i < numLayers; ++i) {
+            printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i, vecTimeAggregate[i]);
+            printLog(nodeId, "<EM>    Lambda        %2u  %.3lf ms", i, vecTimeLambda[i]);
+            printLog(nodeId, "<EM>    Ghost update  %2u  %.3lf ms", i, vecTimeSendout[i]);
+        }
     }
     printLog(nodeId, "<EM>: Total forward-prop time %.3lf ms", timeForwardProcess);
 
-    printLog(nodeId, "<EM>: Backward: Time per stage:");
-    for (unsigned i = numLayers; i < 2 * numLayers; i++) {
-        printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i, vecTimeAggregate[i]);
-        printLog(nodeId, "<EM>    Lambda        %2u  %.3lf ms", i, vecTimeLambda[i]);
-        printLog(nodeId, "<EM>    Ghost update  %2u  %.3lf ms", i, vecTimeSendout[i]);
+    if (!pipeline) {
+        printLog(nodeId, "<EM>: Backward: Time per stage:");
+        for (unsigned i = numLayers; i < 2 * numLayers; i++) {
+            printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i, vecTimeAggregate[i]);
+            printLog(nodeId, "<EM>    Lambda        %2u  %.3lf ms", i, vecTimeLambda[i]);
+            printLog(nodeId, "<EM>    Ghost update  %2u  %.3lf ms", i, vecTimeSendout[i]);
+        }
     }
     printLog(nodeId, "<EM>: Backward-prop takes %.3lf ms", timeBackwardProcess);
 
@@ -1900,7 +1905,8 @@ Engine::parseArgs(int argc, char *argv[]) {
     ("numEpochs", boost::program_options::value<unsigned>(), "Number of epochs to run")
     ("validationFrequency", boost::program_options::value<unsigned>(), "Number of epochs to run before validation")
 
-    ("MODE", boost::program_options::value<unsigned>(), "0: Lambda,1: GPU, 2: CPU")
+    ("MODE", boost::program_options::value<unsigned>(), "0: Lambda, 1: GPU, 2: CPU")
+    ("pipeline", boost::program_options::value<bool>(), "0: Sequential, 1: Pipelined");
     ;
 
     boost::program_options::variables_map vm;
@@ -1973,13 +1979,16 @@ Engine::parseArgs(int argc, char *argv[]) {
     numLambdasBackward = vm["numlambdasbackward"].as<unsigned>();
 
     assert(vm.count("numEpochs"));
-    //    numEpochs = vm["numEpochs"].as<unsigned>();
+    numEpochs = vm["numEpochs"].as<unsigned>();
 
     assert(vm.count("validationFrequency"));
-    //    valFreq = vm["validationFrequency"].as<unsigned>();
+    valFreq = vm["validationFrequency"].as<unsigned>();
 
     assert(vm.count("MODE"));
     mode = vm["MODE"].as<unsigned>();
+
+    assert(vm.count("pipeline"));
+    pipeline = vm["pipeline"].as<bool>();
 
     printLog(404, "Parsed configuration: dThreads = %u, cThreads = %u, datasetDir = %s, featuresFile = %s, dshMachinesFile = %s, "
              "myPrIpFile = %s, myPubIpFile = %s, undirected = %s, data port set -> %u, control port set -> %u, node port set -> %u",
