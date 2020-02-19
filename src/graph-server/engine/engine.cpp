@@ -223,16 +223,6 @@ Engine::getNumEpochs() {
 
 /**
  *
- * Run validation every [valFreq] epochs
- *
- */
-unsigned
-Engine::getValFreq() {
-    return valFreq;
-}
-
-/**
- *
  * Add a new epoch time to the list of epoch times
  *
  */
@@ -248,7 +238,7 @@ Engine::addEpochTime(double epochTime) {
  */
 unsigned
 Engine::getValFreq() {
-    return Engine::valFreq;
+    return valFreq;
 }
 
 /**
@@ -269,6 +259,7 @@ Engine::getNodeId() {
  */
 FeatType *
 Engine::runForward(unsigned epoch) {
+    log(nodeId, "RUNNING FORWARD");
     globalEpoch = epoch;
     // Make sure all nodes start running the forward-prop phase.
     nodeManager.barrier();

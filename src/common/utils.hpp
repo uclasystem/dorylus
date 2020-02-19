@@ -3,12 +3,18 @@
 
 #include <chrono>
 #include <cstring>
+#include <fstream>
 #include <iostream>
 #include <iomanip>
 #include <sstream>
 #include <string>
 #include <vector>
 #include <map>
+
+#include <stdio.h>
+#include <stdarg.h>
+#include <sys/time.h>
+
 
 /** Feature type is float, so be consistent. */
 typedef float FeatType;
@@ -48,6 +54,40 @@ populateHeader(char* header, unsigned op, unsigned field1 = 0, unsigned field2 =
     serialize<unsigned>(header, 2, field2);
     serialize<unsigned>(header, 3, field3);
     serialize<unsigned>(header, 4, field4);
+}
+
+static inline unsigned
+timestamp_ms() {
+    auto now = std::chrono::high_resolution_clock::now();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count() - 1580333752000ull;
+}
+
+static inline void
+log(const unsigned nodeId, const char* msg, ...) {
+    char* format = new char[strlen(msg) + 1];
+    va_list argptr;
+    va_start(argptr, msg);
+    vsprintf(format, msg, argptr);
+    va_end(argptr);
+
+    fprintf(stderr, "\033[1;33m[ Node %2u | %u ]\033[0m %s\n", nodeId, timestamp_ms(), format);
+
+    delete[] format;
+}
+
+static inline void
+log(std::ofstream& outfile, const char *msg, ...) {
+    char format[strlen(msg) + 1];
+    va_list argptr;
+    va_start(argptr, msg);
+    vsprintf(format, msg, argptr);
+    va_end(argptr);
+
+    size_t msgSize = 11 + strlen(format);
+    char logMsg[msgSize];
+    sprintf(logMsg, "%u %s\n", timestamp_ms(), format);
+
+    outfile.write(logMsg, msgSize);
 }
 
 /**
