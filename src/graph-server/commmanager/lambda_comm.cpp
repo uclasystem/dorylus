@@ -170,9 +170,6 @@ void LambdaComm::callback(const Aws::Lambda::LambdaClient *client,
                   v.GetInteger("id"), v.GetInteger("start"),
                   v.GetInteger("reqStart"), v.GetInteger("reqStart"),
                   v.GetInteger("sendStart"), v.GetInteger("sendEnd"));
-                writeMutex.lock();
-                log(debugFile, logMsg);
-                writeMutex.unlock();
             } else {
                 sprintf(logMsg, "END BACKWARD %u %u %u %u %u %u %u %u %u %u",
                   v.GetInteger("id"), v.GetInteger("start"),
@@ -180,9 +177,6 @@ void LambdaComm::callback(const Aws::Lambda::LambdaClient *client,
                   v.GetInteger("reqT1Start"), v.GetInteger("reqT1End"),
                   v.GetInteger("reqT2Start"), v.GetInteger("reqT2End"),
                   v.GetInteger("sendStart"), v.GetInteger("sendEnd"));
-                writeMutex.lock();
-                log(debugFile, logMsg);
-                writeMutex.unlock();
             }
         } else {
             printLog(globalNodeId, "\033[1;31m[ ERROR ]\033[0m\t%s\n", v.GetString("reason").c_str());
@@ -238,10 +232,6 @@ LambdaComm::invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLaye
 
     char* weightServerIp = weightservers[(nodeId * numLambdasForward + lambdaId) % weightservers.size()];
     invokeLambda("eval-forward-gcn", nodeIp.c_str(), dataserverPort, weightServerIp, weightserverPort, layer, lambdaId, lastLayer);
-
-    writeMutex.lock();
-    log(debugFile, "START FORWARD %u", lambdaId);
-    writeMutex.unlock();
 }
 
 
@@ -333,10 +323,6 @@ LambdaComm::invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLay
 
     char* weightServerIp = weightservers[(nodeId * numLambdasForward + lambdaId) % weightservers.size()];
     invokeLambda("eval-backward-gcn", nodeIp.c_str(), dataserverPort, weightServerIp, weightserverPort, layer, lambdaId, lastLayer);
-
-    writeMutex.lock();
-    log(debugFile, "START BACKWARD %u", lambdaId);
-    writeMutex.unlock();
 }
 
 void
