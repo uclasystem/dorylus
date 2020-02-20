@@ -11,6 +11,8 @@
 #include <vector>
 #include <map>
 
+#include <mutex> // for debugging, delete later
+
 #include <stdio.h>
 #include <stdarg.h>
 #include <sys/time.h>
@@ -23,6 +25,7 @@ typedef float FeatType;
 static const size_t HEADER_SIZE = sizeof(unsigned) * 5;
 enum OP { REQ_FORWARD, PUSH_FORWARD, PULL_FORWARD, REQ_BACKWARD, PUSH_BACKWARD, PULL_BACKWARD, PULL_EVAL, PUSH_EVAL, RESP, INFO, TERM };
 enum TYPE { GRAD, AH, Z, ACT, LAB };
+enum PROP_TYPE { FORWARD, BACKWARD };
 
 #define ERR_HEADER_FIELD UINT_MAX
 
@@ -83,7 +86,7 @@ log(std::ofstream& outfile, const char *msg, ...) {
     vsprintf(format, msg, argptr);
     va_end(argptr);
 
-    size_t msgSize = 11 + strlen(format);
+    size_t msgSize = 12 + strlen(format);
     char logMsg[msgSize];
     sprintf(logMsg, "%u %s\n", timestamp_ms(), format);
 
@@ -169,5 +172,9 @@ private:
     std::map<string, TimerPlus*> timers;
 };
 extern GPUTimers gtimers;
+
+extern std::mutex writeMutex;
+extern std::ofstream debugFile;
+
 
 #endif // GLOBAL_UTILS_HPP
