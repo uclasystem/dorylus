@@ -30,9 +30,7 @@ static ComputingUnit cu = ComputingUnit::getInstance();
 
 static int globalEpoch = -1;
 
-std::ofstream debugFile;
 std::string debugFileName = "debug.out";
-std::mutex debugFileLock;
 
 void outputToFile(std::ofstream& outfile, FeatType* fptr, unsigned start, unsigned end, unsigned c, bool enumerate = false) {
     std::string out = "";
@@ -63,7 +61,9 @@ Engine::init(int argc, char *argv[]) {
     parseArgs(argc, argv);
 
     debugFile.open(debugFileName, std::ofstream::out | std::ofstream::trunc);
-    debugFile.close();
+    if (!debugFile.good()) {
+        printLog(404, "ERROR Couldn't open file");
+    }
 
     // Initialize the node manager and communication manager.
     nodeManager.init(dshMachinesFile, myPrIpFile, myPubIpFile);    // NodeManger should go first.
@@ -153,6 +153,7 @@ Engine::init(int argc, char *argv[]) {
  */
 void
 Engine::destroy() {
+    debugFile.close();
     printLog(nodeId, "Destroying the engine...");
 
     nodeManager.destroy();
@@ -248,7 +249,7 @@ Engine::getValFreq() {
  */
 unsigned
 Engine::getNodeId() {
-    return Engine::nodeId;
+    return nodeId;
 }
 
 /**
@@ -259,7 +260,6 @@ Engine::getNodeId() {
  */
 FeatType *
 Engine::runForward(unsigned epoch) {
-    log(nodeId, "RUNNING FORWARD");
     globalEpoch = epoch;
     // Make sure all nodes start running the forward-prop phase.
     nodeManager.barrier();
@@ -271,9 +271,12 @@ Engine::runForward(unsigned epoch) {
     FeatType *inputTensor = forwardVerticesInitData;
     forwardGhostVerticesDataIn = forwardGhostInitData;
 
+    log(debugFile, "START FWD %u", globalEpoch);
+
     // For sequential invocation of operations use this block
     if (!pipeline) {
         for (iteration = 0; iteration < numLayers; ++iteration) {
+            log(debugFile, "START FWDLAYER %u", iteration);
             inputTensor = aggregate(inputTensor, graph.localVtxCnt, getFeatDim(iteration));
             inputTensor = invokeLambda(inputTensor, graph.localVtxCnt,
               getFeatDim(iteration), getFeatDim(iteration + 1));
@@ -282,6 +285,7 @@ Engine::runForward(unsigned epoch) {
                   graph.localVtxCnt, getFeatDim(iteration + 1));
                 forwardGhostVerticesDataIn = forwardGhostVerticesDataOut;
             }
+            log(debugFile, "END FWDLAYER %u", iteration);
         }
     }
 
@@ -300,18 +304,22 @@ Engine::runForward(unsigned epoch) {
     // For Aggregation -> Apply -> Scatter pipeline use this block
     if (pipeline) {
         for (iteration = 0; iteration < numLayers; ++iteration) {
+            log(debugFile, "START FWDLAYER %u", iteration);
             inputTensor = fusedGAS(inputTensor, graph.localVtxCnt, getFeatDim(iteration),
               getFeatDim(iteration + 1), iteration < numLayers - 1);
+            log(debugFile, "END FWDLAYER %u", iteration);
         }
     }
 
     // TODO: Implement Agg_0 -> Apply_0 -> Scatter_0 -> Agg_1 ... pipeline
 //    {
 //    }
+    log(debugFile, "END FWD %u", globalEpoch);
 
     timeForwardProcess += getTimer();
     printLog(nodeId, "Engine completes FORWARD at iter %u.", iteration);
     calcAcc(inputTensor, localVerticesLabels, graph.localVtxCnt, getFeatDim(numLayers));
+
 
     return inputTensor;
 }
@@ -330,23 +338,26 @@ Engine::runBackward(FeatType *initGradTensor) {
 
     timeBackwardProcess -= getTimer();
 
-    debugFile.open("debug.out", std::ofstream::out | std::ofstream::app);
-
-    debugFile << "## EPOCH " << globalEpoch << std::endl;
+    //debugFile << "## EPOCH " << globalEpoch << std::endl << std::flush;
 
     // Create buffer for first-layer aggregation.
     FeatType *gradTensor = initGradTensor;
     // TODO: (YIFAN) this backward flow is correct but weird. I know you have thought for a long time, but try again to refine it.
     iteration = numLayers;
 
+    log(debugFile, "START BKWD %u", globalEpoch);
+
     // Pure sequential
     if (!pipeline) {
+        log(debugFile, "START BKWDLAYER %u", iteration);
         gradTensor = invokeLambdaBackward(gradTensor, graph.localVtxCnt, getFeatDim(numLayers - 1), getFeatDim(numLayers));
         for (iteration = numLayers - 1; iteration > 0; --iteration) {
+            if (iteration != numLayers-1) { log(debugFile, "START BKWDLAYER %u", iteration); }
             gradTensor = scatterBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration));
             backwardGhostVerticesDataIn = backwardGhostVerticesDataOut;
             gradTensor = aggregateBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration));
             gradTensor = invokeLambdaBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration - 1), getFeatDim(iteration));
+            log(debugFile, "END BKWDLAYER %u", iteration);
         } 
     }
 
@@ -363,13 +374,14 @@ Engine::runBackward(FeatType *initGradTensor) {
     // Fused GAS Backward
     if (pipeline) {
         for (iteration = numLayers; iteration > 0; --iteration) {
+            log(debugFile, "START BKWDLAYER %u", iteration);
             gradTensor = fusedGASBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration - 1), getFeatDim(iteration), iteration < numLayers, iteration > 1);
+            log(debugFile, "END BKWDLAYER %u", iteration);
         }
     }
 
     delete[] gradTensor;
 
-    debugFile.close();
 
     timeBackwardProcess += getTimer();
     printLog(nodeId, "Engine completes BACKWARD at iter %u.", iteration);
@@ -455,6 +467,7 @@ Engine::output() {
         }
     }
     sprintf(outBuf, "<EM>: Backward-prop takes %.3lf ms", timeBackwardProcess);
+    outStream << outBuf << std::endl;
 
     double sum = 0.0;
     for (double& d : epochTimes) sum += d;
@@ -536,8 +549,10 @@ FeatType *Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned fea
     AggOPArgs args = {outputTensor, vtcsTensor, vtcsCnt, featDim};
     auto computeFn = std::bind(&Engine::aggregateCompute, this, std::placeholders::_1, std::placeholders::_2);
 
+    log(debugFile, "START AGGREGATE");
     computePool->perform(computeFn, &args);
     computePool->sync();
+    log(debugFile, "END AGGREGATE");
 
     if (iteration > 0) {
         delete[] forwardGhostVerticesDataIn;
@@ -637,7 +652,6 @@ Engine::fusedGatherApply(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeat
             unsigned lvid = currId;
             while (lvid > availChunkSize) {
                 resComm->invokeLambdaForward(iteration, currLambdaId, iteration == numLayers - 1);
-                printLog(nodeId, "INVOKE %u", currLambdaId);
                 ++currLambdaId;
                 availChunkSize += lambdaChunkSize;
             }
@@ -940,6 +954,10 @@ Engine::pipelineForwardGhostUpdates(FeatType* inputTensor, unsigned featDim) {
             partsScatteredTable[partitionInfo.first] = true;
             queueLock.unlock();
 
+            writeMutex.lock();
+            log(debugFile, "START FWD_BATCH_PART %u", partitionInfo.first);
+            writeMutex.unlock();
+
             // Partition Info: (partId, rowsPerPartition)
             unsigned startId = partitionInfo.first * partitionInfo.second;
             unsigned endId = (partitionInfo.first + 1) * partitionInfo.second;
@@ -954,6 +972,11 @@ Engine::pipelineForwardGhostUpdates(FeatType* inputTensor, unsigned featDim) {
                     batchedIds[nid].push_back(lvid);
                 }
             }
+
+            writeMutex.lock();
+            log(debugFile, "END FWD_BATCH_PART %u", partitionInfo.first);
+            log(debugFile, "START FWD_DATA_SEND %u", partitionInfo.first);
+            writeMutex.unlock();
 
             // batch sendouts similar to the sequential version
             bool batchFlag = true;
@@ -978,6 +1001,10 @@ Engine::pipelineForwardGhostUpdates(FeatType* inputTensor, unsigned featDim) {
             delete[] batchedIds;
             failedTrials = 0;
             partsScattered++;
+
+            writeMutex.lock();
+            log(debugFile, "END FWD_DATA_SEND %u", partitionInfo.first);
+            writeMutex.unlock();
         }
     }
 
@@ -1637,6 +1664,10 @@ Engine::pipelineBackwardGhostGradients(FeatType* inputTensor, unsigned featDim) 
             partsScatteredTable[partitionInfo.first] = true;
             queueLock.unlock();
 
+            writeMutex.lock();
+            log(debugFile, "START BWKD_BATCH_PART %u", partitionInfo.first);
+            writeMutex.unlock();
+
             // Partition Info: (partId, rowsPerPartition)
             unsigned startId = partitionInfo.first * partitionInfo.second;
             unsigned endId = (partitionInfo.first + 1) * partitionInfo.second;
@@ -1651,6 +1682,11 @@ Engine::pipelineBackwardGhostGradients(FeatType* inputTensor, unsigned featDim) 
                     batchedIds[nid].push_back(lvid);
                 }
             }
+
+            writeMutex.lock();
+            log(debugFile, "END BKWD_BATCH_PART %u", partitionInfo.first);
+            log(debugFile, "START BKWD_DATA_SEND %u", partitionInfo.first);
+            writeMutex.unlock();
 
             // batch sendouts similar to the sequential version
             bool batchFlag = true;
@@ -1675,6 +1711,10 @@ Engine::pipelineBackwardGhostGradients(FeatType* inputTensor, unsigned featDim) 
             delete[] batchedIds;
             failedTrials = 0;
             partsScattered++;
+
+            writeMutex.lock();
+            log(debugFile, "END BKWD_DATA_SEND %u", partitionInfo.first);
+            writeMutex.unlock();
         }
     }
 

@@ -245,13 +245,21 @@ LambdaWorker::recvLambdaResults(zmq::message_t& client_id, unsigned partId) {
     // Check for total number of partitions received. If all partitions received, wake up lambdaComm.
     // manager->forwardLambdaTable[partId] = false;
     // ++(manager->countForward);
+    writeMutex.lock();
+    log(debugFile, "START ENQUEUE %u", partId);
+    writeMutex.unlock();
     qLock->lock();
     if (pipeline && manager->forwardLambdaTable[partId]) {
         q_ptr->push(std::make_pair(partId, partRows));
     }
+    qLock->unlock();
+
+    writeMutex.lock();
+    log(debugFile, "END ENQUEUE %u", partId);
+    writeMutex.unlock();
+
     __sync_bool_compare_and_swap(manager->forwardLambdaTable + partId, true, false);
     __sync_fetch_and_add(&(manager->countForward), 1);
-    qLock->unlock();
 }
 
 void

@@ -156,18 +156,39 @@ void LambdaComm::callback(const Aws::Lambda::LambdaClient *client,
 
         // JSON Parsing not working from Boost to AWS.
         Aws::IOStream& payload = result.GetPayload();
-        Aws::String functionResult;
-        std::getline(payload, functionResult);
+        Aws::String resultStr;
+        std::getline(payload, resultStr);
+        Aws::Utils::Json::JsonValue response(resultStr);
 
-        // No error found means a successful respond.
-        if (functionResult.find("error") != std::string::npos) {
-            std::cout << "\033[1;31m[ ERROR ]\033[0m\t" << functionResult << std::endl;
+        char logMsg[256];
+        auto v = response.View();
+        if (v.GetBool("success")) {
+            if (v.GetInteger("type") == PROP_TYPE::FORWARD) {
+                sprintf(logMsg, "END FORWARD %u %u %u %u %u %u",
+                  v.GetInteger("id"), v.GetInteger("start"),
+                  v.GetInteger("reqStart"), v.GetInteger("reqStart"),
+                  v.GetInteger("sendStart"), v.GetInteger("sendEnd"));
+                writeMutex.lock();
+                log(debugFile, logMsg);
+                writeMutex.unlock();
+            } else {
+                sprintf(logMsg, "END BACKWARD %u %u %u %u %u %u %u %u %u %u",
+                  v.GetInteger("id"), v.GetInteger("start"),
+                  v.GetInteger("reqT0Start"), v.GetInteger("reqT0End"),
+                  v.GetInteger("reqT1Start"), v.GetInteger("reqT1End"),
+                  v.GetInteger("reqT2Start"), v.GetInteger("reqT2End"),
+                  v.GetInteger("sendStart"), v.GetInteger("sendEnd"));
+                writeMutex.lock();
+                log(debugFile, logMsg);
+                writeMutex.unlock();
+            }
+        } else {
+            printLog(globalNodeId, "\033[1;31m[ ERROR ]\033[0m\t%s\n", v.GetString("reason").c_str());
         }
     // Lambda returns error.
     } else {
-        std::cout << "\033[1;31m[ ERROR ]\033[0m\t";
+        printLog(globalNodeId, "\033[1;31m[ ERROR ]\033[0m");
     }
-
 }
 // END LAMBDA INVOCATION AND RETURN FUNCTIONS
 
@@ -215,6 +236,10 @@ LambdaComm::invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLaye
 
     char* weightServerIp = weightservers[(nodeId * numLambdasForward + lambdaId) % weightservers.size()];
     invokeLambda("eval-forward-gcn", nodeIp.c_str(), dataserverPort, weightServerIp, weightserverPort, layer, lambdaId, lastLayer);
+
+    writeMutex.lock();
+    log(debugFile, "START FORWARD %u", lambdaId);
+    writeMutex.unlock();
 }
 
 
@@ -306,6 +331,10 @@ LambdaComm::invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLay
 
     char* weightServerIp = weightservers[(nodeId * numLambdasForward + lambdaId) % weightservers.size()];
     invokeLambda("eval-backward-gcn", nodeIp.c_str(), dataserverPort, weightServerIp, weightserverPort, layer, lambdaId, lastLayer);
+
+    writeMutex.lock();
+    log(debugFile, "START BACKWARD %u", lambdaId);
+    writeMutex.unlock();
 }
 
 void
