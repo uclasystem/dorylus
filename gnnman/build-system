@@ -37,6 +37,9 @@ elif [[ $1 == "graph" ]]; then
     fi
 elif [[ $1 == "weight" ]]; then
     BUILD_WEIGHT=1
+elif [[ -z $1 ]]; then
+    BUILD_GRAPH=1
+    BUILD_WEIGHT=1
 fi
 
 # For graph servers.
