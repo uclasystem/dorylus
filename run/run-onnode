@@ -60,6 +60,13 @@ case $1 in
             fi
         done
 
+        # After processing args, check to see if GPU enables
+        # If so, disable pipelining
+        if [ $MODE -eq 1 ] && [ $PIPELINE -eq 1 ]; then
+            echo "GPU and pipeline cannot be used together. Disabling pipeline"
+            PIPELINE=0
+        fi
+
         MYPRIPFILE=${HOME}/myprip
         MYPUBIPFILE=${HOME}/mypubip
         DSHMACHINESFILE=${HOME}/dshmachines
