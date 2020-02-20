@@ -37,6 +37,7 @@ CuMatrix ComputingUnit::aggregate(CuMatrix &sparse, CuMatrix &dense) {
     cusparseSpMatDescr_t desA;
     cusparseDnMatDescr_t desB;
     cusparseDnMatDescr_t desC;
+
     auto
     cusparseStat = cusparseCreateCsr(&desA, sparse.getRows(), sparse.getCols(), sparse.nnz,
                                      sparse.csrRowPtr, sparse.csrColInd, sparse.csrVal,
@@ -64,6 +65,7 @@ CuMatrix ComputingUnit::aggregate(CuMatrix &sparse, CuMatrix &dense) {
                                 desC, CUDA_R_32F, CUSPARSE_MM_ALG_DEFAULT, buffer
                                );
     assert(CUSPARSE_STATUS_SUCCESS == cusparseStat);
+    
     return C;
 }
 
@@ -132,7 +134,7 @@ CuMatrix ComputingUnit::softmaxRows( CuMatrix &mat) {
 CuMatrix ComputingUnit::activateBackward( CuMatrix &y, CuMatrix &gradient) {
     cudnnActivationDescriptor_t actDesc;
     cudnnCreateActivationDescriptor(&actDesc);
-    cudnnSetActivationDescriptor(actDesc, CUDNN_ACTIVATION_RELU, CUDNN_NOT_PROPAGATE_NAN, 1.0);
+    cudnnSetActivationDescriptor(actDesc, CUDNN_ACTIVATION_TANH, CUDNN_NOT_PROPAGATE_NAN, 1.0);
 
     cudnnTensorDescriptor_t yDesc, dyDesc;
     cudnnCreateTensorDescriptor(&yDesc);
@@ -153,10 +155,19 @@ CuMatrix ComputingUnit::activateBackward( CuMatrix &y, CuMatrix &gradient) {
 
 
 CuMatrix ComputingUnit::dot( Matrix &A, Matrix &B) {
+    auto t0 = gtimers.getTimer("Dot Copy A");
+    auto t1 = gtimers.getTimer("Dot Copy B");
+    auto t2 = gtimers.getTimer("Dot Copy Out");
+    t0->start();
     CuMatrix devA(A, handle);
+    t0->stop();
+    t1->start();
     CuMatrix devB(B, handle);
+    t1->stop();
     CuMatrix devC = devA.dot(devB);
+    t2->start();
     devC.updateMatrixFromGPU();
+    t2->stop();
     return devC;
 }
 
@@ -168,10 +179,9 @@ void ComputingUnit::activate(CuMatrix &A) {
 
     cudnnActivationDescriptor_t actDesc;
     cudnnCreateActivationDescriptor(&actDesc);
-    cudnnSetActivationDescriptor(actDesc, CUDNN_ACTIVATION_RELU, CUDNN_NOT_PROPAGATE_NAN, 1.0);
+    cudnnSetActivationDescriptor(actDesc, CUDNN_ACTIVATION_TANH, CUDNN_NOT_PROPAGATE_NAN, 1.0);
     cudnnActivationForward(cudnnHandle, actDesc,
                            &alpha, srcTensorDesc, A.devPtr, &beta, srcTensorDesc, A.devPtr);
-    A.updateMatrixFromGPU();
 }
 
 //** much slower than CPU only if Input Matrices are not loaded in GPU beforehand

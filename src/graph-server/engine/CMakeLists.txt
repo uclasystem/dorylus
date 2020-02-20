@@ -33,6 +33,6 @@ if(BUILD_GPU)
                              PUBLIC  ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES})
 else()
 target_link_libraries(engine PRIVATE edge vertex graph dataloader commmanager resource_comm nodemanager threadpool utils
-                             PUBLIC  ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES})
+                             PUBLIC  ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES} ${OpenMP_CXX_FLAGS})
 endif()
-target_compile_options(engine PRIVATE "-Wall" "-Werror" "-Wno-sign-compare" "-Wno-reorder" "-MMD")
+target_compile_options(engine PRIVATE "-Wall" "-Werror" "-Wno-sign-compare" "-Wno-reorder" "-MMD" ${OpenMP_CXX_FLAGS})

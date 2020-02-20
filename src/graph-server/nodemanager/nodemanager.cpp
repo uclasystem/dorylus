@@ -23,6 +23,11 @@ NodeManager::init(std::string dshMachinesFile, std::string myPrIpFile, std::stri
     allNodes[me.id].pubip = me.pubip;       // Set my node struct's pubip, in case CommManager uses it.
     printLog(me.id, "Private IP: %s, Public IP: %s", me.ip.c_str(), me.pubip.c_str());
 
+    if (standAlone) {
+        printLog(404, "NodeManger finds only itself");
+        return;
+    }
+
     // Initialize node barriering sockets.
     nodePublisher = new zmq::socket_t(nodeContext, ZMQ_PUB);
     nodePublisher->setsockopt(ZMQ_SNDHWM, 0);       // Set no limit on number of message queueing.
@@ -109,6 +114,8 @@ NodeManager::init(std::string dshMachinesFile, std::string myPrIpFile, std::stri
  */
 void
 NodeManager::barrier() {
+    if (standAlone) return;
+
     inBarrier = true;
     // printLog(me.id, "Hits on a global barrier |xxx|...");
 
@@ -143,6 +150,8 @@ NodeManager::barrier() {
  */
 void
 NodeManager::destroy() {
+    if(standAlone) return;
+    
     nodePublisher->close();
     nodeSubscriber->close();
 
@@ -150,6 +159,10 @@ NodeManager::destroy() {
     delete nodeSubscriber;
 }
 
+// Return whether there is multiple machines running
+bool NodeManager::standAloneMode() {
+    return standAlone;
+}
 
 /**
  *
@@ -208,4 +221,5 @@ NodeManager::parseNodeConfig(const std::string dshMachinesFile) {
             allNodes.push_back(Node(id, &ip, (id == MASTER_NODEID)));
         }
     }
+    standAlone = (getNumNodes() == 1) ? true : false;
 }
