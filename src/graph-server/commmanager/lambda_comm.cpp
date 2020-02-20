@@ -4,6 +4,8 @@
 static std::vector<LambdaWorker *> workers;
 static std::vector<std::thread *> worker_threads;
 
+std::mutex producerQueueLock;
+
 
 extern "C" ResourceComm* createComm(CommInfo& commInfo) {
     return new LambdaComm(commInfo);
@@ -47,7 +49,7 @@ LambdaComm::LambdaComm(CommInfo &commInfo) :
 
     // Create 'numListeners' workers and detach them.
     for (unsigned i = 0; i < numListeners; ++i) {
-        workers.push_back(new LambdaWorker(this, commInfo.queuePtr, commInfo.qLock));
+        workers.push_back(new LambdaWorker(this, commInfo.queuePtr));
         worker_threads.push_back(new std::thread(std::bind(&LambdaWorker::work, workers[i])));
     }
 

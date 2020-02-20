@@ -120,7 +120,7 @@ Engine::init(int argc, char *argv[]) {
     bkwdRecvCntLock.init();
     bkwdRecvCntCond.init(bkwdRecvCntLock);
 
-    queueLock.init();
+    consumerQueueLock.init();
 
     // Initialize computation thread barrier.
     barComp.init(cThreads);
@@ -194,7 +194,6 @@ Engine::setupCommInfo() {
     commInfo.weightserverPort = weightserverPort;
     commInfo.totalLayers = numLayers;
     commInfo.queuePtr = &rangesToScatter;
-    commInfo.qLock = &queueLock;
 }
 
 /**
@@ -549,10 +548,10 @@ FeatType *Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned fea
     AggOPArgs args = {outputTensor, vtcsTensor, vtcsCnt, featDim};
     auto computeFn = std::bind(&Engine::aggregateCompute, this, std::placeholders::_1, std::placeholders::_2);
 
-    log(debugFile, "START AGGREGATE");
+    log(debugFile, "START AGGREGATE %u", iteration);
     computePool->perform(computeFn, &args);
     computePool->sync();
-    log(debugFile, "END AGGREGATE");
+    log(debugFile, "END AGGREGATE %u", iteration);
 
     if (iteration > 0) {
         delete[] forwardGhostVerticesDataIn;
@@ -731,9 +730,9 @@ Engine::fusedGAS(FeatType* vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     double sttTimer = getTimer();
     // Check just to make sure partition ranges are empty
     // before starting
-    queueLock.lock();
+    consumerQueueLock.lock();
     while (!rangesToScatter.empty()) rangesToScatter.pop();
-    queueLock.unlock();
+    consumerQueueLock.unlock();
 
     // Start data receivers
     commHalt = false;
@@ -933,9 +932,9 @@ Engine::pipelineForwardGhostUpdates(FeatType* inputTensor, unsigned featDim) {
 
     // Check queue to see if partition ready
     while (partsScattered < numLambdasForward) {
-        queueLock.lock();
+        consumerQueueLock.lock();
         if (rangesToScatter.empty()) {
-            queueLock.unlock();
+            consumerQueueLock.unlock();
             // sleep with backoff
             usleep(SLEEP_PERIOD); // sleep a little and give up CPUs
             failedTrials++;
@@ -948,11 +947,11 @@ Engine::pipelineForwardGhostUpdates(FeatType* inputTensor, unsigned featDim) {
             rangesToScatter.pop();
             // Has this partition already been processed
             if (partsScatteredTable[partitionInfo.first]) {
-                queueLock.unlock();
+                consumerQueueLock.unlock();
                 continue;
             }
             partsScatteredTable[partitionInfo.first] = true;
-            queueLock.unlock();
+            consumerQueueLock.unlock();
 
             writeMutex.lock();
             log(debugFile, "START FWD_BATCH_PART %u", partitionInfo.first);
@@ -962,8 +961,6 @@ Engine::pipelineForwardGhostUpdates(FeatType* inputTensor, unsigned featDim) {
             unsigned startId = partitionInfo.first * partitionInfo.second;
             unsigned endId = (partitionInfo.first + 1) * partitionInfo.second;
             endId = endId > graph.localVtxCnt ? graph.localVtxCnt : endId;
-
-            outputToFile(debugFile, inputTensor, startId, endId, featDim, true);
 
             // Create a series of buckets for batching sendout messages to nodes
             std::vector<unsigned>* batchedIds = new std::vector<unsigned>[numNodes];
@@ -1323,9 +1320,9 @@ FeatType*
 Engine::fusedGASBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim, bool aggregate, bool scatter) {
     double sttTimer = getTimer();
 
-    queueLock.lock();
+    consumerQueueLock.lock();
     while (!rangesToScatter.empty()) rangesToScatter.pop();
-    queueLock.unlock();
+    consumerQueueLock.unlock();
 
     // Case 1 - First phase, no aggregate needed
     FeatType* outputTensor = nullptr;
@@ -1642,9 +1639,9 @@ Engine::pipelineBackwardGhostGradients(FeatType* inputTensor, unsigned featDim) 
 
     // Check queue to see if partition ready
     while (partsScattered < numLambdasBackward) {
-        queueLock.lock();
+        consumerQueueLock.lock();
         if (rangesToScatter.empty()) {
-            queueLock.unlock();
+            consumerQueueLock.unlock();
             // sleep with backoff
             usleep(SLEEP_PERIOD); // sleep a little and give up CPUs
             failedTrials++;
@@ -1658,11 +1655,11 @@ Engine::pipelineBackwardGhostGradients(FeatType* inputTensor, unsigned featDim) 
             rangesToScatter.pop();
             // Has this partition already been processed
             if (partsScatteredTable[partitionInfo.first]) {
-                queueLock.unlock();
+                consumerQueueLock.unlock();
                 continue;
             }
             partsScatteredTable[partitionInfo.first] = true;
-            queueLock.unlock();
+            consumerQueueLock.unlock();
 
             writeMutex.lock();
             log(debugFile, "START BWKD_BATCH_PART %u", partitionInfo.first);
@@ -1865,21 +1862,21 @@ Engine::printEngineMetrics() {
             printLog(nodeId, "<EM>    Ghost update  %2u  %.3lf ms", i, vecTimeSendout[i]);
         }
     }
-    printLog(nodeId, "<EM>: Total forward-prop time %.3lf ms", timeForwardProcess);
+    printLog(nodeId, "<EM>: Average forward-prop time %.3lf ms", timeForwardProcess / (float)numEpochs);
 
     if (!pipeline) {
-        printLog(nodeId, "<EM>: Backward: Time per stage:");
+        printLog(nodeId, "<EM>: Backward: Average time per stage:");
         for (unsigned i = numLayers; i < 2 * numLayers; i++) {
             printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i, vecTimeAggregate[i]);
             printLog(nodeId, "<EM>    Lambda        %2u  %.3lf ms", i, vecTimeLambda[i]);
             printLog(nodeId, "<EM>    Ghost update  %2u  %.3lf ms", i, vecTimeSendout[i]);
         }
     }
-    printLog(nodeId, "<EM>: Backward-prop takes %.3lf ms", timeBackwardProcess);
+    printLog(nodeId, "<EM>: Backward-prop takes %.3lf ms", timeBackwardProcess / (float)numEpochs);
 
     double sum = 0.0;
     for (double& d : epochTimes) sum += d;
-    printLog(nodeId, "<EM>: Average epoch time %.3lf ms", sum / (float)epochTimes.size());
+    printLog(nodeId, "<EM>: Average epoch time %.3lf ms", sum / (float)numEpochs);
     printLog(nodeId, "<EM>: Final accuracy %.3lf", accuracy);
 }
 

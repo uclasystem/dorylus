@@ -3,13 +3,15 @@
 
 
 
+extern std::mutex producerQueueLock;
+
 /**
  *
  * LambdaWorker constructor & destructor.
  *
  */
-LambdaWorker::LambdaWorker(LambdaComm *manager_, PairQueue* _q_ptr, Lock* _qLock) : manager(manager_),
-  workersocket(manager->ctx, ZMQ_DEALER), q_ptr(_q_ptr), qLock(_qLock) {
+LambdaWorker::LambdaWorker(LambdaComm *manager_, PairQueue* _q_ptr) : manager(manager_),
+  workersocket(manager->ctx, ZMQ_DEALER), q_ptr(_q_ptr) {
     workersocket.setsockopt(ZMQ_LINGER, 0);
     workersocket.setsockopt(ZMQ_RCVTIMEO, 1000); // Set time out of weight socket to 1s for a graceful shut down.
     workersocket.connect("inproc://backend");
@@ -248,11 +250,12 @@ LambdaWorker::recvLambdaResults(zmq::message_t& client_id, unsigned partId) {
     writeMutex.lock();
     log(debugFile, "START ENQUEUE %u", partId);
     writeMutex.unlock();
-    qLock->lock();
+
+    producerQueueLock.lock();
     if (pipeline && manager->forwardLambdaTable[partId]) {
         q_ptr->push(std::make_pair(partId, partRows));
     }
-    qLock->unlock();
+    producerQueueLock.unlock();
 
     writeMutex.lock();
     log(debugFile, "END ENQUEUE %u", partId);
@@ -323,11 +326,11 @@ LambdaWorker::recvChunk(Matrix &dstMat, zmq::message_t &client_id, unsigned part
     workersocket.send(client_id, ZMQ_SNDMORE);
     workersocket.send(confirm);
 
-    qLock->lock();
+    producerQueueLock.lock();
     if (pipeline && manager->backwardLambdaTable[partId]) {
         q_ptr->push(std::make_pair(partId, partRows));
     }
-    qLock->unlock();
+    producerQueueLock.unlock();
 
     // Check for total number of partitions received. If all partitions received, wake up lambdaComm.
     if (forward) {

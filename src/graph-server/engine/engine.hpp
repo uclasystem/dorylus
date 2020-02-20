@@ -218,7 +218,7 @@ private:
 
     PairQueue rangesToScatter;
     bool* partsScatteredTable;
-    Lock queueLock;
+    Lock consumerQueueLock;
 
     bool pipeline = false;
     // END Pipeline related functions/members

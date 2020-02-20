@@ -36,7 +36,7 @@ class LambdaWorker {
 
 public:
 
-    LambdaWorker(LambdaComm *manager_, PairQueue* _q_ptr, Lock* _qLock);
+    LambdaWorker(LambdaComm *manager_, PairQueue* _q_ptr);
 
     ~LambdaWorker();
 
@@ -99,7 +99,6 @@ private:
     // Callback when lambda results are returned
     bool pipeline;
     PairQueue* q_ptr;
-    Lock* qLock;
 };
 
 
