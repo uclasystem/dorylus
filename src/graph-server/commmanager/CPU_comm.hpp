@@ -42,8 +42,6 @@ class CPUComm : public ResourceComm {
     void invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
     void waitLambdaBackward(unsigned layer, bool lastLayer) {}
 
-    //for validation
-    void setTrainValidationSplit(float trainPortion, unsigned numLocalVertices);
     //cannot be called if newContextBackward is never called due to the assignment of targetmatrix
     void sendTargetMatrix();
 
@@ -73,8 +71,6 @@ class CPUComm : public ResourceComm {
     FeatType *zData;    // Places to store the results from lambda.
     FeatType *actData;
     unsigned numFeatsNext;
-
-    float split;
 
     //backward
     Matrix oldGradMatrix;

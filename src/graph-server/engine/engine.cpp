@@ -526,7 +526,7 @@ FeatType *Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned fea
     currId = vtcsCnt;
 
     if (iteration > 0) {
-        delete[] forwardGhostVerticesData;
+        delete[] forwardGhostVerticesDataIn;
         delete[] vtcsTensor;
     }
 
@@ -1135,7 +1135,7 @@ Engine::aggregateBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featD
     FeatType *outputTensor = new FeatType[vtcsCnt * featDim];
     CuMatrix feat;
     t0->start();
-    feat.loadSpDense(gradTensor, backwardGhostVerticesData,
+    feat.loadSpDense(gradTensor, backwardGhostVerticesDataIn,
                      graph.localVtxCnt, graph.dstGhostCnt,
                      featDim);
     cudaDeviceSynchronize();

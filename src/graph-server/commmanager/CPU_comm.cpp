@@ -147,10 +147,6 @@ void CPUComm::requestForward(unsigned layer, bool lastLayer) {
 }
 
 
-void CPUComm::setTrainValidationSplit(float trainPortion, unsigned numLocalVertices) {
-    split = trainPortion;
-};
-
 // For backward-prop.
 void CPUComm::newContextBackward(unsigned layer, FeatType *oldGradBuf,
   FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
