@@ -23,12 +23,20 @@ if [[ ! -z $1 ]] && [[ $1 != "graph" ]] && [[ $1 != "weight" ]]; then
     exit 1
 fi
 
+BUILD_GPU=""
+for var in "$@"
+do
+    if [ $var = "GPU" ] || [ $var = "gpu" ]; then
+        BUILD_GPU='gpu'
+    fi
+done
+
 
 # For graph servers.
 if [[ -z $1 ]] || [[ $1 == "graph" ]]; then
     echo "Processing context 'graph'..."
     # ${EC2MAN_CMD} graph 0 ssh -t "cd gnn-lambda && ./gnnman/helpers/graphserver.bld && ./gnnman/helpers/send-folder build/graph-server"
-    ${EC2MAN_CMD} graph 0 ssh -t "cd gnn-lambda && ./gnnman/helpers/graphserver.bld && ./gnnman/helpers/send-folder build"
+    ${EC2MAN_CMD} graph 0 ssh -t "cd gnn-lambda && ./gnnman/helpers/graphserver.bld ${BUILD_GPU} && ./gnnman/helpers/send-folder build"
 fi
 
 
