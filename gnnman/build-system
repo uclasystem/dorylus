@@ -17,23 +17,40 @@ cd $( dirname $0 )/..
 EC2MAN_CMD="python3 -m ec2man"
 
 
-if [[ ! -z $1 ]] && [[ $1 != "graph" ]] && [[ $1 != "weight" ]]; then
+if [[ ! -z $1 ]] && [[ $1 != "graph" ]] && [[ $1 != "weight" ]] && [[ $1 != "gpu" ]]; then
     echo "Context '$1' not recognized."
-    echo "Usage: ./gnnman/build-system [Context]    # Empty means build all."
+    echo "Usage: ./gnnman/build-system [[Context|gpu]...]    # Empty means build all."
     exit 1
 fi
 
+let BUILD_GRAPH=0
+let BUILD_WEIGHT=0
+BUILD_GPU_OPT=''
+if [[ $1 == "gpu" ]]; then
+    BUILD_GRAPH=1
+    BUILD_WEIGHT=1
+    BUILD_GPU_OPT='gpu'
+elif [[ $1 == "graph" ]]; then
+    BUILD_GRAPH=1
+    if [[ $2 == "gpu" ]]; then
+        BUILD_GPU_OPT='gpu'
+    fi
+elif [[ $1 == "weight" ]]; then
+    BUILD_WEIGHT=1
+elif [[ -z $1 ]]; then
+    BUILD_GRAPH=1
+    BUILD_WEIGHT=1
+fi
 
 # For graph servers.
-if [[ -z $1 ]] || [[ $1 == "graph" ]]; then
+if [ ${BUILD_GRAPH} -eq 1 ]; then
     echo "Processing context 'graph'..."
-    # ${EC2MAN_CMD} graph 0 ssh -t "cd gnn-lambda && ./gnnman/helpers/graphserver.bld && ./gnnman/helpers/send-folder build/graph-server"
-    ${EC2MAN_CMD} graph 0 ssh -t "cd gnn-lambda && ./gnnman/helpers/graphserver.bld && ./gnnman/helpers/send-file build/graphserver && ./gnnman/helpers/send-file build/graph-server/commmanager/liblambda_comm.so && ./gnnman/helpers/send-file build/src/common/libcommon.so"
+    ${EC2MAN_CMD} graph 0 ssh -t "cd gnn-lambda && ./gnnman/helpers/graphserver.bld ${BUILD_GPU_OPT} && ./gnnman/helpers/send-folder build"
 fi
 
 
 # For weight servers.
-if [[ -z $1 ]] || [[ $1 == "weight" ]]; then
+if [ ${BUILD_WEIGHT} -eq 1 ]; then
     echo "Processing context 'weight'..."
     ${EC2MAN_CMD} weight 0 ssh -t "cd gnn-lambda && ./gnnman/helpers/weightserver.bld && ./gnnman/helpers/send-folder build"
 fi

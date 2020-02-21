@@ -9,10 +9,13 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <functional>
 #include <map>
 #include <string>
 #include <typeinfo>
 #include <vector>
+#include <queue>
+#include <utility>
 
 
 /** Default vertex ID type and features type. */
@@ -23,6 +26,9 @@ typedef float EdgeType;
                                 // From MAX_IDTYPE downto MAX_IDTYPE - numGlobalVertices are receive signals.
 
 extern std::map<size_t, std::string> typeToFormatSpecifier;
+
+typedef std::function<void(unsigned, unsigned, FeatType*, unsigned)> FuncPtr;
+typedef std::queue< std::pair<unsigned, unsigned> > PairQueue;
 
 
 /** Print to log file using this one. */

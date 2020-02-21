@@ -116,7 +116,7 @@ CPUComm::CPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_,
 
 
 void CPUComm::newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData_, FeatType *actData_,
-                                unsigned numLocalVertices_, unsigned numFeats, unsigned numFeatsNext_) {
+                                unsigned numLocalVertices_, unsigned numFeats, unsigned numFeatsNext_, bool pipeline) {
     // Create a new matrix object for workers to access.
     numLocalVertices = numLocalVertices_;
     currLayer = layer;
@@ -147,13 +147,11 @@ void CPUComm::requestForward(unsigned layer, bool lastLayer) {
 }
 
 
-void CPUComm::setTrainValidationSplit(float trainPortion, unsigned numLocalVertices) {
-    split = trainPortion;
-};
-
 // For backward-prop.
-void CPUComm::newContextBackward(unsigned layer, FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
-                                 unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim) {
+void CPUComm::newContextBackward(unsigned layer, FeatType *oldGradBuf,
+  FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
+  unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim,
+  unsigned targetDim, bool pipeline) {
     currLayer = layer;
     // Create new matrices object for workers to access.
     oldGradMatrix = Matrix(numLocalVertices, outFeatDim, oldGradBuf);

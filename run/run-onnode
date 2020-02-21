@@ -40,7 +40,9 @@ case $1 in
             NUM_LAMBDAS_BACKWARD=$3
         fi
 
-        let MODE=0;
+        let MODE=0
+        let PIPELINE=0
+        let NUM_EPOCHS=30
         for var in "$@"
         do
             if [ $var = "GPU" ] || [ $var = "gpu" ]; then
@@ -48,7 +50,22 @@ case $1 in
                 NUM_LAMBDAS_FORWARD=1
                 NUM_LAMBDAS_BACKWARD=1
             fi
+
+            if [ $var = "pipe" ] || [ $var = "PIPE" ]; then
+                PIPELINE=1
+            fi
+
+            if [[ $var = --e=* ]] || [[ $var = --epochs=* ]]; then
+                NUM_EPOCHS="${var#*=}"
+            fi
         done
+
+        # After processing args, check to see if GPU enables
+        # If so, disable pipelining
+        if [ $MODE -eq 1 ] && [ $PIPELINE -eq 1 ]; then
+            echo "GPU and pipeline cannot be used together. Disabling pipeline"
+            PIPELINE=0
+        fi
 
         MYPRIPFILE=${HOME}/myprip
         MYPUBIPFILE=${HOME}/mypubip
@@ -118,9 +135,10 @@ case $1 in
             --nodeport ${NODEPORT} \
             --numlambdasforward ${NUM_LAMBDAS_FORWARD} \
             --numlambdasbackward ${NUM_LAMBDAS_BACKWARD} \
-            --numEpoch 5 \
+            --numEpoch ${NUM_EPOCHS} \
             --validationFrequency 1 \
-            --MODE ${MODE}"
+            --MODE ${MODE} \
+            --pipeline ${PIPELINE}"
         echo ${DSH_COMMAND}
         dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ${DSH_COMMAND}" 2>&1 | tee ${LOGFILE}
 

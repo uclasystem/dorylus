@@ -7,14 +7,17 @@
 #include <string>
 #include <thread>
 #include <cmath>
-#include <boost/property_tree/ptree.hpp>
-#include <boost/property_tree/json_parser.hpp>
+#include <unistd.h>
+
 #include <cblas.h>
 #include <zmq.hpp>
-#include <aws/lambda-runtime/runtime.h>
 
-#include "../../../src/common/matrix.hpp"
-#include "../../../src/common/utils.hpp"
+#include <aws/lambda-runtime/runtime.h>
+#include <aws/core/Aws.h>
+#include <aws/core/utils/json/JsonSerializer.h>
+
+#include "../../common/matrix.hpp"
+#include "../../common/utils.hpp"
 
 #define SLEEP_PERIOD   1000  // us
 #define TIMEOUT_PERIOD (500) // ms
@@ -22,14 +25,19 @@
 #define SND_MORE true
 #define NO_MORE false
 
+typedef std::string timestamp_t;
 
-using boost::property_tree::ptree;
-using boost::property_tree::read_json;
-using boost::property_tree::write_json;
+using namespace Aws::Utils::Json;
 using namespace aws::lambda_runtime;
 using namespace std::chrono;
 
 bool lastLayer = false;
+
+unsigned lambdaStart;
+unsigned reqStart;
+unsigned reqEnd;
+unsigned sendStart;
+unsigned sendEnd;
 
 
 /**
@@ -49,7 +57,7 @@ requestMatrix(zmq::socket_t& socket, OP op, unsigned id, bool data = false) {
 
     // Listen on respond.
     zmq::message_t respHeader;
-    // socket.recv(&respHeader);
+//    socket.recv(&respHeader);
     while (!socket.recv(&respHeader, ZMQ_DONTWAIT)) {
         usleep(SLEEP_PERIOD);
         if (reqTimer.peek() > TIMEOUT_PERIOD) {
@@ -105,6 +113,7 @@ sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned
     zmq::message_t actData(actResult.getDataSize());
     std::memcpy(actData.data(), actResult.getData(), actResult.getDataSize());
     socket.send(zData, ZMQ_SNDMORE);
+    sendStart = timestamp_ms();
     socket.send(actData);
 
     Timer sndTimer;
@@ -112,7 +121,7 @@ sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned
 
     // Wait for data settled reply.
     zmq::message_t confirm;
-    // socket.recv(&confirm);
+//    socket.recv(&confirm);
     while(!socket.recv(&confirm, ZMQ_DONTWAIT)) {
         usleep(SLEEP_PERIOD);
         if (sndTimer.peek() > TIMEOUT_PERIOD) {
@@ -130,6 +139,7 @@ sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned
             sndTimer.start();
         }
     }
+    sendEnd = timestamp_ms();
 }
 
 static void
@@ -334,7 +344,7 @@ gradLoss(Matrix& z, Matrix& weights, Matrix& AH, zmq::socket_t& datasocket, zmq:
  *
  */
 static invocation_response
-forward_prop_layer(std::string dataserver, std::string weightserver, std::string dport, std::string wport,
+forward_prop_layer(std::string dataserver, std::string weightserver, unsigned dport, unsigned wport,
                    unsigned id, unsigned layer, bool lastLayer) {
     zmq::context_t ctx(1);
 
@@ -353,56 +363,59 @@ forward_prop_layer(std::string dataserver, std::string weightserver, std::string
     *(unsigned *)(identity + sizeof(unsigned) * 2) = rand();
     memcpy(identity + sizeof(unsigned) * 3, (char *) dataserver.c_str(), dataserver.length());
 
-    Timer getWeightsTimer;
-    Timer getFeatsTimer;
-    Timer computationTimer;
-    Timer sendResTimer;
-
     try {
         Matrix weights, feats, z, activations;
 
         zmq::socket_t weights_socket(ctx, ZMQ_DEALER);
         weights_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
         char whost_port[50];
-        sprintf(whost_port, "tcp://%s:%s", weightserver.c_str(), wport.c_str());
+        sprintf(whost_port, "tcp://%s:%u", weightserver.c_str(), wport);
         weights_socket.connect(whost_port);
 
         zmq::socket_t data_socket(ctx, ZMQ_DEALER);
         data_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
         char dhost_port[50];
-        sprintf(dhost_port, "tcp://%s:%s", dataserver.c_str(), dport.c_str());
+        sprintf(dhost_port, "tcp://%s:%u", dataserver.c_str(), dport);
         data_socket.connect(dhost_port);
 
         // Request weights matrix of the current layer.
         std::thread t([&] {     // Weight requests run in a separate thread.
             std::cout << "< FORWARD > Asking weightserver..." << whost_port << std::endl;
-            getWeightsTimer.start();
             do {
                 weights = requestMatrix(weights_socket, OP::PULL_FORWARD, layer);
             } while (weights.empty());
-            getWeightsTimer.stop();
             std::cout << "< FORWARD > Got data from weightserver." << dhost_port << std::endl;
         });
 
         // Request feature activation matrix of the current layer.
         std::cout << "< FORWARD > Asking dataserver..." << std::endl;
-        getFeatsTimer.start();
+        reqStart = timestamp_ms();
         do {
             feats = requestMatrix(data_socket, OP::PULL_FORWARD, id, true);
         } while (feats.empty());
-        getFeatsTimer.stop();
+        reqEnd = timestamp_ms();
         std::cout << "< FORWARD > Got data from dataserver." << std::endl;
 
         t.join();
 
-        if (weights.empty())
-            return invocation_response::failure("Weights could not be loaded", "application/json");
-        if (feats.empty())
-            return invocation_response::failure("No chunk corresponding to request", "appliation/json");
+        if (weights.empty()) {
+            JsonValue jsonResponse;
+            jsonResponse.WithBool("success", false);
+            jsonResponse.WithString("reason", "Weights empty");
 
+            auto response = jsonResponse.View().WriteCompact();
+            return invocation_response::failure(response, "application/json");
+        }
+        if (feats.empty()) {
+            JsonValue jsonResponse;
+            jsonResponse.WithBool("success", false);
+            jsonResponse.WithString("reason", "Features empty");
+
+            auto response = jsonResponse.View().WriteCompact();
+            return invocation_response::failure(response, "appliation/json");
+        }
 
         // Multiplication.
-        computationTimer.start();
         z = feats.dot(weights);
 
 
@@ -411,48 +424,53 @@ forward_prop_layer(std::string dataserver, std::string weightserver, std::string
         } else {
             activations = activate(z);
         }
-        computationTimer.stop();
 
-        sendResTimer.start();
         sendMatrices(z, activations, data_socket, id);
-        sendResTimer.stop();
 
         // Delete malloced spaces.
         delete[] weights.getData();
         delete[] feats.getData();
         delete[] z.getData();
         delete[] activations.getData();
-
     } catch(std::exception &ex) {
-        return invocation_response::failure(ex.what(), "application/json");
+        JsonValue jsonResponse;
+        jsonResponse.WithBool("success", false);
+        jsonResponse.WithString("reason", ex.what());
+
+        auto response = jsonResponse.View().WriteCompact();
+        return invocation_response::failure(response, "application/json");
     }
 
-    // Couldn't parse JSON with AWS SDK from ptree.
-    // For now creating a string with the times to be parsed on server.
-    std::string res = "[ FORWARD ] " + std::to_string(id) + ": " +
-                      std::to_string(getWeightsTimer.getTime()) + " " +     \
-                      std::to_string(getFeatsTimer.getTime())  + " " +      \
-                      std::to_string(computationTimer.getTime()) + " " +    \
-                      std::to_string(sendResTimer.getTime());
+    JsonValue jsonResponse;
+    jsonResponse.WithBool("success", true);
+    jsonResponse.WithInteger("type", PROP_TYPE::FORWARD);
+    jsonResponse.WithInteger("id", id);
+    jsonResponse.WithInteger("start", lambdaStart);
+    jsonResponse.WithInteger("reqStart", reqStart);
+    jsonResponse.WithInteger("reqEnd", reqEnd);
+    jsonResponse.WithInteger("sendStart", sendStart);
+    jsonResponse.WithInteger("sendEnd", sendEnd);
+    jsonResponse.WithInteger("lambdaEnd", timestamp_ms());
 
-    return invocation_response::success(res, "application/json");
+    auto response = jsonResponse.View().WriteCompact();
+    return invocation_response::success(response, "application/json");
 }
 
 
 /** Handler that hooks with lambda API. */
 static invocation_response
 my_handler(invocation_request const& request) {
-    ptree pt;
-    std::istringstream is(request.payload);
-    read_json(is, pt);
+    lambdaStart = timestamp_ms();
+    JsonValue json(request.payload);
+    auto v = json.View();
 
-    std::string dataserver = pt.get<std::string>("dataserver");
-    std::string weightserver = pt.get<std::string>("weightserver");
-    std::string dport = pt.get<std::string>("dport");
-    std::string wport = pt.get<std::string>("wport");
-    unsigned layer = pt.get<int>("layer");
-    unsigned chunkId = pt.get<int>("id");
-    lastLayer = pt.get<bool>("lastLayer");
+    std::string dataserver = v.GetString("dataserver");
+    std::string weightserver = v.GetString("weightserver");
+    unsigned dport = v.GetInteger("dport");
+    unsigned wport = v.GetInteger("wport");
+    unsigned layer = v.GetInteger("layer");
+    unsigned chunkId = v.GetInteger("id");
+    lastLayer = v.GetBool("lastLayer");
 
     std::cout << "[ACCEPTED] Thread " << chunkId << " is requested from " << dataserver << ":" << dport
               << ", FORWARD layer " << layer << "." << std::endl;

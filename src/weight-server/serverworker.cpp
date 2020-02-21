@@ -61,19 +61,13 @@ ServerWorker::work() {
 
             switch (op) {
                 case (OP::PULL_FORWARD):
-                    opTimer.start();
                     sendWeights(identity, arg);
-                    opTimer.stop();
                     break;
                 case (OP::PULL_BACKWARD):
-                    opTimer.start();
                     sendWeights(identity, arg);
-                    opTimer.stop();
                     break;
                 case (OP::PUSH_BACKWARD):
-                    opTimer.start();
                     recvUpdate(identity, arg);
-                    opTimer.stop();
                     break;
                 case (OP::INFO):    // Used to tell how many lambda threads it should expect for this round.
                     setBackpropNumLambdas(identity, arg);
@@ -86,7 +80,6 @@ ServerWorker::work() {
                     header.size() << std::endl;
                     break;  /** Not an op that I care about. */
             }
-            ws.addOpTime(op, opTimer.getTime());
         }
     } catch (std::exception& ex) { /** Context Termintated. */ }
 }

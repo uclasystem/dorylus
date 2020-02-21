@@ -46,7 +46,7 @@ void Graph::init(std::string graphFile) {
         infile.read(reinterpret_cast<char *>(&lvid), sizeof(unsigned));
         dstGhostVtcs[gvid] = lvid;
     }
-    // dstination of local vertices during forward
+    // destination of local vertices during forward
     unsigned numNodes = 0;
     infile.read(reinterpret_cast<char *>(&numNodes), sizeof(unsigned));
     for (unsigned i = 0; i < numNodes; ++i) {
@@ -61,6 +61,29 @@ void Graph::init(std::string graphFile) {
         infile.read(reinterpret_cast<char *>(&size), sizeof(unsigned));
         backwardLocalVtxDsts.push_back(std::vector<unsigned>(size));
         infile.read(reinterpret_cast<char *>(backwardLocalVtxDsts[i].data()), sizeof(unsigned) * size);
+    }
+
+    // Create alternate representation of local vertex destinations for pipelined version
+    for (unsigned nid = 0; nid < numNodes; ++nid) {
+        std::vector<unsigned>& vids = forwardLocalVtxDsts[nid];
+        for (unsigned i = 0; i < vids.size(); ++i) {
+            if (forwardGhostMap.find(vids[i]) == forwardGhostMap.end()) {
+                forwardGhostMap[vids[i]] = std::vector<unsigned>();
+            }
+
+            forwardGhostMap[vids[i]].push_back(nid);
+        }
+    }
+
+    for (unsigned nid = 0; nid < numNodes; ++nid) {
+        std::vector<unsigned>& vids = backwardLocalVtxDsts[nid];
+        for (unsigned i = 0; i < vids.size(); ++i) {
+            if (backwardGhostMap.find(vids[i]) == backwardGhostMap.end()) {
+                backwardGhostMap[vids[i]] = std::vector<unsigned>();
+            }
+
+            backwardGhostMap[vids[i]].push_back(nid);
+        }
     }
 
     // CSC representation of graph

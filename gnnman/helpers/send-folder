@@ -17,6 +17,6 @@ FOLDER=$( pwd )/$1
 
 for MACH in $( cat ~/dshmachines ); do
     ssh ${MACH} "mkdir -p ${FOLDER}"
-    scp -r ${FOLDER} ${MACH}:$( dirname ${FOLDER} )
+    scp -r ${FOLDER} ${MACH}:$( dirname ${FOLDER} ) > /dev/null
 done
 

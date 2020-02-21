@@ -26,21 +26,22 @@ class CPUComm : public ResourceComm {
     CPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_, const std::string &wServersFile, unsigned wPort_, unsigned totalLayers_);
 
     // For forward-prop.
-    void newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData_, FeatType *actData_,
-                           unsigned numLocalVertices_, unsigned numFeats, unsigned numFeatsNext_);
+    void newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData_,
+      FeatType *actData_, unsigned numLocalVertices_, unsigned numFeats,
+      unsigned numFeatsNext_, bool pipeline = false);
     void requestForward(unsigned layer, bool lastLayer);
     void waitLambdaForward(unsigned layer, bool lastLayer) {};
     void invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
 
     // For backward-prop.
-    void newContextBackward(unsigned layer, FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
-                            unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim);
+    void newContextBackward(unsigned layer, FeatType *oldGradBuf,
+      FeatType *newGradBuf, std::vector<Matrix> *savedTensors,
+      FeatType *targetBuf, unsigned numLocalVertices, unsigned inFeatDim,
+      unsigned outFeatDim, unsigned targetDim, bool pipeline = false);
     void requestBackward(unsigned layer, bool lastLayer);
     void invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
     void waitLambdaBackward(unsigned layer, bool lastLayer) {}
 
-    //for validation
-    void setTrainValidationSplit(float trainPortion, unsigned numLocalVertices);
     //cannot be called if newContextBackward is never called due to the assignment of targetmatrix
     void sendTargetMatrix();
 
@@ -70,8 +71,6 @@ class CPUComm : public ResourceComm {
     FeatType *zData;    // Places to store the results from lambda.
     FeatType *actData;
     unsigned numFeatsNext;
-
-    float split;
 
     //backward
     Matrix oldGradMatrix;

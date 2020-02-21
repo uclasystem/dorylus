@@ -1,6 +1,7 @@
 #include "resource_comm.hpp"
 #include <iostream>
 
+
 ResourceComm *createResourceComm(const unsigned &type, CommInfo &commInfo) {
     void *hndl = NULL;
     if (type == CPU)

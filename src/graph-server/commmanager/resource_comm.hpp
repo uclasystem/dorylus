@@ -10,6 +10,8 @@ enum{
     LAMBDA, GPU, CPU
 };
 
+class Lock;
+
 struct CommInfo {
     std::string nodeIp;
     unsigned nodeId;
@@ -22,6 +24,9 @@ struct CommInfo {
     unsigned weightserverPort;
 
     unsigned totalLayers; //for weights prefetching
+
+    PairQueue* queuePtr;
+    Lock* qLock;
 };
 
 //abstract interface declaration
@@ -30,9 +35,9 @@ public:
     ResourceComm() {};
     virtual ~ResourceComm() {};
     // For forward-prop.
-    virtual void newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData,
-        FeatType *actData, unsigned numLocalVertices, unsigned numFeats,
-        unsigned numFeatsNext) = 0;
+    virtual void newContextForward(unsigned layer, FeatType *dataBuf,
+        FeatType *zData, FeatType *actData, unsigned numLocalVertices,
+        unsigned numFeats, unsigned numFeatsNext, bool pipeline = false) = 0;
 
     virtual void requestForward(unsigned layer, bool lastLayer) = 0;
 
@@ -40,9 +45,10 @@ public:
     virtual void waitLambdaForward(unsigned layer, bool lastLayer) = 0;
 
     // For backward-prop.
-    virtual void newContextBackward(unsigned layer, FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
-                                    unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim) = 0;
-
+    virtual void newContextBackward(unsigned layer, FeatType *oldGradBuf,
+        FeatType *newGradBuf, std::vector<Matrix> *savedTensors,
+        FeatType *targetBuf, unsigned numLocalVertices, unsigned inFeatDim,
+        unsigned outFeatDim, unsigned targetDim, bool pipeline = false) = 0;
     virtual void requestBackward(unsigned layer, bool lastLayer) = 0;
     virtual void invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLayer) = 0;
     virtual void waitLambdaBackward(unsigned layer, bool lastLayer) = 0;

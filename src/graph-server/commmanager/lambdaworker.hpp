@@ -20,6 +20,7 @@
 #include <unistd.h>
 
 #include "../utils/utils.hpp"
+#include "../parallel/lock.hpp"
 #include "../../common/matrix.hpp"
 #include "../../common/utils.hpp"
 
@@ -35,7 +36,7 @@ class LambdaWorker {
 
 public:
 
-    LambdaWorker(LambdaComm *manager_);
+    LambdaWorker(LambdaComm *manager_, PairQueue* _q_ptr);
 
     ~LambdaWorker();
 
@@ -43,8 +44,11 @@ public:
     void work();
 
     // Used at context creation / destruction.
-    void refreshState(Matrix actMatrix_, FeatType *zData_, FeatType *actData_, unsigned numFeatsNext_);
-    void refreshState(Matrix oldGradMatrix_, Matrix newGradMatrix_, Matrix targetMatrix_, std::vector<Matrix> *savedTensors);
+    void refreshState(Matrix actMatrix_, FeatType *zData_, FeatType *actData_,
+      unsigned numFeatsNext_, bool _pipeline = false);
+    void refreshState(Matrix oldGradMatrix_, Matrix newGradMatrix_,
+      Matrix targetMatrix_, std::vector<Matrix> *savedTensors,
+      bool _pipeline = false);
 
 protected:
     LambdaComm *manager;
@@ -91,6 +95,10 @@ private:
     Matrix newGradMatrix;
     Matrix targetMatrix;
     std::vector<Matrix> *savedTensors;
+
+    // Callback when lambda results are returned
+    bool pipeline;
+    PairQueue* q_ptr;
 };
 
 

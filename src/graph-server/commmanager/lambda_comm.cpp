@@ -4,6 +4,8 @@
 static std::vector<LambdaWorker *> workers;
 static std::vector<std::thread *> worker_threads;
 
+std::mutex producerQueueLock;
+
 
 extern "C" ResourceComm* createComm(CommInfo& commInfo) {
     return new LambdaComm(commInfo);
@@ -47,7 +49,7 @@ LambdaComm::LambdaComm(CommInfo &commInfo) :
 
     // Create 'numListeners' workers and detach them.
     for (unsigned i = 0; i < numListeners; ++i) {
-        workers.push_back(new LambdaWorker(this));
+        workers.push_back(new LambdaWorker(this, commInfo.queuePtr));
         worker_threads.push_back(new std::thread(std::bind(&LambdaWorker::work, workers[i])));
     }
 
@@ -156,18 +158,33 @@ void LambdaComm::callback(const Aws::Lambda::LambdaClient *client,
 
         // JSON Parsing not working from Boost to AWS.
         Aws::IOStream& payload = result.GetPayload();
-        Aws::String functionResult;
-        std::getline(payload, functionResult);
+        Aws::String resultStr;
+        std::getline(payload, resultStr);
+        Aws::Utils::Json::JsonValue response(resultStr);
 
-        // No error found means a successful respond.
-        if (functionResult.find("error") != std::string::npos) {
-            std::cout << "\033[1;31m[ ERROR ]\033[0m\t" << functionResult << std::endl;
+        char logMsg[256];
+        auto v = response.View();
+        if (v.GetBool("success")) {
+            if (v.GetInteger("type") == PROP_TYPE::FORWARD) {
+                sprintf(logMsg, "END FORWARD %u %u %u %u %u %u",
+                  v.GetInteger("id"), v.GetInteger("start"),
+                  v.GetInteger("reqStart"), v.GetInteger("reqStart"),
+                  v.GetInteger("sendStart"), v.GetInteger("sendEnd"));
+            } else {
+                sprintf(logMsg, "END BACKWARD %u %u %u %u %u %u %u %u %u %u",
+                  v.GetInteger("id"), v.GetInteger("start"),
+                  v.GetInteger("reqT0Start"), v.GetInteger("reqT0End"),
+                  v.GetInteger("reqT1Start"), v.GetInteger("reqT1End"),
+                  v.GetInteger("reqT2Start"), v.GetInteger("reqT2End"),
+                  v.GetInteger("sendStart"), v.GetInteger("sendEnd"));
+            }
+        } else {
+            printLog(globalNodeId, "\033[1;31m[ ERROR ]\033[0m\t%s\n", v.GetString("reason").c_str());
         }
     // Lambda returns error.
     } else {
-        std::cout << "\033[1;31m[ ERROR ]\033[0m\t";
+        printLog(globalNodeId, "\033[1;31m[ ERROR ]\033[0m");
     }
-
 }
 // END LAMBDA INVOCATION AND RETURN FUNCTIONS
 
@@ -178,8 +195,9 @@ void LambdaComm::callback(const Aws::Lambda::LambdaClient *client,
  *
  */
 void
-LambdaComm::newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData, FeatType *actData,
-    unsigned numLocalVertices, unsigned numFeats, unsigned numFeatsNext) {
+LambdaComm::newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData,
+  FeatType *actData, unsigned numLocalVertices, unsigned numFeats,
+  unsigned numFeatsNext, bool pipeline) {
     countForward = 0;
 
     currLayer = layer;
@@ -190,7 +208,7 @@ LambdaComm::newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData
 
     // Refresh workers' members, and connect their worker sockets to the backend.
     for (auto&& worker : workers)
-        worker->refreshState(actMatrix, zData, actData, numFeatsNext);
+        worker->refreshState(actMatrix, zData, actData, numFeatsNext, pipeline);
 }
 
 // deprecated.
@@ -244,7 +262,7 @@ LambdaComm::waitLambdaForward(unsigned layer, bool lastLayer) {
  *
  */
 void
-LambdaComm::newContextBackward(unsigned layer, FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf, unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim) {
+LambdaComm::newContextBackward(unsigned layer, FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf, unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim, bool pipeline) {
     countBackward = 0;
 
     currLayer = layer;
@@ -257,7 +275,7 @@ LambdaComm::newContextBackward(unsigned layer, FeatType *oldGradBuf, FeatType *n
 
     // Refresh workers' members, and connect their worker sockets to the backend.
     for (auto&& worker : workers)
-        worker->refreshState(oldGradMatrix, newGradMatrix, targetMatrix, savedTensors);
+        worker->refreshState(oldGradMatrix, newGradMatrix, targetMatrix, savedTensors, pipeline);
 
     if (nodeId == 0) { // I am master and master will send the total number of lambdas of all graph servers.
         unsigned numLambdas = numNodes * numLambdasBackward;

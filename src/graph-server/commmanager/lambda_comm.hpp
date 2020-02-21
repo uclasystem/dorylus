@@ -33,6 +33,7 @@
 #include "resource_comm.hpp"
 #include "lambdaworker.hpp"
 #include "../utils/utils.hpp"
+#include "../parallel/lock.hpp"
 #include "../../common/matrix.hpp"
 #include "../../common/utils.hpp"
 
@@ -69,7 +70,7 @@ public:
     // For forward-prop.
     void newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData,
       FeatType *actData, unsigned numLocalVertices, unsigned numFeats,
-      unsigned numFeatsNext);
+      unsigned numFeatsNext, bool pipeline = false);
     void requestForward(unsigned layer, bool lastLayer);
     void invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer);
     void waitLambdaForward(unsigned layer, bool lastLayer);
@@ -78,7 +79,7 @@ public:
     void newContextBackward(unsigned layer, FeatType *oldGradBuf,
       FeatType *newGradBuf, std::vector<Matrix> *savedTensors,
       FeatType *targetBuf, unsigned numLocalVertices, unsigned inFeatDim,
-      unsigned outFeatDim, unsigned targetDim);
+      unsigned outFeatDim, unsigned targetDim, bool pipeline = false);
     void sendInfoMessage(zmq::socket_t& wsocket, unsigned numLambdas);
     void requestBackward(unsigned layer, bool lastLayer);
     void invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLayer);
@@ -90,7 +91,7 @@ public:
     void sendShutdownMessage();
 
     // simple LambdaWorker initialization
-    friend LambdaWorker::LambdaWorker(LambdaComm *manager);
+    friend LambdaWorker::LambdaWorker(LambdaComm *manager, PairQueue* _q_ptr);
 
 // private:
     // AWSSDK Members

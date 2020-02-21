@@ -1,0 +1,15 @@
+#! /bin/bash
+
+##
+## Runs a command for both contexts
+##
+
+. .venv/bin/activate
+
+contexts=("graph" "weight")
+
+for ctx in ${contexts[@]}; do
+    echo ${ctx}:
+    python -m ec2man $ctx "${@}"
+    echo
+done
