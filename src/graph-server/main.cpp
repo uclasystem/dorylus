@@ -24,6 +24,8 @@ main(int argc, char *argv[]) {
     if (engine.master())
         printLog(engine.getNodeId(),"Number of epochs: %u, validation frequency: %u",
                     numEpochs, valFreq);
+    // Sync all nodes before starting computation
+    engine.makeBarrier();
 
     // Do specified number of epochs.
     Timer epochTimer;
