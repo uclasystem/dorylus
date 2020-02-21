@@ -1,6 +1,6 @@
 #include "forward_ops.hpp"
 
-static Matrix
+Matrix
 softmax(Matrix& mat) {
     FeatType* result = new FeatType[mat.getNumElemts()];
 
@@ -24,7 +24,7 @@ softmax(Matrix& mat) {
     return Matrix(mat.getRows(), mat.getCols(), result);
 }
 
-static Matrix
+Matrix
 tanh(Matrix& mat) {
     FeatType *activationData = new FeatType[mat.getNumElemts()];
     FeatType *zData = mat.getData();
@@ -36,7 +36,7 @@ tanh(Matrix& mat) {
 }
 
 
-static unsigned
+unsigned
 getMaxIndex(FeatType* row, unsigned length) {
     float max = 0.0;
     unsigned maxIndex = 0;
@@ -50,7 +50,7 @@ getMaxIndex(FeatType* row, unsigned length) {
     return maxIndex;
 }
 
-static unsigned
+unsigned
 getLabelIndex(FeatType* row, unsigned length) {
     for (unsigned col = 0; col < length; ++col) {
         if (row[col] == 1)
@@ -61,7 +61,7 @@ getLabelIndex(FeatType* row, unsigned length) {
     return -1;
 }
 
-static unsigned
+unsigned
 checkAccuracy(Matrix& predictions, Matrix& labels) {
     assert(predictions.getRows() == labels.getRows());
     assert(predictions.getCols() == labels.getCols());
@@ -77,7 +77,7 @@ checkAccuracy(Matrix& predictions, Matrix& labels) {
     return totalCorrect;
 }
 
-static float
+float
 checkLoss(Matrix& preds, Matrix& labels) {
     assert(preds.getRows() == labels.getRows());
     assert(preds.getCols() == labels.getCols());

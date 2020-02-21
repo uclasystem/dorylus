@@ -1,7 +1,7 @@
 #include "network_ops.hpp"
 
-static Matrix
-requestTensor(zmq::socket_t& socket, OP op, unsigned partId, TYPE type = TYPE::AH, unsigned layer = 0) {
+Matrix
+requestTensor(zmq::socket_t& socket, OP op, unsigned partId, TYPE type, unsigned layer) {
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char*) header.data(), op, partId, type, layer);
     socket.send(header);
@@ -45,9 +45,8 @@ requestTensor(zmq::socket_t& socket, OP op, unsigned partId, TYPE type = TYPE::A
     }
 }
 
-static void
+void
 sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned id) {
-
     // Send push header.
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char *) header.data(), OP::PUSH_FORWARD, id, zResult.getRows(), zResult.getCols());
@@ -59,7 +58,6 @@ sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned
     zmq::message_t actData(actResult.getDataSize());
     std::memcpy(actData.data(), actResult.getData(), actResult.getDataSize());
     socket.send(zData, ZMQ_SNDMORE);
-    sendStart = timestamp_ms();
     socket.send(actData);
 
     Timer sndTimer;
@@ -85,10 +83,9 @@ sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned
             sndTimer.start();
         }
     }
-    sendEnd = timestamp_ms();
 }
 
-static void
+void
 sendMatrix(Matrix& matrix, zmq::socket_t& socket, unsigned id) {
     // Send push header.
     zmq::message_t header(HEADER_SIZE);

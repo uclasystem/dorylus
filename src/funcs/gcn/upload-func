@@ -24,13 +24,13 @@ if [[ $? -eq 0 ]]; then
 fi
 
 
-# Package up into a .zip file.
-if [[ $? -eq 0 ]]; then
-	make aws-lambda-package-${FUNC_NAME}
-fi
-
-
-# Upload to AWS cloud.
-if [[ $? -eq 0 ]]; then
-	aws lambda update-function-code --function-name ${FUNC_NAME} --zip-file fileb://${ZIP_FILE}
-fi
+## Package up into a .zip file.
+#if [[ $? -eq 0 ]]; then
+#	make aws-lambda-package-${FUNC_NAME}
+#fi
+#
+#
+## Upload to AWS cloud.
+#if [[ $? -eq 0 ]]; then
+#	aws lambda update-function-code --function-name ${FUNC_NAME} --zip-file fileb://${ZIP_FILE}
+#fi

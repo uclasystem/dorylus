@@ -33,11 +33,12 @@ find_package(AWSSDK REQUIRED COMPONENTS core)
 
 
 add_subdirectory(../../common common)
+add_subdirectory(ops)
 
 # Create the executable target.
-aux_source_directory(. FUNC_SRC)
-add_executable(${PROJECT_NAME} ${FUNC_SRC})
-target_link_libraries(${PROJECT_NAME} PUBLIC common Threads::Threads ${AWSSDK_LINK_LIBRARIES} AWS::aws-lambda-runtime ${OBLIB} ${CBLIB} ${ZMQ_LIB})
+
+add_executable(${PROJECT_NAME} "main.cpp")
+target_link_libraries(${PROJECT_NAME} PRIVATE ops PUBLIC common Threads::Threads ${AWSSDK_LINK_LIBRARIES} AWS::aws-lambda-runtime ${OBLIB} ${CBLIB} ${ZMQ_LIB})
 
 
 # Create the packaging target.

@@ -1,6 +1,6 @@
 #include "backward_ops.hpp"
 
-static Matrix
+Matrix
 tanhDerivative(Matrix& mat) {
     FeatType *res = new FeatType[mat.getNumElemts()];
     FeatType *zData = mat.getData();
