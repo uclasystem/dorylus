@@ -53,6 +53,8 @@ public:
     void init(int argc, char *argv[]);
     FeatType *runForward(unsigned epoch);
     void runBackward(FeatType *backwardInitData);
+    void runEpoch(unsigned epoch);
+
     void output();
     void destroy();
     bool master();
@@ -107,6 +109,7 @@ private:
 
     // intermediate data for backward computation.
     std::vector<Matrix> *savedTensors;
+    std::map<std::string, Matrix> savedVtxTensors;
 
     // Persistent pointers to original input data
     FeatType *forwardVerticesInitData;

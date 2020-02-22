@@ -12,8 +12,10 @@ extern std::mutex producerQueueLock;
  * LambdaWorker constructor & destructor.
  *
  */
-LambdaWorker::LambdaWorker(LambdaComm *manager_, PairQueue* _q_ptr) : manager(manager_),
-  workersocket(manager->ctx, ZMQ_DEALER), q_ptr(_q_ptr) {
+LambdaWorker::LambdaWorker(LambdaComm *manager_, PairQueue* _q_ptr,
+  std::map<std::string, Matrix>* _savedTensors) : manager(manager_),
+  workersocket(manager->ctx, ZMQ_DEALER), q_ptr(_q_ptr),
+  savedVtxTensors(_savedTensors) {
     workersocket.setsockopt(ZMQ_LINGER, 0);
     workersocket.setsockopt(ZMQ_RCVTIMEO, 1000); // Set time out of weight socket to 1s for a graceful shut down.
     workersocket.connect("inproc://backend");

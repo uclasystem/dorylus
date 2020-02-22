@@ -36,7 +36,8 @@ class LambdaWorker {
 
 public:
 
-    LambdaWorker(LambdaComm *manager_, PairQueue* _q_ptr);
+    LambdaWorker(LambdaComm *manager_, PairQueue* _q_ptr,
+      std::map<std::string, Matrix>* _savedTensors);
 
     ~LambdaWorker();
 
@@ -98,6 +99,7 @@ private:
     Matrix newGradMatrix;
     Matrix targetMatrix;
     std::vector<Matrix> *savedTensors;
+    std::map<std::string, Matrix>* savedVtxTensors;
 
     // Callback when lambda results are returned
     bool pipeline;

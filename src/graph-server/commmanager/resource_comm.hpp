@@ -26,7 +26,7 @@ struct CommInfo {
     unsigned totalLayers; //for weights prefetching
 
     PairQueue* queuePtr;
-    Lock* qLock;
+    std::map<std::string, Matrix>*;
 };
 
 //abstract interface declaration

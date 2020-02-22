@@ -30,21 +30,6 @@ static ComputingUnit cu = ComputingUnit::getInstance();
 
 static int globalEpoch = -1;
 
-void outputToFile(std::ofstream& outfile, FeatType* fptr, unsigned start, unsigned end, unsigned c, bool enumerate = false) {
-    std::string out = "";
-    for (uint32_t u = start; u < end; ++u) {
-        if (enumerate) {
-            out += std::to_string(u) + ": ";
-        }
-        for (uint32_t uj = 0; uj < c; ++uj) {
-            out += std::to_string(fptr[u * c + uj]) + " ";
-        }
-        out += "\n";
-    }
-    out += "\n";
-
-    outfile.write(out.c_str(), out.size());
-}
 
 /**
  *
@@ -93,7 +78,7 @@ Engine::init(int argc, char *argv[]) {
     printGraphMetrics();
 
     // Save intermediate tensors during forward phase for backward computation.
-    savedTensors = new std::vector<Matrix> [numLayers];
+    savedTensors = new std::vector<Matrix>[numLayers];
 
     // Init it here for collecting data when reading files
     forwardVerticesInitData = new FeatType[getFeatDim(0) * graph.localVtxCnt];
@@ -186,6 +171,7 @@ Engine::setupCommInfo() {
     commInfo.weightserverPort = weightserverPort;
     commInfo.totalLayers = numLayers;
     commInfo.queuePtr = &rangesToScatter;
+    commInfo.savedTensors = &savedVtxTensors;
 }
 
 /**
@@ -249,7 +235,7 @@ Engine::getNodeId() {
  * Will start a bunch of worker threads and a bunch of data communicator threads.
  *
  */
-FeatType *
+FeatType*
 Engine::runForward(unsigned epoch) {
     globalEpoch = epoch;
     // Make sure all nodes start running the forward-prop phase.
@@ -353,12 +339,15 @@ Engine::runBackward(FeatType *initGradTensor) {
             gradTensor = fusedGASBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration - 1), getFeatDim(iteration), iteration < numLayers, iteration > 1);
         }
     }
-
     delete[] gradTensor;
-
 
     timeBackwardProcess += getTimer();
     printLog(nodeId, "Engine completes BACKWARD at iter %u.", iteration);
+}
+
+
+void
+runEpoch(unsigned epoch) {
 }
 
 

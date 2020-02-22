@@ -21,6 +21,7 @@
 /** Feature type is float, so be consistent. */
 typedef float FeatType;
 
+#define TENSOR_NAME_SIZE 8
 
 // base timestamp for profiling
 #define BASE_TMSP (1580333752000ull)
@@ -28,6 +29,8 @@ typedef float FeatType;
 static const size_t HEADER_SIZE = sizeof(unsigned) * 5 + sizeof(unsigned) * 2;
 enum OP { REQ_FORWARD, PUSH_FORWARD, PULL_FORWARD, REQ_BACKWARD, PUSH_BACKWARD, PULL_BACKWARD, PULL_EVAL, PUSH_EVAL, RESP, INFO, TERM,
           REQ_BATCH_FORWARD, REQ_BATCH_BACKWARD };
+// OP, TENSOR_NAME, FIELD0, FIELD1, ...
+static const size_t TENSOR_HDR_SIZE = sizeof(usnigned) * 5 + 8;
 enum TYPE { GRAD, AH, Z, ACT, LAB };
 enum PROP_TYPE { FORWARD, BACKWARD };
 
@@ -61,6 +64,18 @@ populateHeader(char* header, unsigned op, unsigned field1 = 0, unsigned field2 =
     serialize<unsigned>(header, 2, field2);
     serialize<unsigned>(header, 3, field3);
     serialize<unsigned>(header, 4, field4);
+}
+
+static inline void
+populateHeader(void* header, unsigned op, char* tensorName, unsigned field1 = 0,
+  unsigned field2 = 0, unsigned field3 = 0, unsigned field4 = 0) {
+    char* data = (char*)header;
+    serialize<unsigned>(data, 0, op);
+    std::memcpy(data + sizeof(unsigned), tensorName, TENSOR_NAME_SIZE);
+    serialize<unsigned>(data, 3, field1);
+    serialize<unsigned>(data, 4, field2);
+    serialize<unsigned>(data, 5, field3);
+    serialize<unsigned>(data, 6, field4);
 }
 
 static inline unsigned
