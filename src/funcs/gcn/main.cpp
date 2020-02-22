@@ -166,7 +166,66 @@ finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
 invocation_response
 backwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket,
   unsigned partId, unsigned layer) {
-    // gradLayer
+    Matrix grad, z, ah, w;
+    std::commThread = std::thread([&]{
+        std::cout << "< BACKWARD > Requesting weights" << std::endl;
+        do {
+            w = requestTensor(weight_socket, OP::PULL_BACKWARD, layer);
+        } while (weights.empty());
+    });
+
+    do {
+        std::cout << "< BACKWARD > Requesting gradient from graph server" << std::endl;
+        grad = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::GRAD, layer);
+    } while (grad.empty());
+
+    do {
+        std::cout << "< BACKWARD > Requesting Z values" << std::endl;
+        z = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::Z, layer);
+    } while (z.empty());
+
+    std::cout << "< BACKWARD > Requesting AH" << std::endl;
+    do {
+        ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::AH, layer);
+    } while (ah.empty());
+    commThread.join();
+
+    // BACKWARDS COMPUTATION
+    std::cout << "< BACKWARD > Calculating derivative of activation "
+              << z.shape() << std::endl;
+    Matrix actDeriv = activateDerivative(z);
+    delete[] z.getData();
+
+    std::cout << "< BACKWARD > Hadamard multiplication" << grad.shape() << " "
+              << actDeriv.shape() << std::endl;
+    Matrix interGrad = grad * actDeriv;
+    delete[] grad.getData();
+    delete[] actDeriv.getData();
+
+    std::cout << "< BACKWARD > MatMul(gradient, weights) " << interGrad.shape() << " "
+              << weights.shape() << std::endl;
+    Matrix resultGrad = interGrad.dot(weights, false, true);
+    delete[] weights.getData();
+
+    std::cout << "< BACKWARD > Computing weight updates " << ah.shape() << " "
+              << interGrad.shape() << std::endl;
+    Matrix weightUpdates = ah.dot(interGrad, true, false);
+    delete[] ah.getData();
+    delete[] interGrad.getData();
+    // END BACKWARDS COMPUTATION
+
+    // SENDING BACKWARDS RESULTS
+    std::thread wThd([&] {
+        std::cout << "< BACKWARD > Sending weight updates" << std::endl;
+        sendMatrix(weightUpdates, weight_socket, layer);
+        delete[] weightUpdates.getData();
+    });
+
+    std::cout << "< BACKWARD > Sending gradient to graph server" << std::endl;
+    sendMatrix(resultGrad, data_socket, id);
+    delete[] resultGrad.getData();
+    wThd.join();
+    // END SENDING BACKWARDS RESULTS
 }
 
 
