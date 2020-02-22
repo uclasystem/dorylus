@@ -35,7 +35,7 @@ void sendMatrices(Matrix& zResult, Matrix& actResult,
  * Send matrix back to a server.
  *
  */
-void sendMatrix(Matrix& matrix, zmq::socket_t& socket, unsigned id);
+void sendMatrix(Matrix& matrix, OP op, zmq::socket_t& socket, unsigned id);
 
 
 #endif

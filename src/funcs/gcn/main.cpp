@@ -68,7 +68,7 @@ forwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
 
         // Multiplication.
         z = feats.dot(weights);
-        activations = softmax(z);
+        activations = tanh(z);
 
         sendMatrices(z, activations, data_socket, partId);
 
@@ -91,23 +91,24 @@ invocation_response
 finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
   unsigned partId, unsigned layer) {
     try {
-        Matrix weights, feats, z, activations;
+        Matrix w, ah, z, predictions, labels;
+        std::thread commThread;
 
         // Request weights matrix of the current layer.
-        std::thread t([&] {     // Weight requests run in a separate thread.
+        commThread = std::thread([&] {     // Weight requests run in a separate thread.
             do {
-                weights = requestTensor(weights_socket, OP::PULL_FORWARD, layer);
+                w = requestTensor(weights_socket, OP::PULL_FORWARD, layer);
             } while (weights.empty());
         });
 
         // Request feature activation matrix of the current layer.
         std::cout << "< FORWARD > Asking dataserver..." << std::endl;
         do {
-            feats = requestTensor(data_socket, OP::PULL_FORWARD, partId);
+            ah = requestTensor(data_socket, OP::PULL_FORWARD, partId);
         } while (feats.empty());
         std::cout << "< FORWARD > Got data from dataserver." << std::endl;
 
-        t.join();
+        commThread.join();
 
         if (weights.empty()) {
             JsonValue jsonResponse;
@@ -126,17 +127,32 @@ finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
             return invocation_response::failure(response, "appliation/json");
         }
 
+        // Get labels for backward
+        commThread = std::thread([&] {
+            do {
+                labels = requestTensor(data_socket, OP::PULL_BACKWARD, partId, TYPE::LAB);
+            while (labels.empty());
+        });
         // Multiplication.
-        z = feats.dot(weights);
-        activations = softmax(z);
-
-        sendMatrices(z, activations, data_socket, partId);
-
-        // Delete malloced spaces.
-        delete[] weights.getData();
-        delete[] feats.getData();
+        z = ah.dot(w);
+        predictions = softmax(z);
         delete[] z.getData();
-        delete[] activations.getData();
+
+        commThread.join();
+        // d_o = softmax`(predictions)
+        Matrix d_out = predictions - labels;
+        delete[] predictions.getData();
+        delete[] labels.getData();
+
+        // d_o * W^T
+        Matrix interGrad = d_out.dot(w, false, true);
+        delete[] weights.getData();
+        sendMatrix(interGrad, data_socket, partId);
+
+        // AH^T * d_o
+        Matrix d_W = ah.dot(d_out, true, false);
+        delete[] ah.getData();
+        delete[] d_out.getData();
     } catch(std::exception &ex) {
         JsonValue jsonResponse;
         jsonResponse.WithBool("success", false);

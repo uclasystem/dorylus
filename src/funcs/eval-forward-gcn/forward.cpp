@@ -103,7 +103,6 @@ requestMatrix(zmq::socket_t& socket, OP op, unsigned id, bool data = false) {
  */
 static void
 sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned id) {
-
     // Send push header.
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char *) header.data(), OP::PUSH_FORWARD, id, zResult.getRows(), zResult.getCols());
