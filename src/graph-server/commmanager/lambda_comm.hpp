@@ -97,7 +97,7 @@ public:
     void sendShutdownMessage();
 
     // simple LambdaWorker initialization
-    friend LambdaWorker::LambdaWorker(LambdaComm *manager, PairQueue* _q_ptr);
+    friend LambdaWorker::LambdaWorker(LambdaComm *manager, PairQueue* _q_ptr, std::map<std::string, Matrix>* _savedTensors);
 
 // private:
     // AWSSDK Members

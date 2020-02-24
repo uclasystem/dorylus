@@ -248,6 +248,9 @@ private:
     void backwardAggregateFromNeighbors(unsigned lvid, FeatType *nextGradTensor,
                                         FeatType *gradTensor, unsigned featDim);
 
+    void addTensor(char name[8], unsigned rows, unsigned cols);
+    void addTensor(Matrix& mat);
+
     // For initialization.
     void parseArgs(int argc, char* argv[]);
     void readLayerConfigFile(std::string& layerConfigFileName);

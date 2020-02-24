@@ -30,7 +30,7 @@ static const size_t HEADER_SIZE = sizeof(unsigned) * 5 + sizeof(unsigned) * 2;
 enum OP { REQ_FORWARD, PUSH_FORWARD, PULL_FORWARD, REQ_BACKWARD, PUSH_BACKWARD, PULL_BACKWARD, PULL_EVAL, PUSH_EVAL, RESP, INFO, TERM,
           REQ_BATCH_FORWARD, REQ_BATCH_BACKWARD };
 // OP, TENSOR_NAME, FIELD0, FIELD1, ...
-static const size_t TENSOR_HDR_SIZE = sizeof(usnigned) * 5 + 8;
+static const size_t TENSOR_HDR_SIZE = sizeof(unsigned) * 5 + 8;
 enum TYPE { GRAD, AH, Z, ACT, LAB };
 enum PROP_TYPE { FORWARD, BACKWARD };
 

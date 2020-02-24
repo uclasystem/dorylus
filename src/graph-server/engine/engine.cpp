@@ -171,7 +171,7 @@ Engine::setupCommInfo() {
     commInfo.weightserverPort = weightserverPort;
     commInfo.totalLayers = numLayers;
     commInfo.queuePtr = &rangesToScatter;
-    commInfo.savedTensors = &savedVtxTensors;
+    commInfo.savedVtxTensors = &savedVtxTensors;
 }
 
 /**
@@ -508,6 +508,7 @@ FeatType *Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned fea
 #else
 FeatType *Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim) {
     double sttTimer = getTimer();
+    // AH
     FeatType *outputTensor = new FeatType [vtcsCnt * featDim];
     currId = 0;
 
@@ -600,6 +601,7 @@ FeatType*
 Engine::fusedGatherApply(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim) {
     double sttTimer = getTimer();
     // Prepare for gather phase
+    // AH
     FeatType *gatheredTensor = new FeatType[vtcsCnt * inFeatDim];
     currId = 0;
     AggOPArgs args = {gatheredTensor, vtcsTensor, vtcsCnt, inFeatDim};
@@ -609,6 +611,7 @@ Engine::fusedGatherApply(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeat
     computePool->perform(computeFn, &args);
 
     // Prepare for applyVertex phase
+    // H, Z
     FeatType *outputTensor = new FeatType[vtcsCnt * outFeatDim];
     FeatType *zTensor = new FeatType[vtcsCnt * outFeatDim];
     bool saveInput = true;
@@ -1159,7 +1162,7 @@ Engine::aggregateBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featD
 
 
 
-FeatType *
+FeatType*
 Engine::invokeLambdaBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim) {
     double sttTimer = getTimer();
 
@@ -1192,7 +1195,7 @@ Engine::invokeLambdaBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned in
     return outputTensor;
 }
 
-FeatType *
+FeatType*
 Engine::fusedGatherApplyBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim) {
     double sttTimer = getTimer();
 
