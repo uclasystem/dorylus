@@ -18,10 +18,9 @@ void
 NodeManager::init(std::string dshMachinesFile, std::string myPrIpFile, std::string myPubIpFile) {
     printLog(404, "NodeManager starts initialization...");
     getPrIP(myPrIpFile, me.ip);
-    getPubIP(myPubIpFile, me.pubip);
     parseNodeConfig(dshMachinesFile);
-    allNodes[me.id].pubip = me.pubip;       // Set my node struct's pubip, in case CommManager uses it.
-    printLog(me.id, "Private IP: %s, Public IP: %s", me.ip.c_str(), me.pubip.c_str());
+    allNodes[me.id].prip = me.ip;       // Set my node struct's pubip, in case CommManager uses it.
+    printLog(me.id, "Private IP: %s", me.ip.c_str());
 
     if (standAlone) {
         printLog(404, "NodeManger finds only itself");

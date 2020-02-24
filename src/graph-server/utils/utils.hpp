@@ -41,7 +41,6 @@ std::time_t getCurrentTime();
 
 
 void getPrIP(std::string& myPrIpFile, std::string& ip);
-void getPubIP(std::string& myPubIpFile, std::string& ip);
 
 
 inline size_t argmax(FeatType* first, FeatType* last) { return std::distance(first, std::max_element(first, last)); }

@@ -176,7 +176,7 @@ Engine::destroy() {
 */
 void
 Engine::setupCommInfo() {
-    commInfo.nodeIp = nodeManager.getNode(nodeId).pubip;
+    commInfo.nodeIp = nodeManager.getNode(nodeId).prip;
     commInfo.nodeId = nodeId;
     commInfo.dataserverPort = dataserverPort;
     commInfo.numLambdasForward = numLambdasForward;

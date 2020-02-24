@@ -29,7 +29,7 @@ ${EC2MAN_CMD} weight all start
 echo "Processing context 'graph'..."
 
 ${EC2MAN_CMD} graph dshfile > dshmachines
-${EC2MAN_CMD} weight all pubip > wserverip
+${EC2MAN_CMD} weight all prip > wserverip
 
 ## Create `kill-all` file
 cp run/kill-all .
