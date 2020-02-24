@@ -7,6 +7,9 @@ id=i-0507390a688227993
 case $1 in
     "rsync")
         pubip=$( ./ec2-instance.sh pubip )
+        if [[ $2 == "--force" ]]; then
+            ssh -i /home/thorpedoes/.ssh/id_rsa jothor@${pubip} "rm -rf func-testing"
+        fi
 
         rsync -zz -auzh -e "ssh -i /home/thorpedoes/.ssh/id_rsa" ../funcs ../common jothor@${pubip}:func-testing/
         ;;
