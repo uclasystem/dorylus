@@ -2,7 +2,7 @@
 
 cd $( dirname $0 )
 
-id=i-0bafe58784e318755
+id=i-0507390a688227993
 
 case $1 in
     "rsync")
@@ -23,6 +23,9 @@ case $1 in
         ;;
     "stop")
         aws ec2 stop-instances --instance-ids ${id}
+        ;;
+    "state")
+        aws ec2 describe-instances --filter Name=instance-id,Values=${id} --query Reservations[*].Instances[*].State --output text
         ;;
     *)
         echo "Unrecognzied option"

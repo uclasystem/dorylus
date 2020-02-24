@@ -25,10 +25,6 @@
 #define SND_MORE true
 #define NO_MORE false
 
-<<<<<<< HEAD
-
-=======
->>>>>>> 5f73211... Removing timestamp typedefs
 using namespace Aws::Utils::Json;
 using namespace aws::lambda_runtime;
 using namespace std::chrono;

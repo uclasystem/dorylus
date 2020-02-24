@@ -25,10 +25,6 @@
 #define SND_MORE true
 #define NO_MORE false
 
-<<<<<<< HEAD
-
-=======
->>>>>>> 5f73211... Removing timestamp typedefs
 using namespace Aws::Utils::Json;
 using namespace aws::lambda_runtime;
 using namespace std::chrono;
@@ -103,6 +99,7 @@ requestMatrix(zmq::socket_t& socket, OP op, unsigned id, bool data = false) {
  */
 static void
 sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned id) {
+
     // Send push header.
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char *) header.data(), OP::PUSH_FORWARD, id, zResult.getRows(), zResult.getCols());
