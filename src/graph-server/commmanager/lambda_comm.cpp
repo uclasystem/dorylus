@@ -162,7 +162,7 @@ void LambdaComm::callback(const Aws::Lambda::LambdaClient *client,
         std::getline(payload, resultStr);
         Aws::Utils::Json::JsonValue response(resultStr);
 
-        char logMsg[256];
+//        char logMsg[256];
         auto v = response.View();
         if (v.GetBool("success")) {
         } else {
