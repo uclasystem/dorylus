@@ -9,6 +9,7 @@ extern unsigned tsidx;
 
 // Timestamping operations
 void set_timestamp() {
+    using namespace std::chrono;
     auto now = system_clock::now().time_since_epoch();
     unsigned me = duration_cast<milliseconds>(now).count() - BASE_TMSP;
     timestamps[tsidx++] = me;
@@ -49,7 +50,7 @@ requestMatrix(zmq::socket_t& socket, OP op, unsigned id, bool data = false) {
     unsigned layerResp = parse<unsigned>((char *) respHeader.data(), 1);
     if (layerResp == -2) {
         std::cerr << "[ ERROR ] Discard execution." << std::endl;
-        exit(0);
+        throw std::invalid_argument("Stopped by graph server");
     } else if (layerResp == -1) {      // Failed.
         std::cerr << "[ ERROR ] No corresponding matrix chunk!" << std::endl;
         return Matrix();
@@ -294,6 +295,14 @@ evaluateModel(Matrix& activations, zmq::socket_t& datasocket, unsigned partId) {
     // Wait to recv ACK
     zmq::message_t confirm;
     datasocket.recv(&confirm);
+}
+
+static void
+deleteMatrix(Matrix &mat) {
+    if (!mat.empty()) {
+        delete[] mat.getData();
+        mat = Matrix();
+    }
 }
 
 

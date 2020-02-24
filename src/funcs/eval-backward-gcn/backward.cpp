@@ -13,8 +13,8 @@
 #include <zmq.hpp>
 
 #include <aws/lambda-runtime/runtime.h>
-#include <aws/core/Aws.h>
-#include <aws/core/utils/json/JsonSerializer.h>
+#include <aws/core/aws.h>
+#include <aws/core/utils/json/jsonserializer.h>
 
 #include "../../common/matrix.hpp"
 #include "../../common/utils.hpp"
@@ -60,7 +60,7 @@ requestTensor(zmq::socket_t& socket, OP op, unsigned partId, TYPE type = TYPE::A
     unsigned layerResp = parse<unsigned>((char*) respHeader.data(), 1);
     if (layerResp == -2) {
         std::cerr << "[ ERROR ] Discard execution." << std::endl;
-        exit(0);
+        throw std::invalid_argument("Stopped by graph server");
     } else if (layerResp == -1) {
         std::cerr << "[ ERROR ] No corresponding matrix" << std::endl;
         return Matrix();

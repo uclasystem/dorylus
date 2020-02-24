@@ -32,14 +32,6 @@ LambdaWorker::~LambdaWorker() {
 void
 LambdaWorker::work() {
     double serveTimer = getTimer();
-    if (tid == 0) {
-        int nmsg;
-        size_t len;
-        zmq_getsockopt(&workersocket, ZMQ_POLLIN, (void*)&nmsg, &len);
-        printLog(manager->nodeId, "recv msg que: %d", nmsg);
-        zmq_getsockopt(&workersocket, ZMQ_POLLOUT, (void*)&nmsg, &len);
-        printLog(manager->nodeId, "send msg que: %d", nmsg);
-    }
 
     try {
         while (!(manager->halt)) {
@@ -236,12 +228,6 @@ LambdaWorker::sendAggregatedChunk(zmq::message_t& client_id, unsigned partId) {
         workersocket.send(client_id, ZMQ_SNDMORE);
         workersocket.send(header, ZMQ_SNDMORE);
         workersocket.send(partitionData);
-        if (tid == 0) {
-            int nmsg;
-            size_t len;
-            zmq_getsockopt(&workersocket, ZMQ_POLLOUT, (void*)&nmsg, &len);
-            printLog(manager->nodeId, "send msg que: %d", nmsg);
-        }
     }
 }
 
@@ -253,12 +239,6 @@ LambdaWorker::recvLambdaResults(zmq::message_t& client_id, unsigned partId) {
 
     // Receive the pushed-back results.
     zmq::message_t data;
-    if (tid == 0) {
-        int nmsg;
-        size_t len;
-        zmq_getsockopt(&workersocket, ZMQ_POLLIN, (void*)&nmsg, &len);
-        printLog(manager->nodeId, "recv msg que: %d", nmsg);
-    }
     workersocket.recv(&data);
     std::memcpy(partitionZStart, data.data(), data.size());
     workersocket.recv(&data);
@@ -346,12 +326,6 @@ LambdaWorker::sendGCNChunks(zmq::message_t& client_id, unsigned partId, unsigned
             zmq::message_t header(HEADER_SIZE);
             populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, zMat.getCols());
             setTSinHdr(header.data());
-            if (tid == 0) {
-                int nmsg;
-                size_t len;
-                zmq_getsockopt(&workersocket, ZMQ_POLLOUT, (void*)&nmsg, &len);
-                printLog(manager->nodeId, "send msg que: %d", nmsg);
-            }
             workersocket.send(client_id, ZMQ_SNDMORE);
             workersocket.send(header, ZMQ_SNDMORE);
             workersocket.send(gradData, ZMQ_SNDMORE);
@@ -387,12 +361,6 @@ LambdaWorker::sendGCNChunks(zmq::message_t& client_id, unsigned partId, unsigned
             zmq::message_t header(HEADER_SIZE);
             populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, actMat.getCols());
             setTSinHdr(header.data());
-            if (tid == 0) {
-                int nmsg;
-                size_t len;
-                zmq_getsockopt(&workersocket, ZMQ_POLLOUT, (void*)&nmsg, &len);
-                printLog(manager->nodeId, "send msg que: %d", nmsg);
-            }
             workersocket.send(client_id, ZMQ_SNDMORE);
             workersocket.send(header, ZMQ_SNDMORE);
             workersocket.send(actData, ZMQ_SNDMORE);
@@ -445,12 +413,6 @@ LambdaWorker::recvChunk(Matrix &dstMat, zmq::message_t &client_id, unsigned part
     // Receive the pushed-back results.
     zmq::message_t msg;
     workersocket.recv(&msg);
-    if (tid == 0) {
-        int nmsg;
-        size_t len;
-        zmq_getsockopt(&workersocket, ZMQ_POLLIN, (void *)&nmsg, &len);
-        printLog(manager->nodeId, "recv msg que: %d", nmsg);
-    }
 
     // Send confirm ACK message.
     zmq::message_t confirm(2 * sizeof(unsigned));

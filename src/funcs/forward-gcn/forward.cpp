@@ -26,7 +26,6 @@
 
 using namespace aws::lambda_runtime;
 using namespace Aws::Utils::Json;
-using namespace std::chrono;
 
 // timestamp for profiling
 unsigned timestamps[30];
@@ -65,9 +64,8 @@ forward_prop_layer(std::string dataserver, std::string weightserver, unsigned dp
     *(unsigned *)(identity + sizeof(unsigned) * 2) = rand();
     memcpy(identity + sizeof(unsigned) * 3, (char *) dataserver.c_str(), dataserver.length());
 
+    Matrix weights, feats, z, activations;
     try {
-        Matrix weights, feats, z, activations;
-
         zmq::socket_t weights_socket(ctx, ZMQ_DEALER);
         weights_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
         char whost_port[50];
@@ -99,13 +97,27 @@ forward_prop_layer(std::string dataserver, std::string weightserver, unsigned dp
         std::cout << "< FORWARD > Got data from dataserver." << std::endl;
 
         t.join(); // join weight thread
-        if (weights.empty())
-            return invocation_response::failure("Weights could not be loaded", "application/json");
-        if (feats.empty())
-            return invocation_response::failure("No chunk corresponding to request", "appliation/json");
+        if (weights.empty()) {
+            JsonValue jsonResponse;
+            jsonResponse.WithBool("success", false);
+            jsonResponse.WithInteger("type", PROP_TYPE::FORWARD);
+            jsonResponse.WithInteger("id", id);
+            jsonResponse.WithString("reason", "Weights could not be loaded");
+            auto response = jsonResponse.View().WriteCompact();
+            return invocation_response::failure(response, "application/json");
+        }
+        if (feats.empty()) {
+            JsonValue jsonResponse;
+            jsonResponse.WithBool("success", false);
+            jsonResponse.WithInteger("type", PROP_TYPE::FORWARD);
+            jsonResponse.WithInteger("id", id);
+            jsonResponse.WithString("reason", "Feats could not be loaded");
+            auto response = jsonResponse.View().WriteCompact();
+            return invocation_response::failure(response, "appliation/json");
+        }
 
-        set_timestamp();
         // Multiplication.
+        std::cout << "< FORWARD > Begin computation." << std::endl;
         z = feats.dot(weights);
 
         if (lastLayer) {
@@ -113,36 +125,46 @@ forward_prop_layer(std::string dataserver, std::string weightserver, unsigned dp
         } else {
             activations = activate(z);
         }
+        std::cout << "< FORWARD > Finish computation." << std::endl;
 
+        std::cout << "< FORWARD > Send results back." << std::endl;
         set_timestamp();
         sendMatrices(z, activations, data_socket, id);
         set_timestamp();
+        std::cout << "< FORWARD > Send results finished." << std::endl;
 
         // Delete malloced spaces.
-        delete[] weights.getData();
-        delete[] feats.getData();
-        delete[] z.getData();
-        delete[] activations.getData();
-
+        deleteMatrix(weights);
+        deleteMatrix(feats);
+        deleteMatrix(z);
+        deleteMatrix(activations);
     } catch(std::exception &ex) {
-        return invocation_response::failure(ex.what(), "application/json");
+        deleteMatrix(weights);
+        deleteMatrix(feats);
+        deleteMatrix(z);
+        deleteMatrix(activations);
+
+        JsonValue jsonResponse;
+        jsonResponse.WithBool("success", false);
+        jsonResponse.WithInteger("type", PROP_TYPE::FORWARD);
+        jsonResponse.WithInteger("id", id);
+        jsonResponse.WithString("reason", ex.what());
+        auto response = jsonResponse.View().WriteCompact();
+        return invocation_response::failure(response, "application/json");
     }
 
-    // Couldn't parse JSON with AWS SDK from ptree.
-    // For now creating a string with the times to be parsed on server.
-    // std::string res = "[ FORWARD ] " + std::to_string(id) + ": " +
-    //                   std::to_string(getWeightsTimer.getTime()) + " " +     \
-    //                   std::to_string(getFeatsTimer.getTime())  + " " +      \
-    //                   std::to_string(computationTimer.getTime()) + " " +    \
-    //                   std::to_string(sendResTimer.getTime());
-
-    std::string res = "[ FORWARD " + std::to_string(layer) + " ] " + std::to_string(id) + ": ";
+    Aws::String tsStr = "";
     for (unsigned i = 0; i < tsidx; ++i) {
-        res += std::to_string(timestamps[i]) + " ";
+        tsStr += std::to_string(timestamps[i]) + " ";
     }
-    set_timestamp();
 
-    return invocation_response::success(res, "application/json");
+    JsonValue jsonResponse;
+    jsonResponse.WithBool("success", true);
+    jsonResponse.WithInteger("type", PROP_TYPE::FORWARD);
+    jsonResponse.WithInteger("id", id);
+    jsonResponse.WithString("timestamp", tsStr);
+    auto response = jsonResponse.View().WriteCompact();
+    return invocation_response::success(response, "application/json");
 }
 
 
@@ -150,7 +172,6 @@ forward_prop_layer(std::string dataserver, std::string weightserver, unsigned dp
 static invocation_response
 my_handler(invocation_request const& request) {
     tsidx = 0;
-    set_timestamp();
 
     JsonValue json(request.payload);
     auto v = json.View();
