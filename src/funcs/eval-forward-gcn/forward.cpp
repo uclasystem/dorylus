@@ -25,7 +25,6 @@
 #define SND_MORE true
 #define NO_MORE false
 
-typedef std::string timestamp_t;
 
 using namespace Aws::Utils::Json;
 using namespace aws::lambda_runtime;
@@ -113,7 +112,6 @@ sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned
     zmq::message_t actData(actResult.getDataSize());
     std::memcpy(actData.data(), actResult.getData(), actResult.getDataSize());
     socket.send(zData, ZMQ_SNDMORE);
-    sendStart = timestamp_ms();
     socket.send(actData);
 
     Timer sndTimer;
@@ -139,7 +137,6 @@ sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned
             sndTimer.start();
         }
     }
-    sendEnd = timestamp_ms();
 }
 
 static void
@@ -380,20 +377,17 @@ forward_prop_layer(std::string dataserver, std::string weightserver, unsigned dp
 
         // Request weights matrix of the current layer.
         std::thread t([&] {     // Weight requests run in a separate thread.
-            std::cout << "< FORWARD > Asking weightserver..." << whost_port << std::endl;
+            std::cout << "< FORWARD > Asking weightserver at " << whost_port << "..." << std::endl;
             do {
                 weights = requestMatrix(weights_socket, OP::PULL_FORWARD, layer);
             } while (weights.empty());
-            std::cout << "< FORWARD > Got data from weightserver." << dhost_port << std::endl;
         });
 
         // Request feature activation matrix of the current layer.
-        std::cout << "< FORWARD > Asking dataserver..." << std::endl;
-        reqStart = timestamp_ms();
+        std::cout << "< FORWARD > Asking dataserver at " << dhost_port << "..." << std::endl;
         do {
             feats = requestMatrix(data_socket, OP::PULL_FORWARD, id, true);
         } while (feats.empty());
-        reqEnd = timestamp_ms();
         std::cout << "< FORWARD > Got data from dataserver." << std::endl;
 
         t.join();
@@ -417,8 +411,6 @@ forward_prop_layer(std::string dataserver, std::string weightserver, unsigned dp
 
         // Multiplication.
         z = feats.dot(weights);
-
-
         if (lastLayer) {
             activations = softmax(z);
         } else {
@@ -444,13 +436,6 @@ forward_prop_layer(std::string dataserver, std::string weightserver, unsigned dp
     JsonValue jsonResponse;
     jsonResponse.WithBool("success", true);
     jsonResponse.WithInteger("type", PROP_TYPE::FORWARD);
-    jsonResponse.WithInteger("id", id);
-    jsonResponse.WithInteger("start", lambdaStart);
-    jsonResponse.WithInteger("reqStart", reqStart);
-    jsonResponse.WithInteger("reqEnd", reqEnd);
-    jsonResponse.WithInteger("sendStart", sendStart);
-    jsonResponse.WithInteger("sendEnd", sendEnd);
-    jsonResponse.WithInteger("lambdaEnd", timestamp_ms());
 
     auto response = jsonResponse.View().WriteCompact();
     return invocation_response::success(response, "application/json");
@@ -460,7 +445,6 @@ forward_prop_layer(std::string dataserver, std::string weightserver, unsigned dp
 /** Handler that hooks with lambda API. */
 static invocation_response
 my_handler(invocation_request const& request) {
-    lambdaStart = timestamp_ms();
     JsonValue json(request.payload);
     auto v = json.View();
 

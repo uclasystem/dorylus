@@ -165,19 +165,6 @@ void LambdaComm::callback(const Aws::Lambda::LambdaClient *client,
         char logMsg[256];
         auto v = response.View();
         if (v.GetBool("success")) {
-            if (v.GetInteger("type") == PROP_TYPE::FORWARD) {
-                sprintf(logMsg, "END FORWARD %u %u %u %u %u %u",
-                  v.GetInteger("id"), v.GetInteger("start"),
-                  v.GetInteger("reqStart"), v.GetInteger("reqStart"),
-                  v.GetInteger("sendStart"), v.GetInteger("sendEnd"));
-            } else {
-                sprintf(logMsg, "END BACKWARD %u %u %u %u %u %u %u %u %u %u",
-                  v.GetInteger("id"), v.GetInteger("start"),
-                  v.GetInteger("reqT0Start"), v.GetInteger("reqT0End"),
-                  v.GetInteger("reqT1Start"), v.GetInteger("reqT1End"),
-                  v.GetInteger("reqT2Start"), v.GetInteger("reqT2End"),
-                  v.GetInteger("sendStart"), v.GetInteger("sendEnd"));
-            }
         } else {
             printLog(globalNodeId, "\033[1;31m[ ERROR ]\033[0m\t%s\n", v.GetString("reason").c_str());
         }
