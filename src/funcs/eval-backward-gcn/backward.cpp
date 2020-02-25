@@ -25,23 +25,12 @@
 #define SND_MORE true
 #define NO_MORE false
 
-typedef std::string timestamp_t;
 
 using namespace Aws::Utils::Json;
 using namespace aws::lambda_runtime;
 using namespace std::chrono;
 
 bool lastLayer = false;
-
-unsigned lambdaStart;
-unsigned reqT0Start;
-unsigned reqT0End;
-unsigned reqT1Start;
-unsigned reqT1End;
-unsigned reqT2Start;
-unsigned reqT2End;
-unsigned sendStart;
-unsigned sendEnd;
 
 
 
@@ -186,25 +175,19 @@ gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, 
     Matrix ah;
 
     std::cout << "< BACKWARD > Getting predictions" << std::endl;
-    reqT0Start = timestamp_ms();
     do {
         predictions = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::ACT, layer);
     } while (predictions.empty());
-    reqT0End = timestamp_ms();
 
     std::cout << "< BACKWARD > Getting labels" << std::endl;
-    reqT1Start = timestamp_ms();
     do {
         labels = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::LAB, layer);
     } while (labels.empty());
-    reqT1End = timestamp_ms();
 
     std::cout << "< BACKWARD > Requesting AH" << std::endl;
-    reqT2Start = timestamp_ms();
     do {
         ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::AH, layer);
     } while (ah.empty());
-    reqT2End = timestamp_ms();
 
     std::cout << "< BACKWARD > Getting weights" << std::endl;
     do {
@@ -235,9 +218,7 @@ gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, 
     });
 
     std::cout << "< BACKWARD > Sending gradient to graph server" << std::endl;
-    sendStart = timestamp_ms();
     sendMatrix(interGrad, data_socket, id);
-    sendEnd = timestamp_ms();
     delete[] interGrad.getData();
     wThrd.join();
 }
@@ -250,26 +231,20 @@ gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id,
     Matrix ah;
 
     // REQUESTING ALL NEEDED TENSORS FOR COMPUTATION
-    reqT0Start = timestamp_ms();
     do {
         std::cout << "< BACKWARD > Requesting Z values" << std::endl;
         z = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::Z, layer);
     } while (z.empty());
-    reqT0End = timestamp_ms();
 
-    reqT1Start = timestamp_ms();
     do {
         std::cout << "< BACKWARD > Requesting gradient from graph server" << std::endl;
         grad = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::GRAD, layer);
     } while (grad.empty());
-    reqT1End = timestamp_ms();
 
     std::cout << "< BACKWARD > Requesting AH" << std::endl;
-    reqT2Start = timestamp_ms();
     do {
         ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::AH, layer);
     } while (ah.empty());
-    reqT2End = timestamp_ms();
 
     std::cout << "< BACKWARD > Requesting weights" << std::endl;
     do {
@@ -311,9 +286,7 @@ gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id,
     });
 
     std::cout << "< BACKWARD > Sending gradient to graph server" << std::endl;
-    sendStart = timestamp_ms();
     sendMatrix(resultGrad, data_socket, id);
-    sendEnd = timestamp_ms();
     delete[] resultGrad.getData();
     wThd.join();
     // END SENDING BACKWARDS RESULTS
@@ -384,15 +357,6 @@ backward_prop(std::string dataserver, std::string weightserver, unsigned dport,
     jsonResponse.WithBool("success", true);
     jsonResponse.WithInteger("type", PROP_TYPE::BACKWARD);
     jsonResponse.WithInteger("id", id);
-    jsonResponse.WithInteger("start", lambdaStart);
-    jsonResponse.WithInteger("reqT0Start", reqT0Start);
-    jsonResponse.WithInteger("reqT0End", reqT0End);
-    jsonResponse.WithInteger("reqT1Start", reqT1Start);
-    jsonResponse.WithInteger("reqT1End", reqT1End);
-    jsonResponse.WithInteger("reqT2Start", reqT2Start);
-    jsonResponse.WithInteger("reqT2End", reqT2End);
-    jsonResponse.WithInteger("sendStart", sendStart);
-    jsonResponse.WithInteger("sendEnd", sendEnd);
 
     auto response = jsonResponse.View().WriteCompact();
     return invocation_response::success(response, "application/json");
@@ -402,7 +366,6 @@ backward_prop(std::string dataserver, std::string weightserver, unsigned dport,
 /** Handler that hooks with lambda API. */
 static invocation_response
 my_handler(invocation_request const& request) {
-    lambdaStart = timestamp_ms();
     JsonValue json(request.payload);
     auto v = json.View();
 

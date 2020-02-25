@@ -29,7 +29,7 @@ typedef struct nodeMessage {
 typedef struct node {
     unsigned id;
     std::string ip;
-    std::string pubip;
+    std::string prip;
     bool master;
 
     node() { }

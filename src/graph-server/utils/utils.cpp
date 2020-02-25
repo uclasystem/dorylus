@@ -65,13 +65,3 @@ getPrIP(std::string& myPrIpFile, std::string& ip) {
 
     ipFile.close();
 }
-
-void
-getPubIP(std::string& myPubIpFile, std::string& ip) {
-    std::ifstream ipFile(myPubIpFile);
-    assert(ipFile.good());
-
-    std::getline(ipFile, ip);
-
-    ipFile.close();
-}
