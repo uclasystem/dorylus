@@ -59,6 +59,9 @@ populateHeader(char* header, unsigned op, unsigned field1 = 0, unsigned field2 =
     serialize<unsigned>(header, 4, field4);
 }
 
+extern std::ofstream timestampFile;
+extern std::mutex fileMutex;
+
 static inline unsigned
 timestamp_ms() {
     auto now = std::chrono::high_resolution_clock::now();
@@ -90,7 +93,9 @@ log(std::ofstream& outfile, const char *msg, ...) {
     char logMsg[msgSize];
     sprintf(logMsg, "%u %s\n", timestamp_ms(), format);
 
+    fileMutex.lock();
     outfile.write(logMsg, msgSize);
+    fileMutex.unlock();
 }
 
 /**
@@ -173,8 +178,6 @@ private:
 };
 extern GPUTimers gtimers;
 
-extern std::ofstream timestampFile;
-extern std::mutex fileMutex;
 
 
 #endif // GLOBAL_UTILS_HPP

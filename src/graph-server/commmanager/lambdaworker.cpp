@@ -118,6 +118,7 @@ LambdaWorker::work() {
                         if (matType == TYPE::GRAD) {
                             sendChunk(oldGradMatrix, identity, partId, false);
                         } else if (matType == TYPE::AH || matType == TYPE::Z || matType == TYPE::ACT) {
+                            if (matType == TYPE::AH) log(timestampFile, "START SEND_BKWD %u", partId);
                             unsigned layer = parse<unsigned>((char *) header.data(), 3);
                             sendChunk(savedTensors[layer][matType - 1], identity, partId, false);
                         } else if (matType == TYPE::LAB) {
@@ -216,6 +217,7 @@ LambdaWorker::sendAggregatedChunk(zmq::message_t& client_id, unsigned partId) {
         unsigned bufSize = thisPartRows * actMatrix.getCols() * sizeof(FeatType);
         FeatType *partitionStart = actMatrix.getData() + (partId * partRows * actMatrix.getCols());
 
+        log(timestampFile, "START SEND_FWD %u", partId);
         zmq::message_t header(HEADER_SIZE);
         populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, actMatrix.getCols());
         workersocket.send(header, ZMQ_SNDMORE);
@@ -223,6 +225,8 @@ LambdaWorker::sendAggregatedChunk(zmq::message_t& client_id, unsigned partId) {
         zmq::message_t partitionData(bufSize);
         std::memcpy(partitionData.data(), partitionStart, bufSize);
         workersocket.send(partitionData);
+
+        log(timestampFile, "END SEND_FWD %u", partId);
     }
 }
 
@@ -233,6 +237,7 @@ LambdaWorker::recvLambdaResults(zmq::message_t& client_id, unsigned partId) {
     FeatType *partitionActStart = actData + partId * partRows * numFeatsNext;
 
     // Receive the pushed-back results.
+    log(timestampFile, "START RECV_FWD %u", partId);
     zmq::message_t data;
     workersocket.recv(&data);
     std::memcpy(partitionZStart, data.data(), data.size());
@@ -243,6 +248,7 @@ LambdaWorker::recvLambdaResults(zmq::message_t& client_id, unsigned partId) {
     zmq::message_t confirm;
     workersocket.send(client_id, ZMQ_SNDMORE);
     workersocket.send(confirm);
+    log(timestampFile, "END RECV_FWD %u", partId);
 
     // Check for total number of partitions received. If all partitions received, wake up lambdaComm.
     // manager->forwardLambdaTable[partId] = false;
@@ -308,6 +314,7 @@ LambdaWorker::recvChunk(Matrix &dstMat, zmq::message_t &client_id, unsigned part
     unsigned partRows = (dstMat.getRows() + numLambdas - 1) / numLambdas;
     FeatType *partitionStart = dstMat.getData() + partId * partRows * dstMat.getCols();
 
+    log(timestampFile, "START BKWD_RECV %u", partId);
     // Receive the pushed-back results.
     zmq::message_t msg;
     workersocket.recv(&msg);
@@ -317,6 +324,7 @@ LambdaWorker::recvChunk(Matrix &dstMat, zmq::message_t &client_id, unsigned part
     zmq::message_t confirm;
     workersocket.send(client_id, ZMQ_SNDMORE);
     workersocket.send(confirm);
+    log(timestampFile, "END BKWD_RECV %u", partId);
 
     producerQueueLock.lock();
     if (pipeline && manager->backwardLambdaTable[partId]) {

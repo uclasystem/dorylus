@@ -129,8 +129,10 @@ void CPUComm::newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zDa
 }
 
 void CPUComm::requestForward(unsigned layer, bool lastLayer) {
+    log(timestampFile, "START FWD_GETDATA_%u", layer);
     Matrix feats = actMatrix;
     Matrix weight = msgService.getWeightMatrix(layer);
+    log(timestampFile, "END FWD_GETDATA_%u", layer);
     log(timestampFile, "START FWD_COMPUTE_%u", layer);
     Matrix z = feats.dot(weight);
     memcpy(zData, z.getData(), z.getDataSize());
@@ -165,6 +167,7 @@ void CPUComm::newContextBackward(unsigned layer, FeatType *oldGradBuf,
 
 void CPUComm::requestBackward(unsigned layer, bool lastLayer) {
     printLog(nodeId, "CPU BACKWARD request. %u", layer);
+    log(timestampFile, "START BKWD_COMPUTE_%u", layer);
     if (lastLayer) {
         Matrix predictions = savedTensors[layer][TYPE::ACT - 1];
         Matrix labels = targetMatrix;
@@ -174,6 +177,7 @@ void CPUComm::requestBackward(unsigned layer, bool lastLayer) {
         memcpy(newGradMatrix.getData(), interGrad.getData(), interGrad.getNumElemts());
         Matrix ah = savedTensors[layer][TYPE::AH - 1];
         Matrix weightUpdates = ah.dot(d_output, true, false);
+        log(timestampFile, "END BKWD_COMPUTE_%u", layer);
         msgService.sendWeightUpdate(weightUpdates, layer);
         delete[] interGrad.getData();
         delete[] d_output.getData();
@@ -187,6 +191,7 @@ void CPUComm::requestBackward(unsigned layer, bool lastLayer) {
         Matrix resultGrad = interGrad.dot(weight, false, true);
         Matrix ah = savedTensors[layer][TYPE::AH - 1];
         Matrix weightUpdates = ah.dot(interGrad, true, false);
+        log(timestampFile, "END BKWD_COMPUTE_%u", layer);
 
         msgService.sendWeightUpdate(weightUpdates, layer);
         memcpy(newGradMatrix.getData(), resultGrad.getData(), resultGrad.getNumElemts());

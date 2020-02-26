@@ -162,9 +162,16 @@ void LambdaComm::callback(const Aws::Lambda::LambdaClient *client,
         std::getline(payload, resultStr);
         Aws::Utils::Json::JsonValue response(resultStr);
 
-//        char logMsg[256];
         auto v = response.View();
         if (v.GetBool("success")) {
+            char logMsg[256];
+            std::string type = v.GetInteger("type") == PROP_TYPE::FORWARD ? "END FORWARD" : "END BACKWARD";
+            sprintf(logMsg, "%s_%u %u %u %u %u %u", type.c_str(),
+              v.GetInteger("id"), v.GetInteger("lambdaStart"),
+              v.GetInteger("reqStart"), v.GetInteger("reqEnd"),
+              v.GetInteger("sendStart"), v.GetInteger("sendEnd"));
+            printLog(globalNodeId, logMsg);
+//            log(timestampFile, logMsg);
         } else {
             printLog(globalNodeId, "\033[1;31m[ ERROR ]\033[0m\t%s\n", v.GetString("reason").c_str());
         }
@@ -219,6 +226,7 @@ LambdaComm::invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLaye
 
     char* weightServerIp = weightservers[(nodeId * numLambdasForward + lambdaId) % weightservers.size()];
     invokeLambda("eval-forward-gcn", nodeIp.c_str(), dataserverPort, weightServerIp, weightserverPort, layer, lambdaId, lastLayer);
+    log(timestampFile, "START FORWARD_%u", layer);
 }
 
 
@@ -310,6 +318,7 @@ LambdaComm::invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLay
 
     char* weightServerIp = weightservers[(nodeId * numLambdasForward + lambdaId) % weightservers.size()];
     invokeLambda("eval-backward-gcn", nodeIp.c_str(), dataserverPort, weightServerIp, weightserverPort, layer, lambdaId, lastLayer);
+    log(timestampFile, "START BACKWARD_%u", layer);
 }
 
 void
