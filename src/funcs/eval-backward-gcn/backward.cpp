@@ -32,6 +32,11 @@ using namespace std::chrono;
 
 bool lastLayer = false;
 
+unsigned lambdaStart;
+unsigned reqStart;
+unsigned reqEnd;
+unsigned sendStart;
+unsigned sendEnd;
 
 
 static Matrix
@@ -174,6 +179,19 @@ gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, 
     Matrix weights;
     Matrix ah;
 
+    std::thread commThread([&]{
+        std::cout << "< BACKWARD > Getting weights" << std::endl;
+        do {
+            weights = requestTensor(weight_socket, OP::PULL_BACKWARD, layer);
+        } while (weights.empty());
+    });
+
+    reqStart = timestamp_ms();
+    std::cout << "< BACKWARD > Requesting AH" << std::endl;
+    do {
+        ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::AH, layer);
+    } while (ah.empty());
+
     std::cout << "< BACKWARD > Getting predictions" << std::endl;
     do {
         predictions = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::ACT, layer);
@@ -183,16 +201,9 @@ gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, 
     do {
         labels = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::LAB, layer);
     } while (labels.empty());
+    reqEnd = timestamp_ms();
+    commThread.join();
 
-    std::cout << "< BACKWARD > Requesting AH" << std::endl;
-    do {
-        ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::AH, layer);
-    } while (ah.empty());
-
-    std::cout << "< BACKWARD > Getting weights" << std::endl;
-    do {
-        weights = requestTensor(weight_socket, OP::PULL_BACKWARD, layer);
-    } while (weights.empty());
 
     // derivative of softmax
     std::cout << "< BACKWARD > Calculating cross entropy" << std::endl;
@@ -218,7 +229,9 @@ gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, 
     });
 
     std::cout << "< BACKWARD > Sending gradient to graph server" << std::endl;
+    sendStart = timestamp_ms();
     sendMatrix(interGrad, data_socket, id);
+    sendEnd = timestamp_ms();
     delete[] interGrad.getData();
     wThrd.join();
 }
@@ -230,7 +243,19 @@ gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id,
     Matrix weights;
     Matrix ah;
 
+    std::thread commThread([&]{
+        std::cout << "< BACKWARD > Requesting weights" << std::endl;
+        do {
+            weights = requestTensor(weight_socket, OP::PULL_BACKWARD, layer);
+        } while (weights.empty());
+    });
     // REQUESTING ALL NEEDED TENSORS FOR COMPUTATION
+    reqStart = timestamp_ms();
+    std::cout << "< BACKWARD > Requesting AH" << std::endl;
+    do {
+        ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::AH, layer);
+    } while (ah.empty());
+
     do {
         std::cout << "< BACKWARD > Requesting Z values" << std::endl;
         z = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::Z, layer);
@@ -240,16 +265,8 @@ gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id,
         std::cout << "< BACKWARD > Requesting gradient from graph server" << std::endl;
         grad = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::GRAD, layer);
     } while (grad.empty());
-
-    std::cout << "< BACKWARD > Requesting AH" << std::endl;
-    do {
-        ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::AH, layer);
-    } while (ah.empty());
-
-    std::cout << "< BACKWARD > Requesting weights" << std::endl;
-    do {
-        weights = requestTensor(weight_socket, OP::PULL_BACKWARD, layer);
-    } while (weights.empty());
+    reqEnd = timestamp_ms();
+    commThread.join();
     // END REQUESTING ALL NEEDED TENSORS FOR COMPUTATION
 
 
@@ -286,7 +303,9 @@ gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id,
     });
 
     std::cout << "< BACKWARD > Sending gradient to graph server" << std::endl;
+    sendStart = timestamp_ms();
     sendMatrix(resultGrad, data_socket, id);
+    sendEnd = timestamp_ms();
     delete[] resultGrad.getData();
     wThd.join();
     // END SENDING BACKWARDS RESULTS
@@ -357,6 +376,11 @@ backward_prop(std::string dataserver, std::string weightserver, unsigned dport,
     jsonResponse.WithBool("success", true);
     jsonResponse.WithInteger("type", PROP_TYPE::BACKWARD);
     jsonResponse.WithInteger("id", id);
+    jsonResponse.WithInteger("lambdaStart", lambdaStart);
+    jsonResponse.WithInteger("reqStart", reqStart);
+    jsonResponse.WithInteger("reqEnd", reqEnd);
+    jsonResponse.WithInteger("sendStart", sendStart);
+    jsonResponse.WithInteger("sendEnd", sendEnd);
 
     auto response = jsonResponse.View().WriteCompact();
     return invocation_response::success(response, "application/json");
@@ -366,6 +390,7 @@ backward_prop(std::string dataserver, std::string weightserver, unsigned dport,
 /** Handler that hooks with lambda API. */
 static invocation_response
 my_handler(invocation_request const& request) {
+    lambdaStart = timestamp_ms();
     JsonValue json(request.payload);
     auto v = json.View();
 

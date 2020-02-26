@@ -377,10 +377,12 @@ forward_prop_layer(std::string dataserver, std::string weightserver, unsigned dp
 
         // Request weights matrix of the current layer.
         std::thread t([&] {     // Weight requests run in a separate thread.
+            reqStart = timestamp_ms();
             std::cout << "< FORWARD > Asking weightserver at " << whost_port << "..." << std::endl;
             do {
                 weights = requestMatrix(weights_socket, OP::PULL_FORWARD, layer);
             } while (weights.empty());
+            reqEnd = timestamp_ms();
         });
 
         // Request feature activation matrix of the current layer.
@@ -417,7 +419,9 @@ forward_prop_layer(std::string dataserver, std::string weightserver, unsigned dp
             activations = activate(z);
         }
 
+        sendStart = timestamp_ms();
         sendMatrices(z, activations, data_socket, id);
+        sendEnd = timestamp_ms();
 
         // Delete malloced spaces.
         delete[] weights.getData();
@@ -436,6 +440,12 @@ forward_prop_layer(std::string dataserver, std::string weightserver, unsigned dp
     JsonValue jsonResponse;
     jsonResponse.WithBool("success", true);
     jsonResponse.WithInteger("type", PROP_TYPE::FORWARD);
+    jsonResponse.WithInteger("id", id);
+    jsonResponse.WithInteger("lambdaStart", lambdaStart);
+    jsonResponse.WithInteger("reqStart", reqStart);
+    jsonResponse.WithInteger("reqEnd", reqEnd);
+    jsonResponse.WithInteger("sendStart", sendStart);
+    jsonResponse.WithInteger("sendEnd", sendEnd);
 
     auto response = jsonResponse.View().WriteCompact();
     return invocation_response::success(response, "application/json");
@@ -445,6 +455,7 @@ forward_prop_layer(std::string dataserver, std::string weightserver, unsigned dp
 /** Handler that hooks with lambda API. */
 static invocation_response
 my_handler(invocation_request const& request) {
+    lambdaStart = timestamp_ms();
     JsonValue json(request.payload);
     auto v = json.View();
 
