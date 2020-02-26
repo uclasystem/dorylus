@@ -253,7 +253,7 @@ FeatType *
 Engine::runForward(unsigned epoch) {
     globalEpoch = epoch;
     // Make sure all nodes start running the forward-prop phase.
-    nodeManager.barrier();
+    // nodeManager.barrier();
     printLog(nodeId, "Engine starts running FORWARD...");
 
     timeForwardProcess -= getTimer();
@@ -277,16 +277,16 @@ Engine::runForward(unsigned epoch) {
     }
 
     // For fused gather and apply, use this block
-//    {
-//        for (iteration = 0; iteration < numLayers; ++iteration) {
-//            inputTensor = fusedGatherApply(inputTensor, graph.localVtxCnt,
-//              getFeatDim(iteration), getFeatDim(iteration + 1));
-//            if (iteration < numLayers - 1) { // don't need scatter at the last layer.
-//                inputTensor = scatter(inputTensor, graph.localVtxCnt, getFeatDim(iteration + 1));
-//                forwardGhostVerticesDataIn = forwardGhostVerticesDataOut;
-//            }
-//        }
-//    }
+    // if (pipeline) {
+    //     for (iteration = 0; iteration < numLayers; ++iteration) {
+    //         inputTensor = fusedGatherApply(inputTensor, graph.localVtxCnt,
+    //             getFeatDim(iteration), getFeatDim(iteration + 1));
+    //         if (iteration < numLayers - 1) { // don't need scatter at the last layer.
+    //             inputTensor = scatter(inputTensor, graph.localVtxCnt, getFeatDim(iteration + 1));
+    //             forwardGhostVerticesDataIn = forwardGhostVerticesDataOut;
+    //         }
+    //     }
+    // }
 
     // For Aggregation -> Apply -> Scatter pipeline use this block
     if (pipeline) {
@@ -297,8 +297,8 @@ Engine::runForward(unsigned epoch) {
     }
 
     // TODO: Implement Agg_0 -> Apply_0 -> Scatter_0 -> Agg_1 ... pipeline
-//    {
-//    }
+    // {
+    // }
 
     timeForwardProcess += getTimer();
     printLog(nodeId, "Engine completes FORWARD at iter %u.", iteration);
@@ -316,7 +316,7 @@ Engine::runForward(unsigned epoch) {
  */
 void
 Engine::runBackward(FeatType *initGradTensor) {
-    nodeManager.barrier();
+    // nodeManager.barrier();
     printLog(nodeId, "Engine starts running BACKWARD...");
 
     timeBackwardProcess -= getTimer();
@@ -338,14 +338,14 @@ Engine::runBackward(FeatType *initGradTensor) {
     }
 
     // Fused Gather-Apply
-//    {
-//        gradTensor = invokeLambdaBackward(gradTensor, graph.localVtxCnt, getFeatDim(numLayers - 1), getFeatDim(numLayers));
-//        for (iteration = numLayers - 1; iteration > 0; --iteration) {
-//            gradTensor = scatterBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration));
-//            backwardGhostVerticesDataIn = backwardGhostVerticesDataOut;
-//            gradTensor = fusedGatherApplyBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration - 1), getFeatDim(iteration));
-//        }
-//    }
+    // if (pipeline) {
+    //     gradTensor = invokeLambdaBackward(gradTensor, graph.localVtxCnt, getFeatDim(numLayers - 1), getFeatDim(numLayers));
+    //     for (iteration = numLayers - 1; iteration > 0; --iteration) {
+    //         gradTensor = scatterBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration));
+    //         backwardGhostVerticesDataIn = backwardGhostVerticesDataOut;
+    //         gradTensor = fusedGatherApplyBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration - 1), getFeatDim(iteration));
+    //     }
+    // }
 
     // Fused GAS Backward
     if (pipeline) {
