@@ -167,11 +167,16 @@ void LambdaComm::callback(const Aws::Lambda::LambdaClient *client,
         std::getline(payload, resultStr);
         Aws::Utils::Json::JsonValue response(resultStr);
 
-//        char logMsg[256];
         auto v = response.View();
-        if (v.GetBool("success")) {
+        if (v.KeyExists("success")) {
+            if (v.GetBool("success")) {
+            } else {
+                if (v.KeyExists("reason")) {
+                    printLog(globalNodeId, "\033[1;31m[ ERROR ]\033[0m\t%s\n", v.GetString("reason").c_str());
+                }
+            }
         } else {
-            printLog(globalNodeId, "\033[1;31m[ ERROR ]\033[0m\t%s\n", v.GetString("reason").c_str());
+            printLog(globalNodeId, "\033[1;31m[ ERROR ]\033[0m\tUnable to parse: %s\n", resultStr);
         }
     // Lambda returns error.
     } else {
@@ -320,7 +325,6 @@ LambdaComm::invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLay
 void
 LambdaComm::waitLambdaBackward(unsigned layer, bool lastLayer) {
     // Block until all parts have been handled.
-    unsigned prevCnt = 0;
     while (countBackward < numLambdasBackward) {
         if (countBackward >= 0.8 * numLambdasBackward && timeoutPeriod < 1e-8) {
             timeoutPeriod = std::fmax(MIN_TIMEOUT, 2 * (getTimer() - backwardTimer));
@@ -334,22 +338,14 @@ LambdaComm::waitLambdaBackward(unsigned layer, bool lastLayer) {
             backwardTimer = getTimer();
             timeoutPeriod *= EXP_BACKOFF_FACTOR;
         }
-        if (false && nodeId == 0 && countBackward > prevCnt) {
-            printLog(nodeId, "%u backward lambdas takes %.3lf", countBackward, getTimer() - backwardTimer);
-            prevCnt = countBackward;
-        }
         usleep(SLEEP_PERIOD);
-    }
-    if (false && nodeId == 0 && countBackward > prevCnt) {
-        printLog(nodeId, "%u backward lambdas takes %.3lf", countBackward, getTimer() - backwardTimer);
-        prevCnt = countBackward;
     }
 }
 
 
 void
 LambdaComm::relaunchLambda(bool forward, unsigned layer, unsigned lambdaId, bool lastLayer) {
-    printLog(nodeId, "Relaunch %s lambda %u...", (forward ? "FORWARD" : "BACKWARD"), lambdaId);
+    printLog(nodeId, "Relaunch %s lambda %u...", (forward ? FORWARD_FUNC : BACKWARD_FUNC), lambdaId);
 
     Aws::String funcName = forward ? FORWARD_FUNC : BACKWARD_FUNC;
     unsigned numLambdas = forward ? numLambdasForward : numLambdasBackward;

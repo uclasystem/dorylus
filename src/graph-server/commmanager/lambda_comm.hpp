@@ -43,8 +43,8 @@
 #define MIN_TIMEOUT 500     // at least wait for MIN_TIMEOUT ms before relaunching
 #define EXP_BACKOFF_FACTOR 1.5 // base of exponential backoff
 
-#define FORWARD_FUNC "forward-gcn"
-#define BACKWARD_FUNC "backward-gcn"
+#define FORWARD_FUNC "forward"
+#define BACKWARD_FUNC "backward"
 
 
 class LambdaWorker;

@@ -49,7 +49,7 @@ LambdaWorker::work() {
             if (!workersocket.recv(&header)) {
                 continue;
             }
-            if (header.size() != HEADER_SIZE && header.size() != 20) {
+            if (header.size() != HEADER_SIZE) {
                 printLog(manager->nodeId, "header size %u", header.size());
                 continue;
             }
@@ -250,15 +250,15 @@ LambdaWorker::recvLambdaResults(zmq::message_t& client_id, unsigned partId) {
     workersocket.send(client_id, ZMQ_SNDMORE);
     workersocket.send(confirm);
 
-    // Check for total number of partitions received. If all partitions received, wake up lambdaComm.
-    // manager->forwardLambdaTable[partId] = false;
-    // ++(manager->countForward);
-    producerQueueLock.lock();
-    if (pipeline && manager->forwardLambdaTable[partId]) {
-        q_ptr->push(std::make_pair(partId, partRows));
+    if (pipeline) {
+        producerQueueLock.lock();
+        if (manager->forwardLambdaTable[partId]) {
+            q_ptr->push(std::make_pair(partId, partRows));
+        }
+        producerQueueLock.unlock();
     }
-    producerQueueLock.unlock();
 
+    // Check for total number of partitions received. If all partitions received, wake up lambdaComm.
     __sync_bool_compare_and_swap(manager->forwardLambdaTable + partId, true, false);
     __sync_fetch_and_add(&(manager->countForward), 1);
 }
