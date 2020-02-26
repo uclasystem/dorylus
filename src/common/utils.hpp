@@ -173,5 +173,8 @@ private:
 };
 extern GPUTimers gtimers;
 
+extern std::ofstream timestampFile;
+extern std::mutex fileMutex;
+
 
 #endif // GLOBAL_UTILS_HPP

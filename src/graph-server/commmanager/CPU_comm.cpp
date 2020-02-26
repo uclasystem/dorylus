@@ -131,6 +131,7 @@ void CPUComm::newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zDa
 void CPUComm::requestForward(unsigned layer, bool lastLayer) {
     Matrix feats = actMatrix;
     Matrix weight = msgService.getWeightMatrix(layer);
+    log(timestampFile, "START FWD_COMPUTE_%u", layer);
     Matrix z = feats.dot(weight);
     memcpy(zData, z.getData(), z.getDataSize());
 
@@ -143,6 +144,7 @@ void CPUComm::requestForward(unsigned layer, bool lastLayer) {
         memcpy(actData, predictions.getData(), predictions.getDataSize());
         delete[] predictions.getData();
     }
+    log(timestampFile, "END FWD_COMPUTE_%u", layer);
     delete[] z.getData();
 }
 

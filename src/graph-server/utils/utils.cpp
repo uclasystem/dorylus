@@ -15,7 +15,6 @@
  */
 void
 printLog(const unsigned nodeId, const char *msg, ...) {
-
     // Plug in the node ID.
     char format[16 + strlen(msg)];
     sprintf(format, "[ Node %3u ]  %s\n", nodeId, msg);

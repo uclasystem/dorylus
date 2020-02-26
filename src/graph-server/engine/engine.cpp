@@ -30,22 +30,6 @@ static ComputingUnit cu = ComputingUnit::getInstance();
 
 static int globalEpoch = -1;
 
-void outputToFile(std::ofstream& outfile, FeatType* fptr, unsigned start, unsigned end, unsigned c, bool enumerate = false) {
-    std::string out = "";
-    for (uint32_t u = start; u < end; ++u) {
-        if (enumerate) {
-            out += std::to_string(u) + ": ";
-        }
-        for (uint32_t uj = 0; uj < c; ++uj) {
-            out += std::to_string(fptr[u * c + uj]) + " ";
-        }
-        out += "\n";
-    }
-    out += "\n";
-
-    outfile.write(out.c_str(), out.size());
-}
-
 /**
  *
  * Initialize the engine with the given command line arguments.
@@ -66,6 +50,11 @@ Engine::init(int argc, char *argv[]) {
     assert(numNodes <= 256);    // Cluster size limitation.
     outFile += std::to_string(nodeId);
     commManager.init(nodeManager);
+
+    char fname_base[] = "timestamp.out.";
+    char fname[strlen(fname_base) + 2];
+    sprintf(fname, "%s%u", fname_base, mode);
+    timestampFile.open(fname, std::ofstream::out | std::ofstream::trunc);
 
     // Set number of layers and number of features in each layer. Also store the prefix sum of config for offset querying use.
     readLayerConfigFile(layerConfigFile);
@@ -146,6 +135,7 @@ Engine::init(int argc, char *argv[]) {
  */
 void
 Engine::destroy() {
+    timestampFile.close();
     printLog(nodeId, "Destroying the engine...");
 
     nodeManager.destroy();
@@ -262,19 +252,29 @@ Engine::runForward(unsigned epoch) {
     FeatType *inputTensor = forwardVerticesInitData;
     forwardGhostVerticesDataIn = forwardGhostInitData;
 
+    //log(timestampFile, "START EPOCH %u", epoch);
+    //log(timestampFile, "START FWD %u", epoch);
+
     // For sequential invocation of operations use this block
     if (!pipeline) {
         for (iteration = 0; iteration < numLayers; ++iteration) {
+            //log(timestampFile, "START AGG_FWD %u", iteration);
             inputTensor = aggregate(inputTensor, graph.localVtxCnt, getFeatDim(iteration));
+            //log(timestampFile, "END AGG_FWD %u", iteration);
+            //log(timestampFile, "START INVOKE_FWD %u", iteration);
             inputTensor = invokeLambda(inputTensor, graph.localVtxCnt,
               getFeatDim(iteration), getFeatDim(iteration + 1));
+            //log(timestampFile, "END INVOKE_FWD %u", iteration);
             if (iteration < numLayers - 1) { // don't need scatter at the last layer.
+                //log(timestampFile, "START SCATTER_FWD %u", iteration);
                 inputTensor = scatter(inputTensor,
                   graph.localVtxCnt, getFeatDim(iteration + 1));
+                //log(timestampFile, "END SCATTER_FWD %u", iteration);
                 forwardGhostVerticesDataIn = forwardGhostVerticesDataOut;
             }
         }
     }
+    //log(timestampFile, "END FWD %u", epoch);
 
     // For fused gather and apply, use this block 
 //    {
@@ -326,17 +326,29 @@ Engine::runBackward(FeatType *initGradTensor) {
     // TODO: (YIFAN) this backward flow is correct but weird. I know you have thought for a long time, but try again to refine it.
     iteration = numLayers;
 
+    //log(timestampFile, "START BKWD %u", globalEpoch);
+
     // Pure sequential
     if (!pipeline) {
+        //log(timestampFile, "START INVOKE_BKWD %u", numLayers);
         gradTensor = invokeLambdaBackward(gradTensor, graph.localVtxCnt, getFeatDim(numLayers - 1), getFeatDim(numLayers));
+        //log(timestampFile, "END INVOKE_BKWD %u", numLayers);
         for (iteration = numLayers - 1; iteration > 0; --iteration) {
+            //log(timestampFile, "START SCATTER_BWKD %u", iteration);
             gradTensor = scatterBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration));
+            //log(timestampFile, "END SCATTER_BWKD %u", iteration);
             backwardGhostVerticesDataIn = backwardGhostVerticesDataOut;
+            //log(timestampFile, "START AGG_BKWD %u", iteration);
             gradTensor = aggregateBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration));
+            //log(timestampFile, "END AGG_BKWD %u", iteration);
+            //log(timestampFile, "START INVOKE_BKWD %u", iteration);
             gradTensor = invokeLambdaBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration - 1), getFeatDim(iteration));
+            //log(timestampFile, "END INVOKE_BKWD %u", iteration);
         } 
     }
 
+    //log(timestampFile, "END BKWD %u", globalEpoch);
+    //log(timestampFile, "END EPOCH %u", globalEpoch);
     // Fused Gather-Apply
 //    {
 //        gradTensor = invokeLambdaBackward(gradTensor, graph.localVtxCnt, getFeatDim(numLayers - 1), getFeatDim(numLayers));

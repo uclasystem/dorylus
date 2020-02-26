@@ -14,7 +14,6 @@
 cd ${HOME}/gnn-lambda/
 
 case $1 in
-
     #
     # Run graphserver.
     #
@@ -46,9 +45,23 @@ case $1 in
         for var in "$@"
         do
             if [ $var = "GPU" ] || [ $var = "gpu" ]; then
-                let MODE=1;
-                NUM_LAMBDAS_FORWARD=1
-                NUM_LAMBDAS_BACKWARD=1
+                if [ $MODE -eq 2 ]; then
+                    echo "Mode already set to CPU. Ignoring GPU option"
+                else
+                    let MODE=1;
+                    NUM_LAMBDAS_FORWARD=1
+                    NUM_LAMBDAS_BACKWARD=1
+                fi
+            fi
+
+            if [ $var = "CPU" ] || [ $var = "cpu" ]; then
+                if [ $MODE -eq 1 ]; then
+                    echo "Mode already set to GPU. Ignoring CPU option"
+                else
+                    let MODE=2;
+                    NUM_LAMBDAS_FORWARD=1
+                    NUM_LAMBDAS_BACKWARD=1
+                fi
             fi
 
             if [ $var = "pipe" ] || [ $var = "PIPE" ]; then
@@ -62,8 +75,8 @@ case $1 in
 
         # After processing args, check to see if GPU enables
         # If so, disable pipelining
-        if [ $MODE -eq 1 ] && [ $PIPELINE -eq 1 ]; then
-            echo "GPU and pipeline cannot be used together. Disabling pipeline"
+        if [[ ($MODE -eq 1 || $MODE -eq 2)  &&  $PIPELINE -eq 1 ]]; then
+            echo "GPU/CPU and pipeline cannot be used together. Disabling pipeline"
             PIPELINE=0
         fi
 
