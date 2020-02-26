@@ -42,7 +42,7 @@ case $1 in
 
         let MODE=0
         let PIPELINE=0
-        let NUM_EPOCHS=30
+        let NUM_EPOCHS=10
         for var in "$@"
         do
             if [ $var = "GPU" ] || [ $var = "gpu" ]; then
