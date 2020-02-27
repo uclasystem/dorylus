@@ -162,23 +162,30 @@ void LambdaComm::callback(const Aws::Lambda::LambdaClient *client,
   const std::shared_ptr<const Aws::Client::AsyncCallerContext> &context) {
     if (outcome.IsSuccess()) {
         Aws::Lambda::Model::InvokeResult& result = const_cast<Aws::Lambda::Model::InvokeResult&>(outcome.GetResult());
-
-        // JSON Parsing not working from Boost to AWS.
         Aws::IOStream& payload = result.GetPayload();
+        Aws::String funcErr = result.GetFunctionError();
         Aws::String resultStr;
         std::getline(payload, resultStr);
+        // JSON Parsing not working from Boost to AWS.
         Aws::Utils::Json::JsonValue response(resultStr);
-
         auto v = response.View();
-        if (v.KeyExists("success")) {
-            if (v.GetBool("success")) {
+        if (funcErr != "") {
+            if (v.KeyExists("errorMessage")) {
+                printLog(globalNodeId, "\033[1;31m[ FUNC ERROR ]\033[0m %s, %s", funcErr.c_str(), v.GetString("errorMessage"));
             } else {
-                if (v.KeyExists("reason")) {
-                    printLog(globalNodeId, "\033[1;31m[ ERROR ]\033[0m\t%s\n", v.GetString("reason").c_str());
-                }
+                printLog(globalNodeId, "\033[1;31m[ FUNC ERROR ]\033[0m %s, %s", funcErr.c_str(), resultStr.c_str());
             }
         } else {
-            printLog(globalNodeId, "\033[1;31m[ ERROR ]\033[0m\tUnable to parse: %s\n", resultStr);
+            if (v.KeyExists("success")) {
+                if (v.GetBool("success")) {
+                } else {
+                    if (v.KeyExists("reason")) {
+                        printLog(globalNodeId, "\033[1;31m[ ERROR ]\033[0m\t%s", v.GetString("reason").c_str());
+                    }
+                }
+            } else {
+                printLog(globalNodeId, "\033[1;31m[ ERROR ]\033[0m\tUnable to parse: %s", resultStr.c_str());
+            }
         }
     // Lambda returns error.
     } else {

@@ -225,12 +225,8 @@ gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, 
         set_timestamp();
         ret = requestTensors(data_socket, OP::PULL_BACKWARD, id, layer, savedTensors);
         set_timestamp();
-        if (ret != 0 || weights.empty()) {
-            deleteMatrix(weights);
-            for (Matrix &mat : savedTensors) {
-                deleteMatrix(mat);
-            }
 
+        if (ret != 0 || weights.empty()) {
             JsonValue jsonResponse;
             jsonResponse.WithBool("success", false);
             jsonResponse.WithInteger("type", PROP_TYPE::BACKWARD);
@@ -238,9 +234,15 @@ gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, 
             jsonResponse.WithString("reason", std::string("Weights ") + (weights.empty() ? "are" : "are not") +
                                     " empty, Feats " + (ret != 0 ? "are" : "are not") +
                                     " empty. Stopped by graph server");
+
+            deleteMatrix(weights);
+            for (Matrix &mat : savedTensors) {
+                deleteMatrix(mat);
+            }
             auto response = jsonResponse.View().WriteCompact();
-            return invocation_response::failure(response, "appliation/json");
+            return invocation_response::success(response, "appliation/json");
         }
+
         Matrix &predictions = savedTensors[0];
         Matrix &labels = savedTensors[1];
         Matrix &ah = savedTensors[2];
@@ -272,18 +274,18 @@ gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, 
         sendMatrix(weightUpdates, weight_socket, layer);
         deleteMatrix(weightUpdates);
     } catch(std::exception &ex) {
-        deleteMatrix(weights);
-        for (Matrix &mat : savedTensors) {
-            deleteMatrix(mat);
-        }
-
         JsonValue jsonResponse;
         jsonResponse.WithBool("success", false);
         jsonResponse.WithInteger("type", PROP_TYPE::BACKWARD);
         jsonResponse.WithInteger("id", id);
         jsonResponse.WithString("reason", ex.what());
+
+        deleteMatrix(weights);
+        for (Matrix &mat : savedTensors) {
+            deleteMatrix(mat);
+        }
         auto response = jsonResponse.View().WriteCompact();
-        return invocation_response::failure(response, "application/json");
+        return invocation_response::success(response, "application/json");
     }
 
     Aws::String tsStr = "";
@@ -314,6 +316,24 @@ gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id,
         int ret = 0;
         ret = requestTensors(data_socket, OP::PULL_BACKWARD, id, layer, savedTensors);
         set_timestamp();
+
+        if (ret != 0 || weights.empty()) {
+            JsonValue jsonResponse;
+            jsonResponse.WithBool("success", false);
+            jsonResponse.WithInteger("type", PROP_TYPE::BACKWARD);
+            jsonResponse.WithInteger("id", id);
+            jsonResponse.WithString("reason", std::string("Weights ") + (weights.empty() ? "are" : "are not") +
+                                    " empty, Feats " + (ret != 0 ? "are" : "are not") +
+                                    " empty. Stopped by graph server");
+
+            deleteMatrix(weights);
+            for (Matrix &mat : savedTensors) {
+                deleteMatrix(mat);
+            }
+            auto response = jsonResponse.View().WriteCompact();
+            return invocation_response::success(response, "appliation/json");
+        }
+
         Matrix &grad = savedTensors[0];
         Matrix &z = savedTensors[1];
         Matrix &ah = savedTensors[2];
@@ -355,18 +375,18 @@ gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id,
         deleteMatrix(weightUpdates);
         // END SENDING BACKWARDS RESULTS
     } catch(std::exception &ex) {
-        deleteMatrix(weights);
-        for (Matrix &mat : savedTensors) {
-            deleteMatrix(mat);
-        }
-
         JsonValue jsonResponse;
         jsonResponse.WithBool("success", false);
         jsonResponse.WithInteger("type", PROP_TYPE::BACKWARD);
         jsonResponse.WithInteger("id", id);
         jsonResponse.WithString("reason", ex.what());
+
+        deleteMatrix(weights);
+        for (Matrix &mat : savedTensors) {
+            deleteMatrix(mat);
+        }
         auto response = jsonResponse.View().WriteCompact();
-        return invocation_response::failure(response, "application/json");
+        return invocation_response::success(response, "application/json");
     }
 
     Aws::String tsStr = "";

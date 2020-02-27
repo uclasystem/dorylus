@@ -156,7 +156,7 @@ LambdaWorker::sendAggregatedChunk(zmq::message_t& client_id, unsigned partId, un
         setTSinHdr(header.data());
         workersocket.send(header);
 
-        std::string errMsg = "[ ERROR ] (when sending): ";
+        std::string errMsg = "[ ERROR ] (when sending to " + std::to_string(partId) + "): ";
         if (!manager->forward) {
             errMsg += "Forward lambda during backward phase. ";
         }
@@ -212,7 +212,7 @@ LambdaWorker::recvLambdaResults(zmq::message_t& client_id, unsigned partId, unsi
     } else {
         fakeRecvChunks(client_id, 2);
 
-        std::string errMsg = "[ ERROR ] (when recving): ";
+        std::string errMsg = "[ ERROR ] (when recving from " + std::to_string(partId) + "): ";
         if (!manager->forward) {
             errMsg += "Forward lambda during backward phase. ";
         }
@@ -282,7 +282,7 @@ LambdaWorker::sendGCNChunks(zmq::message_t& client_id, unsigned partId, unsigned
         setTSinHdr(header.data());
         workersocket.send(header);
 
-        std::string errMsg = "[ ERROR ] (when sending): ";
+        std::string errMsg = "[ ERROR ] (when sending to " + std::to_string(partId) + "): ";
         if (manager->forward) {
             errMsg += "Backward lambda during forward phase. ";
         }
@@ -333,7 +333,7 @@ LambdaWorker::sendChunk(Matrix &srcMat, zmq::message_t& client_id, unsigned part
         setTSinHdr(header.data());
         workersocket.send(header);
 
-        std::string errMsg = "[ ERROR ] (when sending): ";
+        std::string errMsg = "[ ERROR ] (when sending to " + std::to_string(partId) + "): ";
         if (forward != manager->forward) {
             errMsg += std::string(forward ? "Forward" : "Backward") + " lambda during " +
                       std::string(manager->forward? "forward" : "backward") + " phase. ";
@@ -393,7 +393,7 @@ LambdaWorker::recvChunk(Matrix &dstMat, zmq::message_t &client_id, unsigned part
     } else {
         fakeRecvChunks(client_id, 1);
 
-        std::string errMsg = "[ ERROR ] (when sending): ";
+        std::string errMsg = "[ ERROR ] (when recv from " + std::to_string(partId) + "): ";
         if (forward != manager->forward) {
             errMsg += std::string(forward ? "Forward" : "Backward") + " lambda during " +
                     std::string(manager->forward? "forward" : "backward") + " phase. ";
@@ -443,7 +443,7 @@ LambdaWorker::sendTargetMatrix(zmq::message_t& client_id, unsigned partId) {
         setTSinHdr(header.data());
         workersocket.send(header);
 
-        std::string errMsg = "[ ERROR ] (when sending): ";
+        std::string errMsg = "[ ERROR ] (when sending to " + std::to_string(partId) + "): ";
         if (!manager->forward) {
             errMsg += "Forward lambda during backward phase. ";
         }
