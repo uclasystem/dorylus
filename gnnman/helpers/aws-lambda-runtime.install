@@ -15,7 +15,7 @@ if [[ ! -d /usr/local/include/aws/lambda-runtime ]]; then
     mkdir build
     cd build
     cmake .. -DCMAKE_BUILD_TYPE=Release
-    make
+    make -j
     sudo make install
     cd ../..
     rm -rf aws-lambda-cpp

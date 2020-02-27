@@ -53,6 +53,8 @@ public:
     virtual void invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLayer) = 0;
     virtual void waitLambdaBackward(unsigned layer, bool lastLayer) = 0;
 
+    virtual unsigned getRelaunchCnt() { return 0u; };
+    // Send a message to the coordination server to shutdown.
     virtual void sendShutdownMessage() = 0;
 };
 

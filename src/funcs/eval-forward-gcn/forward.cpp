@@ -74,7 +74,7 @@ requestMatrix(zmq::socket_t& socket, OP op, unsigned id, bool data = false) {
     unsigned layerResp = parse<unsigned>((char *) respHeader.data(), 1);
     if (layerResp == -2) {
         std::cerr << "[ ERROR ] Discard execution." << std::endl;
-        exit(0);
+        throw std::invalid_argument("Stopped by graph server");
     } else if (layerResp == -1) {      // Failed.
         std::cerr << "[ ERROR ] No corresponding matrix chunk!" << std::endl;
         return Matrix();

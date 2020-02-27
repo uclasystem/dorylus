@@ -42,11 +42,15 @@ case $1 in
 
         let MODE=0
         let PIPELINE=0
-        let NUM_EPOCHS=30
+        let NUM_EPOCHS=10
         for var in "$@"
         do
             if [ $var = "GPU" ] || [ $var = "gpu" ]; then
                 let MODE=1;
+                NUM_LAMBDAS_FORWARD=1
+                NUM_LAMBDAS_BACKWARD=1
+            elif [ $var = "CPU" ] || [ $var = "cpu" ]; then
+                let MODE=2;
                 NUM_LAMBDAS_FORWARD=1
                 NUM_LAMBDAS_BACKWARD=1
             fi

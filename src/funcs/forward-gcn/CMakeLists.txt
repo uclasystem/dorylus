@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 11)
 
 
 # Project name.
-project(forward-gcn LANGUAGES CXX)
+project(forward LANGUAGES CXX)
 
 
 # Include ZeroMQ.
@@ -22,17 +22,14 @@ set(CBINC /usr/local/blas/CBLAS/include)
 include_directories(${CBINC})
 
 
-# Include Boost.
-find_package(Boost REQUIRED)
-include_directories(${Boost_INCLUDE_DIRS})
-
-
 # Include Threads.
 find_package(Threads REQUIRED)
 
-
 # Include AWS Lambda runtime.
 find_package(aws-lambda-runtime REQUIRED)
+
+# Include AWS SDK for Json Utils
+find_package(AWSSDK REQUIRED COMPONENTS core)
 
 
 add_subdirectory(../../common common)
@@ -40,7 +37,7 @@ add_subdirectory(../../common common)
 # Create the executable target.
 aux_source_directory(. FUNC_SRC)
 add_executable(${PROJECT_NAME} ${FUNC_SRC})
-target_link_libraries(${PROJECT_NAME} PUBLIC common ${Boost_LIBRARIES} Threads::Threads AWS::aws-lambda-runtime ${OBLIB} ${CBLIB} ${ZMQ_LIB})
+target_link_libraries(${PROJECT_NAME} PUBLIC common Threads::Threads ${AWSSDK_LINK_LIBRARIES} AWS::aws-lambda-runtime ${OBLIB} ${CBLIB} ${ZMQ_LIB})
 
 
 # Create the packaging target.

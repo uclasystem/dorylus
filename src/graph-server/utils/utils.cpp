@@ -11,13 +11,14 @@
 /**
  *
  * Print a log message to the log file.
- * 
+ *
  */
 void
 printLog(const unsigned nodeId, const char *msg, ...) {
 
     // Plug in the node ID.
-    char format[16 + strlen(msg)];
+    // char format[16 + strlen(msg)];
+    char format[16 + 1024];
     sprintf(format, "[ Node %3u ]  %s\n", nodeId, msg);
 
     // Print the log message.
@@ -31,7 +32,7 @@ printLog(const unsigned nodeId, const char *msg, ...) {
 /**
  *
  * Get current timer value.
- * 
+ *
  */
 double getTimer() {
     struct timeval t;
@@ -54,10 +55,10 @@ std::time_t getCurrentTime() {
 /**
  *
  * Read in ip address from file.
- * 
+ *
  */
 void
-getPrIP(std::string& myPrIpFile, std::string& ip) { 
+getPrIP(std::string& myPrIpFile, std::string& ip) {
     std::ifstream ipFile(myPrIpFile);
     assert(ipFile.good());
 

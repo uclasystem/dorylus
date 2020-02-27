@@ -44,7 +44,7 @@ Matrix activate(Matrix &mat) {
 Matrix softmax(Matrix &mat) {
     FeatType *result = new FeatType[mat.getNumElemts()];
 
-    #pragma omp parallel for 
+    #pragma omp parallel for
     for (unsigned r = 0; r < mat.getRows(); ++r) {
         unsigned length = mat.getCols();
         FeatType *vecSrc = mat.getData() + r * length;
@@ -169,7 +169,7 @@ void CPUComm::requestBackward(unsigned layer, bool lastLayer) {
         Matrix d_output = hadamardSub(predictions, labels);
         Matrix weight = msgService.getWeightMatrix(layer);
         Matrix interGrad = d_output.dot(weight, false, true);
-        memcpy(newGradMatrix.getData(), interGrad.getData(), interGrad.getNumElemts());
+        memcpy(newGradMatrix.getData(), interGrad.getData(), interGrad.getDataSize());
         Matrix ah = savedTensors[layer][TYPE::AH - 1];
         Matrix weightUpdates = ah.dot(d_output, true, false);
         msgService.sendWeightUpdate(weightUpdates, layer);
@@ -187,7 +187,7 @@ void CPUComm::requestBackward(unsigned layer, bool lastLayer) {
         Matrix weightUpdates = ah.dot(interGrad, true, false);
 
         msgService.sendWeightUpdate(weightUpdates, layer);
-        memcpy(newGradMatrix.getData(), resultGrad.getData(), resultGrad.getNumElemts());
+        memcpy(newGradMatrix.getData(), resultGrad.getData(), resultGrad.getDataSize());
 
         delete[] actDeriv.getData();
         delete[] resultGrad.getData();

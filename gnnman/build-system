@@ -17,35 +17,32 @@ cd $( dirname $0 )/..
 EC2MAN_CMD="python3 -m ec2man"
 
 
-if [[ ! -z $1 ]] && [[ $1 != "graph" ]] && [[ $1 != "weight" ]] && [[ $1 != "gpu" ]]; then
+if [[ ! -z $1 ]] && [[ $1 != "graph" ]] && [[ $1 != "weight" ]] && [[ $1 != "gpu" ]] && [[ $1 != "d" ]] && [[ $1 != "d" ]]; then
     echo "Context '$1' not recognized."
     echo "Usage: ./gnnman/build-system [[Context|gpu]...]    # Empty means build all."
     exit 1
 fi
 
-let BUILD_GRAPH=0
-let BUILD_WEIGHT=0
-BUILD_GPU_OPT=''
-if [[ $1 == "gpu" ]]; then
-    BUILD_GRAPH=1
-    BUILD_WEIGHT=1
-    BUILD_GPU_OPT='gpu'
-elif [[ $1 == "graph" ]]; then
-    BUILD_GRAPH=1
-    if [[ $2 == "gpu" ]]; then
-        BUILD_GPU_OPT='gpu'
+let BUILD_GRAPH=1
+let BUILD_WEIGHT=1
+BACKEND_OPT=''
+for var in $@; do
+    echo $var
+    if [[ $var == "gpu" ]] || [[ $var == "cpu" ]]; then
+        BACKEND_OPT=$var
+    elif [[ $var == "graph" ]]; then
+        BUILD_WEIGHT=0
+    elif [[ $var == "weight" ]]; then
+        BUILD_GRAPH=0
+    elif [[ $var == "d" ]]; then
+        BACKEND_OPT+=" d"
     fi
-elif [[ $1 == "weight" ]]; then
-    BUILD_WEIGHT=1
-elif [[ -z $1 ]]; then
-    BUILD_GRAPH=1
-    BUILD_WEIGHT=1
-fi
+done
 
 # For graph servers.
 if [ ${BUILD_GRAPH} -eq 1 ]; then
     echo "Processing context 'graph'..."
-    ${EC2MAN_CMD} graph 0 ssh -t "cd gnn-lambda && ./gnnman/helpers/graphserver.bld ${BUILD_GPU_OPT} && ./gnnman/helpers/send-folder build"
+    ${EC2MAN_CMD} graph 0 ssh -t "cd gnn-lambda && ./gnnman/helpers/graphserver.bld ${BACKEND_OPT} && ./gnnman/helpers/send-folder build"
 fi
 
 

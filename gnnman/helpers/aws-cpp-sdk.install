@@ -16,7 +16,7 @@ if [[ ! $( ldconfig -p | grep aws-cpp-sdk ) ]]; then    # Only install if not in
     mkdir build
     cd build
     cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_ONLY=lambda -DBUILD_SHARED_LIBS=OFF
-    make
+    make -j
     sudo make install
     cd ../..
     rm -rf aws-sdk-cpp

@@ -22,8 +22,12 @@
 typedef float FeatType;
 
 
-static const size_t HEADER_SIZE = sizeof(unsigned) * 5;
-enum OP { REQ_FORWARD, PUSH_FORWARD, PULL_FORWARD, REQ_BACKWARD, PUSH_BACKWARD, PULL_BACKWARD, PULL_EVAL, PUSH_EVAL, RESP, INFO, TERM };
+// base timestamp for profiling
+#define BASE_TMSP (1580333752000ull)
+
+static const size_t HEADER_SIZE = sizeof(unsigned) * 5 + sizeof(unsigned) * 20;
+enum OP { REQ_FORWARD, PUSH_FORWARD, PULL_FORWARD, REQ_BACKWARD, PUSH_BACKWARD, PULL_BACKWARD, PULL_EVAL, PUSH_EVAL, RESP, INFO, TERM,
+          REQ_BATCH_FORWARD, REQ_BATCH_BACKWARD };
 enum TYPE { GRAD, AH, Z, ACT, LAB };
 enum PROP_TYPE { FORWARD, BACKWARD };
 
@@ -61,8 +65,9 @@ populateHeader(char* header, unsigned op, unsigned field1 = 0, unsigned field2 =
 
 static inline unsigned
 timestamp_ms() {
-    auto now = std::chrono::high_resolution_clock::now();
-    return std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count() - 1580333752000ull;
+    using namespace std::chrono;
+    auto now = high_resolution_clock::now();
+    return duration_cast<milliseconds>(now.time_since_epoch()).count() - BASE_TMSP;
 }
 
 static inline void
@@ -133,7 +138,7 @@ struct TimerPlus {
 
     TimerPlus() {}
     TimerPlus(const string& name_) {name = name_;}
-    void start() { 
+    void start() {
         begin = std::chrono::high_resolution_clock::now();
     }
     void stop() {

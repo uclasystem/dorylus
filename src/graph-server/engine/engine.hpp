@@ -172,6 +172,8 @@ private:
     double timeBackwardProcess = 0.0;
     std::vector<double> vecTimeAggregate;
     std::vector<double> vecTimeLambda;
+    std::vector<double> vecTimeLambdaInvoke;
+    std::vector<double> vecTimeLambdaWait;
     std::vector<double> vecTimeSendout;
     std::vector<double> epochTimes;
 

@@ -20,9 +20,7 @@
 
 
 class CPUComm : public ResourceComm {
-
   public:
-
     CPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_, const std::string &wServersFile, unsigned wPort_, unsigned totalLayers_);
 
     // For forward-prop.

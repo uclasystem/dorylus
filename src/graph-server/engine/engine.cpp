@@ -253,7 +253,7 @@ FeatType *
 Engine::runForward(unsigned epoch) {
     globalEpoch = epoch;
     // Make sure all nodes start running the forward-prop phase.
-    nodeManager.barrier();
+    // nodeManager.barrier();
     printLog(nodeId, "Engine starts running FORWARD...");
 
     timeForwardProcess -= getTimer();
@@ -276,17 +276,17 @@ Engine::runForward(unsigned epoch) {
         }
     }
 
-    // For fused gather and apply, use this block 
-//    {
-//        for (iteration = 0; iteration < numLayers; ++iteration) {
-//            inputTensor = fusedGatherApply(inputTensor, graph.localVtxCnt,
-//              getFeatDim(iteration), getFeatDim(iteration + 1));
-//            if (iteration < numLayers - 1) { // don't need scatter at the last layer.
-//                inputTensor = scatter(inputTensor, graph.localVtxCnt, getFeatDim(iteration + 1));
-//                forwardGhostVerticesDataIn = forwardGhostVerticesDataOut;
-//            }
-//        }
-//    }
+    // For fused gather and apply, use this block
+    // if (pipeline) {
+    //     for (iteration = 0; iteration < numLayers; ++iteration) {
+    //         inputTensor = fusedGatherApply(inputTensor, graph.localVtxCnt,
+    //             getFeatDim(iteration), getFeatDim(iteration + 1));
+    //         if (iteration < numLayers - 1) { // don't need scatter at the last layer.
+    //             inputTensor = scatter(inputTensor, graph.localVtxCnt, getFeatDim(iteration + 1));
+    //             forwardGhostVerticesDataIn = forwardGhostVerticesDataOut;
+    //         }
+    //     }
+    // }
 
     // For Aggregation -> Apply -> Scatter pipeline use this block
     if (pipeline) {
@@ -297,8 +297,8 @@ Engine::runForward(unsigned epoch) {
     }
 
     // TODO: Implement Agg_0 -> Apply_0 -> Scatter_0 -> Agg_1 ... pipeline
-//    {
-//    }
+    // {
+    // }
 
     timeForwardProcess += getTimer();
     printLog(nodeId, "Engine completes FORWARD at iter %u.", iteration);
@@ -316,7 +316,7 @@ Engine::runForward(unsigned epoch) {
  */
 void
 Engine::runBackward(FeatType *initGradTensor) {
-    nodeManager.barrier();
+    // nodeManager.barrier();
     printLog(nodeId, "Engine starts running BACKWARD...");
 
     timeBackwardProcess -= getTimer();
@@ -334,18 +334,18 @@ Engine::runBackward(FeatType *initGradTensor) {
             backwardGhostVerticesDataIn = backwardGhostVerticesDataOut;
             gradTensor = aggregateBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration));
             gradTensor = invokeLambdaBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration - 1), getFeatDim(iteration));
-        } 
+        }
     }
 
     // Fused Gather-Apply
-//    {
-//        gradTensor = invokeLambdaBackward(gradTensor, graph.localVtxCnt, getFeatDim(numLayers - 1), getFeatDim(numLayers));
-//        for (iteration = numLayers - 1; iteration > 0; --iteration) {
-//            gradTensor = scatterBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration));
-//            backwardGhostVerticesDataIn = backwardGhostVerticesDataOut;
-//            gradTensor = fusedGatherApplyBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration - 1), getFeatDim(iteration));
-//        }
-//    }
+    // if (pipeline) {
+    //     gradTensor = invokeLambdaBackward(gradTensor, graph.localVtxCnt, getFeatDim(numLayers - 1), getFeatDim(numLayers));
+    //     for (iteration = numLayers - 1; iteration > 0; --iteration) {
+    //         gradTensor = scatterBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration));
+    //         backwardGhostVerticesDataIn = backwardGhostVerticesDataOut;
+    //         gradTensor = fusedGatherApplyBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration - 1), getFeatDim(iteration));
+    //     }
+    // }
 
     // Fused GAS Backward
     if (pipeline) {
@@ -448,6 +448,8 @@ Engine::output() {
     sprintf(outBuf, "<EM>: Average epoch time %.3lf ms", sum / (float)epochTimes.size());
     outStream << outBuf << std::endl;
     sprintf(outBuf, "<EM>: Final accuracy %.3lf", accuracy);
+    outStream << outBuf << std::endl;
+    sprintf(outBuf, "Relaunched Lambda Cnt: %u", resComm->getRelaunchCnt());
     outStream << outBuf << std::endl;
 
     // Write benchmarking results to log file.
@@ -560,12 +562,24 @@ Engine::invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     resComm->newContextForward(iteration, vtcsTensor, zTensor, outputTensor, vtcsCnt, inFeatDim, outFeatDim);
 
     if (mode == LAMBDA) {
+        double invTimer = getTimer();
         unsigned availLambdaId = 0;
         while (availLambdaId < numLambdasForward) {
             resComm->invokeLambdaForward(iteration, availLambdaId, iteration == numLayers - 1);
             availLambdaId++;
         }
+        if (vecTimeLambdaInvoke.size() < numLayers) {
+            vecTimeLambdaInvoke.push_back(getTimer() - invTimer);
+        } else {
+            vecTimeLambdaInvoke[iteration] += getTimer() - invTimer;
+        }
+        double waitTimer = getTimer();
         resComm->waitLambdaForward(iteration, iteration == numLayers - 1);
+        if (vecTimeLambdaWait.size() < numLayers) {
+            vecTimeLambdaWait.push_back(getTimer() - waitTimer);
+        } else {
+            vecTimeLambdaWait[iteration] += getTimer() - waitTimer;
+        }
     }
     // if in GPU mode we launch gpu computation here and wait the results
     else
@@ -1164,6 +1178,13 @@ Engine::invokeLambdaBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned in
 
     FeatType *outputTensor = new FeatType [vtcsCnt * inFeatDim];
 
+    if (vecTimeLambdaInvoke.size() < 2 * numLayers) {
+        for (unsigned i = vecTimeLambdaInvoke.size(); i < 2 * numLayers; ++i) {
+            vecTimeLambdaInvoke.push_back(0.0);
+            vecTimeLambdaWait.push_back(0.0);
+        }
+    }
+
     resComm->newContextBackward(iteration - 1, gradTensor, outputTensor, savedTensors, localVerticesLabels, vtcsCnt, inFeatDim, outFeatDim, getFeatDim(numLayers));
     resComm->requestBackward(iteration - 1, iteration - 1 == numLayers - 1);
 
@@ -1626,7 +1647,7 @@ Engine::pipelineBackwardGhostGradients(FeatType* inputTensor, unsigned featDim) 
             unsigned endId = (partitionInfo.first + 1) * partitionInfo.second;
             endId = endId > graph.localVtxCnt ? graph.localVtxCnt : endId;
 
-            
+
 
             // Create a series of buckets for batching sendout messages to nodes
             std::vector<unsigned>* batchedIds = new std::vector<unsigned>[numNodes];
@@ -1825,6 +1846,8 @@ Engine::printEngineMetrics() {
     for (double& d : epochTimes) sum += d;
     printLog(nodeId, "<EM>: Average epoch time %.3lf ms", sum / (float)numEpochs);
     printLog(nodeId, "<EM>: Final accuracy %.3lf", accuracy);
+
+    printLog(nodeId, "Relaunched Lambda Cnt: %u", resComm->getRelaunchCnt());
 }
 
 
@@ -2009,7 +2032,7 @@ Engine::readFeaturesFile(std::string &featuresFileName) {
     std::ifstream infile(featuresFileName.c_str());
     if (!infile.good())
         printLog(nodeId, "Cannot open features file: %s [Reason: %s]", featuresFileName.c_str(), std::strerror(errno));
-    
+
     assert(infile.good());
 
     FeaturesHeaderType fHeader;

@@ -50,6 +50,8 @@ public:
       Matrix targetMatrix_, std::vector<Matrix> *savedTensors,
       bool _pipeline = false);
 
+    unsigned tid;
+
 protected:
     LambdaComm *manager;
 
@@ -63,11 +65,11 @@ private:
 
     // Partitions the data matrix according to the partition id and
     // send that partition to the lambda thread for computation.
-    void sendAggregatedChunk(zmq::message_t& client_id, unsigned partId);
+    void sendAggregatedChunk(zmq::message_t& client_id, unsigned partId, unsigned layer);
 
     // Accepts an incoming connection from a lambda thread and receives
     // two matrices, a 'Z' matrix and a corresponding 'activations' matrix.
-    void recvLambdaResults(zmq::message_t& client_id, unsigned partId);
+    void recvLambdaResults(zmq::message_t& client_id, unsigned partId, unsigned layer);
     void fakeRecvChunks(zmq::message_t& client_id, unsigned chunkCnt);
 
     Matrix actMatrix;   // Current layer's feats.
@@ -78,11 +80,12 @@ private:
     //
     // Backward-prop stuff.
     //
+    void sendGCNChunks(zmq::message_t &client_id, unsigned partId, unsigned layer);
 
     // Partitions the needed matrices according to the partition id and
     // send that partition to the lambda thread for computation.
-    void sendChunk(Matrix &srcMat, zmq::message_t& client_id, unsigned partId, bool forward);
-    void recvChunk(Matrix &dstMat, zmq::message_t& client_id, unsigned partId, bool forward);
+    void sendChunk(Matrix &srcMat, zmq::message_t& client_id, unsigned partId, unsigned layer, bool forward);
+    void recvChunk(Matrix &dstMat, zmq::message_t& client_id, unsigned partId, unsigned layer, bool forward);
 
     // Partitions the label matrix given a partition id and
     // and send that partition to the lambda thread for validation
@@ -99,6 +102,21 @@ private:
     // Callback when lambda results are returned
     bool pipeline;
     PairQueue* q_ptr;
+
+    // timing info for profiling
+    unsigned recvTS;
+    unsigned sendTS;
+
+    void setTSinHdr(void *hdr_buf) {
+        sendTS = timestamp_ms();
+        *((unsigned *)hdr_buf + 5) = recvTS;
+        *((unsigned *)hdr_buf + 6) = sendTS;
+    }
+    void setTSinCfm(void *cfm_buf) {
+        sendTS = timestamp_ms();
+        *((unsigned *)cfm_buf) = recvTS;
+        *((unsigned *)cfm_buf + 1) = sendTS;
+    }
 };
 
 
