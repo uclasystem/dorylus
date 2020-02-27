@@ -65,11 +65,11 @@ private:
 
     // Partitions the data matrix according to the partition id and
     // send that partition to the lambda thread for computation.
-    void sendAggregatedChunk(zmq::message_t& client_id, unsigned partId);
+    void sendAggregatedChunk(zmq::message_t& client_id, unsigned partId, unsigned layer);
 
     // Accepts an incoming connection from a lambda thread and receives
     // two matrices, a 'Z' matrix and a corresponding 'activations' matrix.
-    void recvLambdaResults(zmq::message_t& client_id, unsigned partId);
+    void recvLambdaResults(zmq::message_t& client_id, unsigned partId, unsigned layer);
     void fakeRecvChunks(zmq::message_t& client_id, unsigned chunkCnt);
 
     Matrix actMatrix;   // Current layer's feats.
@@ -84,8 +84,8 @@ private:
 
     // Partitions the needed matrices according to the partition id and
     // send that partition to the lambda thread for computation.
-    void sendChunk(Matrix &srcMat, zmq::message_t& client_id, unsigned partId, bool forward);
-    void recvChunk(Matrix &dstMat, zmq::message_t& client_id, unsigned partId, bool forward);
+    void sendChunk(Matrix &srcMat, zmq::message_t& client_id, unsigned partId, unsigned layer, bool forward);
+    void recvChunk(Matrix &dstMat, zmq::message_t& client_id, unsigned partId, unsigned layer, bool forward);
 
     // Partitions the label matrix given a partition id and
     // and send that partition to the lambda thread for validation
@@ -107,18 +107,13 @@ private:
     unsigned recvTS;
     unsigned sendTS;
 
-    unsigned currTS() {
-        auto now = std::chrono::system_clock::now().time_since_epoch();
-        unsigned ts = std::chrono::duration_cast<std::chrono::milliseconds>(now).count() - BASE_TMSP;
-        return ts;
-    }
     void setTSinHdr(void *hdr_buf) {
-        sendTS = currTS();
+        sendTS = timestamp_ms();
         *((unsigned *)hdr_buf + 5) = recvTS;
         *((unsigned *)hdr_buf + 6) = sendTS;
     }
     void setTSinCfm(void *cfm_buf) {
-        sendTS = currTS();
+        sendTS = timestamp_ms();
         *((unsigned *)cfm_buf) = recvTS;
         *((unsigned *)cfm_buf + 1) = sendTS;
     }

@@ -81,37 +81,28 @@ forward_prop_layer(std::string dataserver, std::string weightserver, unsigned dp
         // Request weights matrix of the current layer.
         std::thread t([&] {     // Weight requests run in a separate thread.
             std::cout << "< FORWARD > Asking weightserver..." << whost_port << std::endl;
-            do {
-                weights = requestMatrix(weights_socket, OP::PULL_FORWARD, layer);
-            } while (weights.empty());
+            weights = requestMatrix(weights_socket, OP::PULL_FORWARD, layer);
             std::cout << "< FORWARD > Got data from weightserver." << dhost_port << std::endl;
         });
 
         // Request feature activation matrix of the current layer.
         std::cout << "< FORWARD > Asking dataserver..." << std::endl;
         set_timestamp();
-        do {
-            feats = requestMatrix(data_socket, OP::PULL_FORWARD, id, true);
-        } while (feats.empty());
+        feats = requestMatrix(data_socket, OP::PULL_FORWARD, id, true);
         set_timestamp();
         std::cout << "< FORWARD > Got data from dataserver." << std::endl;
 
         t.join(); // join weight thread
-        if (weights.empty()) {
+        if (weights.empty() || feats.empty()) {
+            deleteMatrix(weights);
+            deleteMatrix(feats);
             JsonValue jsonResponse;
             jsonResponse.WithBool("success", false);
             jsonResponse.WithInteger("type", PROP_TYPE::FORWARD);
             jsonResponse.WithInteger("id", id);
-            jsonResponse.WithString("reason", "Weights could not be loaded");
-            auto response = jsonResponse.View().WriteCompact();
-            return invocation_response::failure(response, "application/json");
-        }
-        if (feats.empty()) {
-            JsonValue jsonResponse;
-            jsonResponse.WithBool("success", false);
-            jsonResponse.WithInteger("type", PROP_TYPE::FORWARD);
-            jsonResponse.WithInteger("id", id);
-            jsonResponse.WithString("reason", "Feats could not be loaded");
+            jsonResponse.WithString("reason", std::string("Weights ") + (weights.empty() ? "are" : "are not") +
+                                    " empty, Feats " + (feats.empty() ? "are" : "are not") +
+                                    " empty. Stopped by graph server");
             auto response = jsonResponse.View().WriteCompact();
             return invocation_response::failure(response, "appliation/json");
         }

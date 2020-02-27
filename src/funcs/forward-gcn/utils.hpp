@@ -27,8 +27,8 @@ requestMatrix(zmq::socket_t& socket, OP op, unsigned id, bool data = false) {
     populateHeader((char *) header.data(), op, id);
     socket.send(header);
 
-    Timer reqTimer;
-    reqTimer.start();
+    // Timer reqTimer;
+    // reqTimer.start();
 
     // Listen on respond.
     zmq::message_t respHeader;
@@ -48,13 +48,10 @@ requestMatrix(zmq::socket_t& socket, OP op, unsigned id, bool data = false) {
 
     // Parse the respond.
     unsigned layerResp = parse<unsigned>((char *) respHeader.data(), 1);
-    if (layerResp == -2) {
+    if (layerResp != 0) { // Failed.
         std::cerr << "[ ERROR ] Discard execution." << std::endl;
-        throw std::invalid_argument("Stopped by graph server");
-    } else if (layerResp == -1) {      // Failed.
-        std::cerr << "[ ERROR ] No corresponding matrix chunk!" << std::endl;
         return Matrix();
-    } else {                    // Get matrix data.
+    } else {              // Get matrix data.
         unsigned rows = parse<unsigned>((char *) respHeader.data(), 2);
         unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
 

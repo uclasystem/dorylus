@@ -107,6 +107,7 @@ public:
     unsigned numLambdasBackward;
     unsigned numListeners;
 
+    bool forward;
     unsigned currLayer;
 
     std::string wServersFile;

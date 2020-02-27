@@ -65,10 +65,8 @@ requestTensors(zmq::socket_t& socket, OP op, unsigned partId, unsigned layer, st
     // }
 
     unsigned layerResp = parse<unsigned>((char*) respHeader.data(), 1);
-    if (layerResp == -2) {
+    if (layerResp != 0) {
         std::cerr << "[ ERROR ] Discard execution." << std::endl;
-        throw std::invalid_argument("Stopped by graph server");
-    } else if (layerResp == -1) {
         std::cerr << "[ ERROR ] No corresponding matrix" << std::endl;
         return -1;
     } else {
@@ -98,9 +96,9 @@ requestTensors(zmq::socket_t& socket, OP op, unsigned partId, unsigned layer, st
 
 
 static Matrix
-requestTensor(zmq::socket_t& socket, OP op, unsigned partId, TYPE type = TYPE::AH, unsigned layer = 0) {
+requestWeight(zmq::socket_t& socket, OP op, unsigned layer) {
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char*) header.data(), op, partId, type, layer);
+    populateHeader((char*) header.data(), op, layer);
     socket.send(header);
 
     // Timer reqTimer;
@@ -121,15 +119,12 @@ requestTensor(zmq::socket_t& socket, OP op, unsigned partId, TYPE type = TYPE::A
     // }
 
     unsigned layerResp = parse<unsigned>((char*) respHeader.data(), 1);
-    if (layerResp == -2) {
-        std::cerr << "[ ERROR ] Discard execution." << std::endl;
-        throw std::invalid_argument("Stopped by graph server");
-    } else if (layerResp == -1) {
+    if (layerResp != 0) {
         std::cerr << "[ ERROR ] No corresponding matrix" << std::endl;
         return Matrix();
     } else {
         unsigned rows = parse<unsigned>((char*) respHeader.data(), 2);
-        unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
+        unsigned cols = parse<unsigned>((char*) respHeader.data(), 3);
 
         zmq::message_t matxData(rows * cols * sizeof(FeatType));
         socket.recv(&matxData);
@@ -222,20 +217,30 @@ gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, 
     std::vector<Matrix> savedTensors;
 
     try {
-        std::thread weightsThd([&] {
-            std::cout << "< BACKWARD > Getting weights" << std::endl;
-            do {
-                weights = requestTensor(weight_socket, OP::PULL_BACKWARD, layer);
-            } while (weights.empty());
-        });
+        std::cout << "< BACKWARD > Requesting weights" << std::endl;
+        weights = requestWeight(weight_socket, OP::PULL_BACKWARD, layer);
 
         std::cout << "< BACKWARD > Getting savedTensors" << std::endl;
         int ret = 0;
         set_timestamp();
-        do {
-            ret = requestTensors(data_socket, OP::PULL_BACKWARD, id, layer, savedTensors);
-        } while (ret);
+        ret = requestTensors(data_socket, OP::PULL_BACKWARD, id, layer, savedTensors);
         set_timestamp();
+        if (ret != 0 || weights.empty()) {
+            deleteMatrix(weights);
+            for (Matrix &mat : savedTensors) {
+                deleteMatrix(mat);
+            }
+
+            JsonValue jsonResponse;
+            jsonResponse.WithBool("success", false);
+            jsonResponse.WithInteger("type", PROP_TYPE::BACKWARD);
+            jsonResponse.WithInteger("id", id);
+            jsonResponse.WithString("reason", std::string("Weights ") + (weights.empty() ? "are" : "are not") +
+                                    " empty, Feats " + (ret != 0 ? "are" : "are not") +
+                                    " empty. Stopped by graph server");
+            auto response = jsonResponse.View().WriteCompact();
+            return invocation_response::failure(response, "appliation/json");
+        }
         Matrix &predictions = savedTensors[0];
         Matrix &labels = savedTensors[1];
         Matrix &ah = savedTensors[2];
@@ -247,7 +252,6 @@ gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, 
         deleteMatrix(labels);
 
         // d_out * W^T
-        weightsThd.join();
         std::cout << "< BACKWARD > Computing gradient" << std::endl;
         Matrix interGrad = d_output.dot(weights, false, true);
         deleteMatrix(weights);
@@ -258,18 +262,15 @@ gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, 
         deleteMatrix(ah);
         deleteMatrix(d_output);
 
-        std::thread wThd([&] {
-            std::cout << "< BACKWARD > Sending weight updates" << std::endl;
-            sendMatrix(weightUpdates, weight_socket, layer);
-            deleteMatrix(weightUpdates);
-        });
-
         std::cout << "< BACKWARD > Sending gradient to graph server" << std::endl;
         set_timestamp();
         sendMatrix(interGrad, data_socket, id, true);
         set_timestamp();
         deleteMatrix(interGrad);
-        wThd.join();
+
+        std::cout << "< BACKWARD > Sending weight updates" << std::endl;
+        sendMatrix(weightUpdates, weight_socket, layer);
+        deleteMatrix(weightUpdates);
     } catch(std::exception &ex) {
         deleteMatrix(weights);
         for (Matrix &mat : savedTensors) {
@@ -305,20 +306,13 @@ gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id,
 
     try {
         // REQUESTING ALL NEEDED TENSORS FOR COMPUTATION
-        std::thread weightsThd([&] {
-            std::cout << "< BACKWARD > Requesting weights" << std::endl;
-            do {
-                weights = requestTensor(weight_socket, OP::PULL_BACKWARD, layer);
-            } while (weights.empty());
-        });
-        weightsThd.join();
+        std::cout << "< BACKWARD > Requesting weights" << std::endl;
+        weights = requestWeight(weight_socket, OP::PULL_BACKWARD, layer);
 
         std::cout << "< BACKWARD > Requesting savedTensors" << std::endl;
         set_timestamp();
         int ret = 0;
-        do {
-            ret = requestTensors(data_socket, OP::PULL_BACKWARD, id, layer, savedTensors);
-        } while (ret);
+        ret = requestTensors(data_socket, OP::PULL_BACKWARD, id, layer, savedTensors);
         set_timestamp();
         Matrix &grad = savedTensors[0];
         Matrix &z = savedTensors[1];
@@ -349,18 +343,16 @@ gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id,
         deleteMatrix(interGrad);
         // END BACKWARDS COMPUTATION
         // SENDING BACKWARDS RESULTS
-        std::thread wThd([&] {
-            std::cout << "< BACKWARD > Sending weight updates" << std::endl;
-            sendMatrix(weightUpdates, weight_socket, layer);
-            deleteMatrix(weightUpdates);
-        });
 
         std::cout << "< BACKWARD > Sending gradient to graph server" << std::endl;
         set_timestamp();
         sendMatrix(resultGrad, data_socket, id, true);
         set_timestamp();
         deleteMatrix(resultGrad);
-        wThd.join();
+
+        std::cout << "< BACKWARD > Sending weight updates" << std::endl;
+        sendMatrix(weightUpdates, weight_socket, layer);
+        deleteMatrix(weightUpdates);
         // END SENDING BACKWARDS RESULTS
     } catch(std::exception &ex) {
         deleteMatrix(weights);
@@ -405,7 +397,6 @@ static invocation_response
 backward_prop(std::string dataserver, std::string weightserver, unsigned dport,
               unsigned wport, unsigned id, unsigned layer, bool lastLayer) {
     zmq::context_t ctx(1);
-    tsidx = 0;
 
     //
     // Lambda socket identity is set to:
@@ -422,11 +413,11 @@ backward_prop(std::string dataserver, std::string weightserver, unsigned dport,
     *(unsigned *)(identity + sizeof(unsigned) * 2) = rand();
     memcpy(identity + sizeof(unsigned) * 3, (char *) dataserver.c_str(), dataserver.length());
 
-    zmq::socket_t weights_socket(ctx, ZMQ_DEALER);
-    weights_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
+    zmq::socket_t weight_socket(ctx, ZMQ_DEALER);
+    weight_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
     char whost_port[50];
     sprintf(whost_port, "tcp://%s:%u", weightserver.c_str(), wport);
-    weights_socket.connect(whost_port);
+    weight_socket.connect(whost_port);
 
     zmq::socket_t data_socket(ctx, ZMQ_DEALER);
     data_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
@@ -435,10 +426,10 @@ backward_prop(std::string dataserver, std::string weightserver, unsigned dport,
     data_socket.connect(dhost_port);
     if (lastLayer) {
         std::cout << "< BACKWARD > Computing gradient from loss" << std::endl;
-        return gradLoss(data_socket, weights_socket, id, layer);
+        return gradLoss(data_socket, weight_socket, id, layer);
     } else {
         std::cout << "< BACKWARD > Computing gradient for this layer" << std::endl;
-        return gradLayer(data_socket, weights_socket, id, layer);
+        return gradLayer(data_socket, weight_socket, id, layer);
     }
 
     // impossible to reach here
@@ -454,6 +445,8 @@ backward_prop(std::string dataserver, std::string weightserver, unsigned dport,
 /** Handler that hooks with lambda API. */
 static invocation_response
 my_handler(invocation_request const& request) {
+    tsidx = 0;
+
     JsonValue json(request.payload);
     auto v = json.View();
 
