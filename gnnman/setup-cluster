@@ -37,14 +37,14 @@ sed -i s/{{user}}/$( python3 -m ec2man graph user )/ kill-all
 sed -i s/{{WSERVER0}}/$( python3 -m ec2man weight 0 prip )/ kill-all
 sed -i s/{{GSERVER0}}/$( python3 -m ec2man graph 0 prip )/ kill-all
 
-${EC2MAN_CMD} graph all put wserverip run/wserverport dshmachines run/*.config run/gserverport run/dataport run/ctrlport run/nodeport run/numlambdasforward run/numlambdasbackward kill-all ~/.aws
+${EC2MAN_CMD} graph all rsync wserverip run/wserverport dshmachines run/*.config run/gserverport run/dataport run/ctrlport run/nodeport run/numlambdasforward run/numlambdasbackward kill-all ~/.aws
 rm -f dshmachines kill-all wserverip
 
 NUM_GRAPH_NODES=$(( $( ${EC2MAN_CMD} graph info | wc -l | awk '{print $1}' ) - 1 ))
 for i in $( seq 0 $(( ${NUM_GRAPH_NODES} - 1 )) ); do
     ${EC2MAN_CMD} graph $i prip > myprip
     ${EC2MAN_CMD} graph $i pubip > mypubip
-    ${EC2MAN_CMD} graph $i put myprip mypubip
+    ${EC2MAN_CMD} graph $i rsync myprip mypubip
     rm -f myprip mypubip
 done
 
@@ -54,10 +54,10 @@ echo "Processing context 'weight'..."
 NUM_GRAPH_NODES=$(( $( ${EC2MAN_CMD} weight info | wc -l | awk '{print $1}' ) - 1 ))
 for i in $( seq 0 $(( ${NUM_GRAPH_NODES} - 1 )) ); do
     ${EC2MAN_CMD} weight $i prip > myprip
-    ${EC2MAN_CMD} weight $i put myprip
+    ${EC2MAN_CMD} weight $i rsync myprip
     rm -f myprip
 done
 
 ${EC2MAN_CMD} weight dshfile > dshmachines
-${EC2MAN_CMD} weight all put dshmachines run/dataport run/*.config run/wserverport
+${EC2MAN_CMD} weight all rsync dshmachines run/dataport run/*.config run/wserverport
 rm -f dshmachines
