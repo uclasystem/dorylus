@@ -171,7 +171,7 @@ void LambdaComm::invokeLambda(Aws::String funcName, const char* dataserver, unsi
     jsonPayload.WithInteger("id", id);
     jsonPayload.WithBool("prop_dir", forward);
     jsonPayload.WithBool("lastLayer", lastLayer);
-    jsonPayload.WithBool("test", test);
+    jsonPayload.WithBool("test", true);
 
     *payload << jsonPayload.View().WriteReadable();
     invReq.SetBody(payload);
@@ -400,7 +400,7 @@ LambdaComm::requestInvoke(unsigned layer, unsigned lambdaId, bool lastLayer) {
 
     char* weightServerIp = weightservers[(nodeId * numLambdasForward + lambdaId) % weightservers.size()];
     invokeLambda("gcn", nodeIp.c_str(), dataserverPort, weightServerIp,
-      weightserverPort, layer, lambdaId, lastLayer);
+      weightserverPort, layer, lambdaId, true, lastLayer);
 }
 
 void

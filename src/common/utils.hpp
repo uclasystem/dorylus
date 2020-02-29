@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <sys/time.h>
+#include <limits.h>
 
 
 /** Feature type is float, so be consistent. */
@@ -65,6 +66,16 @@ parseName(const char* buf) {
 // ID represents either layer or data partition, depending on server responding.
 static inline void
 populateHeader(char* header, unsigned op, unsigned field1 = 0, unsigned field2 = 0, unsigned field3 = 0, unsigned field4 = 0) {
+    serialize<unsigned>(header, 0, op);
+    serialize<unsigned>(header, 1, field1);
+    serialize<unsigned>(header, 2, field2);
+    serialize<unsigned>(header, 3, field3);
+    serialize<unsigned>(header, 4, field4);
+}
+
+static inline void
+populateHeader(void* ptr, unsigned op, unsigned field1 = 0, unsigned field2 = 0, unsigned field3 = 0, unsigned field4 = 0) {
+    char* header = (char*)ptr;
     serialize<unsigned>(header, 0, op);
     serialize<unsigned>(header, 1, field1);
     serialize<unsigned>(header, 2, field2);

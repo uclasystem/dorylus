@@ -90,152 +90,154 @@ forwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
 invocation_response
 finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
   unsigned partId, unsigned layer) {
-    try {
-        Matrix w, ah, z, predictions, labels;
-        std::thread commThread;
-
-        // Request weights matrix of the current layer.
-        commThread = std::thread([&] {     // Weight requests run in a separate thread.
-            do {
-                w = requestTensor(weights_socket, OP::PULL_FORWARD, layer);
-            } while (weights.empty());
-        });
-
-        // Request feature activation matrix of the current layer.
-        std::cout << "< FORWARD > Asking dataserver..." << std::endl;
-        do {
-            ah = requestTensor(data_socket, OP::PULL_FORWARD, partId);
-        } while (feats.empty());
-        std::cout << "< FORWARD > Got data from dataserver." << std::endl;
-
-        commThread.join();
-
-        if (weights.empty()) {
-            JsonValue jsonResponse;
-            jsonResponse.WithBool("success", false);
-            jsonResponse.WithString("reason", "Weights empty");
-
-            auto response = jsonResponse.View().WriteCompact();
-            return invocation_response::success(response, "application/json");
-        }
-        if (feats.empty()) {
-            JsonValue jsonResponse;
-            jsonResponse.WithBool("success", false);
-            jsonResponse.WithString("reason", "Features empty");
-
-            auto response = jsonResponse.View().WriteCompact();
-            return invocation_response::success(response, "appliation/json");
-        }
-
-        // Get labels for backward
-        commThread = std::thread([&] {
-            do {
-                labels = requestTensor(data_socket, OP::PULL_BACKWARD, partId, TYPE::LAB);
-            while (labels.empty());
-        });
-        // Multiplication.
-        z = ah.dot(w);
-        predictions = softmax(z);
-        delete[] z.getData();
-
-        commThread.join();
-        // d_o = softmax`(predictions)
-        Matrix d_out = predictions - labels;
-        delete[] predictions.getData();
-        delete[] labels.getData();
-
-        // d_o * W^T
-        Matrix interGrad = d_out.dot(w, false, true);
-        delete[] weights.getData();
-        sendMatrix(interGrad, data_socket, partId);
-
-        // AH^T * d_o
-        Matrix d_W = ah.dot(d_out, true, false);
-        delete[] ah.getData();
-        delete[] d_out.getData();
-    } catch(std::exception &ex) {
-        JsonValue jsonResponse;
-        jsonResponse.WithBool("success", false);
-        jsonResponse.WithString("reason", ex.what());
-
-        auto response = jsonResponse.View().WriteCompact();
-        return invocation_response::success(response, "application/json");
-    }
+//    try {
+//        Matrix w, ah, z, predictions, labels;
+//        std::thread commThread;
+//
+//        // Request weights matrix of the current layer.
+//        commThread = std::thread([&] {     // Weight requests run in a separate thread.
+//            do {
+//                w = requestTensor(weights_socket, OP::PULL_FORWARD, layer);
+//            } while (weights.empty());
+//        });
+//
+//        // Request feature activation matrix of the current layer.
+//        std::cout << "< FORWARD > Asking dataserver..." << std::endl;
+//        do {
+//            ah = requestTensor(data_socket, OP::PULL_FORWARD, partId);
+//        } while (feats.empty());
+//        std::cout << "< FORWARD > Got data from dataserver." << std::endl;
+//
+//        commThread.join();
+//
+//        if (weights.empty()) {
+//            JsonValue jsonResponse;
+//            jsonResponse.WithBool("success", false);
+//            jsonResponse.WithString("reason", "Weights empty");
+//
+//            auto response = jsonResponse.View().WriteCompact();
+//            return invocation_response::success(response, "application/json");
+//        }
+//        if (feats.empty()) {
+//            JsonValue jsonResponse;
+//            jsonResponse.WithBool("success", false);
+//            jsonResponse.WithString("reason", "Features empty");
+//
+//            auto response = jsonResponse.View().WriteCompact();
+//            return invocation_response::success(response, "appliation/json");
+//        }
+//
+//        // Get labels for backward
+//        commThread = std::thread([&] {
+//            do {
+//                labels = requestTensor(data_socket, OP::PULL_BACKWARD, partId, TYPE::LAB);
+//            while (labels.empty());
+//        });
+//        // Multiplication.
+//        z = ah.dot(w);
+//        predictions = softmax(z);
+//        delete[] z.getData();
+//
+//        commThread.join();
+//        // d_o = softmax`(predictions)
+//        Matrix d_out = predictions - labels;
+//        delete[] predictions.getData();
+//        delete[] labels.getData();
+//
+//        // d_o * W^T
+//        Matrix interGrad = d_out.dot(w, false, true);
+//        delete[] weights.getData();
+//        sendMatrix(interGrad, data_socket, partId);
+//
+//        // AH^T * d_o
+//        Matrix d_W = ah.dot(d_out, true, false);
+//        delete[] ah.getData();
+//        delete[] d_out.getData();
+//    } catch(std::exception &ex) {
+//        JsonValue jsonResponse;
+//        jsonResponse.WithBool("success", false);
+//        jsonResponse.WithString("reason", ex.what());
+//
+//        auto response = jsonResponse.View().WriteCompact();
+//        return invocation_response::success(response, "application/json");
+//    }
 }
 
 invocation_response
 backwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket,
   unsigned partId, unsigned layer) {
-    Matrix grad, z, ah, w;
-    std::commThread = std::thread([&]{
-        std::cout << "< BACKWARD > Requesting weights" << std::endl;
-        do {
-            w = requestTensor(weight_socket, OP::PULL_BACKWARD, layer);
-        } while (weights.empty());
-    });
-
-    do {
-        std::cout << "< BACKWARD > Requesting gradient from graph server" << std::endl;
-        grad = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::GRAD, layer);
-    } while (grad.empty());
-
-    do {
-        std::cout << "< BACKWARD > Requesting Z values" << std::endl;
-        z = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::Z, layer);
-    } while (z.empty());
-
-    std::cout << "< BACKWARD > Requesting AH" << std::endl;
-    do {
-        ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::AH, layer);
-    } while (ah.empty());
-    commThread.join();
-
-    // BACKWARDS COMPUTATION
-    std::cout << "< BACKWARD > Calculating derivative of activation "
-              << z.shape() << std::endl;
-    Matrix actDeriv = activateDerivative(z);
-    delete[] z.getData();
-
-    std::cout << "< BACKWARD > Hadamard multiplication" << grad.shape() << " "
-              << actDeriv.shape() << std::endl;
-    Matrix interGrad = grad * actDeriv;
-    delete[] grad.getData();
-    delete[] actDeriv.getData();
-
-    std::cout << "< BACKWARD > MatMul(gradient, weights) " << interGrad.shape() << " "
-              << weights.shape() << std::endl;
-    Matrix resultGrad = interGrad.dot(weights, false, true);
-    delete[] weights.getData();
-
-    std::cout << "< BACKWARD > Computing weight updates " << ah.shape() << " "
-              << interGrad.shape() << std::endl;
-    Matrix weightUpdates = ah.dot(interGrad, true, false);
-    delete[] ah.getData();
-    delete[] interGrad.getData();
-    // END BACKWARDS COMPUTATION
-
-    // SENDING BACKWARDS RESULTS
-    std::thread wThd([&] {
-        std::cout << "< BACKWARD > Sending weight updates" << std::endl;
-        sendMatrix(weightUpdates, weight_socket, layer);
-        delete[] weightUpdates.getData();
-    });
-
-    std::cout << "< BACKWARD > Sending gradient to graph server" << std::endl;
-    sendMatrix(resultGrad, data_socket, id);
-    delete[] resultGrad.getData();
-    wThd.join();
-    // END SENDING BACKWARDS RESULTS
+//    Matrix grad, z, ah, w;
+//    std::commThread = std::thread([&]{
+//        std::cout << "< BACKWARD > Requesting weights" << std::endl;
+//        do {
+//            w = requestTensor(weight_socket, OP::PULL_BACKWARD, layer);
+//        } while (weights.empty());
+//    });
+//
+//    do {
+//        std::cout << "< BACKWARD > Requesting gradient from graph server" << std::endl;
+//        grad = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::GRAD, layer);
+//    } while (grad.empty());
+//
+//    do {
+//        std::cout << "< BACKWARD > Requesting Z values" << std::endl;
+//        z = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::Z, layer);
+//    } while (z.empty());
+//
+//    std::cout << "< BACKWARD > Requesting AH" << std::endl;
+//    do {
+//        ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::AH, layer);
+//    } while (ah.empty());
+//    commThread.join();
+//
+//    // BACKWARDS COMPUTATION
+//    std::cout << "< BACKWARD > Calculating derivative of activation "
+//              << z.shape() << std::endl;
+//    Matrix actDeriv = activateDerivative(z);
+//    delete[] z.getData();
+//
+//    std::cout << "< BACKWARD > Hadamard multiplication" << grad.shape() << " "
+//              << actDeriv.shape() << std::endl;
+//    Matrix interGrad = grad * actDeriv;
+//    delete[] grad.getData();
+//    delete[] actDeriv.getData();
+//
+//    std::cout << "< BACKWARD > MatMul(gradient, weights) " << interGrad.shape() << " "
+//              << weights.shape() << std::endl;
+//    Matrix resultGrad = interGrad.dot(weights, false, true);
+//    delete[] weights.getData();
+//
+//    std::cout << "< BACKWARD > Computing weight updates " << ah.shape() << " "
+//              << interGrad.shape() << std::endl;
+//    Matrix weightUpdates = ah.dot(interGrad, true, false);
+//    delete[] ah.getData();
+//    delete[] interGrad.getData();
+//    // END BACKWARDS COMPUTATION
+//
+//    // SENDING BACKWARDS RESULTS
+//    std::thread wThd([&] {
+//        std::cout << "< BACKWARD > Sending weight updates" << std::endl;
+//        sendMatrix(weightUpdates, weight_socket, layer);
+//        delete[] weightUpdates.getData();
+//    });
+//
+//    std::cout << "< BACKWARD > Sending gradient to graph server" << std::endl;
+//    sendMatrix(resultGrad, data_socket, id);
+//    delete[] resultGrad.getData();
+//    wThd.join();
+//    // END SENDING BACKWARDS RESULTS
 }
 
-invocation_response
+void
 testLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, unsigned partId,
   unsigned layer) {
-    const char* tensor_names[] = {"AH0", "Z0"};
+    std::cout << "Running test Layer" << std::endl;
+
+    const char* tensor_names[] = {"AH0", "T0"};
     const char* weight_names[] = {"W0"};
 
-    std::vector<Matrix> matrices = reqTensors(data_socket, partId, 1, tensor_names);
-    std::vector<Matrix> weights = reqTensors(weight_socket, partId, 1, weight_names);
+    std::vector<Matrix> matrices = reqTensors(data_socket, partId, 2, tensor_names);
+    std::vector<Matrix> weights = reqTensors(weights_socket, partId, 1, weight_names);
 
     for (auto& M : matrices)
         std::cout << M.str() << std::endl;

@@ -356,6 +356,12 @@ Engine::runEpoch(unsigned epoch) {
     FeatType* ahTensor = new FeatType[graph.localVtxCnt * featDim];
     std::string ahTensorName = "AH" + std::to_string(iteration);
     saveTensor(ahTensorName, graph.localVtxCnt, featDim, ahTensor);
+    FeatType* testTensor = new FeatType[graph.localVtxCnt * featDim];
+    for (uint32_t u = 0; u < graph.localVtxCnt * featDim; ++u) {
+        testTensor[u] = 1.2;
+    }
+    std::string testName = "T" + std::to_string(iteration);
+    saveTensor(testName, graph.localVtxCnt, featDim, testTensor);
 
     AggOPArgs args = {ahTensor, inputTensor, graph.localVtxCnt, featDim};
     auto computeFn = std::bind(&Engine::aggregateCompute, this, std::placeholders::_1,

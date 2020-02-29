@@ -145,12 +145,12 @@ Matrix recvTensor(zmq::socket_t& socket) {
     return Matrix(name, rows, cols, data);
 }
 
-std::vector<Matrix> reqTensors(zmq::socket_t& socket, unsigned partId, unsigned numTensors, char** tensorNames) {
+std::vector<Matrix> reqTensors(zmq::socket_t& socket, unsigned partId, unsigned numTensors, const char** tensorNames) {
     zmq::message_t header(HEADER_SIZE);
     populateHeader(header.data(), OP::PULL, partId);
     socket.send(header, ZMQ_SNDMORE);
     for (uint32_t u = 0; u < numTensors; ++u) {
-        char* name = tensorNames[u];
+        const char* name = tensorNames[u];
 
         zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
         populateHeader(tensorHeader.data(), partId, name);
