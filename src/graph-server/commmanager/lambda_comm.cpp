@@ -154,6 +154,29 @@ void LambdaComm::invokeLambda(Aws::String funcName, const char* dataserver, unsi
     m_client->InvokeAsync(invReq, callback);
 }
 
+void LambdaComm::invokeLambda(Aws::String funcName, const char* dataserver, unsigned dport,
+  char* weightserver, unsigned wport, unsigned layer, unsigned id, bool forward, bool lastLayer) {
+    Aws::Lambda::Model::InvokeRequest invReq;
+    invReq.SetFunctionName(funcName);
+    invReq.SetInvocationType(Aws::Lambda::Model::InvocationType::RequestResponse);
+    invReq.SetLogType(Aws::Lambda::Model::LogType::Tail);
+    std::shared_ptr<Aws::IOStream> payload = Aws::MakeShared<Aws::StringStream>("LambdaInvoke");
+
+    Aws::Utils::Json::JsonValue jsonPayload;
+    jsonPayload.WithString("dataserver", dataserver);
+    jsonPayload.WithString("weightserver", weightserver);
+    jsonPayload.WithInteger("wport", wport);
+    jsonPayload.WithInteger("dport", dport);
+    jsonPayload.WithInteger("layer", layer);    // For forward-prop: layer-ID; For backward-prop: numLayers.
+    jsonPayload.WithInteger("id", id);
+    jsonPayload.WithBool("prop_dir", forward);
+    jsonPayload.WithBool("lastLayer", lastLayer);
+    jsonPayload.WithBool("test", test);
+
+    *payload << jsonPayload.View().WriteReadable();
+    invReq.SetBody(payload);
+    m_client->InvokeAsync(invReq, callback);
+}
 
 void LambdaComm::callback(const Aws::Lambda::LambdaClient *client,
   const Aws::Lambda::Model::InvokeRequest &invReq,

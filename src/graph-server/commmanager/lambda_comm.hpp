@@ -55,9 +55,7 @@ class LambdaWorker;
  *
  */
 class LambdaComm : public ResourceComm {
-
 public:
-
     LambdaComm(CommInfo &commInfo);
     ~LambdaComm();
     void connectToWeightServers();
@@ -66,6 +64,9 @@ public:
     void invokeLambda(Aws::String funcName, const char* dataserver,
       unsigned dport, char* weightserver, unsigned wport, unsigned layer,
       unsigned id, bool lastLayer);
+    void invokeLambda(Aws::String funcName, const char* dataserver,
+      unsigned dport, char* weightserver, unsigned wport, unsigned layer,
+      unsigned id, bool forward, bool lastLayer);
     static void callback(const Aws::Lambda::LambdaClient *client,
       const Aws::Lambda::Model::InvokeRequest &invReq,
       const Aws::Lambda::Model::InvokeOutcome &outcome,

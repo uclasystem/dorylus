@@ -55,7 +55,7 @@ forwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
             jsonResponse.WithString("reason", "Weights empty");
 
             auto response = jsonResponse.View().WriteCompact();
-            return invocation_response::failure(response, "application/json");
+            return invocation_response::success(response, "application/json");
         }
         if (feats.empty()) {
             JsonValue jsonResponse;
@@ -63,7 +63,7 @@ forwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
             jsonResponse.WithString("reason", "Features empty");
 
             auto response = jsonResponse.View().WriteCompact();
-            return invocation_response::failure(response, "appliation/json");
+            return invocation_response::success(response, "appliation/json");
         }
 
         // Multiplication.
@@ -83,7 +83,7 @@ forwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
         jsonResponse.WithString("reason", ex.what());
 
         auto response = jsonResponse.View().WriteCompact();
-        return invocation_response::failure(response, "application/json");
+        return invocation_response::success(response, "application/json");
     }
 }
 
@@ -116,7 +116,7 @@ finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
             jsonResponse.WithString("reason", "Weights empty");
 
             auto response = jsonResponse.View().WriteCompact();
-            return invocation_response::failure(response, "application/json");
+            return invocation_response::success(response, "application/json");
         }
         if (feats.empty()) {
             JsonValue jsonResponse;
@@ -124,7 +124,7 @@ finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
             jsonResponse.WithString("reason", "Features empty");
 
             auto response = jsonResponse.View().WriteCompact();
-            return invocation_response::failure(response, "appliation/json");
+            return invocation_response::success(response, "appliation/json");
         }
 
         // Get labels for backward
@@ -159,7 +159,7 @@ finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
         jsonResponse.WithString("reason", ex.what());
 
         auto response = jsonResponse.View().WriteCompact();
-        return invocation_response::failure(response, "application/json");
+        return invocation_response::success(response, "application/json");
     }
 }
 
@@ -228,6 +228,22 @@ backwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket,
     // END SENDING BACKWARDS RESULTS
 }
 
+invocation_response
+testLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, unsigned partId,
+  unsigned layer) {
+    const char* tensor_names[] = {"AH0", "Z0"};
+    const char* weight_names[] = {"W0"};
+
+    std::vector<Matrix> matrices = reqTensors(data_socket, partId, 1, tensor_names);
+    std::vector<Matrix> weights = reqTensors(weight_socket, partId, 1, weight_names);
+
+    for (auto& M : matrices)
+        std::cout << M.str() << std::endl;
+
+    for (auto& W : weights)
+        std::cout << W.str() << std::endl;
+}
+
 
 /**
  *
@@ -244,7 +260,7 @@ backwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket,
 invocation_response
 apply_phase(std::string dataserver, std::string weightserver, unsigned dport,
   unsigned wport, unsigned id, unsigned layer, unsigned prop_dir,
-  bool lastLayer) {
+  bool lastLayer, bool test) {
     zmq::context_t ctx(1);
 
     // Creating identity
@@ -274,15 +290,19 @@ apply_phase(std::string dataserver, std::string weightserver, unsigned dport,
         jsonResponse.WithString("reason", ex.what());
 
         auto response = jsonResponse.View().WriteCompact();
-        return invocation_response::failure(response, "application/json");
+        return invocation_response::success(response, "application/json");
     }
 
-    if (prop_dir == PROP_TYPE::FORWARD && !lastLayer) {
-        forwardLayer(data_socket, weights_socket, id, layer);
-    } else if (prop_dir == PROP_TYPE::FORWARD && lastLayer) {
-        finalLayer(data_socket, weights_socket, id, layer);
-    } else if (prop_dir == PROP_TYPE::BACKWARD) {
-        backwardLayer(data_socket, weights_socket, id, layer);
+    if (!test) {
+        if (prop_dir == PROP_TYPE::FORWARD && !lastLayer) {
+            forwardLayer(data_socket, weights_socket, id, layer);
+        } else if (prop_dir == PROP_TYPE::FORWARD && lastLayer) {
+            finalLayer(data_socket, weights_socket, id, layer);
+        } else if (prop_dir == PROP_TYPE::BACKWARD) {
+            backwardLayer(data_socket, weights_socket, id, layer);
+        }
+    } else {
+        testLayer(data_socket, weights_socket, id, layer);
     }
 
     JsonValue jsonResponse;
@@ -307,12 +327,13 @@ my_handler(invocation_request const& request) {
     unsigned chunkId = v.GetInteger("id");
     unsigned prop_type = v.GetInteger("prop_dir");
     lastLayer = v.GetBool("lastLayer");
+    bool test = v.GetBool("test");
 
     std::cout << "[ACCEPTED] Thread " << chunkId << " is requested from "
               << dataserver << ":" << dport << ", FORWARD layer " << layer
               << "." << std::endl;
 
-    return apply_phase(dataserver, weightserver, dport, wport, chunkId, layer, prop_type, lastLayer);
+    return apply_phase(dataserver, weightserver, dport, wport, chunkId, layer, prop_type, lastLayer, test);
 }
 
 int
