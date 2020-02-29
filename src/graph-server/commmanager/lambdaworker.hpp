@@ -114,8 +114,8 @@ private:
     }
     void setTSinCfm(void *cfm_buf) {
         sendTS = timestamp_ms();
-        *((unsigned *)cfm_buf) = recvTS;
-        *((unsigned *)cfm_buf + 1) = sendTS;
+        *((unsigned *)cfm_buf + 1) = recvTS;
+        *((unsigned *)cfm_buf + 2) = sendTS;
     }
 };
 

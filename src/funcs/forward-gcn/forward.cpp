@@ -31,6 +31,16 @@ using namespace Aws::Utils::Json;
 unsigned timestamps[30];
 unsigned tsidx;
 
+static invocation_response
+constructResp(bool success, unsigned id, std::string msg) {
+    JsonValue jsonResponse;
+    jsonResponse.WithBool("success", success);
+    jsonResponse.WithInteger("type", PROP_TYPE::BACKWARD);
+    jsonResponse.WithInteger("id", id);
+    jsonResponse.WithString("message", msg);
+    auto response = jsonResponse.View().WriteCompact();
+    return invocation_response::success(response, "appliation/json");
+}
 
 /**
  *
@@ -80,29 +90,23 @@ forward_prop_layer(std::string dataserver, std::string weightserver, unsigned dp
 
         // Request weights matrix of the current layer.
         std::cout << "< FORWARD > Asking weightserver..." << whost_port << std::endl;
-        weights = requestMatrix(weights_socket, OP::PULL_FORWARD, layer);
+        weights = requestWeight(weights_socket, OP::PULL_FORWARD, layer);
         std::cout << "< FORWARD > Got data from weightserver." << dhost_port << std::endl;
 
         // Request feature activation matrix of the current layer.
         std::cout << "< FORWARD > Asking dataserver..." << std::endl;
         set_timestamp();
-        feats = requestMatrix(data_socket, OP::PULL_FORWARD, id, true);
+        feats = requestMatrix(data_socket, OP::PULL_FORWARD, id);
         set_timestamp();
         std::cout << "< FORWARD > Got data from dataserver." << std::endl;
 
         if (weights.empty() || feats.empty()) {
-            JsonValue jsonResponse;
-            jsonResponse.WithBool("success", false);
-            jsonResponse.WithInteger("type", PROP_TYPE::FORWARD);
-            jsonResponse.WithInteger("id", id);
-            jsonResponse.WithString("reason", std::string("Weights ") + (weights.empty() ? "are" : "are not") +
+            auto resp = constructResp(false, id, std::string("Weights ") + (weights.empty() ? "are" : "are not") +
                                     " empty, Feats " + (feats.empty() ? "are" : "are not") +
                                     " empty. Stopped by graph server");
-
             deleteMatrix(weights);
             deleteMatrix(feats);
-            auto response = jsonResponse.View().WriteCompact();
-            return invocation_response::success(response, "appliation/json");
+            return resp;
         }
 
         // Multiplication.
@@ -128,18 +132,12 @@ forward_prop_layer(std::string dataserver, std::string weightserver, unsigned dp
         deleteMatrix(z);
         deleteMatrix(activations);
     } catch(std::exception &ex) {
-        JsonValue jsonResponse;
-        jsonResponse.WithBool("success", false);
-        jsonResponse.WithInteger("type", PROP_TYPE::FORWARD);
-        jsonResponse.WithInteger("id", id);
-        jsonResponse.WithString("reason", ex.what());
-
         deleteMatrix(weights);
         deleteMatrix(feats);
         deleteMatrix(z);
         deleteMatrix(activations);
-        auto response = jsonResponse.View().WriteCompact();
-        return invocation_response::success(response, "application/json");
+        auto resp = constructResp(false, id, ex.what());
+        return resp;
     }
 
     Aws::String tsStr = "";
@@ -147,13 +145,8 @@ forward_prop_layer(std::string dataserver, std::string weightserver, unsigned dp
         tsStr += std::to_string(timestamps[i]) + " ";
     }
 
-    JsonValue jsonResponse;
-    jsonResponse.WithBool("success", true);
-    jsonResponse.WithInteger("type", PROP_TYPE::FORWARD);
-    jsonResponse.WithInteger("id", id);
-    jsonResponse.WithString("timestamp", tsStr);
-    auto response = jsonResponse.View().WriteCompact();
-    return invocation_response::success(response, "application/json");
+    auto resp = constructResp(true, id, tsStr);
+    return resp;
 }
 
 

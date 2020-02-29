@@ -52,7 +52,7 @@ class WeightServer {
     //For sync
     std::mutex servers_updates_mutex;
     std::condition_variable servers_updates_cv;
-    bool servers_updates_done = true;
+    bool servers_updates_done;
 
   private:
 

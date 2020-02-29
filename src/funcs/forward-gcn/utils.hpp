@@ -2,6 +2,7 @@
 #define __FUNCS_UTILS__
 
 #include <chrono>
+#include <unistd.h>
 #include "../../../src/common/matrix.hpp"
 
 extern unsigned timestamps[30];
@@ -21,7 +22,7 @@ void set_timestamp() {
  *
  */
 static Matrix
-requestMatrix(zmq::socket_t& socket, OP op, unsigned id, bool data = false) {
+requestMatrix(zmq::socket_t& socket, OP op, unsigned id) {
     // Send pull request.
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char *) header.data(), op, id);
@@ -57,12 +58,10 @@ requestMatrix(zmq::socket_t& socket, OP op, unsigned id, bool data = false) {
 
         // printf("recv mat (%u, %u)\n", rows, cols);
 
-        if (data) {
-            unsigned recv_ts = *((unsigned *)respHeader.data() + 5);
-            timestamps[tsidx++] = recv_ts;
-            unsigned send_ts = *((unsigned *)respHeader.data() + 6);
-            timestamps[tsidx++] = send_ts;
-        }
+        unsigned recv_ts = *((unsigned *)respHeader.data() + 5);
+        timestamps[tsidx++] = recv_ts;
+        unsigned send_ts = *((unsigned *)respHeader.data() + 6);
+        timestamps[tsidx++] = send_ts;
 
         zmq::message_t matxData(rows * cols * sizeof(FeatType));
         socket.recv(&matxData);
@@ -75,12 +74,58 @@ requestMatrix(zmq::socket_t& socket, OP op, unsigned id, bool data = false) {
     }
 }
 
+
+static Matrix
+requestWeight(zmq::socket_t& socket, OP op, unsigned id) {
+    // Send pull request.
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader((char *) header.data(), op, id);
+    socket.send(header);
+
+    unsigned TIMEOUT = 100 * 1000; // 100ms
+
+    // Listen on respond.
+    int layerResp = -1;
+    zmq::message_t respHeader;
+    socket.recv(&respHeader);
+    layerResp = parse<int>((char *)respHeader.data(), 1);
+    while (layerResp == -1) {
+        usleep(TIMEOUT);
+        TIMEOUT *= 1.5;
+
+        zmq::message_t _hdr(HEADER_SIZE);
+        populateHeader((char *) _hdr.data(), op, id);
+        socket.send(_hdr);
+        socket.recv(&respHeader);
+        layerResp = parse<int>((char *)respHeader.data(), 1);
+    }
+
+   // Parse the respond.
+    if (layerResp != 0) { // Failed.
+        std::cerr << "[ ERROR ] Get weights failed." << std::endl;
+        return Matrix();
+    } else {              // Get matrix data.
+        unsigned rows = parse<unsigned>((char *) respHeader.data(), 2);
+        unsigned cols = parse<unsigned>((char *) respHeader.data(), 3);
+
+        zmq::message_t matxData(rows * cols * sizeof(FeatType));
+        socket.recv(&matxData);
+
+        FeatType *matxBuffer = new FeatType[rows * cols];
+        std::memcpy(matxBuffer, matxData.data(), matxData.size());
+
+        Matrix m(rows, cols, matxBuffer);
+        return m;
+    }
+}
+
+
 /**
  *
  * Send multiplied matrix result back to dataserver.
  *
  */
-static void
+static int
 sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned id) {
     // Send push header.
     zmq::message_t header(HEADER_SIZE);
@@ -118,27 +163,14 @@ sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned
     //         sndTimer.start();
     //     }
     // }
-
+    int ret = *(int *)confirm.data();
     {
-        unsigned recv_ts = *((unsigned *)confirm.data());
+        unsigned recv_ts = *((unsigned *)confirm.data() + 1);
         timestamps[tsidx++] = recv_ts;
-        unsigned send_ts = *((unsigned *)confirm.data() + 1);
+        unsigned send_ts = *((unsigned *)confirm.data() + 2);
         timestamps[tsidx++] = send_ts;
     }
-}
-
-static void
-sendWeightUpdates(zmq::socket_t& socket, Matrix& weightUpdates, unsigned layer) {
-    zmq::message_t header(HEADER_SIZE);
-    populateHeader((char*) header.data(), OP::PUSH_BACKWARD, layer);
-    socket.send(header, ZMQ_SNDMORE);
-
-    zmq::message_t updateMsg(weightUpdates.getDataSize());
-    std::memcpy(updateMsg.data(), weightUpdates.getData(), weightUpdates.getDataSize());
-    socket.send(updateMsg);
-
-    zmq::message_t confirm;
-    socket.recv(&confirm);
+    return ret;
 }
 
 

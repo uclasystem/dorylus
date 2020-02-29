@@ -143,8 +143,8 @@ requestWeight(zmq::socket_t& socket, OP op, unsigned layer) {
  * Send weight updates back to weightserver.
  *
  */
-static void
-sendMatrix(Matrix& matrix, zmq::socket_t& socket, unsigned id, bool data = false) {
+static int
+sendMatrix(Matrix& matrix, zmq::socket_t& socket, unsigned id) {
     // Send push header.
     zmq::message_t header(HEADER_SIZE);
     populateHeader((char *) header.data(), OP::PUSH_BACKWARD, id, matrix.getRows(),
@@ -177,13 +177,32 @@ sendMatrix(Matrix& matrix, zmq::socket_t& socket, unsigned id, bool data = false
     //         sndTimer.start();
     //     }
     // }
+    int ret = *(int *)confirm.data();
+    unsigned recv_ts = *((unsigned *)confirm.data() + 1);
+    timestamps[tsidx++] = recv_ts;
+    unsigned send_ts = *((unsigned *)confirm.data() + 2);
+    timestamps[tsidx++] = send_ts;
 
-    if (data) {
-        unsigned recv_ts = *((unsigned *)confirm.data());
-        timestamps[tsidx++] = recv_ts;
-        unsigned send_ts = *((unsigned *)confirm.data() + 1);
-        timestamps[tsidx++] = send_ts;
-    }
+    return ret;
+}
+
+static int
+sendWeightUpdate(Matrix& matrix, zmq::socket_t& socket, unsigned id) {
+    // Send push header.
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader((char *) header.data(), OP::PUSH_BACKWARD, id, matrix.getRows(),
+                    matrix.getCols());
+    socket.send(header, ZMQ_SNDMORE);
+
+    zmq::message_t updateMsg(matrix.getDataSize());
+    std::memcpy(updateMsg.data(), matrix.getData(), matrix.getDataSize());
+    socket.send(updateMsg);
+
+    // Wait for updates settled reply.
+    zmq::message_t confirm;
+    socket.recv(&confirm);
+
+    return 0;
 }
 
 static void
@@ -194,6 +213,16 @@ deleteMatrix(Matrix &mat) {
     }
 }
 
+static invocation_response
+constructResp(bool success, unsigned id, std::string msg) {
+    JsonValue jsonResponse;
+    jsonResponse.WithBool("success", success);
+    jsonResponse.WithInteger("type", PROP_TYPE::BACKWARD);
+    jsonResponse.WithInteger("id", id);
+    jsonResponse.WithString("message", msg);
+    auto response = jsonResponse.View().WriteCompact();
+    return invocation_response::success(response, "appliation/json");
+}
 
 /**
  *
@@ -227,20 +256,14 @@ gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, 
         set_timestamp();
 
         if (ret != 0 || weights.empty()) {
-            JsonValue jsonResponse;
-            jsonResponse.WithBool("success", false);
-            jsonResponse.WithInteger("type", PROP_TYPE::BACKWARD);
-            jsonResponse.WithInteger("id", id);
-            jsonResponse.WithString("reason", std::string("Weights ") + (weights.empty() ? "are" : "are not") +
-                                    " empty, Feats " + (ret != 0 ? "are" : "are not") +
-                                    " empty. Stopped by graph server");
-
+            auto resp = constructResp(false, id, std::string("Weights ") + (weights.empty() ? "are" : "are not") +
+                                      " empty, Feats " + (ret != 0 ? "are" : "are not") +
+                                      " empty. Stopped by graph server");
             deleteMatrix(weights);
             for (Matrix &mat : savedTensors) {
                 deleteMatrix(mat);
             }
-            auto response = jsonResponse.View().WriteCompact();
-            return invocation_response::success(response, "appliation/json");
+            return resp;
         }
 
         Matrix &predictions = savedTensors[0];
@@ -266,39 +289,35 @@ gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, 
 
         std::cout << "< BACKWARD > Sending gradient to graph server" << std::endl;
         set_timestamp();
-        sendMatrix(interGrad, data_socket, id, true);
+        ret = sendMatrix(interGrad, data_socket, id);
         set_timestamp();
         deleteMatrix(interGrad);
 
-        std::cout << "< BACKWARD > Sending weight updates" << std::endl;
-        sendMatrix(weightUpdates, weight_socket, layer);
-        deleteMatrix(weightUpdates);
+        if (ret == 0) {
+            std::cout << "< BACKWARD > Sending weight updates" << std::endl;
+            sendWeightUpdate(weightUpdates, weight_socket, layer);
+            deleteMatrix(weightUpdates);
+        } else { // discard by graph servers
+            std::cout << "< BACKWARD > Stopped by graph server" << std::endl;
+            auto resp = constructResp(false, id, "Work has already been done.");
+            deleteMatrix(weightUpdates);
+            return resp;
+        }
     } catch(std::exception &ex) {
-        JsonValue jsonResponse;
-        jsonResponse.WithBool("success", false);
-        jsonResponse.WithInteger("type", PROP_TYPE::BACKWARD);
-        jsonResponse.WithInteger("id", id);
-        jsonResponse.WithString("reason", ex.what());
-
         deleteMatrix(weights);
         for (Matrix &mat : savedTensors) {
             deleteMatrix(mat);
         }
-        auto response = jsonResponse.View().WriteCompact();
-        return invocation_response::success(response, "application/json");
+        auto resp = constructResp(false, id, ex.what());
+        return resp;
     }
 
     Aws::String tsStr = "";
     for (unsigned i = 0; i < tsidx; i++) {
         tsStr += std::to_string(timestamps[i]) + " ";
     }
-    JsonValue jsonResponse;
-    jsonResponse.WithBool("success", true);
-    jsonResponse.WithInteger("type", PROP_TYPE::BACKWARD);
-    jsonResponse.WithInteger("id", id);
-    jsonResponse.WithString("timestamp", tsStr);
-    auto response = jsonResponse.View().WriteCompact();
-    return invocation_response::success(response, "application/json");
+    auto resp = constructResp(true, id, tsStr);
+    return resp;
 }
 
 static invocation_response
@@ -318,20 +337,14 @@ gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id,
         set_timestamp();
 
         if (ret != 0 || weights.empty()) {
-            JsonValue jsonResponse;
-            jsonResponse.WithBool("success", false);
-            jsonResponse.WithInteger("type", PROP_TYPE::BACKWARD);
-            jsonResponse.WithInteger("id", id);
-            jsonResponse.WithString("reason", std::string("Weights ") + (weights.empty() ? "are" : "are not") +
+            auto resp = constructResp(false, id, std::string("Weights ") + (weights.empty() ? "are" : "are not") +
                                     " empty, Feats " + (ret != 0 ? "are" : "are not") +
                                     " empty. Stopped by graph server");
-
             deleteMatrix(weights);
             for (Matrix &mat : savedTensors) {
                 deleteMatrix(mat);
             }
-            auto response = jsonResponse.View().WriteCompact();
-            return invocation_response::success(response, "appliation/json");
+            return resp;
         }
 
         Matrix &grad = savedTensors[0];
@@ -366,42 +379,38 @@ gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id,
 
         std::cout << "< BACKWARD > Sending gradient to graph server" << std::endl;
         set_timestamp();
-        sendMatrix(resultGrad, data_socket, id, true);
+        ret = sendMatrix(resultGrad, data_socket, id);
         set_timestamp();
         deleteMatrix(resultGrad);
 
-        std::cout << "< BACKWARD > Sending weight updates" << std::endl;
-        sendMatrix(weightUpdates, weight_socket, layer);
-        deleteMatrix(weightUpdates);
+        if (ret == 0) {
+            std::cout << "< BACKWARD > Sending weight updates" << std::endl;
+            sendWeightUpdate(weightUpdates, weight_socket, layer);
+            deleteMatrix(weightUpdates);
+        } else { // discard by graph servers
+            std::cout << "< BACKWARD > Stopped by graph server" << std::endl;
+            auto resp = constructResp(false, id, "Work has already been done.");
+            deleteMatrix(weightUpdates);
+            return resp;
+        }
         // END SENDING BACKWARDS RESULTS
     } catch(std::exception &ex) {
-        JsonValue jsonResponse;
-        jsonResponse.WithBool("success", false);
-        jsonResponse.WithInteger("type", PROP_TYPE::BACKWARD);
-        jsonResponse.WithInteger("id", id);
-        jsonResponse.WithString("reason", ex.what());
+        auto resp = constructResp(false, id, ex.what());
 
         deleteMatrix(weights);
         for (Matrix &mat : savedTensors) {
             deleteMatrix(mat);
         }
-        auto response = jsonResponse.View().WriteCompact();
-        return invocation_response::success(response, "application/json");
+        return resp;
     }
 
     Aws::String tsStr = "";
     for (unsigned i = 0; i < tsidx; i++) {
         tsStr += std::to_string(timestamps[i]) + " ";
     }
-    JsonValue jsonResponse;
-    jsonResponse.WithBool("success", true);
-    jsonResponse.WithInteger("type", PROP_TYPE::BACKWARD);
-    jsonResponse.WithInteger("id", id);
-    jsonResponse.WithString("timestamp", tsStr);
-    auto response = jsonResponse.View().WriteCompact();
-    return invocation_response::success(response, "application/json");
+    auto resp = constructResp(true, id, tsStr);
+    return resp;
 }
-
 
 /**
  *
@@ -453,14 +462,9 @@ backward_prop(std::string dataserver, std::string weightserver, unsigned dport,
     }
 
     // impossible to reach here
-    JsonValue jsonResponse;
-    jsonResponse.WithBool("success", true);
-    jsonResponse.WithInteger("type", PROP_TYPE::BACKWARD);
-    jsonResponse.WithInteger("id", id);
-    auto response = jsonResponse.View().WriteCompact();
-    return invocation_response::success(response, "application/json");
+    auto resp = constructResp(false, id, "impossible to reach here");
+    return resp;
 }
-
 
 /** Handler that hooks with lambda API. */
 static invocation_response

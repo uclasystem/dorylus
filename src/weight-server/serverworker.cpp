@@ -61,10 +61,10 @@ ServerWorker::work() {
 
             switch (op) {
                 case (OP::PULL_FORWARD):
-                    sendWeights(identity, arg);
+                    sendWeights(identity, arg, true);
                     break;
                 case (OP::PULL_BACKWARD):
-                    sendWeights(identity, arg);
+                    sendWeights(identity, arg, false);
                     break;
                 case (OP::PUSH_BACKWARD):
                     recvUpdate(identity, arg);
@@ -91,24 +91,25 @@ ServerWorker::work() {
  *
  */
 void
-ServerWorker::sendWeights(zmq::message_t& client_id, unsigned layer) {
+ServerWorker::sendWeights(zmq::message_t& client_id, unsigned layer, bool forward) {
     if (layer >= weightMats.size()) {
         std::cerr << "[ERROR] No such weights corresponding to layer " << layer << std::endl;
     }
-    if (ws.servers_updates_done == false){
-        std::unique_lock<std::mutex> lk(ws.servers_updates_mutex);
-        ws.servers_updates_cv.wait(lk,[&]{ return ws.servers_updates_done == true; });
-    }
 
     workersocket.send(client_id, ZMQ_SNDMORE);    // The identity message will be implicitly consumed to route to the correct client.
+    if (forward && layer == 0 && ws.servers_updates_done == false) {
+        zmq::message_t header(HEADER_SIZE);
+        populateHeader((char *) header.data(), OP::RESP, -1);
+        workersocket.send(header);
+    } else {
+        zmq::message_t header(HEADER_SIZE);
+        populateHeader((char *) header.data(), OP::RESP, 0, weightMats[layer].getRows(), weightMats[layer].getCols());
+        workersocket.send(header, ZMQ_SNDMORE);
 
-    zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::RESP, 0, weightMats[layer].getRows(), weightMats[layer].getCols());
-    workersocket.send(header, ZMQ_SNDMORE);
-
-    zmq::message_t weightData(weightMats[layer].getDataSize());
-    std::memcpy((char *) weightData.data(), weightMats[layer].getData(), weightMats[layer].getDataSize());
-    workersocket.send(weightData);
+        zmq::message_t weightData(weightMats[layer].getDataSize());
+        std::memcpy((char *) weightData.data(), weightMats[layer].getData(), weightMats[layer].getDataSize());
+        workersocket.send(weightData);
+    }
 }
 
 
@@ -123,21 +124,26 @@ void
 ServerWorker::recvUpdate(zmq::message_t& client_id, unsigned layer) {
     zmq::message_t updateMsg;
     workersocket.recv(&updateMsg);
-    // Grab lock then sum the data received in this update matrix.
-    std::lock_guard<std::mutex> update_lock(update_mutex);
-    lambdaRecved++;
-    if (numLambdas == lambdaRecved) { ws.servers_updates_done = false; }
 
     // Send confirm ACK message.
     zmq::message_t confirm;
     workersocket.send(client_id, ZMQ_SNDMORE);
     workersocket.send(confirm);
+    {
+        // Grab lock then sum the data received in this update matrix.
+        std::lock_guard<std::mutex> update_lock(update_mutex);
+        lambdaRecved++;
+        // if (numLambdas == lambdaRecved) { ws.servers_updates_done = false; }
+        if (ws.servers_updates_done) {
+            ws.servers_updates_done = false;
+        }
 
-    float *updateSum = updateMats[layer].getData();
-    float *updateNew = (float *) updateMsg.data();
+        float *updateSum = updateMats[layer].getData();
+        float *updateNew = (float *) updateMsg.data();
 
-    for (unsigned u = 0; u < updateMats[layer].getNumElemts(); ++u)
-        updateSum[u] +=  updateNew[u];
+        for (unsigned u = 0; u < updateMats[layer].getNumElemts(); ++u)
+            updateSum[u] +=  updateNew[u];
+    }
 
     // If this is the final update, begin global aggregation.
     if (numLambdas == lambdaRecved) {
