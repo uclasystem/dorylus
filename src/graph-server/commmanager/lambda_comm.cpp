@@ -171,7 +171,7 @@ void LambdaComm::callback(const Aws::Lambda::LambdaClient *client,
         auto v = response.View();
         if (funcErr != "") {
             if (v.KeyExists("errorMessage")) {
-                printLog(globalNodeId, "\033[1;31m[ FUNC ERROR ]\033[0m %s, %s", funcErr.c_str(), v.GetString("errorMessage"));
+                printLog(globalNodeId, "\033[1;31m[ FUNC ERROR ]\033[0m %s, %s", funcErr.c_str(), v.GetString("errorMessage").c_str());
             } else {
                 printLog(globalNodeId, "\033[1;31m[ FUNC ERROR ]\033[0m %s, %s", funcErr.c_str(), resultStr.c_str());
             }

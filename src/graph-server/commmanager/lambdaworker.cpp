@@ -192,7 +192,8 @@ LambdaWorker::recvLambdaResults(zmq::message_t& client_id, unsigned partId, unsi
         std::memcpy(partitionActStart, data.data(), data.size());
 
         // Send confirm ACK message.
-        zmq::message_t confirm(2 * sizeof(unsigned));
+        zmq::message_t confirm(3 * sizeof(unsigned));
+        *(int *)(confirm.data()) = 0; // 0 : recving success
         setTSinCfm(confirm.data());
         workersocket.send(client_id, ZMQ_SNDMORE);
         workersocket.send(confirm);
@@ -370,7 +371,8 @@ LambdaWorker::recvChunk(Matrix &dstMat, zmq::message_t &client_id, unsigned part
         std::memcpy(partitionStart, msg.data(), msg.size());
 
         // Send confirm ACK message.
-        zmq::message_t confirm(2 * sizeof(unsigned));
+        zmq::message_t confirm(3 * sizeof(unsigned));
+        *(int *)(confirm.data()) = 0;
         setTSinCfm(confirm.data());
         workersocket.send(client_id, ZMQ_SNDMORE);
         workersocket.send(confirm);
@@ -466,7 +468,8 @@ LambdaWorker::fakeRecvChunks(zmq::message_t& client_id, unsigned chunkCnt) {
     }
 
     // Send confirm ACK message.
-    zmq::message_t confirm(2 * sizeof(unsigned));
+    zmq::message_t confirm(3 * sizeof(unsigned));
+    *(int *)(confirm.data()) = -1;
     setTSinCfm(confirm.data());
     workersocket.send(client_id, ZMQ_SNDMORE);
     workersocket.send(confirm);

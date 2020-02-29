@@ -36,7 +36,7 @@ class ServerWorker {
 public:
 
     ServerWorker(zmq::context_t& ctx_, WeightServer& _ws,
-                 std::vector<Matrix>& weights_, std::vector<Matrix>& updates_, 
+                 std::vector<Matrix>& weights_, std::vector<Matrix>& updates_,
                  unsigned& numLambdas_, unsigned& lambdaRecved_);
 
     ~ServerWorker();
@@ -46,7 +46,7 @@ public:
 
 private:
 
-    void sendWeights(zmq::message_t& client_id, unsigned layer);
+    void sendWeights(zmq::message_t& client_id, unsigned layer, bool forward);
     void recvUpdates(zmq::message_t& client_id);
     void recvUpdate(zmq::message_t& client_id, unsigned layer);
     void setBackpropNumLambdas(zmq::message_t& client_id, unsigned numLambdas_);

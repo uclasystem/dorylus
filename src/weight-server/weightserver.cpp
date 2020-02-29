@@ -35,7 +35,7 @@ WeightServer::WeightServer(std::string &weightServersFile, std::string &myPrIpFi
     : ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), count(0),
       listenerPort(_listenerPort), numLambdas(0), lambdaRecved(0),
       dataCtx(1), publisher(dataCtx, ZMQ_PUB), subscriber(dataCtx, ZMQ_SUB),
-      serverPort(_serverPort) {
+      serverPort(_serverPort), servers_updates_done(true) {
     // Hardcoding adam to false for right now
     adam = true;
 
