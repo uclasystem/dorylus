@@ -36,7 +36,6 @@ WeightServer::WeightServer(std::string &weightServersFile, std::string &myPrIpFi
       listenerPort(_listenerPort), numLambdas(0), lambdaRecved(0),
       dataCtx(1), publisher(dataCtx, ZMQ_PUB), subscriber(dataCtx, ZMQ_SUB),
       serverPort(_serverPort), servers_updates_done(true) {
-    // Hardcoding adam to false for right now
     adam = true;
 
     // Read the dsh file to get info about all weight server nodes.
@@ -99,7 +98,7 @@ WeightServer::run() {
     std::vector<std::thread *> worker_threads;
     WeightServer &me = *this;
     for (int i = 0; i < NUM_LISTENERS; ++i) {
-        workers.push_back(new ServerWorker(ctx, me, weightMats, updateMats, numLambdas, lambdaRecved));
+        workers.push_back(new ServerWorker(ctx, me, weightMats, updateMats, weightsStore, numLambdas, lambdaRecved));
         worker_threads.push_back(new std::thread(std::bind(&ServerWorker::work, workers[i])));
         worker_threads[i]->detach();
     }
@@ -508,14 +507,20 @@ WeightServer::initializeWeightMatrices(std::string &configFileName) {
             // Hardcoding this to xavier init for now. Eventually need to make it
             // configurable
             Matrix w = xavierInitialization(dims[u], dims[u + 1]);
+            std::string tenName = "W" + std::to_string(u);
+            w.setName(tenName);
             weightMats.push_back(w);
+            saveTensor(w);
 
             // Initialize layer biases
             // TODO:
             //  Make this configurable based on whether or not a bias matrix is requested
             //  for a NN module
             Matrix b = initBias(dims[u + 1]);
+            tenName = "B" + std::to_string(u);
+            b.setName(tenName);
             biases.push_back(b);
+            saveTensor(b);
         }
 
         for (unsigned u = 0; u < weightMats.size(); ++u)
@@ -624,6 +629,15 @@ WeightServer::initBias(unsigned dim, float initVal) {
         dptr[ui] = initVal;
 
     return Matrix(dim, 1, dptr);
+}
+
+
+void WeightServer::saveTensor(std::string& name, unsigned rows, unsigned cols,
+  FeatType* dptr) {
+    weightsStore.emplace(name, Matrix(name, rows, cols, dptr));
+}
+void WeightServer::saveTensor(Matrix& tensor) {
+    weightsStore.emplace(tensor.name(), tensor);
 }
 
 

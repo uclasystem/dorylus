@@ -134,8 +134,7 @@ void LambdaComm::connectToWeightServers() {
 
 // LAMBDA INVOCATION AND RETURN FUNCTIONS
 void LambdaComm::invokeLambda(Aws::String funcName, const char* dataserver, unsigned dport,
-  char* weightserver, unsigned wport, unsigned layer, unsigned id,
-  bool lastLayer) {
+  char* weightserver, unsigned wport, unsigned layer, unsigned id, bool lastLayer) {
     Aws::Lambda::Model::InvokeRequest invReq;
     invReq.SetFunctionName(funcName);
     invReq.SetInvocationType(Aws::Lambda::Model::InvocationType::RequestResponse);
@@ -369,6 +368,37 @@ LambdaComm::relaunchLambda(bool forward, unsigned layer, unsigned lambdaId, bool
                  weightserverPort, layer, lambdaId, lastLayer);
 
     ++relaunchCnt;
+}
+
+
+void
+LambdaComm::requestInvoke(unsigned layer, unsigned lambdaId, bool lastLayer) {
+    __sync_bool_compare_and_swap(forwardLambdaTable + lambdaId, false, true);
+
+    char* weightServerIp = weightservers[(nodeId * numLambdasForward + lambdaId) % weightservers.size()];
+    invokeLambda("gcn", nodeIp.c_str(), dataserverPort, weightServerIp,
+      weightserverPort, layer, lambdaId, lastLayer);
+}
+
+void
+LambdaComm::waitLambda(unsigned layer, bool lastLayer) {
+    while (countForward < numLambdasForward) {
+//        if (relaunching) {
+//            if (countForward >= 0.8 * numLambdasForward && timeoutPeriod < 1e-8) {
+//                timeoutPeriod = std::fmax(MIN_TIMEOUT, 2 * (getTimer() - forwardTimer));
+//            }
+//            if (getTimer() - forwardTimer > (timeoutPeriod < 1e-8 ? TIMEOUT_PERIOD : timeoutPeriod)) {
+//                for (unsigned i = 0; i < numLambdasForward; i++) {
+//                    if (forwardLambdaTable[i]) {
+//                        relaunchLambda(true, layer, i, lastLayer);
+//                    }
+//                }
+//                forwardTimer = getTimer();
+//                timeoutPeriod *= EXP_BACKOFF_FACTOR;
+//            }
+//        }
+        usleep(SLEEP_PERIOD);
+    }
 }
 
 

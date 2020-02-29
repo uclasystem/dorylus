@@ -347,7 +347,35 @@ Engine::runBackward(FeatType *initGradTensor) {
 
 
 void
-runEpoch(unsigned epoch) {
+Engine::runEpoch(unsigned epoch) {
+    iteration = 0;
+    FeatType* inputTensor = forwardVerticesInitData;
+    forwardGhostVerticesDataIn = forwardGhostInitData;
+
+    unsigned featDim = getFeatDim(iteration);
+    FeatType* ahTensor = new FeatType[graph.localVtxCnt * featDim];
+    std::string ahTensorName = "AH" + std::to_string(iteration);
+    saveTensor(ahTensorName, graph.localVtxCnt, featDim, ahTensor);
+
+    AggOPArgs args = {ahTensor, inputTensor, graph.localVtxCnt, featDim};
+    auto computeFn = std::bind(&Engine::aggregateCompute, this, std::placeholders::_1,
+      std::placeholders::_2);
+
+    currId = 0;
+    computePool->perform(computeFn, &args);
+    computePool->sync();
+
+    unsigned nextFeatDim = getFeatDim(iteration + 1);
+    FeatType* zTensor = new FeatType[graph.localVtxCnt * nextFeatDim];
+    FeatType* hTensor = new FeatType[graph.localVtxCnt * nextFeatDim];
+    std::string zTensorName = "Z" + std::to_string(iteration);
+    std::string hTensorName = "H" + std::to_string(iteration);
+    saveTensor(zTensorName, graph.localVtxCnt, nextFeatDim, zTensor);
+    saveTensor(hTensorName, graph.localVtxCnt, nextFeatDim, hTensor);
+
+    resComm->requestInvoke(iteration, 0, iteration == numLayers - 1);
+
+    resComm->waitLambda(iteration, iteration == numLayers - 1);
 }
 
 
@@ -449,14 +477,6 @@ Engine::output() {
         printEngineMetrics();
     }
 }
-
-
-struct AggOPArgs {
-    FeatType *outputTensor;
-    FeatType *inputTensor;
-    unsigned vtcsCnt;
-    unsigned featDim;
-};
 
 
 #ifdef _GPU_ENABLED_
@@ -1799,6 +1819,13 @@ Engine::calcAcc(FeatType *predicts, FeatType *labels, unsigned vtcsCnt, unsigned
     printLog(getNodeId(), "batch loss %f, batch acc %f", loss, acc);
 
     accuracy = acc;
+}
+
+void Engine::saveTensor(std::string& name, unsigned rows, unsigned cols, FeatType* dptr) {
+    savedVtxTensors.emplace(name, Matrix(name, rows, cols, dptr));
+}
+
+void Engine::saveTensor(Matrix& mat) {
 }
 
 

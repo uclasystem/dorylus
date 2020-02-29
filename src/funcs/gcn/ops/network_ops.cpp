@@ -120,3 +120,77 @@ sendMatrix(Matrix& matrix, zmq::socket_t& socket, unsigned id) {
         }
     }
 }
+
+
+// named-tensors
+Matrix recvTensor(zmq::socket_t& socket) {
+    zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
+    zmq::message_t tensorData;
+
+    socket.recv(&tensorHeader);
+    unsigned resp = parse<unsigned>((char*)tensorHeader.data(), 0);
+    std::string name = parseName((char*)tensorHeader.data());
+    if (resp == ERR_HEADER_FIELD) {
+        std::cerr << "No tensor '" << name << "' found on server" << std::endl;
+        return Matrix();
+    }
+    socket.recv(&tensorData);
+
+    unsigned rows = parse<unsigned>((char*)tensorHeader.data(), 3);
+    unsigned cols = parse<unsigned>((char*)tensorHeader.data(), 4);
+
+    FeatType* data = new FeatType[rows * cols];
+    std::memcpy(data, tensorData.data(), tensorData.size());
+
+    return Matrix(name, rows, cols, data);
+}
+
+std::vector<Matrix> reqTensors(zmq::socket_t& socket, unsigned partId, unsigned numTensors, char** tensorNames) {
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader(header.data(), OP::PULL, partId);
+    socket.send(header, ZMQ_SNDMORE);
+    for (uint32_t u = 0; u < numTensors; ++u) {
+        char* name = tensorNames[u];
+
+        zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
+        populateHeader(tensorHeader.data(), partId, name);
+        if (u < numTensors-1) {
+            socket.send(tensorHeader, ZMQ_SNDMORE);
+        } else {
+            socket.send(tensorHeader);
+        }
+    }
+
+    std::vector<Matrix> matrices;
+    unsigned more = 1;
+    while (more) {
+        Matrix result = recvTensor(socket);
+        matrices.push_back(result);
+
+        size_t usize = sizeof(more);
+        socket.getsockopt(ZMQ_RCVMORE, &more, &usize);
+    }
+
+    return matrices;
+}
+
+void sendTensors(zmq::socket_t& socket, unsigned partId, std::vector<Matrix>& matrices) {
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader(header.data(), OP::PUSH, partId);
+    socket.send(header, ZMQ_SNDMORE);
+    for (uint32_t u = 0; u < matrices.size(); ++u) {
+        zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
+        populateHeader(tensorHeader.data(), OP::PULL, matrices[u].name().c_str(),
+          matrices[u].getRows(), matrices[u].getCols());
+        zmq::message_t tensorData(matrices[u].getDataSize());
+        std::memcpy(tensorData.data(), matrices[u].getData(), matrices[u].getDataSize());
+
+        socket.send(tensorHeader, ZMQ_SNDMORE);
+        if (u < matrices.size() - 1) {
+            socket.send(tensorData, ZMQ_SNDMORE);
+        } else {
+            socket.send(tensorData);
+        }
+    }
+}
+// end named-tensors

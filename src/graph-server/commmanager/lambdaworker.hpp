@@ -25,6 +25,7 @@
 #include "../../common/utils.hpp"
 
 
+
 class LambdaComm;
 
 /**
@@ -87,6 +88,16 @@ private:
     // send that partition to the lambda thread for computation.
     void sendChunk(Matrix &srcMat, zmq::message_t& client_id, unsigned partId, unsigned layer, bool forward);
     void recvChunk(Matrix &dstMat, zmq::message_t& client_id, unsigned partId, unsigned layer, bool forward);
+
+    // named-tensors
+    void sendTensor(FeatType* dptr, std::string tensorName, unsigned rows,
+      unsigned cols, unsigned& more);
+    void getPartitionInfo(Matrix& tensor, unsigned partId, unsigned& more);
+    void sendTensors(unsigned partId, zmq::message_t& client_id);
+
+    Matrix recvTensor();
+    void recvTensors(unsigned partId, zmq::message_t& client_id);
+    // end named-tensors
 
     // Partitions the label matrix given a partition id and
     // and send that partition to the lambda thread for validation

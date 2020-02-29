@@ -46,9 +46,7 @@ struct LabelsHeaderType {
  *
  */
 class Engine {
-
 public:
-
     // Public APIs for benchmarks.
     void init(int argc, char *argv[]);
     FeatType *runForward(unsigned epoch);
@@ -91,7 +89,6 @@ public:
     void addEpochTime(double epochTime);
 
 private:
-
     NodeManager nodeManager;
     CommManager commManager;
 
@@ -119,6 +116,13 @@ private:
     FeatType *forwardGhostVerticesDataOut;
     FeatType *backwardGhostVerticesDataIn;
     FeatType *backwardGhostVerticesDataOut;
+
+    struct AggOPArgs {
+        FeatType *outputTensor;
+        FeatType *inputTensor;
+        unsigned vtcsCnt;
+        unsigned featDim;
+    };
 
     // Labels one-hot storage array.
     FeatType *localVerticesLabels = NULL;
@@ -248,8 +252,8 @@ private:
     void backwardAggregateFromNeighbors(unsigned lvid, FeatType *nextGradTensor,
                                         FeatType *gradTensor, unsigned featDim);
 
-    void addTensor(char name[8], unsigned rows, unsigned cols);
-    void addTensor(Matrix& mat);
+    void saveTensor(std::string& name, unsigned rows, unsigned cols, FeatType *dptr);
+    void saveTensor(Matrix& mat);
 
     // For initialization.
     void parseArgs(int argc, char* argv[]);

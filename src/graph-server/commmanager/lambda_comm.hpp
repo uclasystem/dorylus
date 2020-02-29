@@ -91,6 +91,9 @@ public:
 
     void relaunchLambda(bool forward, unsigned layer, unsigned lambdaId, bool lastLayer);
 
+    void requestInvoke(unsigned layer, unsigned lambdaId, bool lastLayer);
+    void waitLambda(unsigned layer, bool lastLayer);
+
     virtual unsigned getRelaunchCnt() { return relaunchCnt; };
 
     // Send shutdown messages to the weight servers

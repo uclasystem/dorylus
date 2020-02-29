@@ -4,6 +4,7 @@
 #include <chrono>
 #include <iomanip>
 
+static void nofree(void* data, void* hint) {}
 
 extern std::mutex producerQueueLock;
 
@@ -86,6 +87,12 @@ LambdaWorker::work() {
                 case (OP::PUSH_BACKWARD): {
                     recvChunk(newGradMatrix, identity, partId, layer, false);
                     break;
+                }
+                case (OP::PUSH): {
+                    sendTensors(partId, identity);
+                }
+                case (OP::PULL): {
+                    recvTensors(partId, identity);
                 }
                 default: {
                     printLog(manager->nodeId, "unknown op %d, part id %d", op, partId);
@@ -416,6 +423,100 @@ LambdaWorker::recvChunk(Matrix &dstMat, zmq::message_t &client_id, unsigned part
         printLog(manager->nodeId, errMsg.c_str());
     }
 }
+
+
+// named-tensors
+void LambdaWorker::sendTensor(FeatType* dptr, std::string tensorName, unsigned rows,
+  unsigned cols, unsigned& more) {
+    zmq::message_t responseHeader(TENSOR_HDR_SIZE);
+    populateHeader(responseHeader.data(), OP::PULL, tensorName.c_str(),
+      rows, cols);
+    unsigned bufSize = rows * cols * sizeof(FeatType);
+    zmq::message_t tensorData(dptr, bufSize, nofree, NULL);
+
+    workersocket.send(responseHeader, ZMQ_SNDMORE);
+
+    size_t usize = sizeof(unsigned);
+    workersocket.getsockopt(ZMQ_RCVMORE, &more, &usize);
+    if (!more) {
+        workersocket.send(tensorData);
+    } else {
+        workersocket.send(tensorData, ZMQ_SNDMORE);
+    }
+}
+
+void LambdaWorker::getPartitionInfo(Matrix& tensor, unsigned partId, unsigned& more) {
+    unsigned partRows = std::ceil((float) tensor.getRows() / (float) manager->numLambdasForward);
+    unsigned thisPartRows = partRows;
+    if (((partId + 1) * partRows) > tensor.getRows())
+        thisPartRows = partRows - ((partId + 1) * partRows) + tensor.getRows();
+    FeatType* partStart = tensor.getData() + (partId * partRows * tensor.getCols());
+
+    sendTensor(partStart, tensor.name(), thisPartRows, tensor.getCols(), more);
+}
+
+void LambdaWorker::sendTensors(unsigned partId, zmq::message_t& client_id) {
+    unsigned more = 1;
+    workersocket.send(client_id, ZMQ_SNDMORE);
+    while (more) {
+        zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
+        workersocket.recv(&tensorHeader);
+
+        std::string name = parseName((char*)tensorHeader.data());
+        auto found = savedVtxTensors->find(name);
+        if (found == savedVtxTensors->end()) {
+            std::cerr << "Requested tensor '" << name << "' not found" << std::endl;
+            zmq::message_t errorHeader(TENSOR_HDR_SIZE);
+            populateHeader(errorHeader.data(), ERR_HEADER_FIELD, name.c_str());
+            workersocket.send(errorHeader);
+            return;
+        } else {
+            std::cout << "Received request for '" << name <<
+              "' partition " << partId << std::endl;
+            Matrix& reqMatrix = found->second;
+            getPartitionInfo(reqMatrix, partId, more);
+        }
+    }
+}
+
+Matrix LambdaWorker::recvTensor() {
+    zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
+    zmq::message_t tensorData;
+
+    workersocket.recv(&tensorHeader);
+    workersocket.recv(&tensorData);
+
+    std::string name = parseName((char*)tensorHeader.data());
+    unsigned rows = parse<unsigned>((char*)tensorHeader.data(), 3);
+    unsigned cols = parse<unsigned>((char*)tensorHeader.data(), 4);
+
+    FeatType* data = new FeatType[rows * cols];
+    std::memcpy(data, tensorData.data(), tensorData.size());
+
+    return Matrix(name, rows, cols, data);
+}
+
+void LambdaWorker::recvTensors(unsigned partId, zmq::message_t& client_id) {
+    unsigned more = 1;
+    while (more) {
+        Matrix result = recvTensor();
+        auto found = savedVtxTensors->find(result.name());
+        if (found == savedVtxTensors->end()) {
+            std::cerr << "Pushed tensor '" << result.name()
+              << "' not found. Make sure to allocate it before starting workers!" << std::endl;
+        } else {
+            std::cout << "Received push for '" << result.name() << "'" << std::endl;
+        }
+
+        FeatType* partPtr = found->second.getData() + (partId * result.getRows() * result.getCols());
+        std::memcpy(partPtr, result.getData(), result.getRows() * result.getCols() * sizeof(FeatType));
+
+        size_t usize = sizeof(more);
+        workersocket.getsockopt(ZMQ_RCVMORE, &more, &usize);
+    }
+}
+// end named-tensors
+
 
 void
 LambdaWorker::sendTargetMatrix(zmq::message_t& client_id, unsigned partId) {

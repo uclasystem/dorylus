@@ -37,5 +37,13 @@ void sendMatrices(Matrix& zResult, Matrix& actResult,
  */
 void sendMatrix(Matrix& matrix, OP op, zmq::socket_t& socket, unsigned id);
 
+// named-tensors
+Matrix recvTensor(zmq::socket_t& socket);
+
+std::vector<Matrix> reqTensors(zmq::socket_t& socket, unsigned partId, unsigned numTensors, char** tensorNames);
+
+void sendTensors(zmq::socket_t& socket, unsigned partId, std::vector<Matrix>& matrices);
+// end named-tensors
+
 
 #endif
