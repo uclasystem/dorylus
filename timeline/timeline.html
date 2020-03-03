@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    <script type="text/javascript" src="{{ url_for('static', filename='process.js') }}">
+    </script>
+    <style>
+        .google-visualization-tooltip{
+            position: fixed !important;
+            top: 0px !important;
+            right: 0px !important;
+        }
+    </style>
+</head>
+
+<body>
+    <select name="Dataset" id="timelines"></select>
+    <div id="timeline" style="width: 100%;">
+        Loading...
+    </div>
+
+</body>
+
+</html>

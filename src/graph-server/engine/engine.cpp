@@ -252,6 +252,7 @@ Engine::getNodeId() {
 FeatType *
 Engine::runForward(unsigned epoch) {
     globalEpoch = epoch;
+    gtimers.inc_epoch();
     // Make sure all nodes start running the forward-prop phase.
     nodeManager.barrier();
     printLog(nodeId, "Engine starts running FORWARD...");
@@ -265,14 +266,23 @@ Engine::runForward(unsigned epoch) {
     // For sequential invocation of operations use this block
     if (!pipeline) {
         for (iteration = 0; iteration < numLayers; ++iteration) {
+            auto ta=gtimers.getTimer("Agg->"+std::to_string(iteration));
+            auto ti=gtimers.getTimer("Invoke->"+std::to_string(iteration));
+            auto ts=gtimers.getTimer("Scatter->"+std::to_string(iteration));
+            ta->start();
             inputTensor = aggregate(inputTensor, graph.localVtxCnt, getFeatDim(iteration));
+            ta->stop();
+            ti->start();
             inputTensor = invokeLambda(inputTensor, graph.localVtxCnt,
               getFeatDim(iteration), getFeatDim(iteration + 1));
+            ti->stop();
+            ts->start();
             if (iteration < numLayers - 1) { // don't need scatter at the last layer.
                 inputTensor = scatter(inputTensor,
                   graph.localVtxCnt, getFeatDim(iteration + 1));
                 forwardGhostVerticesDataIn = forwardGhostVerticesDataOut;
             }
+            ts->stop();
         }
     }
 
@@ -291,8 +301,11 @@ Engine::runForward(unsigned epoch) {
     // For Aggregation -> Apply -> Scatter pipeline use this block
     if (pipeline) {
         for (iteration = 0; iteration < numLayers; ++iteration) {
+            auto ta=gtimers.getTimer("AggScatter->"+std::to_string(iteration));
+            ta->start();
             inputTensor = fusedGAS(inputTensor, graph.localVtxCnt, getFeatDim(iteration),
               getFeatDim(iteration + 1), iteration < numLayers - 1);
+            ta->stop();
         }
     }
 
@@ -328,12 +341,26 @@ Engine::runBackward(FeatType *initGradTensor) {
 
     // Pure sequential
     if (!pipeline) {
+        auto ti=gtimers.getTimer("Invoke<-"+std::to_string(iteration));
+        ti->start();
         gradTensor = invokeLambdaBackward(gradTensor, graph.localVtxCnt, getFeatDim(numLayers - 1), getFeatDim(numLayers));
+        ti->stop();
+
         for (iteration = numLayers - 1; iteration > 0; --iteration) {
+            ti=gtimers.getTimer("Invoke<-"+std::to_string(iteration));
+            auto ts=gtimers.getTimer("Scatter<-"+std::to_string(iteration));
+            auto ta=gtimers.getTimer("Agg<-"+std::to_string(iteration));
+
+            ts->start();
             gradTensor = scatterBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration));
+            ts->stop();
             backwardGhostVerticesDataIn = backwardGhostVerticesDataOut;
+            ta->start();
             gradTensor = aggregateBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration));
+            ta->stop();
+            ti->start();
             gradTensor = invokeLambdaBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration - 1), getFeatDim(iteration));
+            ti->stop();
         } 
     }
 
@@ -350,7 +377,10 @@ Engine::runBackward(FeatType *initGradTensor) {
     // Fused GAS Backward
     if (pipeline) {
         for (iteration = numLayers; iteration > 0; --iteration) {
+            auto ti=gtimers.getTimer("AggScatter<-"+std::to_string(iteration));
+            ti->start();
             gradTensor = fusedGASBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration - 1), getFeatDim(iteration), iteration < numLayers, iteration > 1);
+            ti->stop();
         }
     }
 
@@ -1796,7 +1826,7 @@ Engine::calcAcc(FeatType *predicts, FeatType *labels, unsigned vtcsCnt, unsigned
  */
 void
 Engine::printEngineMetrics() {
-    gtimers.report();
+    gtimers.report(1,mode);
     printLog(nodeId, "<EM>: Using %u forward lambdas and %u bacward lambdas",
              numLambdasForward, numLambdasBackward);
     printLog(nodeId, "<EM>: Initialization takes %.3lf ms", timeInit);
