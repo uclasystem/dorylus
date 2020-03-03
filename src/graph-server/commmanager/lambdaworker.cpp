@@ -89,10 +89,10 @@ LambdaWorker::work() {
                     break;
                 }
                 case (OP::PUSH): {
-                    sendTensors(partId, identity);
+                    recvTensors(partId, identity);
                 }
                 case (OP::PULL): {
-                    recvTensors(partId, identity);
+                    sendTensors(partId, identity);
                 }
                 default: {
                     printLog(manager->nodeId, "unknown op %d, part id %d", op, partId);
@@ -463,16 +463,15 @@ void LambdaWorker::sendTensors(unsigned partId, zmq::message_t& client_id) {
         workersocket.recv(&tensorHeader);
 
         std::string name = parseName((char*)tensorHeader.data());
+        printLog(manager->nodeId, "Got request for tensor %s:%u", name.c_str(), partId);
         auto found = savedVtxTensors->find(name);
         if (found == savedVtxTensors->end()) {
-            std::cerr << "Requested tensor '" << name << "' not found" << std::endl;
+            printLog(manager->nodeId, "Requested tensor '%s' not found", name.c_str());
             zmq::message_t errorHeader(TENSOR_HDR_SIZE);
             populateHeader(errorHeader.data(), ERR_HEADER_FIELD, name.c_str());
             workersocket.send(errorHeader);
             return;
         } else {
-            std::cout << "Received request for '" << name <<
-              "' partition " << partId << std::endl;
             Matrix& reqMatrix = found->second;
             getPartitionInfo(reqMatrix, partId, more);
         }
@@ -502,10 +501,9 @@ void LambdaWorker::recvTensors(unsigned partId, zmq::message_t& client_id) {
         Matrix result = recvTensor();
         auto found = savedVtxTensors->find(result.name());
         if (found == savedVtxTensors->end()) {
-            std::cerr << "Pushed tensor '" << result.name()
-              << "' not found. Make sure to allocate it before starting workers!" << std::endl;
+            printLog(manager->nodeId, "Lambda returned unknown tensor '%'. Make sure to allocate it before running lambdas!", result.name().c_str());
         } else {
-            std::cout << "Received push for '" << result.name() << "'" << std::endl;
+            printLog(manager->nodeId, "Lambda return tensor '%s'", result.name().c_str());
         }
 
         FeatType* partPtr = found->second.getData() + (partId * result.getRows() * result.getCols());

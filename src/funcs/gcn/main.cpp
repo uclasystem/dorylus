@@ -236,7 +236,9 @@ testLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, unsigned pa
     const char* tensor_names[] = {"AH0", "T0"};
     const char* weight_names[] = {"W0"};
 
+    std::cout << "Req data Tensors" << std::endl;
     std::vector<Matrix> matrices = reqTensors(data_socket, partId, 2, tensor_names);
+    std::cout << "Req weights" << std::endl;
     std::vector<Matrix> weights = reqTensors(weights_socket, partId, 1, weight_names);
 
     for (auto& M : matrices)

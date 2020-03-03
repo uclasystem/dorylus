@@ -134,6 +134,7 @@ Matrix recvTensor(zmq::socket_t& socket) {
         std::cerr << "No tensor '" << name << "' found on server" << std::endl;
         return Matrix();
     }
+    std::cout << "Getting tensor data for " << name << std::endl;
     socket.recv(&tensorData);
 
     unsigned rows = parse<unsigned>((char*)tensorHeader.data(), 3);
@@ -152,6 +153,7 @@ std::vector<Matrix> reqTensors(zmq::socket_t& socket, unsigned partId, unsigned 
     for (uint32_t u = 0; u < numTensors; ++u) {
         const char* name = tensorNames[u];
 
+        std::cout << "Requesting tensor " << name << std::endl;
         zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
         populateHeader(tensorHeader.data(), partId, name);
         if (u < numTensors-1) {
@@ -161,6 +163,7 @@ std::vector<Matrix> reqTensors(zmq::socket_t& socket, unsigned partId, unsigned 
         }
     }
 
+    std::cout << "Waiting for tensors" << std::endl;
     std::vector<Matrix> matrices;
     unsigned more = 1;
     while (more) {
