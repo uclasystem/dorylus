@@ -143,19 +143,17 @@ Matrix recvTensor(zmq::socket_t& socket) {
     FeatType* data = new FeatType[rows * cols];
     std::memcpy(data, tensorData.data(), tensorData.size());
 
-    return Matrix(name, rows, cols, data);
+    return Matrix(name.c_str(), rows, cols, data);
 }
 
-std::vector<Matrix> reqTensors(zmq::socket_t& socket, unsigned partId, unsigned numTensors, const char** tensorNames) {
+std::vector<Matrix> reqTensors(zmq::socket_t& socket, unsigned partId, std::vector<std::string>& tensorRequests) {
     zmq::message_t header(HEADER_SIZE);
     populateHeader(header.data(), OP::PULL, partId);
     socket.send(header, ZMQ_SNDMORE);
-    for (uint32_t u = 0; u < numTensors; ++u) {
-        const char* name = tensorNames[u];
-
+    for (auto& name : tensorRequests) {
         std::cout << "Requesting tensor " << name << std::endl;
         zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
-        populateHeader(tensorHeader.data(), partId, name);
+        populateHeader(tensorHeader.data(), partId, name.c_str());
         if (u < numTensors-1) {
             socket.send(tensorHeader, ZMQ_SNDMORE);
         } else {
