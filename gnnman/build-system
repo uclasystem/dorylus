@@ -27,7 +27,6 @@ let BUILD_GRAPH=1
 let BUILD_WEIGHT=1
 BACKEND_OPT=''
 for var in $@; do
-    echo $var
     if [[ $var == "gpu" ]] || [[ $var == "cpu" ]]; then
         BACKEND_OPT=$var
     elif [[ $var == "graph" ]]; then
