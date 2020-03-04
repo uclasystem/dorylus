@@ -18,8 +18,8 @@
 class Matrix {
 public:
     Matrix();
-    Matrix(std::string _name, unsigned _rows, unsigned _cols);
-    Matrix(std::string _name, unsigned _rows, unsigned _cols, FeatType *_data);
+    Matrix(const char* _name, unsigned _rows, unsigned _cols);
+    Matrix(const char* _name, unsigned _rows, unsigned _cols, FeatType *_data);
     Matrix(unsigned _rows, unsigned _cols);
     Matrix(unsigned _rows, unsigned _cols, FeatType *_data);
     Matrix(unsigned _rows, unsigned _cols, char *_data);
@@ -38,7 +38,7 @@ public:
     // Just returns a pointer to the start of the row (no size information etc)
     FeatType* get(unsigned row);
 
-    void setName(std::string& _name);
+    void setName(const char* _name);
     void setRows(unsigned _rows);
     void setCols(unsigned _cols);
     void setDims(unsigned _rows, unsigned _cols);
@@ -84,8 +84,8 @@ public:
     Matrix dot(Matrix& M, bool transpose1 = false, bool transpose2 = false, float scale = 1.0);
 
     std::string shape();
-
     std::string str();
+    std::string signature();
 
 private:
     std::string tensorName;

@@ -4,12 +4,12 @@ Matrix::Matrix() {
     rows = 0; cols = 0;
 }
 
-Matrix::Matrix(std::string _name, unsigned _rows, unsigned _cols) {
+Matrix::Matrix(const char* _name, unsigned _rows, unsigned _cols) {
     tensorName = _name;
     rows = _rows; cols = _cols;
 }
 
-Matrix::Matrix(std::string _name, unsigned _rows, unsigned _cols, FeatType *_data) {
+Matrix::Matrix(const char* _name, unsigned _rows, unsigned _cols, FeatType *_data) {
     tensorName = _name;
     rows = _rows; cols = _cols; data = _data;
 }
@@ -42,7 +42,7 @@ FeatType Matrix::get(unsigned row, unsigned col) { return data[row * cols + col]
 FeatType* Matrix::get(unsigned row) { return data + (row * cols); }
 
 // Setting Matrix info (not sure when this would be used)
-void Matrix::setName(std::string& _name) { tensorName = _name; }
+void Matrix::setName(const char* _name) { tensorName = _name; }
 void Matrix::setRows(unsigned _rows) { rows = _rows; }
 void Matrix::setCols(unsigned _cols) { cols = _cols; }
 void Matrix::setDims(unsigned _rows, unsigned _cols) { rows = _rows; cols = _cols; }
@@ -312,12 +312,31 @@ std::string Matrix::shape() { return "(" + std::to_string(rows) + ", " + std::to
 
 std::string Matrix::str() {
     std::stringstream output;
-    output << "Matrix Dims: " << shape() << "\n";
+    output << "Matrix " << tensorName << "\n";
+    output << "Dims: " << shape() << "\n";
     for (unsigned i = 0; i < rows; ++i) {
         for (unsigned j = 0; j < cols; ++j) {
             output << std::fixed << std::setprecision(8) << data[i * cols + j] << " ";
         }
         output << "\n";
     }
+    return output.str();
+}
+
+std::string Matrix::signature() {
+    auto sumRow = [](FeatType* rowPtr, unsigned cols) {
+        float sum = 0;
+        for (unsigned c = 0; c < cols; ++c) {
+            sum += rowPtr[c];
+        }
+        return sum;
+    };
+
+    std::stringstream output;
+    output << "Matrix: " << tensorName << "\n";
+    output << "Sum row 0: " << sumRow(get(0), cols) << "\n";
+    output << "Sum row " << rows/2 << ": " << sumRow(get(rows/2), cols) << "\n";
+    output << "Sum row " << rows-1 << ": " << sumRow(get(rows-1), cols) << "\n";
+
     return output.str();
 }
