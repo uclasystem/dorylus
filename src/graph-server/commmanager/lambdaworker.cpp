@@ -88,11 +88,13 @@ LambdaWorker::work() {
                     recvChunk(newGradMatrix, identity, partId, layer, false);
                     break;
                 }
-                case (OP::PUSH): {
-                    recvTensors(partId, identity);
-                }
                 case (OP::PULL): {
                     sendTensors(partId, identity);
+                    break;
+                }
+                case (OP::PUSH): {
+                    recvTensors(partId, identity);
+                    break;
                 }
                 default: {
                     printLog(manager->nodeId, "unknown op %d, part id %d", op, partId);
@@ -463,7 +465,6 @@ void LambdaWorker::sendTensors(unsigned partId, zmq::message_t& client_id) {
         workersocket.recv(&tensorHeader);
 
         std::string name = parseName((char*)tensorHeader.data());
-        printLog(manager->nodeId, "Got request for tensor %s:%u", name.c_str(), partId);
         auto found = savedVtxTensors->find(name);
         if (found == savedVtxTensors->end()) {
             printLog(manager->nodeId, "Requested tensor '%s' not found", name.c_str());
@@ -478,7 +479,7 @@ void LambdaWorker::sendTensors(unsigned partId, zmq::message_t& client_id) {
     }
 }
 
-Matrix LambdaWorker::recvTensor() {
+int LambdaWorker::storeTensorPart(unsigned partId) {
     zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
     zmq::message_t tensorData;
 
@@ -486,31 +487,38 @@ Matrix LambdaWorker::recvTensor() {
     workersocket.recv(&tensorData);
 
     std::string name = parseName((char*)tensorHeader.data());
-    unsigned rows = parse<unsigned>((char*)tensorHeader.data(), 3);
-    unsigned cols = parse<unsigned>((char*)tensorHeader.data(), 4);
+    auto found = savedVtxTensors->find(name);
+    if (found == savedVtxTensors->end()) {
+        printLog(manager->nodeId, "Lambda %u returned unknown tensor '%s'. \
+          Make sure to allocate it before running lambdas!",
+          partId, name.c_str());
+        return 1;
+    }
 
-    FeatType* data = new FeatType[rows * cols];
-    std::memcpy(data, tensorData.data(), tensorData.size());
+    Matrix& result = found->second;
+    printLog(manager->nodeId, "Lambda %u returned tensor '%s'",
+      partId, result.name().c_str());
+    unsigned partRows = std::ceil((float) result.getRows() / (float) (manager->numLambdasForward));
 
-    return Matrix(name, rows, cols, data);
+    FeatType* partPtr = result.getData() + (partId * partRows * result.getCols());
+    std::memcpy(partPtr, tensorData.data(), tensorData.size());
+
+    return 0;
 }
 
 void LambdaWorker::recvTensors(unsigned partId, zmq::message_t& client_id) {
     unsigned more = 1;
-    while (more) {
-        Matrix result = recvTensor();
-        auto found = savedVtxTensors->find(result.name());
-        if (found == savedVtxTensors->end()) {
-            printLog(manager->nodeId, "Lambda returned unknown tensor '%'. Make sure to allocate it before running lambdas!", result.name().c_str());
-        } else {
-            printLog(manager->nodeId, "Lambda return tensor '%s'", result.name().c_str());
-        }
-
-        FeatType* partPtr = found->second.getData() + (partId * result.getRows() * result.getCols());
-        std::memcpy(partPtr, result.getData(), result.getRows() * result.getCols() * sizeof(FeatType));
+    int ret = 0;
+    while (more && ret == 0) {
+        ret = storeTensorPart(partId);
 
         size_t usize = sizeof(more);
         workersocket.getsockopt(ZMQ_RCVMORE, &more, &usize);
+    }
+
+    if (ret == 0) {
+        __sync_bool_compare_and_swap(manager->forwardLambdaTable + partId, true, false);
+        __sync_fetch_and_add(&(manager->countForward), 1);
     }
 }
 // end named-tensors

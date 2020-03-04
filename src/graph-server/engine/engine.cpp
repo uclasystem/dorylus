@@ -30,6 +30,32 @@ static ComputingUnit cu = ComputingUnit::getInstance();
 
 static int globalEpoch = -1;
 
+void outputToFile(std::ofstream& outfile, FeatType* fptr, unsigned start,
+  unsigned end, unsigned c) {
+    std::string out = "";
+    for (uint32_t u = start; u < end; ++u) {
+        for (uint32_t uj = 0; uj < c; ++uj) {
+            out += std::to_string(fptr[u * c + uj]) + " ";
+        }
+        out += "\n";
+    }
+    out += "\n";
+
+    outfile.write(out.c_str(), out.size());
+
+    outfile << std::flush;
+}
+
+void outputToFile(std::ofstream& outfile, Matrix& mat) {
+    outfile.write(mat.str().c_str(), mat.str().size());
+    outfile << std::endl << std::flush;
+}
+
+void outputToFile(std::ofstream& outfile, std::string str) {
+    outfile.write(str.c_str(), str.size());
+    outfile << std::endl << std::flush;
+}
+
 
 /**
  *
@@ -45,6 +71,8 @@ Engine::init(int argc, char *argv[]) {
 
     // Initialize the node manager and communication manager.
     nodeManager.init(dshMachinesFile, myPrIpFile, myPubIpFile);    // NodeManger should go first.
+
+    debugFile.open("debug.out", std::ofstream::out | std::ofstream::trunc);
 
     nodeId = nodeManager.getMyNodeId();
     numNodes = nodeManager.getNumNodes();
@@ -132,6 +160,8 @@ Engine::init(int argc, char *argv[]) {
 void
 Engine::destroy() {
     printLog(nodeId, "Destroying the engine...");
+
+    debugFile.close();
 
     nodeManager.destroy();
     commManager.destroy();
@@ -348,20 +378,72 @@ Engine::runBackward(FeatType *initGradTensor) {
 
 void
 Engine::runEpoch(unsigned epoch) {
-    iteration = 0;
     FeatType* inputTensor = forwardVerticesInitData;
     forwardGhostVerticesDataIn = forwardGhostInitData;
 
-    unsigned featDim = getFeatDim(iteration);
+    for (iteration = 0; iteration < numLayers; ++iteraion) {
+        unsigned featDim = getFeatDim(iteration);
+        unsigned nextFeatDim = getFeatDim(iteration + 1);
+        char tName[8];
+
+        FeatType* ahTensor = new FeatType[graph.localVtxCnt * featDim];
+        sprintf(tName, "AH%u", iteration);
+        saveTensor(tName, graph.localVtxCnt, featDim, ahTensor);
+
+        // Aggregate
+        AggOPArgs args = {ahTensor, inputTensor, graph.localVtxCnt, featDim};
+        auto computeFn = std::bind(&Engine::aggregateCompute, this, std::placeholders::_1,
+          std::placeholders::_2);
+
+        currId = 0;
+        computePool->perform(computeFn, &args);
+        computePool->sync();
+
+        if (iteration < numLayers - 1) {
+            // If middle layer, allocate Z and H tensors
+            FeatType* zTensor = new FeatType[graph.localVtxCnt * nextFeatDim];
+            FeatType* hTensor = new FeatType[graph.localVtxCnt * nextFeatDim];
+            sprintf(tName, "Z%u", iteration);
+            saveTensor(tName, graph.localVtxCnt, nextFeatDim, zTensor);
+            sprintf(tName, "H%u", iteration);
+            saveTensor(tName, graph.localVtxCnt, nextFeatDim, hTensor);
+        } else {
+            // If final layer, pre-allocate backward tensor for backward
+            FeatType* gradTensor = new FeatType[graph.localVtxCnt * featDim];
+            sprintf(tName, "GRAD%u", iteration);
+            saveTensor(tName, graph.localVtxCnt, featDim, gradTensor);
+        }
+
+        for (unsigned u = 0; u < numLambdasForward; ++u) {
+            resComm->requestInvoke(iteration, u, iteration == numLayers - 1);
+        }
+
+        resComm->waitLambda(iteration, iteration == numLayers - 1);
+
+        if (iteration < numLayer - 1) {
+            scatter(hTensor, graph.localVtxCnt, nextFeatDim);
+            forwardGhostVerticesDataIn = forwardGhostVerticesDataOut;
+        }
+    }
+
+    for (iteration = numLayers - 1; iteraion > 0; --iteration) {
+        scatterBackward(
+    }
+
+    return;
+//REFERENCE
+    iteration = 0;
+
+    char tName[8];
     FeatType* ahTensor = new FeatType[graph.localVtxCnt * featDim];
-    std::string ahTensorName = "AH" + std::to_string(iteration);
-    saveTensor(ahTensorName, graph.localVtxCnt, featDim, ahTensor);
+    sprintf(tName, "AH%u", iteration);
+    saveTensor(tName, graph.localVtxCnt, featDim, ahTensor);
     FeatType* testTensor = new FeatType[graph.localVtxCnt * featDim];
     for (uint32_t u = 0; u < graph.localVtxCnt * featDim; ++u) {
         testTensor[u] = 1.2;
     }
-    std::string testName = "T" + std::to_string(iteration);
-    saveTensor(testName, graph.localVtxCnt, featDim, testTensor);
+    sprintf(tName, "T%u", iteration);
+    saveTensor(tName, graph.localVtxCnt, featDim, testTensor);
 
     AggOPArgs args = {ahTensor, inputTensor, graph.localVtxCnt, featDim};
     auto computeFn = std::bind(&Engine::aggregateCompute, this, std::placeholders::_1,
@@ -374,14 +456,31 @@ Engine::runEpoch(unsigned epoch) {
     unsigned nextFeatDim = getFeatDim(iteration + 1);
     FeatType* zTensor = new FeatType[graph.localVtxCnt * nextFeatDim];
     FeatType* hTensor = new FeatType[graph.localVtxCnt * nextFeatDim];
-    std::string zTensorName = "Z" + std::to_string(iteration);
-    std::string hTensorName = "H" + std::to_string(iteration);
-    saveTensor(zTensorName, graph.localVtxCnt, nextFeatDim, zTensor);
-    saveTensor(hTensorName, graph.localVtxCnt, nextFeatDim, hTensor);
+    sprintf(tName, "Z%u", iteration);
+    saveTensor(tName, graph.localVtxCnt, nextFeatDim, zTensor);
+    sprintf(tName, "H%u", iteration);
+    saveTensor(tName, graph.localVtxCnt, nextFeatDim, hTensor);
 
-    resComm->requestInvoke(iteration, 0, iteration == numLayers - 1);
+    for (unsigned u = 0; u < numLambdasForward; ++u) {
+        resComm->requestInvoke(iteration, u, iteration == numLayers - 1);
+    }
 
     resComm->waitLambda(iteration, iteration == numLayers - 1);
+
+    auto z = savedVtxTensors.find("Z0");
+    auto h = savedVtxTensors.find("H0");
+    if (z == savedVtxTensors.end()) {
+        printLog(nodeId, "COULDN'T FIND 'Z0'");
+        return;
+    } else if (h == savedVtxTensors.end()) {
+        printLog(nodeId, "COULDN'T FIND 'H0'");
+        return;
+    } else {
+        Matrix& Z = z->second;
+        Matrix& H = h->second;
+        outputToFile(debugFile, Z.signature());
+        outputToFile(debugFile, H.signature());
+    }
 }
 
 
@@ -1828,10 +1927,15 @@ Engine::calcAcc(FeatType *predicts, FeatType *labels, unsigned vtcsCnt, unsigned
 }
 
 void Engine::saveTensor(std::string& name, unsigned rows, unsigned cols, FeatType* dptr) {
-    savedVtxTensors.emplace(name, Matrix(name, rows, cols, dptr));
+    savedVtxTensors.emplace(name, Matrix(name.c_str(), rows, cols, dptr));
+}
+
+void Engine::saveTensor(const char* name, unsigned rows, unsigned cols, FeatType* dptr) {
+    savedVtxTensors.emplace(std::string(name), Matrix(name, rows, cols, dptr));
 }
 
 void Engine::saveTensor(Matrix& mat) {
+    savedVtxTensors.emplace(mat.name(), mat);
 }
 
 

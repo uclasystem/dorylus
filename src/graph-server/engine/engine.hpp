@@ -253,6 +253,7 @@ private:
                                         FeatType *gradTensor, unsigned featDim);
 
     void saveTensor(std::string& name, unsigned rows, unsigned cols, FeatType *dptr);
+    void saveTensor(const char* name, unsigned rows, unsigned cols, FeatType *dptr);
     void saveTensor(Matrix& mat);
 
     // For initialization.

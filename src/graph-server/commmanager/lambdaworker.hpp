@@ -95,7 +95,7 @@ private:
     void getPartitionInfo(Matrix& tensor, unsigned partId, unsigned& more);
     void sendTensors(unsigned partId, zmq::message_t& client_id);
 
-    Matrix recvTensor();
+    int storeTensorPart(unsigned partId);
     void recvTensors(unsigned partId, zmq::message_t& client_id);
     // end named-tensors
 

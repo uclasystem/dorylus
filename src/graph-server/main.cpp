@@ -21,14 +21,6 @@ main(int argc, char *argv[]) {
     unsigned numEpochs = engine.getNumEpochs();
     unsigned valFreq = 1;
 
-    std::string opStr = "";
-    for (int i = OP::REQ_FORWARD; i != OP::PULL; ++i) {
-        OP op = static_cast<OP>(i);
-        opStr += std::to_string(op) + " ";
-    }
-    opStr += "\n";
-    printLog(engine.getNodeId(), "OPS %s", opStr.c_str());
-
     if (engine.master())
         printLog(engine.getNodeId(),"Number of epochs: %u, validation frequency: %u",
                     numEpochs, valFreq);
