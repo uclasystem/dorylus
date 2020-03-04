@@ -265,7 +265,7 @@ void ServerWorker::sendTensors(zmq::message_t& client_id) {
             workersocket.send(errorHeader);
             return;
         } else {
-            std::cout << "Received request for '" << name << std::endl;
+            std::cout << "Received request for '" << name << "'" << std::endl;
             Matrix& reqMatrix = found->second;
             sendTensor(reqMatrix, more);
         }

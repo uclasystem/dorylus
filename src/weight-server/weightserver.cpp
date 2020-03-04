@@ -19,8 +19,10 @@ static bool checkCorrectnessFlag = true;
 /** Logging utility. */
 void
 WeightServer::serverLog(std::string info) {
+    char msg[512];
+    sprintf(msg, "[ %s ] %s\n", master ? "MASTER" : "WORKER", info.c_str());
     std::string msgBase = master ? "[ MASTER ] " : "[ WORKER ] ";
-    std::cout << msgBase << info << std::endl;
+    fprintf(stdout, "%s", msg);
 }
 
 
@@ -184,7 +186,6 @@ void WeightServer::applyUpdate(unsigned layer) {
 
         // Worker code.
     } else {
-
         // Send the updated weight matrices to the master for aggregation.
         Matrix &updateMat = updateMats[layer];
         zmq::message_t updateDataMsg(updateMat.getDataSize());
@@ -299,7 +300,6 @@ void WeightServer::applyUpdates() {
 
         // Worker code.
     } else {
-
         // Send all updated weight matrices to the master for aggregation.
         for (unsigned i = 0; i < updateMats.size(); ++i) {
             Matrix &updateMat = updateMats[i];
@@ -413,7 +413,6 @@ WeightServer::initializeWeightServerComms(std::string &weightServersFile, std::s
         publisher.send(outMsg2);
 
     } else {
-
         zmq::message_t inMsg;   // Recv msg 1.
         while (subscriber.recv(&inMsg)) {
             unsigned msgType;
@@ -480,7 +479,6 @@ WeightServer::parseNodeConfig(std::string &weightServersFile, std::string &myPrI
  */
 void
 WeightServer::initializeWeightMatrices(std::string &configFileName) {
-
     // Read the layer config file. Each line is a number of features.
     std::ifstream infile(configFileName.c_str());
     if (!infile.good())
@@ -508,7 +506,7 @@ WeightServer::initializeWeightMatrices(std::string &configFileName) {
             // configurable
             Matrix w = xavierInitialization(dims[u], dims[u + 1]);
             std::string tenName = "W" + std::to_string(u);
-            w.setName(tenName);
+            w.setName(tenName.c_str());
             weightMats.push_back(w);
             saveTensor(w);
 
@@ -518,7 +516,7 @@ WeightServer::initializeWeightMatrices(std::string &configFileName) {
             //  for a NN module
             Matrix b = initBias(dims[u + 1]);
             tenName = "B" + std::to_string(u);
-            b.setName(tenName);
+            b.setName(tenName.c_str());
             biases.push_back(b);
             saveTensor(b);
         }
@@ -634,8 +632,9 @@ WeightServer::initBias(unsigned dim, float initVal) {
 
 void WeightServer::saveTensor(std::string& name, unsigned rows, unsigned cols,
   FeatType* dptr) {
-    weightsStore.emplace(name, Matrix(name, rows, cols, dptr));
+    weightsStore.emplace(name, Matrix(name.c_str(), rows, cols, dptr));
 }
+
 void WeightServer::saveTensor(Matrix& tensor) {
     weightsStore.emplace(tensor.name(), tensor);
 }
@@ -648,10 +647,7 @@ void WeightServer::saveTensor(Matrix& tensor) {
  */
 void
 WeightServer::distributeWeightMatrices() {
-
-    // Master code.
     if (master) {
-
         // Master sends all the weight matrices to the worker nodes.
         for (unsigned i = 0; i < weightMats.size(); ++i) {
             Matrix &weights = weightMats[i];
@@ -677,10 +673,8 @@ WeightServer::distributeWeightMatrices() {
                 acksNeeded--;
             }
         }
-
         // Worker code.
     } else {
-
         // Worker receives each weight matrix.
         int more = 0;
         do {
@@ -690,7 +684,10 @@ WeightServer::distributeWeightMatrices() {
             char *matxData = new char[weightData.size()];
             std::memcpy(matxData, weightData.data(), weightData.size());
 
-            weightMats.push_back(Matrix(dims[count], dims[count + 1], matxData));
+            std::string w_name = "W" + std::to_string(count);
+            Matrix w(w_name.c_str(), dims[count], dims[count+1], (FeatType*)matxData);
+            weightMats.push_back(w);
+            saveTensor(w);
             ++count;
 
             size_t more_size = sizeof(more);
@@ -712,8 +709,7 @@ WeightServer::distributeWeightMatrices() {
 /** Main entrance: Starts a weightserver instance and run. */
 int
 main(int argc, char *argv[]) {
-
-    // TODO: May need to start using an arg parser like boost.
+// TODO: May need to start using an arg parser like boost.
     assert(argc == 7);
     std::string weightServersFile = argv[1];
     std::string myPrIpFile = argv[2];
