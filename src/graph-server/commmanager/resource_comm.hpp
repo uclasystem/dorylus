@@ -34,6 +34,10 @@ class ResourceComm {
 public:
     ResourceComm() {};
     virtual ~ResourceComm() {};
+
+    virtual void reset(unsigned layer) = 0;
+    virtual void sendInfoMsg(unsigned layer) = 0;
+
     // For forward-prop.
     virtual void newContextForward(unsigned layer, FeatType *dataBuf,
         FeatType *zData, FeatType *actData, unsigned numLocalVertices,
@@ -53,7 +57,8 @@ public:
     virtual void invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLayer) = 0;
     virtual void waitLambdaBackward(unsigned layer, bool lastLayer) = 0;
 
-    virtual void requestInvoke(unsigned layer, unsigned lambdaId, bool lastLayer) = 0;
+    virtual void requestInvoke(unsigned layer, unsigned lambdaId,
+      PROP_TYPE prop_dir, bool lastLayer) = 0;
     virtual void waitLambda(unsigned layer, bool lastLayer) = 0;
 
     virtual unsigned getRelaunchCnt() { return 0u; };

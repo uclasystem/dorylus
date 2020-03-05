@@ -489,8 +489,7 @@ int LambdaWorker::storeTensorPart(unsigned partId) {
     std::string name = parseName((char*)tensorHeader.data());
     auto found = savedVtxTensors->find(name);
     if (found == savedVtxTensors->end()) {
-        printLog(manager->nodeId, "Lambda %u returned unknown tensor '%s'. \
-          Make sure to allocate it before running lambdas!",
+        printLog(manager->nodeId, "Lambda %u returned unknown tensor '%s'. Make sure to allocate it before running lambdas!",
           partId, name.c_str());
         return 1;
     }
@@ -519,6 +518,10 @@ void LambdaWorker::recvTensors(unsigned partId, zmq::message_t& client_id) {
     if (ret == 0) {
         __sync_bool_compare_and_swap(manager->forwardLambdaTable + partId, true, false);
         __sync_fetch_and_add(&(manager->countForward), 1);
+
+        zmq::message_t ack;
+        workersocket.send(client_id, ZMQ_SNDMORE);
+        workersocket.send(ack);
     }
 }
 // end named-tensors

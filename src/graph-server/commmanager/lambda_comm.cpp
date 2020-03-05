@@ -155,7 +155,7 @@ void LambdaComm::invokeLambda(Aws::String funcName, const char* dataserver, unsi
 }
 
 void LambdaComm::invokeLambda(Aws::String funcName, const char* dataserver, unsigned dport,
-  char* weightserver, unsigned wport, unsigned layer, unsigned id, bool forward, bool lastLayer) {
+  char* weightserver, unsigned wport, unsigned layer, unsigned id, PROP_TYPE prop_dir, bool lastLayer) {
     Aws::Lambda::Model::InvokeRequest invReq;
     invReq.SetFunctionName(funcName);
     invReq.SetInvocationType(Aws::Lambda::Model::InvocationType::RequestResponse);
@@ -169,9 +169,8 @@ void LambdaComm::invokeLambda(Aws::String funcName, const char* dataserver, unsi
     jsonPayload.WithInteger("dport", dport);
     jsonPayload.WithInteger("layer", layer);    // For forward-prop: layer-ID; For backward-prop: numLayers.
     jsonPayload.WithInteger("id", id);
-    jsonPayload.WithBool("prop_dir", forward);
+    jsonPayload.WithBool("prop_dir", prop_dir);
     jsonPayload.WithBool("lastLayer", lastLayer);
-    jsonPayload.WithBool("test", true);
 
     *payload << jsonPayload.View().WriteReadable();
     invReq.SetBody(payload);
@@ -201,7 +200,11 @@ void LambdaComm::callback(const Aws::Lambda::LambdaClient *client,
             if (v.KeyExists("success")) {
                 if (v.GetBool("success")) {
                     unsigned id = v.GetInteger("id");
-                    printLog(globalNodeId, "\033[1;32m[ SUCCESS ]\033[0m\t%u", id);
+                    if (v.KeyExists("message")) {
+                        printLog(globalNodeId, "\033[1;32m[ SUCCESS ]\033[0m %u %s", id, v.GetString("message").c_str());
+                    } else {
+                        printLog(globalNodeId, "\033[1;32m[ SUCCESS ]\033[0m %u, No message", id);
+                    }
                 } else {
                     if (v.KeyExists("reason")) {
                         printLog(globalNodeId, "\033[1;31m[ ERROR ]\033[0m\t%s", v.GetString("reason").c_str());
@@ -218,6 +221,34 @@ void LambdaComm::callback(const Aws::Lambda::LambdaClient *client,
 }
 // END LAMBDA INVOCATION AND RETURN FUNCTIONS
 
+
+/**
+ * Reset LambdaComm
+ */
+void
+LambdaComm::reset(unsigned layer) {
+    countForward = 0;
+    currLayer = layer;
+    timeoutPeriod = 0.0;
+}
+
+void
+LambdaComm::sendInfoMsg(unsigned layer) {
+    if (nodeId == 0) {
+        unsigned numLambdas = numNodes * numLambdasForward;
+
+        unsigned baseNumThreads = numLambdas / weightservers.size();
+        unsigned remainder = numLambdas % weightservers.size();
+
+        for (unsigned u = 0; u < remainder; ++u) {
+            sendInfoMessage(weightsockets[u % weightservers.size()], baseNumThreads + 1);
+        }
+
+        for (unsigned u = remainder; u < weightservers.size(); ++u) {
+            sendInfoMessage(weightsockets[u % weightservers.size()], baseNumThreads);
+        }
+    }
+}
 
 /**
  *
@@ -397,12 +428,12 @@ LambdaComm::relaunchLambda(bool forward, unsigned layer, unsigned lambdaId, bool
 
 
 void
-LambdaComm::requestInvoke(unsigned layer, unsigned lambdaId, bool lastLayer) {
+LambdaComm::requestInvoke(unsigned layer, unsigned lambdaId, PROP_TYPE prop_dir, bool lastLayer) {
     __sync_bool_compare_and_swap(forwardLambdaTable + lambdaId, false, true);
 
     char* weightServerIp = weightservers[(nodeId * numLambdasForward + lambdaId) % weightservers.size()];
     invokeLambda("gcn", nodeIp.c_str(), dataserverPort, weightServerIp,
-      weightserverPort, layer, lambdaId, true, lastLayer);
+      weightserverPort, layer, lambdaId, prop_dir, lastLayer);
 }
 
 void
