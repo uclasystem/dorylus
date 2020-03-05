@@ -40,9 +40,11 @@ void sendMatrix(Matrix& matrix, OP op, zmq::socket_t& socket, unsigned id);
 // named-tensors
 Matrix recvTensor(zmq::socket_t& socket);
 
-std::vector<Matrix> reqTensors(zmq::socket_t& socket, unsigned partId, std::vector<std::string>& tensorRequests);
+std::vector<Matrix> reqTensors(zmq::socket_t& socket, unsigned partId,
+  std::vector<std::string>& tensorRequests);
 
-void sendTensors(zmq::socket_t& socket, unsigned partId, std::vector<Matrix>& matrices);
+void sendTensors(zmq::socket_t& socket, unsigned partId,
+  std::vector<Matrix>& matrices, bool ack = false);
 // end named-tensors
 
 

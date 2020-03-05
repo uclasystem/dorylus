@@ -15,6 +15,7 @@
 #include <aws/core/Aws.h>
 #include <aws/core/utils/json/JsonSerializer.h>
 
+#include "utils.hpp"
 #include "../../common/matrix.hpp"
 #include "../../common/utils.hpp"
 
@@ -33,166 +34,173 @@ bool lastLayer = false;
 invocation_response
 finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
   unsigned partId, unsigned layer) {
-//    try {
-//        Matrix w, ah, z, predictions, labels;
-//        std::thread commThread;
-//
-//        // Request weights matrix of the current layer.
-//        commThread = std::thread([&] {     // Weight requests run in a separate thread.
-//            do {
-//                w = requestTensor(weights_socket, OP::PULL_FORWARD, layer);
-//            } while (weights.empty());
-//        });
-//
-//        // Request feature activation matrix of the current layer.
-//        std::cout << "< FORWARD > Asking dataserver..." << std::endl;
-//        do {
-//            ah = requestTensor(data_socket, OP::PULL_FORWARD, partId);
-//        } while (feats.empty());
-//        std::cout << "< FORWARD > Got data from dataserver." << std::endl;
-//
-//        commThread.join();
-//
-//        if (weights.empty()) {
-//            JsonValue jsonResponse;
-//            jsonResponse.WithBool("success", false);
-//            jsonResponse.WithString("reason", "Weights empty");
-//
-//            auto response = jsonResponse.View().WriteCompact();
-//            return invocation_response::success(response, "application/json");
-//        }
-//        if (feats.empty()) {
-//            JsonValue jsonResponse;
-//            jsonResponse.WithBool("success", false);
-//            jsonResponse.WithString("reason", "Features empty");
-//
-//            auto response = jsonResponse.View().WriteCompact();
-//            return invocation_response::success(response, "appliation/json");
-//        }
-//
-//        // Get labels for backward
-//        commThread = std::thread([&] {
-//            do {
-//                labels = requestTensor(data_socket, OP::PULL_BACKWARD, partId, TYPE::LAB);
-//            while (labels.empty());
-//        });
-//        // Multiplication.
-//        z = ah.dot(w);
-//        predictions = softmax(z);
-//        delete[] z.getData();
-//
-//        commThread.join();
-//        // d_o = softmax`(predictions)
-//        Matrix d_out = predictions - labels;
-//        delete[] predictions.getData();
-//        delete[] labels.getData();
-//
-//        // d_o * W^T
-//        Matrix interGrad = d_out.dot(w, false, true);
-//        delete[] weights.getData();
-//        sendMatrix(interGrad, data_socket, partId);
-//
-//        // AH^T * d_o
-//        Matrix d_W = ah.dot(d_out, true, false);
-//        delete[] ah.getData();
-//        delete[] d_out.getData();
-//    } catch(std::exception &ex) {
-//        JsonValue jsonResponse;
-//        jsonResponse.WithBool("success", false);
-//        jsonResponse.WithString("reason", ex.what());
-//
-//        auto response = jsonResponse.View().WriteCompact();
-//        return invocation_response::success(response, "application/json");
-//    }
-}
+    std::cout << "FINAL LAYER" << std::endl;
+    std::vector<std::string> dataRequests{"AH" + std::to_string(layer), "LAB"};
+    std::vector<std::string> weightRequests{"W" + std::to_string(layer)};
 
-invocation_response
-backwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket,
-  unsigned partId, unsigned layer) {
-//    Matrix grad, z, ah, w;
-//    std::commThread = std::thread([&]{
-//        std::cout << "< BACKWARD > Requesting weights" << std::endl;
-//        do {
-//            w = requestTensor(weight_socket, OP::PULL_BACKWARD, layer);
-//        } while (weights.empty());
-//    });
-//
-//    do {
-//        std::cout << "< BACKWARD > Requesting gradient from graph server" << std::endl;
-//        grad = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::GRAD, layer);
-//    } while (grad.empty());
-//
-//    do {
-//        std::cout << "< BACKWARD > Requesting Z values" << std::endl;
-//        z = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::Z, layer);
-//    } while (z.empty());
-//
-//    std::cout << "< BACKWARD > Requesting AH" << std::endl;
-//    do {
-//        ah = requestTensor(data_socket, OP::PULL_BACKWARD, id, TYPE::AH, layer);
-//    } while (ah.empty());
-//    commThread.join();
-//
-//    // BACKWARDS COMPUTATION
-//    std::cout << "< BACKWARD > Calculating derivative of activation "
-//              << z.shape() << std::endl;
-//    Matrix actDeriv = activateDerivative(z);
-//    delete[] z.getData();
-//
-//    std::cout << "< BACKWARD > Hadamard multiplication" << grad.shape() << " "
-//              << actDeriv.shape() << std::endl;
-//    Matrix interGrad = grad * actDeriv;
-//    delete[] grad.getData();
-//    delete[] actDeriv.getData();
-//
-//    std::cout << "< BACKWARD > MatMul(gradient, weights) " << interGrad.shape() << " "
-//              << weights.shape() << std::endl;
-//    Matrix resultGrad = interGrad.dot(weights, false, true);
-//    delete[] weights.getData();
-//
-//    std::cout << "< BACKWARD > Computing weight updates " << ah.shape() << " "
-//              << interGrad.shape() << std::endl;
-//    Matrix weightUpdates = ah.dot(interGrad, true, false);
-//    delete[] ah.getData();
-//    delete[] interGrad.getData();
-//    // END BACKWARDS COMPUTATION
-//
-//    // SENDING BACKWARDS RESULTS
-//    std::thread wThd([&] {
-//        std::cout << "< BACKWARD > Sending weight updates" << std::endl;
-//        sendMatrix(weightUpdates, weight_socket, layer);
-//        delete[] weightUpdates.getData();
-//    });
-//
-//    std::cout << "< BACKWARD > Sending gradient to graph server" << std::endl;
-//    sendMatrix(resultGrad, data_socket, id);
-//    delete[] resultGrad.getData();
-//    wThd.join();
-//    // END SENDING BACKWARDS RESULTS
-}
-
-invocation_response
-forwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, unsigned partId,
-  unsigned layer) {
-    std::vector<std::string> dataRequests{"AH" + std::to_string(layer)};
-    std::vector<std::string> weightRequests("W" + std::to_string(layer)};
-
-    std::cout << "Req data Tensors" << std::endl;
     std::vector<Matrix> matrices = reqTensors(data_socket, partId, dataRequests);
-    std::cout << "Req weights" << std::endl;
     std::vector<Matrix> weights = reqTensors(weights_socket, partId, weightRequests);
 
     for (auto& M : matrices) {
         if (M.empty()){
             std::cout << M.name() << " is empty" << std::endl;
             return constructResp(false, partId, M.name() + " is empty");
+        } else {
+            std::cout << "GOT " << M.name() << std::endl;
         }
     }
-
     for (auto& W : weights) {
         if (W.empty()){
             std::cout << W.name() << " is empty" << std::endl;
             return constructResp(false, partId, W.name() + " is empty");
+        } else {
+            std::cout << "GOT " << W.name() << std::endl;
+        }
+    }
+
+    // Forward layer
+    Matrix& AH = matrices[0];
+    Matrix& W = weights[0];
+
+    Matrix Z = AH.dot(W);
+    Matrix preds = softmax(Z);
+    Matrix& labels = matrices[1];
+
+    // Backward computation
+    Matrix d_out = preds - labels;
+    Matrix interGrad = d_out.dot(W, false, true);
+    Matrix d_weights = AH.dot(d_out, true, false);
+    char name[8];
+    sprintf(name, "GRAD%u", layer);
+    interGrad.setName(name);
+
+    sprintf(name, "W%u", layer);
+    d_weights.setName(name);
+
+    std::vector<Matrix> weightUpdates{d_weights};
+    sendTensors(weights_socket, layer, weightUpdates);
+
+    std::vector<Matrix> toSend{interGrad};
+    sendTensors(data_socket, partId, toSend, true);
+
+    std::cout << "SENT tensors and weight updates" << std::endl;
+
+    // Clean up data
+    for (auto& M : matrices)
+        deleteMatrix(M);
+    for (auto& W : weights)
+        deleteMatrix(W);
+    for (auto& M : toSend)
+        deleteMatrix(M);
+    for (auto& M : weightUpdates)
+        deleteMatrix(M);
+    std::cout << "Data cleaned up" << std::endl;
+
+    return constructResp(true, partId, "Finished final layer");
+}
+
+invocation_response
+backwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
+  unsigned partId, unsigned layer) {
+    std::cout << "BACKWARD LAYER" << std::endl;
+    std::vector<std::string> dataReqs{"AH" + std::to_string(layer), "Z" + std::to_string(layer), "BAH" + std::to_string(layer+1)};
+    std::vector<std::string> weightReqs{"W" + std::to_string(layer)};
+    std::vector<Matrix> matrices = reqTensors(data_socket, partId, dataReqs);
+    std::vector<Matrix> weights = reqTensors(weights_socket, partId, weightReqs);
+
+    for (auto& M : matrices) {
+        if (M.empty()){
+            std::cout << M.name() << " is empty" << std::endl;
+            return constructResp(false, partId, M.name() + " is empty");
+        } else {
+            std::cout << "GOT " << M.name() << std::endl;
+        }
+    }
+    for (auto& W : weights) {
+        if (W.empty()){
+            std::cout << W.name() << " is empty" << std::endl;
+            return constructResp(false, partId, W.name() + " is empty");
+        } else {
+            std::cout << "GOT " << W.name() << std::endl;
+        }
+    }
+
+    auto printInfo = [&](Matrix& mat) {
+        std::cout << mat.name() << ": " << mat.shape() << std::endl;
+    };
+
+    Matrix& AH = matrices[0];
+    Matrix& Z = matrices[1];
+    Matrix& grad = matrices[2];
+
+    Matrix& W = weights[0];
+    printInfo(AH);
+    printInfo(Z);
+    printInfo(grad);
+    printInfo(W);
+    char name[8];
+
+    Matrix actDeriv = tanhDerivative(Z);
+    sprintf(name, "Z'");
+    actDeriv.setName(name);
+    printInfo(actDeriv);
+
+    Matrix interGrad = grad * actDeriv;
+    sprintf(name, "d_z");
+    interGrad.setName(name);
+    printInfo(interGrad);
+
+    Matrix resultGrad = interGrad.dot(W, false, true);
+
+    Matrix d_weights = AH.dot(interGrad, true, false);
+
+    sprintf(name, "W%u", layer);
+    d_weights.setName(name);
+
+    sprintf(name, "GRAD%u", layer);
+    resultGrad.setName(name);
+
+    std::vector<Matrix> weightUpdates{d_weights};
+    std::vector<Matrix> toSend{resultGrad};
+
+    printInfo(resultGrad);
+    printInfo(d_weights);
+
+    sendTensors(weights_socket, layer, weightUpdates);
+    sendTensors(data_socket, partId, toSend, true);
+
+    for (auto& M : toSend)
+        deleteMatrix(M);
+    for (auto& M : weightUpdates)
+        deleteMatrix(M);
+
+    return constructResp(true, partId, "Finished backward layer");
+}
+
+invocation_response
+forwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, unsigned partId,
+  unsigned layer) {
+    std::cout << "FORWARD LAYER" << std::endl;
+    std::vector<std::string> dataRequests{"AH" + std::to_string(layer)};
+    std::vector<std::string> weightRequests{"W" + std::to_string(layer)};
+
+    std::vector<Matrix> matrices = reqTensors(data_socket, partId, dataRequests);
+    std::vector<Matrix> weights = reqTensors(weights_socket, partId, weightRequests);
+
+    for (auto& M : matrices) {
+        if (M.empty()){
+            std::cout << M.name() << " is empty" << std::endl;
+            return constructResp(false, partId, M.name() + " is empty");
+        } else {
+            std::cout << "GOT " << M.name() << std::endl;
+        }
+    }
+    for (auto& W : weights) {
+        if (W.empty()){
+            std::cout << W.name() << " is empty" << std::endl;
+            return constructResp(false, partId, W.name() + " is empty");
+        } else {
+            std::cout << "GOT " << W.name() << std::endl;
         }
     }
 
@@ -212,7 +220,9 @@ forwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, unsigned
     toSend.push_back(Z);
     toSend.push_back(H_l);
 
-    sendTensors(data_socket, partId, toSend);
+    sendTensors(data_socket, partId, toSend, true);
+
+    std::cout << "SENT tensors Z, H" << std::endl;
 
     // Clean up data
     for (auto& M : matrices)
@@ -221,6 +231,8 @@ forwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, unsigned
         deleteMatrix(W);
     for (auto& M : toSend)
         deleteMatrix(M);
+
+    std::cout << "Data cleaned up" << std::endl;
 
     return constructResp(true, partId, "Finished forward layer");
 }
@@ -276,6 +288,12 @@ apply_phase(std::string dataserver, std::string weightserver, unsigned dport,
     } else if (prop_dir == PROP_TYPE::BACKWARD) {
         return backwardLayer(data_socket, weights_socket, id, layer);
     }
+
+    std::cout << "Returning from function" << std::endl;
+
+//    weights_socket.close();
+//    data_socket.close();
+//    ctx.close();
 
     return constructResp(false, id, "Didn't run any config");
 }

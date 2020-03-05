@@ -2,8 +2,13 @@
 #define __GCN_UTILS_HPP__
 
 #include <aws/lambda-runtime/runtime.h>
+#include <aws/core/Aws.h>
+#include <aws/core/utils/json/JsonSerializer.h>
 
 #include "../../common/matrix.hpp"
+
+using namespace Aws::Utils::Json;
+using namespace aws::lambda_runtime;
 
 invocation_response
 constructResp(bool success, unsigned id, std::string msg) {
