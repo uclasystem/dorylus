@@ -74,7 +74,7 @@ ServerWorker::work() {
                     recvUpdate(identity, arg);
                     break;
                 case (OP::PUSH):
-                    recvTensors(identity);
+                    recvTensors(identity, arg);
                     break;
                 case (OP::PULL):
                     sendTensors(identity);
@@ -272,14 +272,13 @@ void ServerWorker::sendTensors(zmq::message_t& client_id) {
     }
 }
 
-void ServerWorker::recvUpdateTensor() {
+void ServerWorker::recvUpdateTensor(unsigned layer) {
     zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
     zmq::message_t tensorData;
 
     workersocket.recv(&tensorHeader);
     workersocket.recv(&tensorData);
 
-    unsigned layer = parse<unsigned>((char*)tensorHeader.data(), 0);
     std::string name = parseName((char*)tensorHeader.data());
     if (weightsStore.find(name) == weightsStore.end()) {
         std::cerr << "Pushed tensor '" << name
@@ -300,10 +299,10 @@ void ServerWorker::recvUpdateTensor() {
     }
 }
 
-void ServerWorker::recvTensors(zmq::message_t& client_id) {
+void ServerWorker::recvTensors(zmq::message_t& client_id, unsigned layer) {
     unsigned more = 1;
     while (more) {
-        recvUpdateTensor();
+        recvUpdateTensor(layer);
 
         size_t usize = sizeof(more);
         workersocket.getsockopt(ZMQ_RCVMORE, &more, &usize);

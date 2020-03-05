@@ -57,8 +57,8 @@ private:
     //void getPartitionInfo(Matrix& tensor, unsigned partId, unsigned& more);
     void sendTensors(zmq::message_t& client_id);
 
-    void recvUpdateTensor();
-    void recvTensors(zmq::message_t& client_id);
+    void recvUpdateTensor(unsigned layer);
+    void recvTensors(zmq::message_t& client_id, unsigned layer);
     // end named-tensors
 
     zmq::context_t &ctx;
