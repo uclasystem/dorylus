@@ -308,6 +308,16 @@ Matrix Matrix::dot(Matrix& M, bool transpose1, bool transpose2, float scale) {
 }
 
 // Print functions for info / debugging
+float Matrix::sum() {
+    float sum = 0;
+    unsigned numElemts = getNumElemts();
+    for (unsigned u = 0; u < numElemts; ++u) {
+        sum += data[u];
+    }
+
+    return sum;
+}
+
 std::string Matrix::shape() { return "(" + std::to_string(rows) + ", " + std::to_string(cols) + ")"; }
 
 std::string Matrix::str() {
@@ -324,19 +334,20 @@ std::string Matrix::str() {
 }
 
 std::string Matrix::signature() {
-    auto sumRow = [](FeatType* rowPtr, unsigned cols) {
-        float sum = 0;
-        for (unsigned c = 0; c < cols; ++c) {
-            sum += rowPtr[c];
-        }
-        return sum;
-    };
+//    auto sumRow = [](FeatType* rowPtr, unsigned cols) {
+//        float sum = 0;
+//        for (unsigned c = 0; c < cols; ++c) {
+//            sum += rowPtr[c];
+//        }
+//        return sum;
+//    };
 
     std::stringstream output;
     output << "Matrix: " << tensorName << "\n";
-    output << "Sum row 0: " << sumRow(get(0), cols) << "\n";
-    output << "Sum row " << rows/2 << ": " << sumRow(get(rows/2), cols) << "\n";
-    output << "Sum row " << rows-1 << ": " << sumRow(get(rows-1), cols) << "\n";
+    output << "Sum: " << sum() << "\n";
+//    output << "Sum row 0: " << sumRow(get(0), cols) << "\n";
+//    output << "Sum row " << rows/2 << ": " << sumRow(get(rows/2), cols) << "\n";
+//    output << "Sum row " << rows-1 << ": " << sumRow(get(rows-1), cols) << "\n";
 
     return output.str();
 }

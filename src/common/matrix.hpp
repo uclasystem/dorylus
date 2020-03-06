@@ -83,6 +83,7 @@ public:
     // will cause a dangling pointer
     Matrix dot(Matrix& M, bool transpose1 = false, bool transpose2 = false, float scale = 1.0);
 
+    float sum();
     std::string shape();
     std::string str();
     std::string signature();
