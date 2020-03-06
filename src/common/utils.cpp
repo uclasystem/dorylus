@@ -2,4 +2,4 @@
 GPUTimers gtimers;
 
 std::ofstream debugFile;
-std::ofstream fileMutex;
+std::mutex fileMutex;

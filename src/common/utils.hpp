@@ -211,7 +211,7 @@ private:
 extern GPUTimers gtimers;
 
 extern std::ofstream debugFile;
-extern std::ofstream fileMutex;
+extern std::mutex fileMutex;
 
 
 #endif // GLOBAL_UTILS_HPP
