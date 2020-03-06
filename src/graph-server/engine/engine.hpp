@@ -51,7 +51,7 @@ public:
     void init(int argc, char *argv[]);
     FeatType *runForward(unsigned epoch);
     void runBackward(FeatType *backwardInitData);
-    void runEpoch(unsigned epoch);
+    void runGCN();
 
     void output();
     void destroy();
@@ -183,6 +183,8 @@ private:
     std::vector<double> vecTimeLambdaWait;
     std::vector<double> vecTimeSendout;
     std::vector<double> epochTimes;
+
+    std::vector<unsigned> epochMs;
 
     Barrier barComp;
 
