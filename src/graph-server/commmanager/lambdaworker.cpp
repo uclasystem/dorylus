@@ -492,6 +492,8 @@ int LambdaWorker::storeTensorPart(unsigned partId) {
         printLog(manager->nodeId, "Lambda %u returned unknown tensor '%s'. Make sure to allocate it before running lambdas!",
           partId, name.c_str());
         return 1;
+    } else {
+        printLog(manager->nodeId, "Lambda %u returned tensor '%s'", partId, name.c_str());
     }
 
     Matrix& result = found->second;

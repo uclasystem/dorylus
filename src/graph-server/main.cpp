@@ -14,7 +14,6 @@
  */
 int
 main(int argc, char *argv[]) {
-
     // Initialize the engine.
     // The engine object is static and has been substantiated in Engine.cpp.
     engine.init(argc, argv);
@@ -29,24 +28,24 @@ main(int argc, char *argv[]) {
 
     // Do specified number of epochs.
     Timer epochTimer;
-//    engine.runGCN();
-    for (unsigned epoch = 0; epoch < numEpochs; ++epoch) {
-        epochTimer.start();
-        printLog(engine.getNodeId(), "Starting Epoch %u", epoch+1);
-        if (epoch != 0 && (epoch % valFreq == 0 || epoch == 1)) {
-            FeatType *predictData = engine.runForward(epoch);
-            engine.runBackward(predictData);
-        } else {
-            FeatType *predictData = engine.runForward(epoch);
-            // Do a backward-prop phase.
-            engine.runBackward(predictData);
-        }
-        epochTimer.stop();
-
-        printLog(engine.getNodeId(), "Time for epoch %u: %f ms",
-                 epoch+1, epochTimer.getTime());
-        engine.addEpochTime(epochTimer.getTime());
-    }
+    engine.runGCN();
+//    for (unsigned epoch = 0; epoch < numEpochs; ++epoch) {
+//        epochTimer.start();
+//        printLog(engine.getNodeId(), "Starting Epoch %u", epoch+1);
+//        if (epoch != 0 && (epoch % valFreq == 0 || epoch == 1)) {
+//            FeatType *predictData = engine.runForward(epoch);
+//            engine.runBackward(predictData);
+//        } else {
+//            FeatType *predictData = engine.runForward(epoch);
+//            // Do a backward-prop phase.
+//            engine.runBackward(predictData);
+//        }
+//        epochTimer.stop();
+//
+//        printLog(engine.getNodeId(), "Time for epoch %u: %f ms",
+//                 epoch+1, epochTimer.getTime());
+//        engine.addEpochTime(epochTimer.getTime());
+//    }
 
     // Procude the output files.
 //    engine.output();
