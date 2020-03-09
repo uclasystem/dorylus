@@ -213,5 +213,9 @@ extern GPUTimers gtimers;
 extern std::ofstream debugFile;
 extern std::mutex fileMutex;
 
+extern std::ofstream matrixFile;
+extern std::mutex mFileMutex;
+
+void matrixToFile(FeatType* fptr, unsigned start, unsigned end, unsigned c);
 
 #endif // GLOBAL_UTILS_HPP
