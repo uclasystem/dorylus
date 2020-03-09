@@ -50,6 +50,8 @@ main(int argc, char *argv[]) {
     // Procude the output files.
 //    engine.output();
 
+    usleep(100000);
+
     // Destroy the engine.
     engine.destroy();
 

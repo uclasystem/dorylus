@@ -422,8 +422,24 @@ LambdaComm::relaunchLambda(bool forward, unsigned layer, unsigned lambdaId, bool
 
 
 void
-LambdaComm::requestInvoke(unsigned layer, unsigned lambdaId, PROP_TYPE prop_dir, bool lastLayer) {
+LambdaComm::relaunchLambda(unsigned layer, unsigned lambdaId,
+  PROP_TYPE prop_dir, bool lastLayer) {
+    printLog(nodeId, "Relaunch lambda %u for layer %u...", lambdaId, layer);
+
+    char* weightServerIp = weightservers[(nodeId * numLambdasForward + lambdaId) % weightservers.size()];
+    invokeLambda("gcn", nodeIp.c_str(), dataserverPort, weightServerIp,
+      weightserverPort, layer, lambdaId, prop_dir, lastLayer);
+    ++relaunchCnt;
+}
+
+
+void
+LambdaComm::requestInvoke(unsigned layer, unsigned lambdaId,
+  PROP_TYPE prop_dir, bool lastLayer) {
     __sync_bool_compare_and_swap(forwardLambdaTable + lambdaId, false, true);
+    if (lambdaId == 0) {
+        forwardTimer = getTimer();
+    }
 
     char* weightServerIp = weightservers[(nodeId * numLambdasForward + lambdaId) % weightservers.size()];
     invokeLambda("gcn", nodeIp.c_str(), dataserverPort, weightServerIp,
@@ -431,7 +447,7 @@ LambdaComm::requestInvoke(unsigned layer, unsigned lambdaId, PROP_TYPE prop_dir,
 }
 
 void
-LambdaComm::waitLambda(unsigned layer, bool lastLayer) {
+LambdaComm::waitLambda(unsigned layer, PROP_TYPE prop_dir, bool lastLayer) {
     while (countForward < numLambdasForward) {
 //        if (relaunching) {
 //            if (countForward >= 0.8 * numLambdasForward && timeoutPeriod < 1e-8) {
@@ -440,7 +456,7 @@ LambdaComm::waitLambda(unsigned layer, bool lastLayer) {
 //            if (getTimer() - forwardTimer > (timeoutPeriod < 1e-8 ? TIMEOUT_PERIOD : timeoutPeriod)) {
 //                for (unsigned i = 0; i < numLambdasForward; i++) {
 //                    if (forwardLambdaTable[i]) {
-//                        relaunchLambda(true, layer, i, lastLayer);
+//                        relaunchLambda(layer, i, prop_dir, lastLayer);
 //                    }
 //                }
 //                forwardTimer = getTimer();

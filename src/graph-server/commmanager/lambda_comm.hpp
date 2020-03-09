@@ -95,10 +95,12 @@ public:
     void waitLambdaBackward(unsigned layer, bool lastLayer);
 
     void relaunchLambda(bool forward, unsigned layer, unsigned lambdaId, bool lastLayer);
+    void relaunchLambda(unsigned layer, unsigned lambdaId, PROP_TYPE prop_dir,
+      bool lastLayer);
 
     void requestInvoke(unsigned layer, unsigned lambdaId, PROP_TYPE prop_dir,
       bool lastLayer);
-    void waitLambda(unsigned layer, bool lastLayer);
+    void waitLambda(unsigned layer, PROP_TYPE prop_dir, bool lastLayer);
 
     virtual unsigned getRelaunchCnt() { return relaunchCnt; };
 

@@ -458,24 +458,37 @@ void LambdaWorker::getPartitionInfo(Matrix& tensor, unsigned partId, unsigned& m
 }
 
 void LambdaWorker::sendTensors(unsigned partId, zmq::message_t& client_id) {
-    unsigned more = 1;
-    workersocket.send(client_id, ZMQ_SNDMORE);
-    while (more) {
-        zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
-        workersocket.recv(&tensorHeader);
+    if (partId < manager->numLambdasForward && manager->forwardLambdaTable[partId]) {
+        unsigned more = 1;
+        workersocket.send(client_id, ZMQ_SNDMORE);
+        while (more) {
+            zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
+            workersocket.recv(&tensorHeader);
 
-        std::string name = parseName((char*)tensorHeader.data());
-        auto found = savedVtxTensors->find(name);
-        if (found == savedVtxTensors->end()) {
-            printLog(manager->nodeId, "Requested tensor '%s' not found", name.c_str());
-            zmq::message_t errorHeader(TENSOR_HDR_SIZE);
-            populateHeader(errorHeader.data(), ERR_HEADER_FIELD, name.c_str());
-            workersocket.send(errorHeader);
-            return;
-        } else {
-            Matrix& reqMatrix = found->second;
-            getPartitionInfo(reqMatrix, partId, more);
+            std::string name = parseName((char*)tensorHeader.data());
+            auto found = savedVtxTensors->find(name);
+            if (found == savedVtxTensors->end()) {
+                printLog(manager->nodeId, "Requested tensor '%s' not found", name.c_str());
+                zmq::message_t errorHeader(TENSOR_HDR_SIZE);
+                populateHeader(errorHeader.data(), ERR_HEADER_FIELD, name.c_str());
+                workersocket.send(errorHeader);
+                return;
+            } else {
+                Matrix& reqMatrix = found->second;
+                getPartitionInfo(reqMatrix, partId, more);
+            }
         }
+    } else {
+        size_t usize = sizeof(unsigned);
+        unsigned more = 1;
+        while (more) {
+            zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
+            workersocket.recv(&tensorHeader);
+
+            workersocket.getsockopt(ZMQ_RECVMORE, &more, &usize);
+        }
+
+        workersocket.send(client_id, ZMQ_SNDMORE);
     }
 }
 
@@ -492,13 +505,9 @@ int LambdaWorker::storeTensorPart(unsigned partId) {
         printLog(manager->nodeId, "Lambda %u returned unknown tensor '%s'. Make sure to allocate it before running lambdas!",
           partId, name.c_str());
         return 1;
-    } else {
-        printLog(manager->nodeId, "Lambda %u returned tensor '%s'", partId, name.c_str());
     }
 
     Matrix& result = found->second;
-    printLog(manager->nodeId, "Lambda %u returned tensor '%s'",
-      partId, result.name().c_str());
     unsigned partRows = std::ceil((float) result.getRows() / (float) (manager->numLambdasForward));
 
     FeatType* partPtr = result.getData() + (partId * partRows * result.getCols());

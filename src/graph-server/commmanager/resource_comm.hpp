@@ -59,7 +59,7 @@ public:
 
     virtual void requestInvoke(unsigned layer, unsigned lambdaId,
       PROP_TYPE prop_dir, bool lastLayer) = 0;
-    virtual void waitLambda(unsigned layer, bool lastLayer) = 0;
+    virtual void waitLambda(unsigned layer, PROP_TYPE prop_dir, bool lastLayer) = 0;
 
     virtual unsigned getRelaunchCnt() { return 0u; };
     // Send a message to the coordination server to shutdown.
