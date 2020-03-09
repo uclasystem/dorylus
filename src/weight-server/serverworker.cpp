@@ -265,7 +265,6 @@ void ServerWorker::sendTensors(zmq::message_t& client_id) {
             workersocket.send(errorHeader);
             return;
         } else {
-            std::cout << "Received request for '" << name << "'" << std::endl;
             Matrix& reqMatrix = found->second;
             sendTensor(reqMatrix, more);
         }
@@ -283,8 +282,6 @@ void ServerWorker::recvUpdateTensor(unsigned layer) {
     if (weightsStore.find(name) == weightsStore.end()) {
         std::cerr << "Pushed tensor '" << name
           << "' not found. Make sure to allocate it before starting workers!" << std::endl;
-    } else {
-        std::cout << "Received push for '" << name << "'" << std::endl;
     }
 
     std::lock_guard<std::mutex> update_lock(update_mutex);
