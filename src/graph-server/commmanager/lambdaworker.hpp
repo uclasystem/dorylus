@@ -93,10 +93,10 @@ private:
     void sendTensor(FeatType* dptr, std::string tensorName, unsigned rows,
       unsigned cols, unsigned& more);
     void getPartitionInfo(Matrix& tensor, unsigned partId, unsigned& more);
-    void sendTensors(unsigned partId, zmq::message_t& client_id);
+    void sendTensors(unsigned partId, unsigned layer, zmq::message_t& client_id);
 
     int storeTensorPart(unsigned partId);
-    void recvTensors(unsigned partId, zmq::message_t& client_id);
+    void recvTensors(unsigned partId, unsigned layer, zmq::message_t& client_id);
     // end named-tensors
 
     // Partitions the label matrix given a partition id and

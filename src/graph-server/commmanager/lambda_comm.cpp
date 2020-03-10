@@ -169,7 +169,7 @@ void LambdaComm::invokeLambda(Aws::String funcName, const char* dataserver, unsi
     jsonPayload.WithInteger("dport", dport);
     jsonPayload.WithInteger("layer", layer);    // For forward-prop: layer-ID; For backward-prop: numLayers.
     jsonPayload.WithInteger("id", id);
-    jsonPayload.WithBool("prop_dir", prop_dir);
+    jsonPayload.WithInteger("prop_dir", prop_dir);
     jsonPayload.WithBool("lastLayer", lastLayer);
 
     *payload << jsonPayload.View().WriteReadable();
@@ -191,10 +191,28 @@ void LambdaComm::callback(const Aws::Lambda::LambdaClient *client,
         Aws::Utils::Json::JsonValue response(resultStr);
         auto v = response.View();
         if (funcErr != "") {
+            Aws::IOStream& requestBody = *(invReq.GetBody());
+            Aws::String requestStr;
+            std::getline(requestBody, requestStr);
+
+            Aws::Utils::Json::JsonValue request(requestStr);
+            auto rv = request.View();
+
+            std::string errOut = "";
+            if (rv.KeyExists("prop_dir")) {
+                unsigned dir = v.GetInteger("prop_dir");
+                errOut += "PROP_DIR: " + (dir == PROP_TYPE::FORWARD ? std::string("FWD") : std::string("BKWD"));
+            }
+            if (rv.KeyExists("layer")) {
+                errOut += " | layer: " + std::to_string(rv.GetInteger("layer"));
+            }
+            if (rv.KeyExists("id")) {
+                errOut += " | id: " + std::to_string(rv.GetInteger("id"));
+            }
             if (v.KeyExists("errorMessage")) {
                 printLog(globalNodeId, "\033[1;31m[ FUNC ERROR ]\033[0m %s, %s", funcErr.c_str(), v.GetString("errorMessage").c_str());
             } else {
-                printLog(globalNodeId, "\033[1;31m[ FUNC ERROR ]\033[0m %s, %s", funcErr.c_str(), resultStr.c_str());
+                printLog(globalNodeId, "\033[1;31m[ FUNC ERROR ]\033[0m %s, %s", funcErr.c_str(), errOut.c_str());
             }
         } else {
             if (v.KeyExists("success")) {
@@ -449,20 +467,21 @@ LambdaComm::requestInvoke(unsigned layer, unsigned lambdaId,
 void
 LambdaComm::waitLambda(unsigned layer, PROP_TYPE prop_dir, bool lastLayer) {
     while (countForward < numLambdasForward) {
-//        if (relaunching) {
-//            if (countForward >= 0.8 * numLambdasForward && timeoutPeriod < 1e-8) {
-//                timeoutPeriod = std::fmax(MIN_TIMEOUT, 2 * (getTimer() - forwardTimer));
-//            }
-//            if (getTimer() - forwardTimer > (timeoutPeriod < 1e-8 ? TIMEOUT_PERIOD : timeoutPeriod)) {
-//                for (unsigned i = 0; i < numLambdasForward; i++) {
-//                    if (forwardLambdaTable[i]) {
-//                        relaunchLambda(layer, i, prop_dir, lastLayer);
-//                    }
-//                }
-//                forwardTimer = getTimer();
-//                timeoutPeriod *= EXP_BACKOFF_FACTOR;
-//            }
-//        }
+        if (relaunching) {
+            if (countForward >= 0.8 * numLambdasForward && timeoutPeriod < 1e-8) {
+                timeoutPeriod = std::fmax(MIN_TIMEOUT, 2 * (getTimer() - forwardTimer));
+            }
+            if (getTimer() - forwardTimer > (timeoutPeriod < 1e-8 ? TIMEOUT_PERIOD : timeoutPeriod)) {
+                for (unsigned i = 0; i < numLambdasForward; i++) {
+                    if (forwardLambdaTable[i]) {
+                        printLog(nodeId, "Relaunching lambda %u", i);
+                        relaunchLambda(layer, i, prop_dir, lastLayer);
+                    }
+                }
+                forwardTimer = getTimer();
+                timeoutPeriod *= EXP_BACKOFF_FACTOR;
+            }
+        }
         usleep(SLEEP_PERIOD);
     }
 }

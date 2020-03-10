@@ -131,10 +131,9 @@ Matrix recvTensor(zmq::socket_t& socket) {
     unsigned resp = parse<unsigned>((char*)tensorHeader.data(), 0);
     std::string name = parseName((char*)tensorHeader.data());
     if (resp == ERR_HEADER_FIELD) {
-        std::cerr << "No tensor '" << name << "' found on server" << std::endl;
+        std::cerr << "Got error from graph server. Consult graph server output" << std::endl;
         return Matrix();
     }
-    std::cout << "Getting tensor data for " << name << std::endl;
     socket.recv(&tensorData);
 
     unsigned rows = parse<unsigned>((char*)tensorHeader.data(), 3);
@@ -146,14 +145,13 @@ Matrix recvTensor(zmq::socket_t& socket) {
     return Matrix(name.c_str(), rows, cols, data);
 }
 
-std::vector<Matrix> reqTensors(zmq::socket_t& socket, unsigned partId, std::vector<std::string>& tensorRequests) {
+std::vector<Matrix> reqTensors(zmq::socket_t& socket, unsigned partId, unsigned layer, std::vector<std::string>& tensorRequests) {
     zmq::message_t header(HEADER_SIZE);
-    populateHeader(header.data(), OP::PULL, partId);
+    populateHeader(header.data(), OP::PULL, partId, layer);
     socket.send(header, ZMQ_SNDMORE);
     unsigned numTensors = tensorRequests.size();
     for (unsigned u = 0; u < tensorRequests.size(); ++u) {
         std::string& name = tensorRequests[u];
-        std::cout << "Requesting tensor " << name << std::endl;
         zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
         populateHeader(tensorHeader.data(), partId, name.c_str());
         if (u < numTensors-1) {
@@ -163,11 +161,14 @@ std::vector<Matrix> reqTensors(zmq::socket_t& socket, unsigned partId, std::vect
         }
     }
 
-    std::cout << "Waiting for tensors" << std::endl;
     std::vector<Matrix> matrices;
     unsigned more = 1;
     while (more) {
         Matrix result = recvTensor(socket);
+        if (result.empty()) {
+            // Means there was an error
+            return std::vector<Matrix>();
+        }
         matrices.push_back(result);
 
         size_t usize = sizeof(more);
@@ -177,9 +178,9 @@ std::vector<Matrix> reqTensors(zmq::socket_t& socket, unsigned partId, std::vect
     return matrices;
 }
 
-void sendTensors(zmq::socket_t& socket, unsigned partId, std::vector<Matrix>& matrices, bool ack) {
+void sendTensors(zmq::socket_t& socket, unsigned partId, unsigned layer, std::vector<Matrix>& matrices, bool ack) {
     zmq::message_t header(HEADER_SIZE);
-    populateHeader(header.data(), OP::PUSH, partId);
+    populateHeader(header.data(), OP::PUSH, partId, layer);
     socket.send(header, ZMQ_SNDMORE);
     for (uint32_t u = 0; u < matrices.size(); ++u) {
         zmq::message_t tensorHeader(TENSOR_HDR_SIZE);

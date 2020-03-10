@@ -89,11 +89,11 @@ LambdaWorker::work() {
                     break;
                 }
                 case (OP::PULL): {
-                    sendTensors(partId, identity);
+                    sendTensors(partId, layer, identity);
                     break;
                 }
                 case (OP::PUSH): {
-                    recvTensors(partId, identity);
+                    recvTensors(partId, layer, identity);
                     break;
                 }
                 default: {
@@ -457,8 +457,10 @@ void LambdaWorker::getPartitionInfo(Matrix& tensor, unsigned partId, unsigned& m
     sendTensor(partStart, tensor.name(), thisPartRows, tensor.getCols(), more);
 }
 
-void LambdaWorker::sendTensors(unsigned partId, zmq::message_t& client_id) {
-    if (partId < manager->numLambdasForward && manager->forwardLambdaTable[partId]) {
+void LambdaWorker::sendTensors(unsigned partId, unsigned layer, zmq::message_t& client_id) {
+    if (partId < manager->numLambdasForward
+        && manager->forwardLambdaTable[partId]
+        && layer == manager->currLayer) {
         unsigned more = 1;
         workersocket.send(client_id, ZMQ_SNDMORE);
         while (more) {
@@ -471,6 +473,7 @@ void LambdaWorker::sendTensors(unsigned partId, zmq::message_t& client_id) {
                 printLog(manager->nodeId, "Requested tensor '%s' not found", name.c_str());
                 zmq::message_t errorHeader(TENSOR_HDR_SIZE);
                 populateHeader(errorHeader.data(), ERR_HEADER_FIELD, name.c_str());
+                workersocket.send(client_id, ZMQ_SNDMORE);
                 workersocket.send(errorHeader);
                 return;
             } else {
@@ -485,10 +488,18 @@ void LambdaWorker::sendTensors(unsigned partId, zmq::message_t& client_id) {
             zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
             workersocket.recv(&tensorHeader);
 
-            workersocket.getsockopt(ZMQ_RECVMORE, &more, &usize);
+            workersocket.getsockopt(ZMQ_RCVMORE, &more, &usize);
         }
 
         workersocket.send(client_id, ZMQ_SNDMORE);
+        zmq::message_t header(TENSOR_HDR_SIZE);
+        populateHeader((char*) header.data(), ERR_HEADER_FIELD, ERR_HEADER_FIELD, ERR_HEADER_FIELD, ERR_HEADER_FIELD);
+        setTSinHdr(header.data());
+        workersocket.send(header);
+
+        std::string errMsg = "[ ERROR ] when sending to " + std::to_string(partId) + ": ";
+        errMsg += "Received duplicate requests. Discarding...";
+        printLog(manager->nodeId, errMsg.c_str());
     }
 }
 
@@ -516,24 +527,37 @@ int LambdaWorker::storeTensorPart(unsigned partId) {
     return 0;
 }
 
-void LambdaWorker::recvTensors(unsigned partId, zmq::message_t& client_id) {
+void LambdaWorker::recvTensors(unsigned partId, unsigned layer, zmq::message_t& client_id) {
     unsigned more = 1;
-    int ret = 0;
-    while (more && ret == 0) {
-        ret = storeTensorPart(partId);
+    size_t usize = sizeof(unsigned);
+    if (partId < manager->numLambdasForward
+        && manager->forwardLambdaTable[partId]
+        && layer == manager->currLayer) {
+        int ret = 0;
+        while (more && ret == 0) {
+            ret = storeTensorPart(partId);
 
-        size_t usize = sizeof(more);
-        workersocket.getsockopt(ZMQ_RCVMORE, &more, &usize);
+            workersocket.getsockopt(ZMQ_RCVMORE, &more, &usize);
+        }
+
+        if (ret == 0) {
+            __sync_bool_compare_and_swap(manager->forwardLambdaTable + partId, true, false);
+            __sync_fetch_and_add(&(manager->countForward), 1);
+        }
+    } else {
+        zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
+        while (more) {
+            zmq::message_t tensorData;
+            workersocket.recv(&tensorHeader);
+            workersocket.recv(&tensorData);
+
+            workersocket.getsockopt(ZMQ_RCVMORE, &more, &usize);
+        }
     }
 
-    if (ret == 0) {
-        __sync_bool_compare_and_swap(manager->forwardLambdaTable + partId, true, false);
-        __sync_fetch_and_add(&(manager->countForward), 1);
-
-        zmq::message_t ack;
-        workersocket.send(client_id, ZMQ_SNDMORE);
-        workersocket.send(ack);
-    }
+    zmq::message_t ack;
+    workersocket.send(client_id, ZMQ_SNDMORE);
+    workersocket.send(ack);
 }
 // end named-tensors
 

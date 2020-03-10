@@ -503,7 +503,7 @@ Engine::runGCN() {
             saveTensor(tName, graph.localVtxCnt, featDim, gradTensor);
 
             resComm->sendInfoMsg(iteration);
-            resComm->reset(iteration);
+            resComm->reset(iteration-1);
             for (unsigned u = 0; u < numLambdasForward; ++u) {
                 resComm->requestInvoke(iteration-1, u, PROP_TYPE::BACKWARD, iteration == numLayers - 1);
             }
