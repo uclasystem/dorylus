@@ -5,6 +5,9 @@ cd $( dirname $0 )
 id=i-0507390a688227993
 
 case $1 in
+    "id")
+        echo ${id}
+        ;;
     "rsync")
         pubip=$( ./ec2-instance.sh pubip )
         if [[ $2 == "--force" ]]; then

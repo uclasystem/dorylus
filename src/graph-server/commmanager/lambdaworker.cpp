@@ -498,7 +498,16 @@ void LambdaWorker::sendTensors(unsigned partId, unsigned layer, zmq::message_t& 
         workersocket.send(header);
 
         std::string errMsg = "[ ERROR ] when sending to " + std::to_string(partId) + ": ";
-        errMsg += "Received duplicate requests. Discarding...";
+        if (partId >= manager->numLambdasForward) {
+            errMsg += " exceeds numLambdas";
+        }
+        if (!(manager->forwardLambdaTable[partId])) {
+            errMsg += " already finished";
+        }
+        if (layer != manager->currLayer) {
+            errMsg += " layer's don't match";
+        }
+        //errMsg += "Received duplicate requests. Discarding...";
         printLog(manager->nodeId, errMsg.c_str());
     }
 }
@@ -553,6 +562,10 @@ void LambdaWorker::recvTensors(unsigned partId, unsigned layer, zmq::message_t& 
 
             workersocket.getsockopt(ZMQ_RCVMORE, &more, &usize);
         }
+
+        std::string errMsg = "[ ERROR ] when receiving from " + std::to_string(partId) + ": ";
+        errMsg += "Received duplicate results. Discarding...";
+        printLog(manager->nodeId, errMsg.c_str());
     }
 
     zmq::message_t ack;

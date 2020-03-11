@@ -194,30 +194,16 @@ void LambdaComm::callback(const Aws::Lambda::LambdaClient *client,
             Aws::IOStream& requestBody = *(invReq.GetBody());
             Aws::String requestStr;
             std::getline(requestBody, requestStr);
-
-            Aws::Utils::Json::JsonValue request(requestStr);
-            auto rv = request.View();
-
-            std::string errOut = "";
-            if (rv.KeyExists("prop_dir")) {
-                unsigned dir = v.GetInteger("prop_dir");
-                errOut += "PROP_DIR: " + (dir == PROP_TYPE::FORWARD ? std::string("FWD") : std::string("BKWD"));
-            }
-            if (rv.KeyExists("layer")) {
-                errOut += " | layer: " + std::to_string(rv.GetInteger("layer"));
-            }
-            if (rv.KeyExists("id")) {
-                errOut += " | id: " + std::to_string(rv.GetInteger("id"));
-            }
             if (v.KeyExists("errorMessage")) {
-                printLog(globalNodeId, "\033[1;31m[ FUNC ERROR ]\033[0m %s, %s", funcErr.c_str(), v.GetString("errorMessage").c_str());
+                printLog(globalNodeId, "\033[1;31m[ FUNC0 ERROR ]\033[0m %s, %s", funcErr.c_str(), v.GetString("errorMessage").c_str());
             } else {
-                printLog(globalNodeId, "\033[1;31m[ FUNC ERROR ]\033[0m %s, %s", funcErr.c_str(), errOut.c_str());
+                printLog(globalNodeId, "\033[1;31m[ FUNC1 ERROR ]\033[0m %s, %s", funcErr.c_str(), resultStr.c_str());
             }
         } else {
             if (v.KeyExists("success")) {
                 if (v.GetBool("success")) {
                 } else {
+                    printLog(globalNodeId, "\033[1;31m[ ERROR ]\033[0m %u: %s", v.GetInteger("id"), v.GetString("message"));
                     if (v.KeyExists("reason")) {
                         printLog(globalNodeId, "\033[1;31m[ ERROR ]\033[0m\t%s", v.GetString("reason").c_str());
                     }
@@ -474,7 +460,6 @@ LambdaComm::waitLambda(unsigned layer, PROP_TYPE prop_dir, bool lastLayer) {
             if (getTimer() - forwardTimer > (timeoutPeriod < 1e-8 ? TIMEOUT_PERIOD : timeoutPeriod)) {
                 for (unsigned i = 0; i < numLambdasForward; i++) {
                     if (forwardLambdaTable[i]) {
-                        printLog(nodeId, "Relaunching lambda %u", i);
                         relaunchLambda(layer, i, prop_dir, lastLayer);
                     }
                 }

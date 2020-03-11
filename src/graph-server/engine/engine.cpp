@@ -502,13 +502,13 @@ Engine::runGCN() {
             sprintf(tName, "GRAD%u", iteration-1);
             saveTensor(tName, graph.localVtxCnt, featDim, gradTensor);
 
-            resComm->sendInfoMsg(iteration);
+            resComm->sendInfoMsg(iteration-1);
             resComm->reset(iteration-1);
             for (unsigned u = 0; u < numLambdasForward; ++u) {
                 resComm->requestInvoke(iteration-1, u, PROP_TYPE::BACKWARD, iteration == numLayers - 1);
             }
 
-            resComm->waitLambda(iteration, PROP_TYPE::FORWARD, iteration == numLayers - 1);
+            resComm->waitLambda(iteration-1, PROP_TYPE::BACKWARD, iteration == numLayers - 1);
         }
         unsigned epEnd = timestamp_ms();
         unsigned epTime = epEnd - epStart;

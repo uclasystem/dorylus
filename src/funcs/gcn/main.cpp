@@ -68,12 +68,19 @@ finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
 
     Matrix Z = AH.dot(W);
     Matrix preds = softmax(Z);
+    deleteMatrix(Z);
     Matrix& labels = matrices[1];
 
     // Backward computation
     Matrix d_out = preds - labels;
+    deleteMatrix(labels);
+    deleteMatrix(preds);
+
     Matrix interGrad = d_out.dot(W, false, true);
+    deleteMatrix(W);
     Matrix d_weights = AH.dot(d_out, true, false);
+    deleteMatrix(AH);
+    deleteMatrix(d_out);
     char name[8];
     sprintf(name, "GRAD%u", layer);
     interGrad.setName(name);
@@ -90,10 +97,6 @@ finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
     std::cout << "SENT tensors and weight updates" << std::endl;
 
     // Clean up data
-    for (auto& M : matrices)
-        deleteMatrix(M);
-    for (auto& W : weights)
-        deleteMatrix(W);
     for (auto& M : toSend)
         deleteMatrix(M);
     for (auto& M : weightUpdates)
@@ -138,25 +141,25 @@ backwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
     Matrix& grad = matrices[2];
 
     Matrix& W = weights[0];
-    //printInfo(AH);
-    //printInfo(Z);
-    //printInfo(grad);
-    //printInfo(W);
     char name[8];
 
     Matrix actDeriv = tanhDerivative(Z);
+    deleteMatrix(Z);
     sprintf(name, "Z'");
     actDeriv.setName(name);
-    //printInfo(actDeriv);
 
     Matrix interGrad = grad * actDeriv;
+    deleteMatrix(grad);
+    deleteMatrix(actDeriv);
     sprintf(name, "d_z");
     interGrad.setName(name);
-    //printInfo(interGrad);
 
     Matrix resultGrad = interGrad.dot(W, false, true);
+    deleteMatrix(W);
 
     Matrix d_weights = AH.dot(interGrad, true, false);
+    deleteMatrix(AH);
+    deleteMatrix(interGrad);
 
     sprintf(name, "W%u", layer);
     d_weights.setName(name);
@@ -166,9 +169,6 @@ backwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
 
     std::vector<Matrix> weightUpdates{d_weights};
     std::vector<Matrix> toSend{resultGrad};
-
-    //printInfo(resultGrad);
-    //printInfo(d_weights);
 
     sendTensors(weights_socket, layer, layer, weightUpdates);
     sendTensors(data_socket, partId, layer, toSend, true);
