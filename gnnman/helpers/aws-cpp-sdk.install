@@ -9,9 +9,11 @@ cd ${HOME}
 
 sudo apt install libcurl4-openssl-dev libssl-dev
 
-# Install AWS-SDK.
-if [[ ! $( ldconfig -p | grep aws-cpp-sdk ) ]]; then    # Only install if not installed yet.
-    git clone https://github.com/aws/aws-sdk-cpp.git
+
+function install_aws_sdk {
+    wget https://github.com/aws/aws-sdk-cpp/archive/1.7.264.tar.gz
+    tar xzvf 1.7.264.tar.gz
+    mv aws-sdk-cpp-1.7.264/ aws-sdk-cpp
     cd aws-sdk-cpp
     mkdir build
     cd build
@@ -19,5 +21,16 @@ if [[ ! $( ldconfig -p | grep aws-cpp-sdk ) ]]; then    # Only install if not in
     make -j
     sudo make install
     cd ../..
-    rm -rf aws-sdk-cpp
+    rm -rf aws-sdk-cpp 1.7.264.tar.gz
+}
+
+# Install AWS-SDK.
+if [[ ! -d /usr/local/include/aws/core/ ]]; then
+    install_aws_sdk
+elif [[ -d /usr/local/include/aws/core/ ]]; then
+    echo "AWSSDK already exists. Overwrite it (y/n)?"
+    read overwrite
+    if [[ ${overwrite} == "y" ]]; then
+        install_aws_sdk
+    fi
 fi
