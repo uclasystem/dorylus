@@ -8,9 +8,10 @@ sudo apt install libcurl4-openssl-dev libssl-dev
 
 cd ${HOME}
 
-# Install AWS-Lambda C++ runtime.
-if [[ ! -d /usr/local/include/aws/lambda-runtime ]]; then
-    git clone https://github.com/awslabs/aws-lambda-cpp.git
+function install_aws_runtime {
+    wget https://github.com/awslabs/aws-lambda-cpp/archive/v0.2.6.tar.gz
+    tar xvzf v0.2.6.tar.gz
+    mv aws-lambda-cpp-0.2.6/ aws-lambda-cpp
     cd aws-lambda-cpp
     mkdir build
     cd build
@@ -18,5 +19,17 @@ if [[ ! -d /usr/local/include/aws/lambda-runtime ]]; then
     make -j
     sudo make install
     cd ../..
-    rm -rf aws-lambda-cpp
+    rm -rf aws-lambda-cpp v0.2.6.tar.gz
+}
+
+# Install AWS-Lambda C++ runtime.
+if [[ ! -d /usr/local/include/aws/lambda-runtime ]]; then
+    install_aws_runtime
+elif [[ -d /usr/local/include/aws/lambda-runtime ]]; then
+    echo "Lambda runtime already installed. Overwrite (y/n)?"
+    read overwrite
+
+    if [[ ${overwrite} == "y" ]]; then
+        install_aws_runtime
+    fi
 fi
