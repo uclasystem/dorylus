@@ -115,6 +115,10 @@ backwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
     std::vector<Matrix> matrices = reqTensors(data_socket, partId, layer, dataReqs);
     std::vector<Matrix> weights = reqTensors(weights_socket, partId, layer, weightReqs);
 
+    if (matrices.empty() || weights.empty()) {
+        return constructResp(false, partId, "Got error message from server");
+    }
+
     for (auto& M : matrices) {
         if (M.empty()){
             std::cout << M.name() << " is empty" << std::endl;
@@ -131,10 +135,6 @@ backwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
             std::cout << "GOT " << W.name() << std::endl;
         }
     }
-
-//    auto //printInfo = [&](Matrix& mat) {
-//        std::cout << mat.name() << ": " << mat.shape() << std::endl;
-//    };
 
     Matrix& AH = matrices[0];
     Matrix& Z = matrices[1];
@@ -190,6 +190,10 @@ forwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, unsigned
 
     std::vector<Matrix> matrices = reqTensors(data_socket, partId, layer, dataRequests);
     std::vector<Matrix> weights = reqTensors(weights_socket, partId, layer, weightRequests);
+
+    if (matrices.empty() || weights.empty()) {
+        return constructResp(false, partId, "Got error message from server");
+    }
 
     for (auto& M : matrices) {
         if (M.empty()){

@@ -649,7 +649,7 @@ Engine::output() {
     if (!pipeline) {
         sprintf(outBuf, "<EM>: Backward: Time per stage:");
         outStream << outBuf << std::endl;
-        for (unsigned i = numEpochs; i < 2 * numLayers; i++) {
+        for (unsigned i = numLayers; i < 2 * numLayers; i++) {
             sprintf(outBuf, "<EM>    Aggregation   %2u  %.3lf ms", i, vecTimeAggregate[i] / (float)numEpochs);
             outStream << outBuf << std::endl;
             sprintf(outBuf, "<EM>    Lambda        %2u  %.3lf ms", i, vecTimeLambda[i] / (float)numEpochs);
