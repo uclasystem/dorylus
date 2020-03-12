@@ -32,12 +32,6 @@ static int globalEpoch = -1;
 
 // ======== Debug utils ========
 typedef std::vector< std::vector<unsigned> > opTimes;
-opTimes fwdAggTimes(numLayers);
-opTimes fwdInvTimes(numLayers);
-opTimes fwdScatrTimes(numLayers);
-opTimes bkwdAggTimes(numLayers);
-opTimes bkwdInvTimes(numLayers);
-opTimes bkwdScatTimes(numLayers);
 
 // Outputs a matrix "signature" (the sum of the elements) without
 // creating an actual matrix
@@ -421,6 +415,12 @@ Engine::runGCN() {
 
         return (float)sum / (float)vec.size();
     };
+    opTimes fwdAggTimes(numLayers);
+    opTimes fwdInvTimes(numLayers);
+    opTimes fwdScatrTimes(numLayers);
+    opTimes bkwdAggTimes(numLayers);
+    opTimes bkwdInvTimes(numLayers);
+    opTimes bkwdScatTimes(numLayers);
 
     char tName[8];
     sprintf(tName, "H%d", -1);
@@ -550,6 +550,7 @@ Engine::runGCN() {
 
     if (nodeId == 0) {
         std::stringstream output;
+        output << "Average op times:" << std::endl;
         for (unsigned u = 0; u < numLayers; ++u) {
             if (!fwdAggTimes[u].empty())
                 output << "<EM> Average fwd agg time for layer " << u
@@ -2028,7 +2029,7 @@ void Engine::saveTensor(std::string& name, unsigned rows, unsigned cols, FeatTyp
         delete[] (iter->second).getData();
         savedVtxTensors.erase(iter);
     }
-    savedVtxTensors.emplace(name, Matrix(name.c_str(), rows, cols, dptr));
+    savedVtxTensors[name] = Matrix(name.c_str(), rows, cols, dptr);
 }
 
 void Engine::saveTensor(const char* name, unsigned rows, unsigned cols, FeatType* dptr) {
@@ -2037,7 +2038,7 @@ void Engine::saveTensor(const char* name, unsigned rows, unsigned cols, FeatType
         delete[] (iter->second).getData();
         savedVtxTensors.erase(iter);
     }
-    savedVtxTensors.emplace(std::string(name), Matrix(name, rows, cols, dptr));
+    savedVtxTensors[std::string(name)] = Matrix(name, rows, cols, dptr);
 }
 
 void Engine::saveTensor(Matrix& mat) {
@@ -2046,7 +2047,7 @@ void Engine::saveTensor(Matrix& mat) {
         delete[] (iter->second).getData();
         savedVtxTensors.erase(iter);
     }
-    savedVtxTensors.emplace(mat.name(), mat);
+    savedVtxTensors[mat.name()] = mat;
 }
 
 
