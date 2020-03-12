@@ -203,7 +203,6 @@ void LambdaComm::callback(const Aws::Lambda::LambdaClient *client,
             if (v.KeyExists("success")) {
                 if (v.GetBool("success")) {
                 } else {
-                    printLog(globalNodeId, "\033[1;31m[ ERROR ]\033[0m %u: %s", v.GetInteger("id"), v.GetString("message"));
                     if (v.KeyExists("reason")) {
                         printLog(globalNodeId, "\033[1;31m[ ERROR ]\033[0m\t%s", v.GetString("reason").c_str());
                     }

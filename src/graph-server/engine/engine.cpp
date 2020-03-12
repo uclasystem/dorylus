@@ -30,7 +30,15 @@ static ComputingUnit cu = ComputingUnit::getInstance();
 
 static int globalEpoch = -1;
 
-// ======== Debug File utils ========
+// ======== Debug utils ========
+typedef std::vector< std::vector<unsigned> > opTimes;
+opTimes fwdAggTimes(numLayers);
+opTimes fwdInvTimes(numLayers);
+opTimes fwdScatrTimes(numLayers);
+opTimes bkwdAggTimes(numLayers);
+opTimes bkwdInvTimes(numLayers);
+opTimes bkwdScatTimes(numLayers);
+
 // Outputs a matrix "signature" (the sum of the elements) without
 // creating an actual matrix
 void signFile(std::ofstream& outfile, const char* name, FeatType* fptr,
@@ -375,17 +383,14 @@ Engine::runBackward(FeatType *initGradTensor) {
     // Pure sequential
     if (!pipeline) {
         gradTensor = invokeLambdaBackward(gradTensor, graph.localVtxCnt, getFeatDim(numLayers - 1), getFeatDim(numLayers));
-        signFile(debugFile, std::string("GRAD" + std::to_string(iteration-1)).c_str(), gradTensor, 0, graph.localVtxCnt, getFeatDim(iteration));
 
         for (iteration = numLayers - 1; iteration > 0; --iteration) {
             gradTensor = scatterBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration));
             backwardGhostVerticesDataIn = backwardGhostVerticesDataOut;
 
             gradTensor = aggregateBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration));
-            signFile(debugFile, std::string("BAH" + std::to_string(iteration)).c_str(), gradTensor, 0, graph.localVtxCnt, getFeatDim(iteration));
 
             gradTensor = invokeLambdaBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration - 1), getFeatDim(iteration));
-            signFile(debugFile, std::string("GRAD" + std::to_string(iteration-1)).c_str(), gradTensor, 0, graph.localVtxCnt, getFeatDim(iteration-1));
         }
     }
 
@@ -414,6 +419,13 @@ Engine::runBackward(FeatType *initGradTensor) {
 
 void
 Engine::runGCN() {
+    auto avg = [&](std::vector<unsigned>& vec) {
+        unsigned sum = 0;
+        for (auto& u : vec) sum += u;
+
+        return (float)sum / (float)vec.size();
+    };
+
     char tName[8];
     sprintf(tName, "H%d", -1);
     saveTensor(tName, graph.localVtxCnt, getFeatDim(0), forwardVerticesInitData);
@@ -428,6 +440,7 @@ Engine::runGCN() {
             unsigned nextFeatDim = getFeatDim(iteration + 1);
 
             // AGGREGATE FORWARD
+            unsigned aggStart = timestamp_ms();
             FeatType* ahTensor = new FeatType[graph.localVtxCnt * featDim];
             sprintf(tName, "AH%u", iteration);
             saveTensor(tName, graph.localVtxCnt, featDim, ahTensor);
@@ -441,11 +454,15 @@ Engine::runGCN() {
             currId = 0;
             computePool->perform(computeFn, &args);
             computePool->sync();
+            unsigned aggEnd = timestamp_ms();
+            fwdAggTimes[iteration].push_back(aggEnd - aggStart);
+            printLog(nodeId, "FWD Aggregate %u took %u ms", iteration, aggEnd - aggStart);
 
             if (iteration > 0)
                 delete[] forwardGhostVerticesDataIn;
 
             // INVOKE FORWARD
+            unsigned invStart = timestamp_ms();
             if (iteration < numLayers - 1) {
                 // If middle layer, allocate Z and H tensors
                 FeatType* zTensor = new FeatType[graph.localVtxCnt * nextFeatDim];
@@ -468,13 +485,19 @@ Engine::runGCN() {
             }
 
             resComm->waitLambda(iteration, PROP_TYPE::FORWARD, iteration == numLayers - 1);
+            unsigned invEnd = timestamp_ms();
+            fwdInvTimes[iteration].push_back(invEnd - invStart);
+            printLog(nodeId, "FWD Invoke %u took %u ms", iteration, invEnd - invStart);
 
             // SCATTER FORWARD
             if (iteration < numLayers - 1) {
+                unsigned scatStart = timestamp_ms();
                 FeatType* hTensor = (savedVtxTensors.find("H" + std::to_string(iteration))->second).getData();
                 scatter(hTensor, graph.localVtxCnt, nextFeatDim);
                 forwardGhostVerticesDataIn = forwardGhostVerticesDataOut;
-                signFile(debugFile, std::string("G" + std::to_string(iteration)).c_str(), forwardGhostVerticesDataIn, 0, graph.srcGhostCnt, nextFeatDim);
+                unsigned scatEnd = timestamp_ms();
+                fwdScatrTimes[iteration].push_back(scatEnd - scatStart);
+                printLog(nodeId, "FWD Scatter %u took %u ms", iteration, scatEnd - scatStart);
             }
         }
 
@@ -483,11 +506,16 @@ Engine::runGCN() {
             unsigned prevFeatDim = getFeatDim(iteration - 1);
 
             // SCATTER BACKWARD
+            unsigned scatStart = timestamp_ms();
             FeatType* outputGradTensor = ((savedVtxTensors.find("GRAD" + std::to_string(iteration))->second)).getData();
             scatterBackward(outputGradTensor, graph.localVtxCnt, featDim);
             backwardGhostVerticesDataIn = backwardGhostVerticesDataOut;
+            unsigned scatEnd = timestamp_ms();
+            bkwdScatTimes[iteration].push_back(scatEnd - scatStart);
+            printLog(nodeId, "BKWD Scatter %u took %u ms", iteration, scatEnd - scatStart);
 
             // AGGREGATE BACKWARD
+            unsigned aggStart = timestamp_ms();
             FeatType* bahTensor = new FeatType[graph.localVtxCnt * featDim];
             sprintf(tName, "BAH%u", iteration);
             saveTensor(tName, graph.localVtxCnt, featDim, bahTensor);
@@ -496,8 +524,12 @@ Engine::runGCN() {
             auto computeFn = std::bind(&Engine::aggregateBPCompute, this, std::placeholders::_1, std::placeholders::_2);
             computePool->perform(computeFn, &args);
             computePool->sync();
+            unsigned aggEnd = timestamp_ms();
+            bkwdAggTimes[iteration].push_back(aggEnd - aggStart);
+            printLog(nodeId, "BKWD Aggregate %u took %u ms", iteration, aggEnd - aggStart);
 
             // INVOKE BACKWARD
+            unsigned invStart = timestamp_ms();
             FeatType* gradTensor = new FeatType[graph.localVtxCnt * prevFeatDim];
             sprintf(tName, "GRAD%u", iteration-1);
             saveTensor(tName, graph.localVtxCnt, featDim, gradTensor);
@@ -509,16 +541,44 @@ Engine::runGCN() {
             }
 
             resComm->waitLambda(iteration-1, PROP_TYPE::BACKWARD, iteration == numLayers - 1);
+            unsigned invEnd = timestamp_ms();
+            bkwdInvTimes[iteration].push_back(invEnd - invStart);
+            printLog(nodeId, "BKWD Invoke %u took %u ms", iteration-1, invEnd - invStart);
         }
         unsigned epEnd = timestamp_ms();
         unsigned epTime = epEnd - epStart;
+
         printLog(nodeId, "Finished epoch %u. Epoch Time: %u ms", epoch, epTime);
         epochMs.push_back(epTime);
     }
 
-    unsigned sum = 0;
-    for (unsigned& u : epochMs) sum += u;
-    printLog(nodeId, "<EM> Average epoch time %.3lf ms", (float)sum / (float)epochMs.size());
+    if (nodeId == 0) {
+        std::stringstream output;
+        for (unsigned u = 0; u < numLayers; ++u) {
+            if (!fwdAggTimes[u].empty())
+                output << "<EM> Average fwd agg time for layer " << u
+                  << ": " << avg(fwdAggTimes[u]) << " ms" << std::endl;
+            if (!fwdInvTimes[u].empty())
+                output << "<EM> Average fwd invoke time for layer " << u
+                  << ": " << avg(fwdInvTimes[u]) << " ms" << std::endl;
+            if (!fwdScatrTimes[u].empty())
+                output << "<EM> Average fwd scatter time for layer " << u
+                  << ": " << avg(fwdScatrTimes[u]) << " ms" << std::endl;
+            if (!bkwdScatTimes[u].empty())
+                output << "<EM> Average bkwd agg time for layer " << u
+                  << ": " << avg(bkwdScatTimes[u]) << " ms" << std::endl;
+            if (!bkwdAggTimes[u].empty())
+                output << "<EM> Average bkwd scatter time for layer " << u
+                  << ": " << avg(bkwdAggTimes[u]) << " ms" << std::endl;
+            if (!bkwdInvTimes[u].empty())
+                output << "<EM> Average bkwd invoke for layer " << u
+                  << ": " << avg(bkwdInvTimes[u]) << " ms" << std::endl;
+        }
+
+        output << "<EM> Average epoch time " << avg(epochMs) << " ms" << std::endl;
+
+        printLog(nodeId, output.str().c_str());
+    }
 
     return;
 }
@@ -579,26 +639,26 @@ Engine::output() {
         sprintf(outBuf, "<EM>: Forward:  Time per stage:");
         outStream << outBuf << std::endl;
         for (unsigned i = 0; i < numLayers; ++i) {
-            sprintf(outBuf, "<EM>    Aggregation   %2u  %.3lf ms", i, vecTimeAggregate[i]);
+            sprintf(outBuf, "<EM>    Aggregation   %2u  %.3lf ms", i, vecTimeAggregate[i] / (float)numEpochs);
             outStream << outBuf << std::endl;
-            sprintf(outBuf, "<EM>    Lambda        %2u  %.3lf ms", i, vecTimeLambda[i]);
+            sprintf(outBuf, "<EM>    Lambda        %2u  %.3lf ms", i, vecTimeLambda[i] / (float)numEpochs);
             outStream << outBuf << std::endl;
-            sprintf(outBuf, "<EM>    Ghost update  %2u  %.3lf ms", i, vecTimeSendout[i]);
+            sprintf(outBuf, "<EM>    Ghost update  %2u  %.3lf ms", i, vecTimeSendout[i] / (float)numEpochs);
             outStream << outBuf << std::endl;
         }
     }
-    sprintf(outBuf, "<EM>: Total forward-prop time %.3lf ms", timeForwardProcess);
+    sprintf(outBuf, "<EM>: Total forward-prop time %.3lf ms", timeForwardProcess / (float)numEpochs);
     outStream << outBuf << std::endl;
 
     if (!pipeline) {
         sprintf(outBuf, "<EM>: Backward: Time per stage:");
         outStream << outBuf << std::endl;
-        for (unsigned i = numLayers; i < 2 * numLayers; i++) {
-            sprintf(outBuf, "<EM>    Aggregation   %2u  %.3lf ms", i, vecTimeAggregate[i]);
+        for (unsigned i = numEpochs; i < 2 * numLayers; i++) {
+            sprintf(outBuf, "<EM>    Aggregation   %2u  %.3lf ms", i, vecTimeAggregate[i] / (float)numEpochs);
             outStream << outBuf << std::endl;
-            sprintf(outBuf, "<EM>    Lambda        %2u  %.3lf ms", i, vecTimeLambda[i]);
+            sprintf(outBuf, "<EM>    Lambda        %2u  %.3lf ms", i, vecTimeLambda[i] / (float)numEpochs);
             outStream << outBuf << std::endl;
-            sprintf(outBuf, "<EM>    Ghost update  %2u  %.3lf ms", i, vecTimeSendout[i]);
+            sprintf(outBuf, "<EM>    Ghost update  %2u  %.3lf ms", i, vecTimeSendout[i] / (float)numEpochs);
             outStream << outBuf << std::endl;
         }
     }
@@ -2009,9 +2069,9 @@ Engine::printEngineMetrics() {
     if (!pipeline) {
         printLog(nodeId, "<EM>: Forward:  Time per stage:");
         for (unsigned i = 0; i < numLayers; ++i) {
-            printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i, vecTimeAggregate[i]);
-            printLog(nodeId, "<EM>    Lambda        %2u  %.3lf ms", i, vecTimeLambda[i]);
-            printLog(nodeId, "<EM>    Ghost update  %2u  %.3lf ms", i, vecTimeSendout[i]);
+            printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i, vecTimeAggregate[i] / (float)numEpochs);
+            printLog(nodeId, "<EM>    Lambda        %2u  %.3lf ms", i, vecTimeLambda[i] / (float)numEpochs);
+            printLog(nodeId, "<EM>    Ghost update  %2u  %.3lf ms", i, vecTimeSendout[i] / (float)numEpochs);
         }
     }
     printLog(nodeId, "<EM>: Average forward-prop time %.3lf ms", timeForwardProcess / (float)numEpochs);
@@ -2019,9 +2079,9 @@ Engine::printEngineMetrics() {
     if (!pipeline) {
         printLog(nodeId, "<EM>: Backward: Average time per stage:");
         for (unsigned i = numLayers; i < 2 * numLayers; i++) {
-            printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i, vecTimeAggregate[i]);
-            printLog(nodeId, "<EM>    Lambda        %2u  %.3lf ms", i, vecTimeLambda[i]);
-            printLog(nodeId, "<EM>    Ghost update  %2u  %.3lf ms", i, vecTimeSendout[i]);
+            printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i, vecTimeAggregate[i] / (float)numEpochs);
+            printLog(nodeId, "<EM>    Lambda        %2u  %.3lf ms", i, vecTimeLambda[i] / (float)numEpochs);
+            printLog(nodeId, "<EM>    Ghost update  %2u  %.3lf ms", i, vecTimeSendout[i] / (float)numEpochs);
         }
     }
     printLog(nodeId, "<EM>: Backward-prop takes %.3lf ms", timeBackwardProcess / (float)numEpochs);
