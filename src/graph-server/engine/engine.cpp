@@ -108,8 +108,6 @@ Engine::init(int argc, char *argv[]) {
     // Initialize the node manager and communication manager.
     nodeManager.init(dshMachinesFile, myPrIpFile, myPubIpFile);    // NodeManger should go first.
 
-    debugFile.open("debug.out", std::ofstream::out | std::ofstream::trunc);
-
     nodeId = nodeManager.getMyNodeId();
     numNodes = nodeManager.getNumNodes();
     assert(numNodes <= 256);    // Cluster size limitation.
@@ -197,8 +195,6 @@ Engine::init(int argc, char *argv[]) {
 void
 Engine::destroy() {
     printLog(nodeId, "Destroying the engine...");
-
-    debugFile.close();
 
     nodeManager.destroy();
     commManager.destroy();

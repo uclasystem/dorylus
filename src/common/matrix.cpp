@@ -334,20 +334,9 @@ std::string Matrix::str() {
 }
 
 std::string Matrix::signature() {
-//    auto sumRow = [](FeatType* rowPtr, unsigned cols) {
-//        float sum = 0;
-//        for (unsigned c = 0; c < cols; ++c) {
-//            sum += rowPtr[c];
-//        }
-//        return sum;
-//    };
-
     std::stringstream output;
     output << "Matrix: " << tensorName << "\n";
     output << "Sum: " << sum() << "\n";
-//    output << "Sum row 0: " << sumRow(get(0), cols) << "\n";
-//    output << "Sum row " << rows/2 << ": " << sumRow(get(rows/2), cols) << "\n";
-//    output << "Sum row " << rows-1 << ": " << sumRow(get(rows-1), cols) << "\n";
 
     return output.str();
 }

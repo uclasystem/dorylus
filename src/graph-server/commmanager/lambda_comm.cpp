@@ -195,9 +195,9 @@ void LambdaComm::callback(const Aws::Lambda::LambdaClient *client,
             Aws::String requestStr;
             std::getline(requestBody, requestStr);
             if (v.KeyExists("errorMessage")) {
-                printLog(globalNodeId, "\033[1;31m[ FUNC0 ERROR ]\033[0m %s, %s", funcErr.c_str(), v.GetString("errorMessage").c_str());
+                printLog(globalNodeId, "\033[1;31m[ FUNC ERROR ]\033[0m %s, %s", funcErr.c_str(), v.GetString("errorMessage").c_str());
             } else {
-                printLog(globalNodeId, "\033[1;31m[ FUNC1 ERROR ]\033[0m %s, %s", funcErr.c_str(), resultStr.c_str());
+                printLog(globalNodeId, "\033[1;31m[ FUNC ERROR ]\033[0m %s, %s", funcErr.c_str(), resultStr.c_str());
             }
         } else {
             if (v.KeyExists("success")) {
