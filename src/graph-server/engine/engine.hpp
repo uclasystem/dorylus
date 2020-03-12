@@ -46,13 +46,13 @@ struct LabelsHeaderType {
  *
  */
 class Engine {
-
 public:
-
     // Public APIs for benchmarks.
     void init(int argc, char *argv[]);
     FeatType *runForward(unsigned epoch);
     void runBackward(FeatType *backwardInitData);
+    void runGCN();
+
     void output();
     void destroy();
     bool master();
@@ -89,7 +89,6 @@ public:
     void addEpochTime(double epochTime);
 
 private:
-
     NodeManager nodeManager;
     CommManager commManager;
 
@@ -107,6 +106,7 @@ private:
 
     // intermediate data for backward computation.
     std::vector<Matrix> *savedTensors;
+    std::map<std::string, Matrix> savedVtxTensors;
 
     // Persistent pointers to original input data
     FeatType *forwardVerticesInitData;
@@ -116,6 +116,13 @@ private:
     FeatType *forwardGhostVerticesDataOut;
     FeatType *backwardGhostVerticesDataIn;
     FeatType *backwardGhostVerticesDataOut;
+
+    struct AggOPArgs {
+        FeatType *outputTensor;
+        FeatType *inputTensor;
+        unsigned vtcsCnt;
+        unsigned featDim;
+    };
 
     // Labels one-hot storage array.
     FeatType *localVerticesLabels = NULL;
@@ -176,6 +183,8 @@ private:
     std::vector<double> vecTimeLambdaWait;
     std::vector<double> vecTimeSendout;
     std::vector<double> epochTimes;
+
+    std::vector<unsigned> epochMs;
 
     Barrier barComp;
 
@@ -244,6 +253,10 @@ private:
                                        FeatType *inputTensor, unsigned featDim);
     void backwardAggregateFromNeighbors(unsigned lvid, FeatType *nextGradTensor,
                                         FeatType *gradTensor, unsigned featDim);
+
+    void saveTensor(std::string& name, unsigned rows, unsigned cols, FeatType *dptr);
+    void saveTensor(const char* name, unsigned rows, unsigned cols, FeatType *dptr);
+    void saveTensor(Matrix& mat);
 
     // For initialization.
     void parseArgs(int argc, char* argv[]);

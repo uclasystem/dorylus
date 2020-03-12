@@ -25,6 +25,7 @@
 #include "../../common/utils.hpp"
 
 
+
 class LambdaComm;
 
 /**
@@ -36,7 +37,8 @@ class LambdaWorker {
 
 public:
 
-    LambdaWorker(LambdaComm *manager_, PairQueue* _q_ptr);
+    LambdaWorker(LambdaComm *manager_, PairQueue* _q_ptr,
+      std::map<std::string, Matrix>* _savedTensors);
 
     ~LambdaWorker();
 
@@ -87,6 +89,16 @@ private:
     void sendChunk(Matrix &srcMat, zmq::message_t& client_id, unsigned partId, unsigned layer, bool forward);
     void recvChunk(Matrix &dstMat, zmq::message_t& client_id, unsigned partId, unsigned layer, bool forward);
 
+    // named-tensors
+    void sendTensor(FeatType* dptr, std::string tensorName, unsigned rows,
+      unsigned cols, unsigned& more);
+    void getPartitionInfo(Matrix& tensor, unsigned partId, unsigned& more);
+    void sendTensors(unsigned partId, unsigned layer, zmq::message_t& client_id);
+
+    int storeTensorPart(unsigned partId);
+    void recvTensors(unsigned partId, unsigned layer, zmq::message_t& client_id);
+    // end named-tensors
+
     // Partitions the label matrix given a partition id and
     // and send that partition to the lambda thread for validation
     void sendTargetMatrix(zmq::message_t& client_id, unsigned partId);
@@ -98,6 +110,7 @@ private:
     Matrix newGradMatrix;
     Matrix targetMatrix;
     std::vector<Matrix> *savedTensors;
+    std::map<std::string, Matrix>* savedVtxTensors;
 
     // Callback when lambda results are returned
     bool pipeline;

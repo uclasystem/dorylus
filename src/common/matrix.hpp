@@ -16,14 +16,15 @@
  *
  */
 class Matrix {
-
 public:
-
     Matrix();
+    Matrix(const char* _name, unsigned _rows, unsigned _cols);
+    Matrix(const char* _name, unsigned _rows, unsigned _cols, FeatType *_data);
     Matrix(unsigned _rows, unsigned _cols);
     Matrix(unsigned _rows, unsigned _cols, FeatType *_data);
     Matrix(unsigned _rows, unsigned _cols, char *_data);
 
+    std::string name();
     unsigned getRows();
     unsigned getCols();
     unsigned getNumElemts();
@@ -37,6 +38,7 @@ public:
     // Just returns a pointer to the start of the row (no size information etc)
     FeatType* get(unsigned row);
 
+    void setName(const char* _name);
     void setRows(unsigned _rows);
     void setCols(unsigned _cols);
     void setDims(unsigned _rows, unsigned _cols);
@@ -81,17 +83,13 @@ public:
     // will cause a dangling pointer
     Matrix dot(Matrix& M, bool transpose1 = false, bool transpose2 = false, float scale = 1.0);
 
-    // Special case of matrix multiplication designed specifically for data parallelism
-    // when operating on very large transposed matrices that cannot fit into memory of a
-    // lambda
-    Matrix dotT(Matrix& M);
-
+    float sum();
     std::string shape();
-
     std::string str();
+    std::string signature();
 
 private:
-
+    std::string tensorName;
     unsigned rows;
     unsigned cols;
     FeatType *data;

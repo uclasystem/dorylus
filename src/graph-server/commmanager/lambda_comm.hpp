@@ -55,9 +55,7 @@ class LambdaWorker;
  *
  */
 class LambdaComm : public ResourceComm {
-
 public:
-
     LambdaComm(CommInfo &commInfo);
     ~LambdaComm();
     void connectToWeightServers();
@@ -66,10 +64,17 @@ public:
     void invokeLambda(Aws::String funcName, const char* dataserver,
       unsigned dport, char* weightserver, unsigned wport, unsigned layer,
       unsigned id, bool lastLayer);
+    void invokeLambda(Aws::String funcName, const char* dataserver,
+      unsigned dport, char* weightserver, unsigned wport, unsigned layer,
+      unsigned id, PROP_TYPE prop_dir, bool lastLayer);
     static void callback(const Aws::Lambda::LambdaClient *client,
       const Aws::Lambda::Model::InvokeRequest &invReq,
       const Aws::Lambda::Model::InvokeOutcome &outcome,
       const std::shared_ptr<const Aws::Client::AsyncCallerContext> &context);
+
+    // Reset LambdaComm state
+    void reset(unsigned layer);
+    void sendInfoMsg(unsigned layer);
 
     // For forward-prop.
     void newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData,
@@ -90,6 +95,12 @@ public:
     void waitLambdaBackward(unsigned layer, bool lastLayer);
 
     void relaunchLambda(bool forward, unsigned layer, unsigned lambdaId, bool lastLayer);
+    void relaunchLambda(unsigned layer, unsigned lambdaId, PROP_TYPE prop_dir,
+      bool lastLayer);
+
+    void requestInvoke(unsigned layer, unsigned lambdaId, PROP_TYPE prop_dir,
+      bool lastLayer);
+    void waitLambda(unsigned layer, PROP_TYPE prop_dir, bool lastLayer);
 
     virtual unsigned getRelaunchCnt() { return relaunchCnt; };
 
@@ -97,7 +108,7 @@ public:
     void sendShutdownMessage();
 
     // simple LambdaWorker initialization
-    friend LambdaWorker::LambdaWorker(LambdaComm *manager, PairQueue* _q_ptr);
+    friend LambdaWorker::LambdaWorker(LambdaComm *manager, PairQueue* _q_ptr, std::map<std::string, Matrix>* _savedTensors);
 
 // private:
     // AWSSDK Members

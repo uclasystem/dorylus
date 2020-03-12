@@ -30,12 +30,40 @@ static ComputingUnit cu = ComputingUnit::getInstance();
 
 static int globalEpoch = -1;
 
-void outputToFile(std::ofstream& outfile, FeatType* fptr, unsigned start, unsigned end, unsigned c, bool enumerate = false) {
+// ======== Debug utils ========
+typedef std::vector< std::vector<unsigned> > opTimes;
+
+// Outputs a matrix "signature" (the sum of the elements) without
+// creating an actual matrix
+void signFile(std::ofstream& outfile, const char* name, FeatType* fptr,
+  unsigned start, unsigned end, unsigned c) {
+    auto matxSum = [](FeatType* ptr, unsigned start, unsigned end, unsigned c) {
+        float sum = 0;
+        for (unsigned u = start; u < end; ++u) {
+            for (unsigned uj = 0; uj < c; ++uj) {
+                sum += ptr[u*c + uj];
+            }
+        }
+        return sum;
+    };
+
+    std::stringstream output;
+    output << "Matrix: " << name << std::endl;
+    output << "Sum: " << matxSum(fptr, start, end, c) << std::endl;
+
+    std::string res = output.str();
+
+    fileMutex.lock();
+    outfile.write(res.c_str(), res.size());
+    outfile << std::endl << std::flush;
+    fileMutex.unlock();
+}
+
+// Outputs a full matrix to a file
+void outputToFile(std::ofstream& outfile, FeatType* fptr, unsigned start,
+  unsigned end, unsigned c) {
     std::string out = "";
     for (uint32_t u = start; u < end; ++u) {
-        if (enumerate) {
-            out += std::to_string(u) + ": ";
-        }
         for (uint32_t uj = 0; uj < c; ++uj) {
             out += std::to_string(fptr[u * c + uj]) + " ";
         }
@@ -43,8 +71,21 @@ void outputToFile(std::ofstream& outfile, FeatType* fptr, unsigned start, unsign
     }
     out += "\n";
 
+    fileMutex.lock();
     outfile.write(out.c_str(), out.size());
+    outfile << std::endl << std::flush;
+    fileMutex.unlock();
 }
+
+// Outputs a string to a file
+void outputToFile(std::ofstream& outfile, std::string str) {
+    fileMutex.lock();
+    outfile.write(str.c_str(), str.size());
+    outfile << std::endl << std::flush;
+    fileMutex.unlock();
+}
+// ======== END Debug File utils ========
+
 
 /**
  *
@@ -93,7 +134,7 @@ Engine::init(int argc, char *argv[]) {
     printGraphMetrics();
 
     // Save intermediate tensors during forward phase for backward computation.
-    savedTensors = new std::vector<Matrix> [numLayers];
+    savedTensors = new std::vector<Matrix>[numLayers];
 
     // Init it here for collecting data when reading files
     forwardVerticesInitData = new FeatType[getFeatDim(0) * graph.localVtxCnt];
@@ -104,6 +145,7 @@ Engine::init(int argc, char *argv[]) {
     // Read in initial feature values (input features) & labels.
     readFeaturesFile(featuresFile);
     readLabelsFile(labelsFile);
+    saveTensor("LAB", graph.localVtxCnt, layerConfig[numLayers], localVerticesLabels);
 
     // Initialize synchronization utilities.
     fwdRecvCnt = 0;
@@ -186,6 +228,7 @@ Engine::setupCommInfo() {
     commInfo.weightserverPort = weightserverPort;
     commInfo.totalLayers = numLayers;
     commInfo.queuePtr = &rangesToScatter;
+    commInfo.savedVtxTensors = &savedVtxTensors;
 }
 
 /**
@@ -249,7 +292,7 @@ Engine::getNodeId() {
  * Will start a bunch of worker threads and a bunch of data communicator threads.
  *
  */
-FeatType *
+FeatType*
 Engine::runForward(unsigned epoch) {
     globalEpoch = epoch;
     // Make sure all nodes start running the forward-prop phase.
@@ -266,6 +309,7 @@ Engine::runForward(unsigned epoch) {
     if (!pipeline) {
         for (iteration = 0; iteration < numLayers; ++iteration) {
             inputTensor = aggregate(inputTensor, graph.localVtxCnt, getFeatDim(iteration));
+
             inputTensor = invokeLambda(inputTensor, graph.localVtxCnt,
               getFeatDim(iteration), getFeatDim(iteration + 1));
             if (iteration < numLayers - 1) { // don't need scatter at the last layer.
@@ -329,10 +373,13 @@ Engine::runBackward(FeatType *initGradTensor) {
     // Pure sequential
     if (!pipeline) {
         gradTensor = invokeLambdaBackward(gradTensor, graph.localVtxCnt, getFeatDim(numLayers - 1), getFeatDim(numLayers));
+
         for (iteration = numLayers - 1; iteration > 0; --iteration) {
             gradTensor = scatterBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration));
             backwardGhostVerticesDataIn = backwardGhostVerticesDataOut;
+
             gradTensor = aggregateBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration));
+
             gradTensor = invokeLambdaBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration - 1), getFeatDim(iteration));
         }
     }
@@ -353,12 +400,184 @@ Engine::runBackward(FeatType *initGradTensor) {
             gradTensor = fusedGASBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration - 1), getFeatDim(iteration), iteration < numLayers, iteration > 1);
         }
     }
-
     delete[] gradTensor;
-
 
     timeBackwardProcess += getTimer();
     printLog(nodeId, "Engine completes BACKWARD at iter %u.", iteration);
+}
+
+
+void
+Engine::runGCN() {
+    auto avg = [&](std::vector<unsigned>& vec) {
+        unsigned sum = 0;
+        for (auto& u : vec) sum += u;
+
+        return (float)sum / (float)vec.size();
+    };
+    opTimes fwdAggTimes(numLayers);
+    opTimes fwdInvTimes(numLayers);
+    opTimes fwdScatrTimes(numLayers);
+    opTimes bkwdAggTimes(numLayers);
+    opTimes bkwdInvTimes(numLayers);
+    opTimes bkwdScatTimes(numLayers);
+
+    char tName[8];
+    sprintf(tName, "H%d", -1);
+    saveTensor(tName, graph.localVtxCnt, getFeatDim(0), forwardVerticesInitData);
+    for (unsigned epoch = 0; epoch < numEpochs; ++epoch) {
+        globalEpoch = epoch;
+        unsigned epStart = timestamp_ms();
+        forwardGhostVerticesDataIn = forwardGhostInitData;
+        nodeManager.barrier();
+
+        for (iteration = 0; iteration < numLayers; ++iteration) {
+            unsigned featDim = getFeatDim(iteration);
+            unsigned nextFeatDim = getFeatDim(iteration + 1);
+
+            // AGGREGATE FORWARD
+            unsigned aggStart = timestamp_ms();
+            FeatType* ahTensor = new FeatType[graph.localVtxCnt * featDim];
+            sprintf(tName, "AH%u", iteration);
+            saveTensor(tName, graph.localVtxCnt, featDim, ahTensor);
+
+            Matrix& input = savedVtxTensors.find("H" + std::to_string((int(iteration)) - 1))->second;
+            FeatType* inputTensor = input.getData();
+            AggOPArgs args = {ahTensor, inputTensor, graph.localVtxCnt, featDim};
+            auto computeFn = std::bind(&Engine::aggregateCompute, this, std::placeholders::_1,
+                    std::placeholders::_2);
+
+            currId = 0;
+            computePool->perform(computeFn, &args);
+            computePool->sync();
+            unsigned aggEnd = timestamp_ms();
+            fwdAggTimes[iteration].push_back(aggEnd - aggStart);
+            printLog(nodeId, "FWD Aggregate %u took %u ms", iteration, aggEnd - aggStart);
+
+            if (iteration > 0)
+                delete[] forwardGhostVerticesDataIn;
+
+            // INVOKE FORWARD
+            unsigned invStart = timestamp_ms();
+            if (iteration < numLayers - 1) {
+                // If middle layer, allocate Z and H tensors
+                FeatType* zTensor = new FeatType[graph.localVtxCnt * nextFeatDim];
+                FeatType* hTensor = new FeatType[graph.localVtxCnt * nextFeatDim];
+                sprintf(tName, "Z%u", iteration);
+                saveTensor(tName, graph.localVtxCnt, nextFeatDim, zTensor);
+                sprintf(tName, "H%u", iteration);
+                saveTensor(tName, graph.localVtxCnt, nextFeatDim, hTensor);
+            } else {
+                // If final layer, pre-allocate backward tensor for backward
+                FeatType* gradTensor = new FeatType[graph.localVtxCnt * featDim];
+                sprintf(tName, "GRAD%u", iteration);
+                saveTensor(tName, graph.localVtxCnt, featDim, gradTensor);
+                resComm->sendInfoMsg(iteration);
+            }
+
+            resComm->reset(iteration);
+            for (unsigned u = 0; u < numLambdasForward; ++u) {
+                resComm->requestInvoke(iteration, u, PROP_TYPE::FORWARD, iteration == numLayers - 1);
+            }
+
+            resComm->waitLambda(iteration, PROP_TYPE::FORWARD, iteration == numLayers - 1);
+            unsigned invEnd = timestamp_ms();
+            fwdInvTimes[iteration].push_back(invEnd - invStart);
+            printLog(nodeId, "FWD Invoke %u took %u ms", iteration, invEnd - invStart);
+
+            // SCATTER FORWARD
+            if (iteration < numLayers - 1) {
+                unsigned scatStart = timestamp_ms();
+                FeatType* hTensor = (savedVtxTensors.find("H" + std::to_string(iteration))->second).getData();
+                scatter(hTensor, graph.localVtxCnt, nextFeatDim);
+                forwardGhostVerticesDataIn = forwardGhostVerticesDataOut;
+                unsigned scatEnd = timestamp_ms();
+                fwdScatrTimes[iteration].push_back(scatEnd - scatStart);
+                printLog(nodeId, "FWD Scatter %u took %u ms", iteration, scatEnd - scatStart);
+            }
+        }
+
+        for (iteration = numLayers - 1; iteration > 0; --iteration) {
+            unsigned featDim = getFeatDim(iteration);
+            unsigned prevFeatDim = getFeatDim(iteration - 1);
+
+            // SCATTER BACKWARD
+            unsigned scatStart = timestamp_ms();
+            FeatType* outputGradTensor = ((savedVtxTensors.find("GRAD" + std::to_string(iteration))->second)).getData();
+            scatterBackward(outputGradTensor, graph.localVtxCnt, featDim);
+            backwardGhostVerticesDataIn = backwardGhostVerticesDataOut;
+            unsigned scatEnd = timestamp_ms();
+            bkwdScatTimes[iteration].push_back(scatEnd - scatStart);
+            printLog(nodeId, "BKWD Scatter %u took %u ms", iteration, scatEnd - scatStart);
+
+            // AGGREGATE BACKWARD
+            unsigned aggStart = timestamp_ms();
+            FeatType* bahTensor = new FeatType[graph.localVtxCnt * featDim];
+            sprintf(tName, "BAH%u", iteration);
+            saveTensor(tName, graph.localVtxCnt, featDim, bahTensor);
+            currId = 0;
+            AggOPArgs args = {bahTensor, outputGradTensor, graph.localVtxCnt, featDim};
+            auto computeFn = std::bind(&Engine::aggregateBPCompute, this, std::placeholders::_1, std::placeholders::_2);
+            computePool->perform(computeFn, &args);
+            computePool->sync();
+            unsigned aggEnd = timestamp_ms();
+            bkwdAggTimes[iteration].push_back(aggEnd - aggStart);
+            printLog(nodeId, "BKWD Aggregate %u took %u ms", iteration, aggEnd - aggStart);
+
+            // INVOKE BACKWARD
+            unsigned invStart = timestamp_ms();
+            FeatType* gradTensor = new FeatType[graph.localVtxCnt * prevFeatDim];
+            sprintf(tName, "GRAD%u", iteration-1);
+            saveTensor(tName, graph.localVtxCnt, featDim, gradTensor);
+
+            resComm->sendInfoMsg(iteration-1);
+            resComm->reset(iteration-1);
+            for (unsigned u = 0; u < numLambdasForward; ++u) {
+                resComm->requestInvoke(iteration-1, u, PROP_TYPE::BACKWARD, iteration == numLayers - 1);
+            }
+
+            resComm->waitLambda(iteration-1, PROP_TYPE::BACKWARD, iteration == numLayers - 1);
+            unsigned invEnd = timestamp_ms();
+            bkwdInvTimes[iteration].push_back(invEnd - invStart);
+            printLog(nodeId, "BKWD Invoke %u took %u ms", iteration-1, invEnd - invStart);
+        }
+        unsigned epEnd = timestamp_ms();
+        unsigned epTime = epEnd - epStart;
+
+        printLog(nodeId, "Finished epoch %u. Epoch Time: %u ms", epoch, epTime);
+        epochMs.push_back(epTime);
+    }
+
+    if (nodeId == 0) {
+        std::stringstream output;
+        output << "Average op times:" << std::endl;
+        for (unsigned u = 0; u < numLayers; ++u) {
+            if (!fwdAggTimes[u].empty())
+                output << "<EM> Average fwd agg time for layer " << u
+                  << ": " << avg(fwdAggTimes[u]) << " ms" << std::endl;
+            if (!fwdInvTimes[u].empty())
+                output << "<EM> Average fwd invoke time for layer " << u
+                  << ": " << avg(fwdInvTimes[u]) << " ms" << std::endl;
+            if (!fwdScatrTimes[u].empty())
+                output << "<EM> Average fwd scatter time for layer " << u
+                  << ": " << avg(fwdScatrTimes[u]) << " ms" << std::endl;
+            if (!bkwdScatTimes[u].empty())
+                output << "<EM> Average bkwd agg time for layer " << u
+                  << ": " << avg(bkwdScatTimes[u]) << " ms" << std::endl;
+            if (!bkwdAggTimes[u].empty())
+                output << "<EM> Average bkwd scatter time for layer " << u
+                  << ": " << avg(bkwdAggTimes[u]) << " ms" << std::endl;
+            if (!bkwdInvTimes[u].empty())
+                output << "<EM> Average bkwd invoke for layer " << u
+                  << ": " << avg(bkwdInvTimes[u]) << " ms" << std::endl;
+        }
+
+        output << "<EM> Average epoch time " << avg(epochMs) << " ms" << std::endl;
+
+        printLog(nodeId, output.str().c_str());
+    }
+
+    return;
 }
 
 
@@ -417,26 +636,26 @@ Engine::output() {
         sprintf(outBuf, "<EM>: Forward:  Time per stage:");
         outStream << outBuf << std::endl;
         for (unsigned i = 0; i < numLayers; ++i) {
-            sprintf(outBuf, "<EM>    Aggregation   %2u  %.3lf ms", i, vecTimeAggregate[i]);
+            sprintf(outBuf, "<EM>    Aggregation   %2u  %.3lf ms", i, vecTimeAggregate[i] / (float)numEpochs);
             outStream << outBuf << std::endl;
-            sprintf(outBuf, "<EM>    Lambda        %2u  %.3lf ms", i, vecTimeLambda[i]);
+            sprintf(outBuf, "<EM>    Lambda        %2u  %.3lf ms", i, vecTimeLambda[i] / (float)numEpochs);
             outStream << outBuf << std::endl;
-            sprintf(outBuf, "<EM>    Ghost update  %2u  %.3lf ms", i, vecTimeSendout[i]);
+            sprintf(outBuf, "<EM>    Ghost update  %2u  %.3lf ms", i, vecTimeSendout[i] / (float)numEpochs);
             outStream << outBuf << std::endl;
         }
     }
-    sprintf(outBuf, "<EM>: Total forward-prop time %.3lf ms", timeForwardProcess);
+    sprintf(outBuf, "<EM>: Total forward-prop time %.3lf ms", timeForwardProcess / (float)numEpochs);
     outStream << outBuf << std::endl;
 
     if (!pipeline) {
         sprintf(outBuf, "<EM>: Backward: Time per stage:");
         outStream << outBuf << std::endl;
         for (unsigned i = numLayers; i < 2 * numLayers; i++) {
-            sprintf(outBuf, "<EM>    Aggregation   %2u  %.3lf ms", i, vecTimeAggregate[i]);
+            sprintf(outBuf, "<EM>    Aggregation   %2u  %.3lf ms", i, vecTimeAggregate[i] / (float)numEpochs);
             outStream << outBuf << std::endl;
-            sprintf(outBuf, "<EM>    Lambda        %2u  %.3lf ms", i, vecTimeLambda[i]);
+            sprintf(outBuf, "<EM>    Lambda        %2u  %.3lf ms", i, vecTimeLambda[i] / (float)numEpochs);
             outStream << outBuf << std::endl;
-            sprintf(outBuf, "<EM>    Ghost update  %2u  %.3lf ms", i, vecTimeSendout[i]);
+            sprintf(outBuf, "<EM>    Ghost update  %2u  %.3lf ms", i, vecTimeSendout[i] / (float)numEpochs);
             outStream << outBuf << std::endl;
         }
     }
@@ -460,14 +679,6 @@ Engine::output() {
         printEngineMetrics();
     }
 }
-
-
-struct AggOPArgs {
-    FeatType *outputTensor;
-    FeatType *inputTensor;
-    unsigned vtcsCnt;
-    unsigned featDim;
-};
 
 
 #ifdef _GPU_ENABLED_
@@ -519,7 +730,8 @@ FeatType *Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned fea
 #else
 FeatType *Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim) {
     double sttTimer = getTimer();
-    FeatType *outputTensor = new FeatType [vtcsCnt * featDim];
+    // AH
+    FeatType *outputTensor = new FeatType[vtcsCnt * featDim];
     currId = 0;
 
     AggOPArgs args = {outputTensor, vtcsTensor, vtcsCnt, featDim};
@@ -549,8 +761,8 @@ Engine::invokeLambda(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     double sttTimer = getTimer();
     assert(vtcsCnt == graph.localVtxCnt);
 
-    FeatType *outputTensor = new FeatType [vtcsCnt * outFeatDim];
-    FeatType *zTensor = new FeatType [vtcsCnt * outFeatDim];
+    FeatType *outputTensor = new FeatType[vtcsCnt * outFeatDim];
+    FeatType *zTensor = new FeatType[vtcsCnt * outFeatDim];
 
     bool saveInput = true;
     if (saveInput) {
@@ -611,6 +823,7 @@ FeatType*
 Engine::fusedGatherApply(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim) {
     double sttTimer = getTimer();
     // Prepare for gather phase
+    // AH
     FeatType *gatheredTensor = new FeatType[vtcsCnt * inFeatDim];
     currId = 0;
     AggOPArgs args = {gatheredTensor, vtcsTensor, vtcsCnt, inFeatDim};
@@ -620,6 +833,7 @@ Engine::fusedGatherApply(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeat
     computePool->perform(computeFn, &args);
 
     // Prepare for applyVertex phase
+    // H, Z
     FeatType *outputTensor = new FeatType[vtcsCnt * outFeatDim];
     FeatType *zTensor = new FeatType[vtcsCnt * outFeatDim];
     bool saveInput = true;
@@ -836,6 +1050,7 @@ void Engine::aggregateCompute(unsigned tid, void *args) {
     }
 }
 
+
 /**
  *
  * Aggregate featDim feature values starting from offset from all neighbors (including self). Then write the results to the
@@ -844,7 +1059,6 @@ void Engine::aggregateCompute(unsigned tid, void *args) {
  */
 inline void
 Engine::forwardAggregateFromNeighbors(unsigned lvid, FeatType *outputTensor, FeatType *inputTensor, unsigned featDim) {
-
     // Read out data of the current iteration of given vertex.
     FeatType *currDataDst = getVtxFeat(outputTensor, lvid, featDim);
     FeatType *currDataPtr = getVtxFeat(inputTensor, lvid, featDim);
@@ -1142,7 +1356,7 @@ Engine::aggregateBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featD
     return outputTensor;
 }
 #else
-FeatType *
+FeatType*
 Engine::aggregateBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim) {
     double sttTimer = getTimer();
 
@@ -1170,7 +1384,7 @@ Engine::aggregateBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featD
 
 
 
-FeatType *
+FeatType*
 Engine::invokeLambdaBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim) {
     double sttTimer = getTimer();
 
@@ -1203,7 +1417,7 @@ Engine::invokeLambdaBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned in
     return outputTensor;
 }
 
-FeatType *
+FeatType*
 Engine::fusedGatherApplyBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim) {
     double sttTimer = getTimer();
 
@@ -1267,7 +1481,7 @@ Engine::fusedGatherApplyBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigne
     return outputTensor;
 }
 
-FeatType *
+FeatType*
 Engine::scatterBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim) {
     double sttTimer = getTimer();
 
@@ -1809,6 +2023,33 @@ Engine::calcAcc(FeatType *predicts, FeatType *labels, unsigned vtcsCnt, unsigned
     accuracy = acc;
 }
 
+void Engine::saveTensor(std::string& name, unsigned rows, unsigned cols, FeatType* dptr) {
+    auto iter = savedVtxTensors.find(name);
+    if (iter != savedVtxTensors.end()) {
+        delete[] (iter->second).getData();
+        savedVtxTensors.erase(iter);
+    }
+    savedVtxTensors[name] = Matrix(name.c_str(), rows, cols, dptr);
+}
+
+void Engine::saveTensor(const char* name, unsigned rows, unsigned cols, FeatType* dptr) {
+    auto iter = savedVtxTensors.find(name);
+    if (iter != savedVtxTensors.end()) {
+        delete[] (iter->second).getData();
+        savedVtxTensors.erase(iter);
+    }
+    savedVtxTensors[std::string(name)] = Matrix(name, rows, cols, dptr);
+}
+
+void Engine::saveTensor(Matrix& mat) {
+    auto iter = savedVtxTensors.find(mat.name());
+    if (iter != savedVtxTensors.end()) {
+        delete[] (iter->second).getData();
+        savedVtxTensors.erase(iter);
+    }
+    savedVtxTensors[mat.name()] = mat;
+}
+
 
 /**
  *
@@ -1825,9 +2066,9 @@ Engine::printEngineMetrics() {
     if (!pipeline) {
         printLog(nodeId, "<EM>: Forward:  Time per stage:");
         for (unsigned i = 0; i < numLayers; ++i) {
-            printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i, vecTimeAggregate[i]);
-            printLog(nodeId, "<EM>    Lambda        %2u  %.3lf ms", i, vecTimeLambda[i]);
-            printLog(nodeId, "<EM>    Ghost update  %2u  %.3lf ms", i, vecTimeSendout[i]);
+            printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i, vecTimeAggregate[i] / (float)numEpochs);
+            printLog(nodeId, "<EM>    Lambda        %2u  %.3lf ms", i, vecTimeLambda[i] / (float)numEpochs);
+            printLog(nodeId, "<EM>    Ghost update  %2u  %.3lf ms", i, vecTimeSendout[i] / (float)numEpochs);
         }
     }
     printLog(nodeId, "<EM>: Average forward-prop time %.3lf ms", timeForwardProcess / (float)numEpochs);
@@ -1835,9 +2076,9 @@ Engine::printEngineMetrics() {
     if (!pipeline) {
         printLog(nodeId, "<EM>: Backward: Average time per stage:");
         for (unsigned i = numLayers; i < 2 * numLayers; i++) {
-            printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i, vecTimeAggregate[i]);
-            printLog(nodeId, "<EM>    Lambda        %2u  %.3lf ms", i, vecTimeLambda[i]);
-            printLog(nodeId, "<EM>    Ghost update  %2u  %.3lf ms", i, vecTimeSendout[i]);
+            printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i, vecTimeAggregate[i] / (float)numEpochs);
+            printLog(nodeId, "<EM>    Lambda        %2u  %.3lf ms", i, vecTimeLambda[i] / (float)numEpochs);
+            printLog(nodeId, "<EM>    Ghost update  %2u  %.3lf ms", i, vecTimeSendout[i] / (float)numEpochs);
         }
     }
     printLog(nodeId, "<EM>: Backward-prop takes %.3lf ms", timeBackwardProcess / (float)numEpochs);

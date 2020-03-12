@@ -26,7 +26,7 @@ struct CommInfo {
     unsigned totalLayers; //for weights prefetching
 
     PairQueue* queuePtr;
-    Lock* qLock;
+    std::map<std::string, Matrix>* savedVtxTensors;
 };
 
 //abstract interface declaration
@@ -34,6 +34,10 @@ class ResourceComm {
 public:
     ResourceComm() {};
     virtual ~ResourceComm() {};
+
+    virtual void reset(unsigned layer) = 0;
+    virtual void sendInfoMsg(unsigned layer) = 0;
+
     // For forward-prop.
     virtual void newContextForward(unsigned layer, FeatType *dataBuf,
         FeatType *zData, FeatType *actData, unsigned numLocalVertices,
@@ -52,6 +56,10 @@ public:
     virtual void requestBackward(unsigned layer, bool lastLayer) = 0;
     virtual void invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLayer) = 0;
     virtual void waitLambdaBackward(unsigned layer, bool lastLayer) = 0;
+
+    virtual void requestInvoke(unsigned layer, unsigned lambdaId,
+      PROP_TYPE prop_dir, bool lastLayer) = 0;
+    virtual void waitLambda(unsigned layer, PROP_TYPE prop_dir, bool lastLayer) = 0;
 
     virtual unsigned getRelaunchCnt() { return 0u; };
     // Send a message to the coordination server to shutdown.

@@ -25,7 +25,6 @@
 #define SND_MORE true
 #define NO_MORE false
 
-
 using namespace Aws::Utils::Json;
 using namespace aws::lambda_runtime;
 using namespace std::chrono;

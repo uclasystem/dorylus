@@ -1,7 +1,6 @@
 #ifndef __WEIGHT_SERVER_HPP__
 #define __WEIGHT_SERVER_HPP__
 
-#include "AdamOptimizer.hpp"
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -16,10 +15,13 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <map>
+
 #include <zmq.hpp>
 #include <boost/algorithm/string/trim.hpp>
 
 #include "serverworker.hpp"
+#include "AdamOptimizer.hpp"
 #include "../common/matrix.hpp"
 #include "../common/utils.hpp"
 
@@ -34,9 +36,7 @@ const float LEARNING_RATE = 0.01;
  *
  */
 class WeightServer {
-
   public:
-
     WeightServer(std::string &weightServersFile, std::string &myPrIpFile,
                  unsigned _listenerPort, std::string &configFileName,
                  unsigned _serverPort, std::string &tmpFileName);
@@ -55,7 +55,6 @@ class WeightServer {
     bool servers_updates_done;
 
   private:
-
     // For debugging.
     void serverLog(std::string info);
 
@@ -76,6 +75,10 @@ class WeightServer {
     // Initialize bias vectors
     Matrix initBias(unsigned dim, float initVal = 0);
 
+    void saveTensor(std::string& name, unsigned rows, unsigned cols,
+      FeatType* dptr);
+    void saveTensor(Matrix& tensor);
+
     void initializeAdamVariables();
 
     void distributeWeightMatrices();
@@ -83,6 +86,8 @@ class WeightServer {
     std::vector<unsigned> dims;
     std::vector<Matrix> weightMats;
     std::vector<Matrix> biases;
+
+    std::map<std::string, Matrix> weightsStore;
 
     // Adam descent variables
     bool adam;  // whether to use standard SGD or Adam Opt

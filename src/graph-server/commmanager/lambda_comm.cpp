@@ -53,7 +53,7 @@ LambdaComm::LambdaComm(CommInfo &commInfo) :
 
     // Create 'numListeners' workers and detach them.
     for (unsigned i = 0; i < numListeners; ++i) {
-        workers.push_back(new LambdaWorker(this, commInfo.queuePtr));
+        workers.push_back(new LambdaWorker(this, commInfo.queuePtr, commInfo.savedVtxTensors));
         worker_threads.push_back(new std::thread(std::bind(&LambdaWorker::work, workers[i])));
     }
 
@@ -134,8 +134,7 @@ void LambdaComm::connectToWeightServers() {
 
 // LAMBDA INVOCATION AND RETURN FUNCTIONS
 void LambdaComm::invokeLambda(Aws::String funcName, const char* dataserver, unsigned dport,
-  char* weightserver, unsigned wport, unsigned layer, unsigned id,
-  bool lastLayer) {
+  char* weightserver, unsigned wport, unsigned layer, unsigned id, bool lastLayer) {
     Aws::Lambda::Model::InvokeRequest invReq;
     invReq.SetFunctionName(funcName);
     invReq.SetInvocationType(Aws::Lambda::Model::InvocationType::RequestResponse);
@@ -155,6 +154,28 @@ void LambdaComm::invokeLambda(Aws::String funcName, const char* dataserver, unsi
     m_client->InvokeAsync(invReq, callback);
 }
 
+void LambdaComm::invokeLambda(Aws::String funcName, const char* dataserver, unsigned dport,
+  char* weightserver, unsigned wport, unsigned layer, unsigned id, PROP_TYPE prop_dir, bool lastLayer) {
+    Aws::Lambda::Model::InvokeRequest invReq;
+    invReq.SetFunctionName(funcName);
+    invReq.SetInvocationType(Aws::Lambda::Model::InvocationType::RequestResponse);
+    invReq.SetLogType(Aws::Lambda::Model::LogType::Tail);
+    std::shared_ptr<Aws::IOStream> payload = Aws::MakeShared<Aws::StringStream>("LambdaInvoke");
+
+    Aws::Utils::Json::JsonValue jsonPayload;
+    jsonPayload.WithString("dataserver", dataserver);
+    jsonPayload.WithString("weightserver", weightserver);
+    jsonPayload.WithInteger("wport", wport);
+    jsonPayload.WithInteger("dport", dport);
+    jsonPayload.WithInteger("layer", layer);    // For forward-prop: layer-ID; For backward-prop: numLayers.
+    jsonPayload.WithInteger("id", id);
+    jsonPayload.WithInteger("prop_dir", prop_dir);
+    jsonPayload.WithBool("lastLayer", lastLayer);
+
+    *payload << jsonPayload.View().WriteReadable();
+    invReq.SetBody(payload);
+    m_client->InvokeAsync(invReq, callback);
+}
 
 void LambdaComm::callback(const Aws::Lambda::LambdaClient *client,
   const Aws::Lambda::Model::InvokeRequest &invReq,
@@ -170,6 +191,9 @@ void LambdaComm::callback(const Aws::Lambda::LambdaClient *client,
         Aws::Utils::Json::JsonValue response(resultStr);
         auto v = response.View();
         if (funcErr != "") {
+            Aws::IOStream& requestBody = *(invReq.GetBody());
+            Aws::String requestStr;
+            std::getline(requestBody, requestStr);
             if (v.KeyExists("errorMessage")) {
                 printLog(globalNodeId, "\033[1;31m[ FUNC ERROR ]\033[0m %s, %s", funcErr.c_str(), v.GetString("errorMessage").c_str());
             } else {
@@ -194,6 +218,34 @@ void LambdaComm::callback(const Aws::Lambda::LambdaClient *client,
 }
 // END LAMBDA INVOCATION AND RETURN FUNCTIONS
 
+
+/**
+ * Reset LambdaComm
+ */
+void
+LambdaComm::reset(unsigned layer) {
+    countForward = 0;
+    currLayer = layer;
+    timeoutPeriod = 0.0;
+}
+
+void
+LambdaComm::sendInfoMsg(unsigned layer) {
+    if (nodeId == 0) {
+        unsigned numLambdas = numNodes * numLambdasForward;
+
+        unsigned baseNumThreads = numLambdas / weightservers.size();
+        unsigned remainder = numLambdas % weightservers.size();
+
+        for (unsigned u = 0; u < remainder; ++u) {
+            sendInfoMessage(weightsockets[u % weightservers.size()], baseNumThreads + 1);
+        }
+
+        for (unsigned u = remainder; u < weightservers.size(); ++u) {
+            sendInfoMessage(weightsockets[u % weightservers.size()], baseNumThreads);
+        }
+    }
+}
 
 /**
  *
@@ -369,6 +421,53 @@ LambdaComm::relaunchLambda(bool forward, unsigned layer, unsigned lambdaId, bool
                  weightserverPort, layer, lambdaId, lastLayer);
 
     ++relaunchCnt;
+}
+
+
+void
+LambdaComm::relaunchLambda(unsigned layer, unsigned lambdaId,
+  PROP_TYPE prop_dir, bool lastLayer) {
+    printLog(nodeId, "Relaunch lambda %u for layer %u...", lambdaId, layer);
+
+    char* weightServerIp = weightservers[(nodeId * numLambdasForward + lambdaId) % weightservers.size()];
+    invokeLambda("gcn", nodeIp.c_str(), dataserverPort, weightServerIp,
+      weightserverPort, layer, lambdaId, prop_dir, lastLayer);
+    ++relaunchCnt;
+}
+
+
+void
+LambdaComm::requestInvoke(unsigned layer, unsigned lambdaId,
+  PROP_TYPE prop_dir, bool lastLayer) {
+    __sync_bool_compare_and_swap(forwardLambdaTable + lambdaId, false, true);
+    if (lambdaId == 0) {
+        forwardTimer = getTimer();
+    }
+
+    char* weightServerIp = weightservers[(nodeId * numLambdasForward + lambdaId) % weightservers.size()];
+    invokeLambda("gcn", nodeIp.c_str(), dataserverPort, weightServerIp,
+      weightserverPort, layer, lambdaId, prop_dir, lastLayer);
+}
+
+void
+LambdaComm::waitLambda(unsigned layer, PROP_TYPE prop_dir, bool lastLayer) {
+    while (countForward < numLambdasForward) {
+        if (relaunching) {
+            if (countForward >= 0.8 * numLambdasForward && timeoutPeriod < 1e-8) {
+                timeoutPeriod = std::fmax(MIN_TIMEOUT, 2 * (getTimer() - forwardTimer));
+            }
+            if (getTimer() - forwardTimer > (timeoutPeriod < 1e-8 ? TIMEOUT_PERIOD : timeoutPeriod)) {
+                for (unsigned i = 0; i < numLambdasForward; i++) {
+                    if (forwardLambdaTable[i]) {
+                        relaunchLambda(layer, i, prop_dir, lastLayer);
+                    }
+                }
+                forwardTimer = getTimer();
+                timeoutPeriod *= EXP_BACKOFF_FACTOR;
+            }
+        }
+        usleep(SLEEP_PERIOD);
+    }
 }
 
 

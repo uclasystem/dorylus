@@ -14,7 +14,6 @@
 cd ${HOME}/gnn-lambda/
 
 case $1 in
-
     #
     # Run graphserver.
     #
@@ -32,13 +31,8 @@ case $1 in
         NODEPORT=$( < ../nodeport )
         WSERVERIP=$HOME/wserverip
 
-        if [[ $# -lt 3 ]]; then
-            NUM_LAMBDAS_FORWARD=$( < ../numlambdasforward )
-            NUM_LAMBDAS_BACKWARD=$( < ../numlambdasbackward )
-        else
-            NUM_LAMBDAS_FORWARD=$3
-            NUM_LAMBDAS_BACKWARD=$3
-        fi
+        NUM_LAMBDAS_FORWARD=$( < ../numlambdasforward )
+        NUM_LAMBDAS_BACKWARD=$( < ../numlambdasbackward )
 
         let MODE=0
         let PIPELINE=0
@@ -59,6 +53,12 @@ case $1 in
                 PIPELINE=1
             fi
 
+            if [[ $var = --l=* ]] || [[ $var = --lambdas=* ]]; then
+                NUM_LAMBDAS="${var#*=}"
+                NUM_LAMBDAS_FORWARD=${NUM_LAMBDAS}
+                NUM_LAMBDAS_BACKWARD=${NUM_LAMBDAS}
+            fi
+
             if [[ $var = --e=* ]] || [[ $var = --epochs=* ]]; then
                 NUM_EPOCHS="${var#*=}"
             fi
@@ -66,8 +66,8 @@ case $1 in
 
         # After processing args, check to see if GPU enables
         # If so, disable pipelining
-        if [ $MODE -eq 1 ] && [ $PIPELINE -eq 1 ]; then
-            echo "GPU and pipeline cannot be used together. Disabling pipeline"
+        if [[ ($MODE -eq 1 || $MODE -eq 2)  &&  $PIPELINE -eq 1 ]]; then
+            echo "GPU/CPU and pipeline cannot be used together. Disabling pipeline"
             PIPELINE=0
         fi
 

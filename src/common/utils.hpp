@@ -16,18 +16,23 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <sys/time.h>
+#include <limits.h>
 
 
 /** Feature type is float, so be consistent. */
 typedef float FeatType;
 
+#define TENSOR_NAME_SIZE 8
 
 // base timestamp for profiling
 #define BASE_TMSP (1580333752000ull)
 
 static const size_t HEADER_SIZE = sizeof(unsigned) * 5 + sizeof(unsigned) * 2;
 enum OP { REQ_FORWARD, PUSH_FORWARD, PULL_FORWARD, REQ_BACKWARD, PUSH_BACKWARD, PULL_BACKWARD, PULL_EVAL, PUSH_EVAL, RESP, INFO, TERM,
-          REQ_BATCH_FORWARD, REQ_BATCH_BACKWARD };
+          REQ_BATCH_FORWARD, REQ_BATCH_BACKWARD,
+          PUSH, PULL };
+// OP, TENSOR_NAME, FIELD0, FIELD1, ...
+static const size_t TENSOR_HDR_SIZE = sizeof(unsigned) * 5 + TENSOR_NAME_SIZE;
 enum TYPE { GRAD, AH, Z, ACT, LAB };
 enum PROP_TYPE { FORWARD, BACKWARD };
 
@@ -53,6 +58,11 @@ parse(const char *buf, unsigned offset) {
     return val;
 }
 
+static inline std::string
+parseName(const char* buf) {
+    return std::string(buf + sizeof(unsigned));
+}
+
 // ID represents either layer or data partition, depending on server responding.
 static inline void
 populateHeader(char* header, unsigned op, unsigned field1 = 0, unsigned field2 = 0, unsigned field3 = 0, unsigned field4 = 0) {
@@ -61,6 +71,28 @@ populateHeader(char* header, unsigned op, unsigned field1 = 0, unsigned field2 =
     serialize<unsigned>(header, 2, field2);
     serialize<unsigned>(header, 3, field3);
     serialize<unsigned>(header, 4, field4);
+}
+
+static inline void
+populateHeader(void* ptr, unsigned op, unsigned field1 = 0, unsigned field2 = 0, unsigned field3 = 0, unsigned field4 = 0) {
+    char* header = (char*)ptr;
+    serialize<unsigned>(header, 0, op);
+    serialize<unsigned>(header, 1, field1);
+    serialize<unsigned>(header, 2, field2);
+    serialize<unsigned>(header, 3, field3);
+    serialize<unsigned>(header, 4, field4);
+}
+
+static inline void
+populateHeader(void* header, unsigned op, const char* tensorName, unsigned field1 = 0,
+  unsigned field2 = 0, unsigned field3 = 0, unsigned field4 = 0) {
+    char* data = (char*)header;
+    serialize<unsigned>(data, 0, op);
+    std::memcpy(data + sizeof(unsigned), tensorName, TENSOR_NAME_SIZE);
+    serialize<unsigned>(data, 3, field1);
+    serialize<unsigned>(data, 4, field2);
+    serialize<unsigned>(data, 5, field3);
+    serialize<unsigned>(data, 6, field4);
 }
 
 static inline unsigned
@@ -178,5 +210,12 @@ private:
 };
 extern GPUTimers gtimers;
 
+extern std::ofstream debugFile;
+extern std::mutex fileMutex;
+
+extern std::ofstream matrixFile;
+extern std::mutex mFileMutex;
+
+void matrixToFile(FeatType* fptr, unsigned start, unsigned end, unsigned c);
 
 #endif // GLOBAL_UTILS_HPP

@@ -4,6 +4,16 @@ Matrix::Matrix() {
     rows = 0; cols = 0;
 }
 
+Matrix::Matrix(const char* _name, unsigned _rows, unsigned _cols) {
+    tensorName = _name;
+    rows = _rows; cols = _cols;
+}
+
+Matrix::Matrix(const char* _name, unsigned _rows, unsigned _cols, FeatType *_data) {
+    tensorName = _name;
+    rows = _rows; cols = _cols; data = _data;
+}
+
 Matrix::Matrix(unsigned _rows, unsigned _cols) {
     rows = _rows; cols = _cols;
 }
@@ -17,6 +27,7 @@ Matrix::Matrix(unsigned _rows, unsigned _cols, char *_data) {
 }
 
 // Get Matrix data / information
+std::string Matrix::name() { return tensorName; }
 unsigned Matrix::getRows() { return rows; }
 unsigned Matrix::getCols() { return cols; }
 unsigned Matrix::getNumElemts() { return rows * cols; }
@@ -31,6 +42,7 @@ FeatType Matrix::get(unsigned row, unsigned col) { return data[row * cols + col]
 FeatType* Matrix::get(unsigned row) { return data + (row * cols); }
 
 // Setting Matrix info (not sure when this would be used)
+void Matrix::setName(const char* _name) { tensorName = _name; }
 void Matrix::setRows(unsigned _rows) { rows = _rows; }
 void Matrix::setCols(unsigned _cols) { cols = _cols; }
 void Matrix::setDims(unsigned _rows, unsigned _cols) { rows = _rows; cols = _cols; }
@@ -295,43 +307,36 @@ Matrix Matrix::dot(Matrix& M, bool transpose1, bool transpose2, float scale) {
     return Matrix(m, n, result);
 }
 
-Matrix Matrix::dotT(Matrix& M) {
-    assert(getRows() == M.getRows());
-
-    unsigned colsThis = getCols();
-    unsigned colsM = M.getCols();
-    FeatType* result = new FeatType[colsThis * colsM];
-
-    // For the number of rows in the matrices
-    for (unsigned r = 0; r < getRows(); ++r) {
-        // comment these 2 lines to make compiler happy.
-        // FeatType* rowThis = get(r);
-        // FeatType* rowM = M.get(r);
-
-        // For each number in the first row
-        for (unsigned cThis = 0; cThis < colsThis; ++cThis) {
-            // For each number in the second row
-            for (unsigned cM = 0; cM < colsM; ++cM) {
-                // Sum the product of the number at index cThis,cM
-                result[cThis * colsM + cM] += get(r, cThis) * M.get(r, cM);
-            }
-        }
+// Print functions for info / debugging
+float Matrix::sum() {
+    float sum = 0;
+    unsigned numElemts = getNumElemts();
+    for (unsigned u = 0; u < numElemts; ++u) {
+        sum += data[u];
     }
 
-    return Matrix(colsThis, colsM, result);
+    return sum;
 }
 
-// Print functions for info / debugging
 std::string Matrix::shape() { return "(" + std::to_string(rows) + ", " + std::to_string(cols) + ")"; }
 
 std::string Matrix::str() {
     std::stringstream output;
-    output << "Matrix Dims: " << shape() << "\n";
+    output << "Matrix " << tensorName << "\n";
+    output << "Dims: " << shape() << "\n";
     for (unsigned i = 0; i < rows; ++i) {
         for (unsigned j = 0; j < cols; ++j) {
             output << std::fixed << std::setprecision(8) << data[i * cols + j] << " ";
         }
         output << "\n";
     }
+    return output.str();
+}
+
+std::string Matrix::signature() {
+    std::stringstream output;
+    output << "Matrix: " << tensorName << "\n";
+    output << "Sum: " << sum() << "\n";
+
     return output.str();
 }
