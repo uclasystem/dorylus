@@ -1796,7 +1796,7 @@ void
 Engine::sendBackwardGhostGradients(FeatType *gradTensor, unsigned featDim) {
     // Loop through all local vertices and do the data send out work. If there are any remote edges for a vertex, should send this vid to
     // other nodes for their ghost's update.
-    bool batchFlag = false;
+    bool batchFlag = true;
     unsigned BATCH_SIZE = std::max(((batchFlag ? MAX_MSG_SIZE : 4096) - DATA_HEADER_SIZE) /
                                    (sizeof(unsigned) + sizeof(FeatType) * featDim), 1ul); // at least send one vertex
     for (unsigned nid = 0; nid < numNodes; ++nid) {

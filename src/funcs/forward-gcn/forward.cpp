@@ -35,7 +35,7 @@ static invocation_response
 constructResp(bool success, unsigned id, std::string msg) {
     JsonValue jsonResponse;
     jsonResponse.WithBool("success", success);
-    jsonResponse.WithInteger("type", PROP_TYPE::BACKWARD);
+    jsonResponse.WithInteger("type", PROP_TYPE::FORWARD);
     jsonResponse.WithInteger("id", id);
     jsonResponse.WithString("message", msg);
     auto response = jsonResponse.View().WriteCompact();
@@ -78,20 +78,25 @@ forward_prop_layer(std::string dataserver, std::string weightserver, unsigned dp
     try {
         zmq::socket_t weights_socket(ctx, ZMQ_DEALER);
         weights_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
+        weights_socket.setsockopt(ZMQ_TCP_KEEPALIVE, 1);
         char whost_port[50];
         sprintf(whost_port, "tcp://%s:%u", weightserver.c_str(), wport);
         weights_socket.connect(whost_port);
 
         zmq::socket_t data_socket(ctx, ZMQ_DEALER);
         data_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
+        data_socket.setsockopt(ZMQ_TCP_KEEPALIVE, 1);
         char dhost_port[50];
         sprintf(dhost_port, "tcp://%s:%u", dataserver.c_str(), dport);
         data_socket.connect(dhost_port);
 
-        // Request weights matrix of the current layer.
-        std::cout << "< FORWARD > Asking weightserver..." << whost_port << std::endl;
-        weights = requestWeight(weights_socket, OP::PULL_FORWARD, layer);
-        std::cout << "< FORWARD > Got data from weightserver." << dhost_port << std::endl;
+        std::thread wReqThd([&] {
+            __sync_synchronize();
+            // Request weights matrix of the current layer.
+            std::cout << "< FORWARD > Asking weightserver..." << whost_port << std::endl;
+            weights = requestWeight(weights_socket, OP::PULL_FORWARD, layer);
+            std::cout << "< FORWARD > Got data from weightserver." << dhost_port << std::endl;
+        });
 
         // Request feature activation matrix of the current layer.
         std::cout << "< FORWARD > Asking dataserver..." << std::endl;
@@ -99,6 +104,8 @@ forward_prop_layer(std::string dataserver, std::string weightserver, unsigned dp
         feats = requestMatrix(data_socket, OP::PULL_FORWARD, id);
         set_timestamp();
         std::cout << "< FORWARD > Got data from dataserver." << std::endl;
+
+        wReqThd.join();
 
         if (weights.empty() || feats.empty()) {
             auto resp = constructResp(false, id, std::string("Weights ") + (weights.empty() ? "are" : "are not") +

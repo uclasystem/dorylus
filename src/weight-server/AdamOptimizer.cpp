@@ -6,7 +6,7 @@ AdamOptimizer::AdamOptimizer(float lr, std::vector<unsigned> dims_) {
     epochs = 0;
     lr_t = 0;
     nextIteration();
-    for (unsigned ui = 0; ui < dims.size(); ++ui) {
+    for (unsigned ui = 0; ui < dims.size() - 1; ++ui) {
         unsigned dataSize = dims[ui] * dims[ui + 1];
         FeatType *momentumptr = new FeatType[dataSize];
         FeatType *decayptr = new FeatType[dataSize];
@@ -14,8 +14,15 @@ AdamOptimizer::AdamOptimizer(float lr, std::vector<unsigned> dims_) {
         std::memset(momentumptr, 0, dataSize * sizeof(FeatType));
         std::memset(decayptr, 0, dataSize * sizeof(FeatType));
 
-        momentum.push_back( momentumptr);
+        momentum.push_back(momentumptr);
         decay.push_back(decayptr);
+    }
+}
+
+AdamOptimizer::~AdamOptimizer() {
+    for (unsigned i = 0; i < momentum.size(); ++i) {
+        delete[] momentum[i];
+        delete[] decay[i];
     }
 }
 
