@@ -22,6 +22,7 @@ ServerWorker::ServerWorker(zmq::context_t& ctx_, WeightServer& _ws,
       weightsStore(_weightsStore),
       numLambdas(numLambdas_),lambdaRecved(lambdaRecved_) {
     workersocket.setsockopt(ZMQ_LINGER, 0);
+    workersocket.setsockopt(ZMQ_BACKLOG, 500);
     workersocket.connect("inproc://backend");
 }
 

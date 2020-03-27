@@ -6,7 +6,7 @@ static std::vector<std::thread *> worker_threads;
 
 std::mutex producerQueueLock;
 
-static const bool relaunching = true;
+static const bool relaunching = false;
 
 
 extern "C" ResourceComm* createComm(CommInfo& commInfo) {
@@ -48,7 +48,14 @@ LambdaComm::LambdaComm(CommInfo &commInfo) :
     // Bind the proxy sockets.
     char dhost_port[50];
     sprintf(dhost_port, "tcp://*:%u", dataserverPort);
+    frontend.setsockopt(ZMQ_BACKLOG, 1000);
+    frontend.setsockopt(ZMQ_RCVHWM, 5000);
+    frontend.setsockopt(ZMQ_SNDHWM, 5000);
+    frontend.setsockopt(ZMQ_ROUTER_MANDATORY, 1);
     frontend.bind(dhost_port);
+    backend.setsockopt(ZMQ_BACKLOG, 1000);
+    backend.setsockopt(ZMQ_RCVHWM, 5000);
+    backend.setsockopt(ZMQ_SNDHWM, 5000);
     backend.bind("inproc://backend");
 
     // Create 'numListeners' workers and detach them.
@@ -204,7 +211,7 @@ void LambdaComm::callback(const Aws::Lambda::LambdaClient *client,
                 if (v.GetBool("success")) {
                 } else {
                     if (v.KeyExists("reason")) {
-                        printLog(globalNodeId, "\033[1;31m[ ERROR ]\033[0m\t%s", v.GetString("reason").c_str());
+                        printLog(globalNodeId, "\033[1;31m[ ERROR ]\033[0m\tReason: %s", v.GetString("reason").c_str());
                     }
                 }
             } else {
@@ -213,7 +220,7 @@ void LambdaComm::callback(const Aws::Lambda::LambdaClient *client,
         }
     // Lambda returns error.
     } else {
-        printLog(globalNodeId, "\033[1;31m[ ERROR ]\033[0m");
+        printLog(globalNodeId, "\033[1;31m[ ERROR ]\033[0m\treturn error.");
     }
 }
 // END LAMBDA INVOCATION AND RETURN FUNCTIONS

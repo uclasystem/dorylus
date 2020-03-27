@@ -38,6 +38,10 @@ WeightServer::WeightServer(std::string &weightServersFile, std::string &myPrIpFi
       listenerPort(_listenerPort), numLambdas(0), lambdaRecved(0),
       dataCtx(1), publisher(dataCtx, ZMQ_PUB), subscriber(dataCtx, ZMQ_SUB),
       serverPort(_serverPort), servers_updates_done(true) {
+
+    frontend.setsockopt(ZMQ_BACKLOG, 1000);
+    backend.setsockopt(ZMQ_BACKLOG, 1000);
+
     adam = true;
 
     // Read the dsh file to get info about all weight server nodes.
@@ -52,8 +56,11 @@ WeightServer::WeightServer(std::string &weightServersFile, std::string &myPrIpFi
     initializeWeightMatrices(configFileName);
 
     // Initialize the adam optimizer if this is the master
-    if (adam && master)
-        adamOpt = AdamOptimizer(LEARNING_RATE, dims);
+    if (adam && master) {
+        adamOpt = new AdamOptimizer(LEARNING_RATE, dims);
+    } else {
+        adamOpt = NULL;
+    }
 
     // Send weight matrix info to all servers and wait for ack.
     distributeWeightMatrices();
@@ -61,6 +68,11 @@ WeightServer::WeightServer(std::string &weightServersFile, std::string &myPrIpFi
 
 WeightServer::~WeightServer() {
     std::cout << "[SHUTDOWN] Deleting workers" << std::endl;
+
+    if (adam && master && adamOpt) {
+        delete[] adamOpt;
+    }
+
     // Delete allocated resources.
     for (int i = 0; i < NUM_LISTENERS; ++i) {
         delete workers[i];
@@ -137,7 +149,7 @@ void WeightServer::applyUpdate(unsigned layer) {
         FeatType *weightData = weightMats[layer].getData();
         FeatType *updateSum = updateMats[layer].getData();
         if (adam) {
-            adamOpt.update(layer, weightData, updateSum);
+            adamOpt->update(layer, weightData, updateSum);
         } else {
             // Once all updates have been aggregated, apply to the weights matrices.
             for (unsigned u = 0; u < weightMats[layer].getNumElemts(); ++u)
@@ -599,7 +611,7 @@ WeightServer::kaimingInitialization(unsigned dim1, unsigned dim2) {
 Matrix
 WeightServer::randomInitialization(unsigned dim1, unsigned dim2,
                                    float lowerBound, float upperBound) {
-    assert(lowerBoud < upperBound);
+    assert(lowerBound < upperBound);
     std::default_random_engine dre(8888);
     std::uniform_real_distribution<float> dist(lowerBound, upperBound);
 

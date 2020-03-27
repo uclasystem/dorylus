@@ -12,6 +12,7 @@ const float EPSILON = 1e-07;
 class AdamOptimizer {
   public:
     AdamOptimizer() {};
+    ~AdamOptimizer();
     AdamOptimizer(float lr, std::vector<unsigned> dims);
     void nextIteration();
     void update(unsigned layer, FeatType *weight, FeatType *gradient);

@@ -246,14 +246,21 @@ gradLoss(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id, 
     std::vector<Matrix> savedTensors;
 
     try {
-        std::cout << "< BACKWARD > Requesting weights" << std::endl;
-        weights = requestWeight(weight_socket, OP::PULL_BACKWARD, layer);
+        std::thread wReqThd([&] {
+            __sync_synchronize();
+            std::cout << "< BACKWARD > Requesting weights" << std::endl;
+            weights = requestWeight(weight_socket, OP::PULL_BACKWARD, layer);
+            std::cout << "< BACKWARD > Got weights" << std::endl;
+        });
 
         std::cout << "< BACKWARD > Getting savedTensors" << std::endl;
         int ret = 0;
         set_timestamp();
         ret = requestTensors(data_socket, OP::PULL_BACKWARD, id, layer, savedTensors);
         set_timestamp();
+        std::cout << "< BACKWARD > Got feats" << std::endl;
+
+        wReqThd.join();
 
         if (ret != 0 || weights.empty()) {
             auto resp = constructResp(false, id, std::string("Weights ") + (weights.empty() ? "are" : "are not") +
@@ -327,14 +334,21 @@ gradLayer(zmq::socket_t& data_socket, zmq::socket_t& weight_socket, unsigned id,
 
     try {
         // REQUESTING ALL NEEDED TENSORS FOR COMPUTATION
-        std::cout << "< BACKWARD > Requesting weights" << std::endl;
-        weights = requestWeight(weight_socket, OP::PULL_BACKWARD, layer);
+        std::thread wReqThd([&] {
+            __sync_synchronize();
+            std::cout << "< BACKWARD > Requesting weights" << std::endl;
+            weights = requestWeight(weight_socket, OP::PULL_BACKWARD, layer);
+            std::cout << "< BACKWARD > Got weights" << std::endl;
+        });
 
         std::cout << "< BACKWARD > Requesting savedTensors" << std::endl;
         set_timestamp();
         int ret = 0;
         ret = requestTensors(data_socket, OP::PULL_BACKWARD, id, layer, savedTensors);
         set_timestamp();
+        std::cout << "< BACKWARD > Got feats" << std::endl;
+
+        wReqThd.join();
 
         if (ret != 0 || weights.empty()) {
             auto resp = constructResp(false, id, std::string("Weights ") + (weights.empty() ? "are" : "are not") +
@@ -444,12 +458,14 @@ backward_prop(std::string dataserver, std::string weightserver, unsigned dport,
 
     zmq::socket_t weight_socket(ctx, ZMQ_DEALER);
     weight_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
+    weight_socket.setsockopt(ZMQ_TCP_KEEPALIVE, 1);
     char whost_port[50];
     sprintf(whost_port, "tcp://%s:%u", weightserver.c_str(), wport);
     weight_socket.connect(whost_port);
 
     zmq::socket_t data_socket(ctx, ZMQ_DEALER);
     data_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
+    data_socket.setsockopt(ZMQ_TCP_KEEPALIVE, 1);
     char dhost_port[50];
     sprintf(dhost_port, "tcp://%s:%u", dataserver.c_str(), dport);
     data_socket.connect(dhost_port);

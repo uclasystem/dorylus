@@ -91,13 +91,6 @@ class WeightServer {
 
     // Adam descent variables
     bool adam;  // whether to use standard SGD or Adam Opt
-    std::vector<Matrix> momentum;
-    std::vector<Matrix> decay;
-
-    float beta1;
-    float beta2;
-    float epsilon;
-    float alpha;
 
     // List of Matrices for holding updates until they are ready to be applied.
     std::vector<Matrix> updateMats;
@@ -122,7 +115,7 @@ class WeightServer {
     zmq::socket_t subscriber;
     unsigned serverPort;
 
-    AdamOptimizer adamOpt;
+    AdamOptimizer *adamOpt;
 };
 
 
