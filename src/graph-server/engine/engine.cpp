@@ -745,7 +745,6 @@ FeatType *Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned fea
         delete[] vtcsTensor;
     }
 
-
     if (vecTimeAggregate.size() < numLayers) {
         vecTimeAggregate.push_back(getTimer() - sttTimer);
     } else {
