@@ -155,6 +155,7 @@ private:
     unsigned numInEdgeGhostVertices;
     unsigned numOutEdgeGhostVertices;
 
+    // Local Edge: the src vertex locates on the local machine.
     unsigned long long numLocalInEdges = 0;
     unsigned long long numLocalOutEdges = 0;
     unsigned long long numGlobalEdges = 0;

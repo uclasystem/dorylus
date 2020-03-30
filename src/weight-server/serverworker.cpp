@@ -55,23 +55,23 @@ ServerWorker::work() {
             unsigned arg = parse<unsigned>((char *) header.data(), 1);
 
             // std::string accMsg;
-            // if (op == OP::PULL_FORWARD)
+            // if (op == OP::PULL_VTX_FORWARD)
             //     accMsg = "[ACCEPTED] Pull FORWARD for layer " + std::to_string(arg) + ".";
-            // else if (op == OP::PULL_BACKWARD)
+            // else if (op == OP::PULL_VTX_BACKWARD)
             //     accMsg = "[ACCEPTED] Pull BACKWARD from layer " + std::to_string(arg) + ".";
-            // else if (op == OP::PUSH_BACKWARD)
+            // else if (op == OP::PUSH_VTX_BACKWARD)
             //     accMsg = "[ UPDATE ] Push BACKWARD from layer " + std::to_string(arg) + ".";
             // if (!accMsg.empty())
             //     std::cout << accMsg << std::endl;
 
             switch (op) {
-                case (OP::PULL_FORWARD):
+                case (OP::PULL_VTX_FORWARD):
                     sendWeights(identity, arg, true);
                     break;
-                case (OP::PULL_BACKWARD):
+                case (OP::PULL_VTX_BACKWARD):
                     sendWeights(identity, arg, false);
                     break;
-                case (OP::PUSH_BACKWARD):
+                case (OP::PUSH_VTX_BACKWARD):
                     recvUpdate(identity, arg);
                     break;
                 case (OP::PUSH):

@@ -57,7 +57,7 @@ def handle_command(ec2_cli, ctx, instance, op, args):
             if len(args) != 0:
                 ssh_command += args
             subprocess.run(ssh_command)
-    
+
     # Send file through scp to the instance.
     elif op == "put":
         instance = set_pub_ip(ec2_cli, instance)

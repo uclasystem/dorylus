@@ -129,7 +129,7 @@ static int
 sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned id) {
     // Send push header.
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::PUSH_FORWARD, id, zResult.getRows(), zResult.getCols());
+    populateHeader((char *) header.data(), OP::PUSH_VTX_FORWARD, id, zResult.getRows(), zResult.getCols());
     socket.send(header, ZMQ_SNDMORE);
 
     // Send zData and actData.
@@ -305,7 +305,7 @@ checkLoss(Matrix& preds, Matrix& labels) {
  */
 static void
 evaluateModel(Matrix& activations, zmq::socket_t& datasocket, unsigned partId) {
-    Matrix labels = requestMatrix(datasocket, OP::PULL_EVAL, partId);
+    Matrix labels = requestMatrix(datasocket, OP::PULL_VTX_EVAL, partId);
     Matrix predictions = softmax(activations);
 
     // Check if the label with the highest probability after softmax is equal to the
@@ -316,7 +316,7 @@ evaluateModel(Matrix& activations, zmq::socket_t& datasocket, unsigned partId) {
     float lossThisPart = checkLoss(predictions, labels);
 
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char*)header.data(), OP::PUSH_EVAL, partId, totalCorrect);
+    populateHeader((char*)header.data(), OP::PUSH_VTX_EVAL, partId, totalCorrect);
     serialize<float>((char*)header.data(), 3, lossThisPart);
 
     datasocket.send(header);

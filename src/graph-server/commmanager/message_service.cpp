@@ -14,7 +14,7 @@ MessageService::sendWeightUpdate(Matrix &matrix, unsigned layer) {
     [&](Matrix matrix, unsigned layer) {
         // Send push header.
         zmq::message_t header(HEADER_SIZE);
-        populateHeader((char *) header.data(), OP::PUSH_BACKWARD, layer, matrix.getRows(),
+        populateHeader((char *) header.data(), OP::PUSH_VTX_BACKWARD, layer, matrix.getRows(),
                        matrix.getCols());
         weightSocket->send(header, ZMQ_SNDMORE);
         zmq::message_t updateMsg(matrix.getData(), matrix.getDataSize(), doNotFreeBuffer, NULL);
@@ -79,7 +79,7 @@ void MessageService::prefetchWeightsMatrix(unsigned totalLayers) {
         for(unsigned j = 0; j < totalLayers; ++j) {
             // Send pull request.
             zmq::message_t header(HEADER_SIZE);
-            populateHeader((char *) header.data(), OP::PULL_FORWARD, j);
+            populateHeader((char *) header.data(), OP::PULL_VTX_FORWARD, j);
             weightSocket->send(header);
             // Listen on respond.
             zmq::message_t respHeader(HEADER_SIZE);

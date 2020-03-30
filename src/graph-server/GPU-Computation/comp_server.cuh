@@ -46,9 +46,6 @@ class ComputingServer {
     CuMatrix* weights; //Weight Matrices Array
     // CuMatrix features;
     // CuMatrix
-
 };
-
-
 
 #endif

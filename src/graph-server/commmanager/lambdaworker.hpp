@@ -37,33 +37,12 @@ class LambdaWorker {
 
 public:
 
-    LambdaWorker(LambdaComm *manager_, PairQueue* _q_ptr,
-      std::map<std::string, Matrix>* _savedTensors);
+    LambdaWorker(LambdaComm *manager_);
 
     ~LambdaWorker();
 
     // Continuously listens for incoming lambda connections.
     void work();
-
-    // Used at context creation / destruction.
-    void refreshState(Matrix actMatrix_, FeatType *zData_, FeatType *actData_,
-      unsigned numFeatsNext_, bool _pipeline = false);
-    void refreshState(Matrix oldGradMatrix_, Matrix newGradMatrix_,
-      Matrix targetMatrix_, std::vector<Matrix> *savedTensors,
-      bool _pipeline = false);
-
-    unsigned tid;
-
-protected:
-    LambdaComm *manager;
-
-    zmq::socket_t workersocket;
-
-private:
-
-    //
-    // Forward-prop stuff.
-    //
 
     // Partitions the data matrix according to the partition id and
     // send that partition to the lambda thread for computation.
@@ -73,11 +52,6 @@ private:
     // two matrices, a 'Z' matrix and a corresponding 'activations' matrix.
     void recvLambdaResults(zmq::message_t& client_id, unsigned partId, unsigned layer);
     void fakeRecvChunks(zmq::message_t& client_id, unsigned chunkCnt);
-
-    Matrix actMatrix;   // Current layer's feats.
-    unsigned numFeatsNext;
-    FeatType *zData;    // Places to store the results from lambda.
-    FeatType *actData;
 
     //
     // Backward-prop stuff.
@@ -99,6 +73,8 @@ private:
     void recvTensors(unsigned partId, unsigned layer, zmq::message_t& client_id);
     // end named-tensors
 
+    void sendRefChunk(Matrix &srcMat, zmq::message_t& client_id, unsigned partId, bool forward);
+
     // Partitions the label matrix given a partition id and
     // and send that partition to the lambda thread for validation
     void sendTargetMatrix(zmq::message_t& client_id, unsigned partId);
@@ -106,15 +82,10 @@ private:
     // Receive the summed loss and total correct for this model
     void recvValidationResults(zmq::message_t& client_id, zmq::message_t& header);
 
-    Matrix oldGradMatrix;
-    Matrix newGradMatrix;
-    Matrix targetMatrix;
-    std::vector<Matrix> *savedTensors;
-    std::map<std::string, Matrix>* savedVtxTensors;
 
-    // Callback when lambda results are returned
-    bool pipeline;
-    PairQueue* q_ptr;
+    LambdaComm *manager;
+
+    zmq::socket_t workersocket;
 
     // timing info for profiling
     unsigned recvTS;

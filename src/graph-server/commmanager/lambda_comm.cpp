@@ -30,7 +30,9 @@ static std::ofstream lambdaOut;
 LambdaComm::LambdaComm(CommInfo &commInfo) :
         ResourceComm(), nodeIp(commInfo.nodeIp), dataserverPort(commInfo.dataserverPort),
         wServersFile(commInfo.wServersFile), weightserverPort(commInfo.weightserverPort),
-        nodeId(commInfo.nodeId), numNodes(commInfo.numNodes), ctx(4), halt(false), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
+        nodeId(commInfo.nodeId), numNodes(commInfo.numNodes),
+        queuePtr(commInfo.queuePtr), savedVtxTensors(commInfo.savedVtxTensors),
+        ctx(4), halt(false), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
         numLambdasForward(commInfo.numLambdasForward), numLambdasBackward(commInfo.numLambdasBackward), numListeners(4), // TODO: Decide numListeners.
         countForward(0), countBackward(0), timeoutPeriod(0.0), currLayer(0) {
     // If master, establish connections to weight servers
@@ -60,7 +62,7 @@ LambdaComm::LambdaComm(CommInfo &commInfo) :
 
     // Create 'numListeners' workers and detach them.
     for (unsigned i = 0; i < numListeners; ++i) {
-        workers.push_back(new LambdaWorker(this, commInfo.queuePtr, commInfo.savedVtxTensors));
+        workers.push_back(new LambdaWorker(this));
         worker_threads.push_back(new std::thread(std::bind(&LambdaWorker::work, workers[i])));
     }
 
@@ -260,36 +262,69 @@ LambdaComm::sendInfoMsg(unsigned layer) {
  *
  */
 void
-LambdaComm::newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData,
-  FeatType *actData, unsigned numLocalVertices, unsigned numFeats,
-  unsigned numFeatsNext, bool pipeline) {
+LambdaComm::newContext(unsigned layer, Matrix &inputTensor_, Matrix &outputTensor_,
+                        std::vector<Matrix> *savedTensors_, bool pipeline_) {
     countForward = 0;
 
+    pipeline = pipeline_;
     forward = true;
     currLayer = layer;
     timeoutPeriod = 0.0;
 
-    // Create a new matrix object for workers to access.
-    Matrix actMatrix(numLocalVertices, numFeats, dataBuf);
+    inputTensor = inputTensor_;
+    outputTensor = outputTensor_;
+    savedTensors = savedTensors_;
 
-    // Refresh workers' members, and connect their worker sockets to the backend.
-    for (auto&& worker : workers)
-        worker->refreshState(actMatrix, zData, actData, numFeatsNext, pipeline);
+    // printLog(nodeId, "Lambda FORWARD context created.");
 }
+
+void
+LambdaComm::newContext(unsigned layer, Matrix &inputTensor_, Matrix &outputTensor_, Matrix &targetTensor_,
+                        std::vector<Matrix> *savedTensors_, bool pipeline_) {
+    countBackward = 0;
+
+    pipeline = pipeline_;
+    forward = false;
+    currLayer = layer;
+    timeoutPeriod = 0.0;
+
+    inputTensor = inputTensor_;
+    outputTensor = outputTensor_;
+    targetTensor = targetTensor_;
+    savedTensors = savedTensors_;
+
+    if (nodeId == 0) { // I am master and master will send the total number of lambdas of all graph servers.
+        unsigned numLambdas = numNodes * numLambdasBackward;
+
+        unsigned baseNumThreads = numLambdas / weightservers.size();
+        unsigned remainder = numLambdas % weightservers.size();
+
+        for (unsigned u = 0; u < remainder; ++u) {
+            sendInfoMessage(weightsockets[u % weightservers.size()], baseNumThreads + 1);
+        }
+
+        for (unsigned u = remainder; u < weightservers.size(); ++u) {
+            sendInfoMessage(weightsockets[u % weightservers.size()], baseNumThreads);
+        }
+    }
+
+    // printLog(nodeId, "Lambda BACKWARD context created.");
+}
+
 
 // deprecated.
 void
 LambdaComm::requestForward(unsigned layer, bool lastLayer) {
     for (unsigned i = 0; i < numLambdasForward; i++) {
-        invokeLambdaForward(layer, i, lastLayer);
+        applyVertexForward(layer, i, lastLayer);
     }
 
-    waitLambdaForward(layer, lastLayer);
+    waitResForward(layer, lastLayer);
 }
 
 
 void
-LambdaComm::invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer) {
+LambdaComm::applyVertexForward(unsigned layer, unsigned lambdaId, bool lastLayer) {
     // forwardLambdaTable[lambdaId] = true;
     __sync_bool_compare_and_swap(forwardLambdaTable + lambdaId, false, true);
     if (lambdaId == 0) {
@@ -300,9 +335,11 @@ LambdaComm::invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLaye
     invokeLambda(FORWARD_FUNC, nodeIp.c_str(), dataserverPort, weightServerIp, weightserverPort, layer, lambdaId, lastLayer);
 }
 
+void
+LambdaComm::applyEdgeForward(unsigned layer, unsigned lambdaId, bool lastLayer) {}
 
 void
-LambdaComm::waitLambdaForward(unsigned layer, bool lastLayer) {
+LambdaComm::waitResForward(unsigned layer, bool lastLayer) {
     // Block until all parts have been handled.
     while (countForward < numLambdasForward) {
         if (relaunching) {
@@ -323,45 +360,6 @@ LambdaComm::waitLambdaForward(unsigned layer, bool lastLayer) {
     }
 }
 
-
-/**
- *
- * Call 'newContext()' before the lambda invokation to refresh the parameters, then call `requestLambdas()`
- *
- */
-void
-LambdaComm::newContextBackward(unsigned layer, FeatType *oldGradBuf, FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf, unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim, unsigned targetDim, bool pipeline) {
-    countBackward = 0;
-
-    forward = false;
-    currLayer = layer;
-    timeoutPeriod = 0.0;
-
-    // Create new matrices object for workers to access.
-    Matrix oldGradMatrix(numLocalVertices, outFeatDim, oldGradBuf);
-    Matrix newGradMatrix(numLocalVertices, inFeatDim, newGradBuf);
-    Matrix targetMatrix(numLocalVertices, targetDim, targetBuf);
-
-    // Refresh workers' members, and connect their worker sockets to the backend.
-    for (auto&& worker : workers)
-        worker->refreshState(oldGradMatrix, newGradMatrix, targetMatrix, savedTensors, pipeline);
-
-    if (nodeId == 0) { // I am master and master will send the total number of lambdas of all graph servers.
-        unsigned numLambdas = numNodes * numLambdasBackward;
-
-        unsigned baseNumThreads = numLambdas / weightservers.size();
-        unsigned remainder = numLambdas % weightservers.size();
-
-        for (unsigned u = 0; u < remainder; ++u) {
-            sendInfoMessage(weightsockets[u % weightservers.size()], baseNumThreads + 1);
-        }
-
-        for (unsigned u = remainder; u < weightservers.size(); ++u) {
-            sendInfoMessage(weightsockets[u % weightservers.size()], baseNumThreads);
-        }
-    }
-}
-
 void
 LambdaComm::sendInfoMessage(zmq::socket_t& wsocket, unsigned numLambdas) {
     zmq::message_t info_header(HEADER_SIZE);
@@ -372,19 +370,17 @@ LambdaComm::sendInfoMessage(zmq::socket_t& wsocket, unsigned numLambdas) {
     wsocket.recv(&ack);
 }
 
-
 void
 LambdaComm::requestBackward(unsigned layer, bool lastLayer) {
     for (unsigned i = 0; i < numLambdasBackward; i++) {
-        invokeLambdaBackward(layer, i, lastLayer);
+        applyVertexBackward(layer, i, lastLayer);
     }
 
-    waitLambdaBackward(layer, lastLayer);
+    waitResBackward(layer, lastLayer);
 }
 
 void
-LambdaComm::invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLayer) {
-    // backwardLambdaTable[lambdaId] = true;
+LambdaComm::applyVertexBackward(unsigned layer, unsigned lambdaId, bool lastLayer) {
     __sync_bool_compare_and_swap(backwardLambdaTable + lambdaId, false, true);
     if (lambdaId == 0) {
         backwardTimer = getTimer();
@@ -395,7 +391,10 @@ LambdaComm::invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLay
 }
 
 void
-LambdaComm::waitLambdaBackward(unsigned layer, bool lastLayer) {
+LambdaComm::applyEdgeBackward(unsigned layer, unsigned lambdaId, bool lastLayer) {}
+
+void
+LambdaComm::waitResBackward(unsigned layer, bool lastLayer) {
     // Block until all parts have been handled.
     while (countBackward < numLambdasBackward) {
         if (relaunching) {

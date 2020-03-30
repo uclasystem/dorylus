@@ -24,27 +24,26 @@ class ComputingServer;
  *
  */
 class GPUComm : public ResourceComm {
-
   public:
 
     GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_, const std::string &wServersFile, unsigned wPort_, unsigned totalLayers_);
 
+    void newContext(unsigned layer, Matrix &inputTensor_, Matrix &outputTensor_, std::vector<Matrix> *savedTensors_);
+    void newContext(unsigned layer, Matrix &inputTensor_, Matrix &outputTensor_, Matrix &targetTensor_, std::vector<Matrix> *savedTensors_);
+
     // For forward-prop.
-    void newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData_,
-      FeatType *actData_, unsigned numLocalVertices_, unsigned numFeats,
-      unsigned numFeatsNext_, bool _pipeline = false);
     void requestForward(unsigned layer, bool lastLayer);
-    void waitLambdaForward(unsigned layer, bool lastLayer) {};
-    void invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
+
+    void applyVertexForward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
+    void applyEdgeForward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
+    void waitResForward(unsigned layer, bool lastLayer) {};
 
     // For backward-prop.
-    void newContextBackward(unsigned layer, FeatType *oldGradBuf,
-      FeatType *newGradBuf, std::vector<Matrix> *savedTensors,
-      FeatType *targetBuf, unsigned numLocalVertices, unsigned inFeatDim,
-      unsigned outFeatDim, unsigned targetDim, bool _pipeline = false);
     void requestBackward(unsigned layer, bool lastLayer);
-    void invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
-    void waitLambdaBackward(unsigned layer, bool lastLayer) {}
+
+    void applyVertexBackward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
+    void applyEdgeBackward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
+    void waitResBackward(unsigned layer, bool lastLayer) {};
 
     //cannot be called if newContextBackward is never called due to the assignment of targetmatrix
     void sendTargetMatrix();
@@ -67,17 +66,10 @@ class GPUComm : public ResourceComm {
     unsigned dPort;
     unsigned wPort;
 
-    //forward
-    //data related objs
-    Matrix actMatrix;   // Current layer's feats.
-    FeatType *zData;    // Places to store the results from lambda.
-    FeatType *actData;
-    unsigned numFeatsNext;
 
-    //backward
-    Matrix oldGradMatrix;
-    Matrix newGradMatrix;
-    Matrix targetMatrix;
+    Matrix &inputTensor;
+    Matrix &outputTensor;
+    Matrix &targetTensor;
     std::vector<Matrix> *savedTensors;
 
     ComputingServer *comp_server;

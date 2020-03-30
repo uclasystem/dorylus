@@ -94,14 +94,14 @@ forward_prop_layer(std::string dataserver, std::string weightserver, unsigned dp
             __sync_synchronize();
             // Request weights matrix of the current layer.
             std::cout << "< FORWARD > Asking weightserver..." << whost_port << std::endl;
-            weights = requestWeight(weights_socket, OP::PULL_FORWARD, layer);
+            weights = requestWeight(weights_socket, OP::PULL_VTX_FORWARD, layer);
             std::cout << "< FORWARD > Got data from weightserver." << dhost_port << std::endl;
         });
 
         // Request feature activation matrix of the current layer.
         std::cout << "< FORWARD > Asking dataserver..." << std::endl;
         set_timestamp();
-        feats = requestMatrix(data_socket, OP::PULL_FORWARD, id);
+        feats = requestMatrix(data_socket, OP::PULL_VTX_FORWARD, id);
         set_timestamp();
         std::cout << "< FORWARD > Got data from dataserver." << std::endl;
 
