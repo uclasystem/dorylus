@@ -45,6 +45,7 @@ WeightServer::WeightServer(std::string &weightServersFile, std::string &myPrIpFi
     adam = true;
 
     // Read the dsh file to get info about all weight server nodes.
+    std::cout << "INIT COMMS" << std::endl;
     initializeWeightServerComms(weightServersFile, myPrIpFile);
 
     // Set output file name.
@@ -53,6 +54,7 @@ WeightServer::WeightServer(std::string &weightServersFile, std::string &myPrIpFi
     assert(outfile.good());
 
     // Read in layer configurations and initialize weight matrices.
+    std::cout << "INIT MATS" << std::endl;
     initializeWeightMatrices(configFileName);
 
     // Initialize the adam optimizer if this is the master
@@ -63,6 +65,7 @@ WeightServer::WeightServer(std::string &weightServersFile, std::string &myPrIpFi
     }
 
     // Send weight matrix info to all servers and wait for ack.
+    std::cout << "[ INIT ] Distributing weight matrices" << std::endl;
     distributeWeightMatrices();
 }
 
@@ -112,7 +115,8 @@ WeightServer::run() {
     std::vector<std::thread *> worker_threads;
     WeightServer &me = *this;
     for (int i = 0; i < NUM_LISTENERS; ++i) {
-        workers.push_back(new ServerWorker(ctx, me, weightMats, updateMats, weightsStore, numLambdas, lambdaRecved));
+        workers.push_back(new ServerWorker(ctx, me, weightMats, updateMats,
+          updateStore, weightsStore, numLambdas, lambdaRecved));
         worker_threads.push_back(new std::thread(std::bind(&ServerWorker::work, workers[i])));
         worker_threads[i]->detach();
     }
@@ -128,26 +132,25 @@ WeightServer::run() {
  * Apply the updates in queue.
  *
  */
-void WeightServer::applyUpdate(unsigned layer) {
+void WeightServer::applyUpdate(unsigned layer, std::string& name) {
     Timer updateTimer;
     updateTimer.start();
     std::lock_guard<std::mutex> lk(servers_updates_mutex);
     // Master code.
     if (master) {
         // For all nodes.
+        FeatType *updateSum = updateStore[layer][name].getData();
         for (unsigned i = 0; i < allNodeIps.size() - 1; ++i) {
             // Recv update info from other weight servers and aggregate.
             zmq::message_t updateMsg;
             subscriber.recv(&updateMsg);
 
-            FeatType *updateSum = updateMats[layer].getData();
             FeatType *updateNew = (FeatType *) updateMsg.data();
             for (unsigned u = 0; u < updateMats[layer].getNumElemts(); ++u)
                 updateSum[u] += updateNew[u];
         }
 
-        FeatType *weightData = weightMats[layer].getData();
-        FeatType *updateSum = updateMats[layer].getData();
+        FeatType *weightData = weightsStore[layer][name].getData();
         if (adam) {
             adamOpt->update(layer, weightData, updateSum);
         } else {
@@ -238,7 +241,6 @@ void WeightServer::applyUpdate(unsigned layer) {
 }
 
 void WeightServer::applyUpdates() {
-
     Timer updateTimer;
     updateTimer.start();
 
@@ -356,6 +358,10 @@ void WeightServer::applyUpdates() {
 
     // Reset number of lambdas.
     lambdaRecved = 0;
+}
+
+void
+WeightServer::synchronize(unsigned layer) {
 }
 
 
@@ -517,20 +523,16 @@ WeightServer::initializeWeightMatrices(std::string &configFileName) {
             // Hardcoding this to xavier init for now. Eventually need to make it
             // configurable
             Matrix w = xavierInitialization(dims[u], dims[u + 1]);
-            std::string tenName = "W" + std::to_string(u);
-            w.setName(tenName.c_str());
             weightMats.push_back(w);
-            saveTensor(w);
+            weightsStore[u]["w"] = w;
 
             // Initialize layer biases
             // TODO:
             //  Make this configurable based on whether or not a bias matrix is requested
             //  for a NN module
             Matrix b = initBias(dims[u + 1]);
-            tenName = "B" + std::to_string(u);
-            b.setName(tenName.c_str());
             biases.push_back(b);
-            saveTensor(b);
+            weightsStore[u]["b"] = b;
         }
 
         for (unsigned u = 0; u < weightMats.size(); ++u)
@@ -552,7 +554,9 @@ WeightServer::initializeWeightMatrices(std::string &configFileName) {
         for (unsigned ui = 0; ui < dataSize; ++ui)
             dptr[ui] = 0.;
 
-        updateMats.push_back(Matrix(dims[u], dims[u + 1], dptr));
+        Matrix updateMat = Matrix(dims[u], dims[u+1], dptr);
+        updateMats.push_back(updateMat);
+        updateStore[u]["w"] = updateMat;
     }
 }
 
@@ -642,15 +646,6 @@ WeightServer::initBias(unsigned dim, float initVal) {
 }
 
 
-void WeightServer::saveTensor(std::string& name, unsigned rows, unsigned cols,
-  FeatType* dptr) {
-    weightsStore.emplace(name, Matrix(name.c_str(), rows, cols, dptr));
-}
-
-void WeightServer::saveTensor(Matrix& tensor) {
-    weightsStore.emplace(tensor.name(), tensor);
-}
-
 
 /**
  *
@@ -696,10 +691,9 @@ WeightServer::distributeWeightMatrices() {
             char *matxData = new char[weightData.size()];
             std::memcpy(matxData, weightData.data(), weightData.size());
 
-            std::string w_name = "W" + std::to_string(count);
-            Matrix w(w_name.c_str(), dims[count], dims[count+1], (FeatType*)matxData);
+            Matrix w(dims[count], dims[count+1], (FeatType*)matxData);
             weightMats.push_back(w);
-            saveTensor(w);
+            weightsStore[count]["w"] = w;
             ++count;
 
             size_t more_size = sizeof(more);

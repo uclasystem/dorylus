@@ -95,5 +95,7 @@ private:
     FeatType *data;
 };
 
+typedef std::map<std::string, Matrix> TensorMap;
+
 
 #endif

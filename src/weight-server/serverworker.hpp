@@ -34,8 +34,10 @@ class WeightServer;
 class ServerWorker {
 public:
     ServerWorker(zmq::context_t& ctx_, WeightServer& _ws,
-                 std::vector<Matrix>& weights_, std::vector<Matrix>& updates_,
-                 std::map<std::string, Matrix>& _weightsStore,
+                 std::vector<Matrix>& weights_,
+                 std::vector<Matrix>& updates_,
+                 std::vector< TensorMap >& updateStore_,
+                 std::vector< TensorMap >& _weightsStore,
                  unsigned& numLambdas_, unsigned& lambdaRecved_);
 
     ~ServerWorker();
@@ -55,19 +57,20 @@ private:
       unsigned cols, unsigned& more);
     void sendTensor(Matrix& tensor, unsigned& more);
     //void getPartitionInfo(Matrix& tensor, unsigned partId, unsigned& more);
-    void sendTensors(zmq::message_t& client_id);
+    void sendTensors(zmq::message_t& client_id, unsigned layer);
 
-    void recvUpdateTensor(unsigned layer);
+    void recvUpdateTensor(unsigned layer, TensorMap& weights);
     void recvTensors(zmq::message_t& client_id, unsigned layer);
     // end named-tensors
 
     zmq::context_t &ctx;
     zmq::socket_t workersocket;
 
-    std::map<std::string, Matrix>& weightsStore;
+    std::vector< TensorMap >& weightsStore;
+    std::vector< TensorMap >& updateStore;
 
-    std::vector<Matrix>& weightMats;
     std::vector<Matrix>& updateMats;
+    std::vector<Matrix>& weightMats;
 
     unsigned& numLambdas;
     unsigned& lambdaRecved;

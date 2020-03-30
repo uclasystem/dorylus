@@ -35,8 +35,8 @@ invocation_response
 finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
   unsigned partId, unsigned layer) {
     std::cout << "FINAL LAYER" << std::endl;
-    std::vector<std::string> dataRequests{"AH" + std::to_string(layer), "LAB"};
-    std::vector<std::string> weightRequests{"W" + std::to_string(layer)};
+    std::vector<std::string> dataRequests{"ah", "lab"};
+    std::vector<std::string> weightRequests{"w"};
 
     std::vector<Matrix> matrices = reqTensors(data_socket, partId, layer, dataRequests);
     std::vector<Matrix> weights = reqTensors(weights_socket, partId, layer, weightRequests);
@@ -81,12 +81,9 @@ finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
     Matrix d_weights = AH.dot(d_out, true, false);
     deleteMatrix(AH);
     deleteMatrix(d_out);
-    char name[8];
-    sprintf(name, "GRAD%u", layer);
-    interGrad.setName(name);
+    interGrad.setName("grad");
 
-    sprintf(name, "W%u", layer);
-    d_weights.setName(name);
+    d_weights.setName("w");
 
     std::vector<Matrix> weightUpdates{d_weights};
     sendTensors(weights_socket, layer, layer, weightUpdates);
@@ -110,8 +107,8 @@ invocation_response
 backwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
   unsigned partId, unsigned layer) {
     std::cout << "BACKWARD LAYER" << std::endl;
-    std::vector<std::string> dataReqs{"AH" + std::to_string(layer), "Z" + std::to_string(layer), "BAH" + std::to_string(layer+1)};
-    std::vector<std::string> weightReqs{"W" + std::to_string(layer)};
+    std::vector<std::string> dataReqs{"ah", "z", "aTg"};
+    std::vector<std::string> weightReqs{"w"};
     std::vector<Matrix> matrices = reqTensors(data_socket, partId, layer, dataReqs);
     std::vector<Matrix> weights = reqTensors(weights_socket, partId, layer, weightReqs);
 
@@ -141,18 +138,13 @@ backwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
     Matrix& grad = matrices[2];
 
     Matrix& W = weights[0];
-    char name[8];
 
     Matrix actDeriv = tanhDerivative(Z);
     deleteMatrix(Z);
-    sprintf(name, "Z'");
-    actDeriv.setName(name);
 
     Matrix interGrad = grad * actDeriv;
     deleteMatrix(grad);
     deleteMatrix(actDeriv);
-    sprintf(name, "d_z");
-    interGrad.setName(name);
 
     Matrix resultGrad = interGrad.dot(W, false, true);
     deleteMatrix(W);
@@ -161,11 +153,8 @@ backwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
     deleteMatrix(AH);
     deleteMatrix(interGrad);
 
-    sprintf(name, "W%u", layer);
-    d_weights.setName(name);
-
-    sprintf(name, "GRAD%u", layer);
-    resultGrad.setName(name);
+    d_weights.setName("w");
+    resultGrad.setName("grad");
 
     std::vector<Matrix> weightUpdates{d_weights};
     std::vector<Matrix> toSend{resultGrad};
@@ -185,8 +174,8 @@ invocation_response
 forwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, unsigned partId,
   unsigned layer) {
     std::cout << "FORWARD LAYER" << std::endl;
-    std::vector<std::string> dataRequests{"AH" + std::to_string(layer)};
-    std::vector<std::string> weightRequests{"W" + std::to_string(layer)};
+    std::vector<std::string> dataRequests{"ah"};
+    std::vector<std::string> weightRequests{"w"};
 
     std::vector<Matrix> matrices = reqTensors(data_socket, partId, layer, dataRequests);
     std::vector<Matrix> weights = reqTensors(weights_socket, partId, layer, weightRequests);
@@ -215,14 +204,13 @@ forwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, unsigned
     Matrix& AH = matrices[0];
     Matrix& W = weights[0];
 
-    char name[8];
     Matrix Z = AH.dot(W);
-    sprintf(name, "Z%u", layer);
-    Z.setName(name);
+    Z.setName("z");
+    deleteMatrix(AH);
+    deleteMatrix(Z);
 
     Matrix H_l = tanh(Z);
-    sprintf(name, "H%u", layer);
-    H_l.setName(name);
+    H_l.setName("h");
 
     std::vector<Matrix> toSend;
     toSend.push_back(Z);
@@ -233,13 +221,8 @@ forwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, unsigned
     std::cout << "SENT tensors Z, H" << std::endl;
 
     // Clean up data
-    for (auto& M : matrices)
-        deleteMatrix(M);
-    for (auto& W : weights)
-        deleteMatrix(W);
     for (auto& M : toSend)
         deleteMatrix(M);
-
     std::cout << "Data cleaned up" << std::endl;
 
     return constructResp(true, partId, "Finished forward layer");

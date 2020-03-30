@@ -24,7 +24,8 @@ struct CommInfo {
     unsigned totalLayers; //for weights prefetching
 
     PairQueue* queuePtr;
-    std::map<std::string, Matrix>* savedVtxTensors;
+    TensorMap* savedVtxTensors;
+    std::vector< TensorMap > *savedNNTensors;
 };
 
 //abstract interface declaration

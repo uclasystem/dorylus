@@ -37,7 +37,7 @@ enum OP {
     REQ_EDG_FORWARD, PUSH_EDG_FORWARD, PULL_EDG_FORWARD,
     REQ_EDG_BACKWARD, PUSH_EDG_BACKWARD, PULL_EDG_BACKWARD,
     PULL_EDG_EVAL, PUSH_EDG_EVAL,
-    PUSH, PULL,
+    PUSH, PULL, FIN,
     RESP, INFO, TERM
 };
 enum TYPE { GRAD, AH, Z, ACT, LAB };
@@ -69,6 +69,17 @@ parse(const char *buf, unsigned offset) {
 static inline std::string
 parseName(const char* buf) {
     return std::string(buf + sizeof(unsigned));
+}
+
+static inline float
+sumTensor(unsigned rows, unsigned cols, FeatType* tensor) {
+    unsigned items = rows * cols;
+    float sum = 0;
+    for (unsigned u = 0; u < items; ++u) {
+        sum += tensor[u];
+    }
+
+    return sum;
 }
 
 // ID represents either layer or data partition, depending on server responding.

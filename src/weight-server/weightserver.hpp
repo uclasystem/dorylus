@@ -46,8 +46,9 @@ class WeightServer {
     void run();
 
     // Average and apply update batches.
-    void applyUpdate(unsigned layer);
+    void applyUpdate(unsigned layer, std::string& name);
     void applyUpdates();
+    void synchronize(unsigned layer);
 
     //For sync
     std::mutex servers_updates_mutex;
@@ -75,10 +76,6 @@ class WeightServer {
     // Initialize bias vectors
     Matrix initBias(unsigned dim, float initVal = 0);
 
-    void saveTensor(std::string& name, unsigned rows, unsigned cols,
-      FeatType* dptr);
-    void saveTensor(Matrix& tensor);
-
     void initializeAdamVariables();
 
     void distributeWeightMatrices();
@@ -87,7 +84,8 @@ class WeightServer {
     std::vector<Matrix> weightMats;
     std::vector<Matrix> biases;
 
-    std::map<std::string, Matrix> weightsStore;
+    std::vector< TensorMap > weightsStore;
+    std::vector< TensorMap > updateStore;
 
     // Adam descent variables
     bool adam;  // whether to use standard SGD or Adam Opt

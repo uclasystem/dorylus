@@ -39,6 +39,12 @@ struct LabelsHeaderType {
     unsigned labelKinds;
 };
 
+struct Chunk {
+    unsigned chunkId;
+    unsigned layer;
+    PROP_TYPE dir;
+};
+
 
 /**
  *
@@ -51,7 +57,10 @@ public:
     void init(int argc, char *argv[]);
     FeatType *runForward(unsigned epoch);
     void runBackward(FeatType *backwardInitData);
+
     void runGCN();
+    void runSynchronous(FeatType* inputTensor);
+    void runPipeline();
 
     void output();
     void destroy();
@@ -115,6 +124,13 @@ private:
     std::vector<Matrix> *vtxNNSavedTensors; // intermediate data for vertex NN backward computation.
     std::vector<Matrix> *edgNNSavedTensors; // intermediate data for edge NN backward computation.
     std::map<std::string, Matrix> savedVtxTensors;
+
+    std::vector< TensorMap > savedNNTensors;
+    std::vector< std::map<std::string, Matrix> > savedNNTensors;
+
+    // intermediate data for backward computation.
+    std::vector<Matrix> *savedTensors;
+    TensorMap savedVtxTensors;
 
     // Persistent pointers to original input data
     FeatType *forwardVerticesInitData;
@@ -202,6 +218,13 @@ private:
 
     Barrier barComp;
 
+    // Deep pipeline stuff
+    std::queue<Chunk> taskQueue;
+
+    ThreadPool* workers = NULL;
+    // End Deep pipeline stuff
+
+
     void calcAcc(FeatType *predicts, FeatType *labels, unsigned vtcsCnt,
                  unsigned featDim);
 
@@ -238,6 +261,8 @@ private:
     // All pipeline related functions/members
     void pipelineForwardGhostUpdates(FeatType* inputTensor, unsigned featDim);
     void pipelineBackwardGhostGradients(FeatType* inputTensor, unsigned featDim);
+
+    void pipelineGhostReceiver();
 
     // fusedGASBackward phases
     FeatType* applyScatterPhase(FeatType* gradTensor, unsigned vtcsCnt,
@@ -277,6 +302,9 @@ private:
     void saveTensor(std::string& name, unsigned rows, unsigned cols, FeatType *dptr);
     void saveTensor(const char* name, unsigned rows, unsigned cols, FeatType *dptr);
     void saveTensor(Matrix& mat);
+
+    void saveTensor(const char* name, unsigned layer, unsigned rows, unsigned cols, FeatType *dptr);
+    void saveTensor(const char* name, unsigned layer, Matrix& mat);
 
     // For initialization.
     void parseArgs(int argc, char* argv[]);

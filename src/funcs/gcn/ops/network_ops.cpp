@@ -145,7 +145,8 @@ Matrix recvTensor(zmq::socket_t& socket) {
     return Matrix(name.c_str(), rows, cols, data);
 }
 
-std::vector<Matrix> reqTensors(zmq::socket_t& socket, unsigned partId, unsigned layer, std::vector<std::string>& tensorRequests) {
+std::vector<Matrix> reqTensors(zmq::socket_t& socket, unsigned partId,
+  unsigned layer, std::vector<std::string>& tensorRequests) {
     zmq::message_t header(HEADER_SIZE);
     populateHeader(header.data(), OP::PULL, partId, layer);
     socket.send(header, ZMQ_SNDMORE);
@@ -178,13 +179,14 @@ std::vector<Matrix> reqTensors(zmq::socket_t& socket, unsigned partId, unsigned 
     return matrices;
 }
 
-void sendTensors(zmq::socket_t& socket, unsigned partId, unsigned layer, std::vector<Matrix>& matrices, bool ack) {
+void sendTensors(zmq::socket_t& socket, unsigned partId, unsigned layer,
+  std::vector<Matrix>& matrices, bool ack) {
     zmq::message_t header(HEADER_SIZE);
     populateHeader(header.data(), OP::PUSH, partId, layer);
     socket.send(header, ZMQ_SNDMORE);
     for (uint32_t u = 0; u < matrices.size(); ++u) {
         zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
-        populateHeader(tensorHeader.data(), OP::PULL, matrices[u].name().c_str(),
+        populateHeader(tensorHeader.data(), OP::PULL, matrices[u].name().c_str(), layer,
           matrices[u].getRows(), matrices[u].getCols());
         zmq::message_t tensorData(matrices[u].getDataSize());
         std::memcpy(tensorData.data(), matrices[u].getData(), matrices[u].getDataSize());

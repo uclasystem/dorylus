@@ -69,7 +69,7 @@ public:
     void getPartitionInfo(Matrix& tensor, unsigned partId, unsigned& more);
     void sendTensors(unsigned partId, unsigned layer, zmq::message_t& client_id);
 
-    int storeTensorPart(unsigned partId);
+    int storeTensorPart(unsigned partId, TensorMap& savedNNTensors);
     void recvTensors(unsigned partId, unsigned layer, zmq::message_t& client_id);
     // end named-tensors
 
@@ -81,7 +81,6 @@ public:
 
     // Receive the summed loss and total correct for this model
     void recvValidationResults(zmq::message_t& client_id, zmq::message_t& header);
-
 
     LambdaComm *manager;
 

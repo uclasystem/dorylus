@@ -430,6 +430,8 @@ void LambdaWorker::sendTensors(unsigned partId, unsigned layer, zmq::message_t& 
         && layer == manager->currLayer) {
         unsigned more = 1;
         workersocket.send(client_id, ZMQ_SNDMORE);
+
+        TensorMap& savedNNTensors = (*savedVtxTensors)[layer];
         while (more) {
             zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
             workersocket.recv(&tensorHeader);
@@ -437,6 +439,8 @@ void LambdaWorker::sendTensors(unsigned partId, unsigned layer, zmq::message_t& 
             std::string name = parseName((char*)tensorHeader.data());
             auto found = manager->savedVtxTensors->find(name);
             if (found == manager->savedVtxTensors->end()) {
+            auto found = savedNNTensors.find(name);
+            if (found == savedNNTensors.end()) {
                 printLog(manager->nodeId, "Requested tensor '%s' not found", name.c_str());
                 zmq::message_t errorHeader(TENSOR_HDR_SIZE);
                 populateHeader(errorHeader.data(), ERR_HEADER_FIELD, name.c_str());
@@ -479,7 +483,7 @@ void LambdaWorker::sendTensors(unsigned partId, unsigned layer, zmq::message_t& 
     }
 }
 
-int LambdaWorker::storeTensorPart(unsigned partId) {
+int LambdaWorker::storeTensorPart(unsigned partId, TensorMap& savedNNTensors) {
     zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
     zmq::message_t tensorData;
 
@@ -510,8 +514,9 @@ void LambdaWorker::recvTensors(unsigned partId, unsigned layer, zmq::message_t& 
         && manager->forwardLambdaTable[partId]
         && layer == manager->currLayer) {
         int ret = 0;
+        TensorMap& savedNNTensors = (*savedVtxTensors)[layer];
         while (more && ret == 0) {
-            ret = storeTensorPart(partId);
+            ret = storeTensorPart(partId, savedNNTensors);
 
             workersocket.getsockopt(ZMQ_RCVMORE, &more, &usize);
         }
