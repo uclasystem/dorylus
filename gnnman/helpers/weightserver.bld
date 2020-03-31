@@ -7,13 +7,20 @@
 
 cd ${HOME}/gnn-lambda/
 
+build_type="Release"
+for var in "${@}"; do
+    if [[ $var == "d" ]]; then
+        build_type="Debug"
+    fi
+done
+
 
 if [ ! -d build ]; then
     mkdir build
 fi
 
 cd build
-cmake .. -DBUILD_WEIGHT=yes
+cmake .. -DBUILD_WEIGHT=yes -DCMAKE_BUILD_TYPE=${build_type}
 make
 
 mv weight-server/weightserver .
