@@ -45,7 +45,6 @@ WeightServer::WeightServer(std::string &weightServersFile, std::string &myPrIpFi
     adam = true;
 
     // Read the dsh file to get info about all weight server nodes.
-    std::cout << "INIT COMMS" << std::endl;
     initializeWeightServerComms(weightServersFile, myPrIpFile);
 
     // Set output file name.
@@ -54,7 +53,6 @@ WeightServer::WeightServer(std::string &weightServersFile, std::string &myPrIpFi
     assert(outfile.good());
 
     // Read in layer configurations and initialize weight matrices.
-    std::cout << "INIT MATS" << std::endl;
     initializeWeightMatrices(configFileName);
 
     // Initialize the adam optimizer if this is the master
@@ -65,7 +63,6 @@ WeightServer::WeightServer(std::string &weightServersFile, std::string &myPrIpFi
     }
 
     // Send weight matrix info to all servers and wait for ack.
-    std::cout << "[ INIT ] Distributing weight matrices" << std::endl;
     distributeWeightMatrices();
 }
 
@@ -516,6 +513,9 @@ WeightServer::initializeWeightMatrices(std::string &configFileName) {
 
     // Assert there is at least one layer (input -> output).
     assert(dims.size() > 1);
+
+    updateStore.resize(dims.size());
+    weightsStore.resize(dims.size());
 
     // If master node, initialize the weight matrices according to the layer config.
     if (master) {
