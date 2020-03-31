@@ -31,7 +31,7 @@ LambdaWorker::~LambdaWorker() {
  *
  */
 void
-LambdaWorker::work() {
+LambdaWorker::work(unsigned wid) {
     try {
         while (!(manager->halt)) {
             zmq::message_t identity;
@@ -431,16 +431,14 @@ void LambdaWorker::sendTensors(unsigned partId, unsigned layer, zmq::message_t& 
         unsigned more = 1;
         workersocket.send(client_id, ZMQ_SNDMORE);
 
-        TensorMap& savedNNTensors = (*savedVtxTensors)[layer];
+        TensorMap& savedVtxTensors = (*(manager->savedNNTensors))[layer];
         while (more) {
             zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
             workersocket.recv(&tensorHeader);
 
             std::string name = parseName((char*)tensorHeader.data());
-            auto found = manager->savedVtxTensors->find(name);
-            if (found == manager->savedVtxTensors->end()) {
-            auto found = savedNNTensors.find(name);
-            if (found == savedNNTensors.end()) {
+            auto found = savedVtxTensors.find(name);
+            if (found == savedVtxTensors.end()) {
                 printLog(manager->nodeId, "Requested tensor '%s' not found", name.c_str());
                 zmq::message_t errorHeader(TENSOR_HDR_SIZE);
                 populateHeader(errorHeader.data(), ERR_HEADER_FIELD, name.c_str());
@@ -491,8 +489,8 @@ int LambdaWorker::storeTensorPart(unsigned partId, TensorMap& savedNNTensors) {
     workersocket.recv(&tensorData);
 
     std::string name = parseName((char*)tensorHeader.data());
-    auto found = manager->savedVtxTensors->find(name);
-    if (found == manager->savedVtxTensors->end()) {
+    auto found = savedNNTensors.find(name);
+    if (found == savedNNTensors.end()) {
         printLog(manager->nodeId, "Lambda %u returned unknown tensor '%s'. Make sure to allocate it before running lambdas!",
           partId, name.c_str());
         return 1;
@@ -514,7 +512,7 @@ void LambdaWorker::recvTensors(unsigned partId, unsigned layer, zmq::message_t& 
         && manager->forwardLambdaTable[partId]
         && layer == manager->currLayer) {
         int ret = 0;
-        TensorMap& savedNNTensors = (*savedVtxTensors)[layer];
+        TensorMap& savedNNTensors = (*(manager->savedNNTensors))[layer];
         while (more && ret == 0) {
             ret = storeTensorPart(partId, savedNNTensors);
 

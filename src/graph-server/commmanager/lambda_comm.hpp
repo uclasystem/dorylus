@@ -119,6 +119,8 @@ public:
     std::vector<Matrix> *savedTensors;    // Places to store the intermediate results from lambda.
     std::map<std::string, Matrix>* savedVtxTensors;
 
+    std::vector< TensorMap >* savedNNTensors;
+
     PairQueue *queuePtr;
 
 // private:

@@ -25,7 +25,7 @@ struct CommInfo {
 
     PairQueue* queuePtr;
     TensorMap* savedVtxTensors;
-    std::vector< TensorMap > *savedNNTensors;
+    std::vector< TensorMap >* savedNNTensors;
 };
 
 //abstract interface declaration

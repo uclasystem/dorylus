@@ -36,13 +36,11 @@ class LambdaComm;
 class LambdaWorker {
 
 public:
-
     LambdaWorker(LambdaComm *manager_);
-
     ~LambdaWorker();
 
     // Continuously listens for incoming lambda connections.
-    void work();
+    void work(unsigned wid);
 
     // Partitions the data matrix according to the partition id and
     // send that partition to the lambda thread for computation.

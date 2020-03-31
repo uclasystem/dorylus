@@ -32,6 +32,7 @@ LambdaComm::LambdaComm(CommInfo &commInfo) :
         wServersFile(commInfo.wServersFile), weightserverPort(commInfo.weightserverPort),
         nodeId(commInfo.nodeId), numNodes(commInfo.numNodes),
         queuePtr(commInfo.queuePtr), savedVtxTensors(commInfo.savedVtxTensors),
+        savedNNTensors(commInfo.savedNNTensors),
         ctx(4), halt(false), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
         numLambdasForward(commInfo.numLambdasForward), numLambdasBackward(commInfo.numLambdasBackward), numListeners(4), // TODO: Decide numListeners.
         countForward(0), countBackward(0), timeoutPeriod(0.0), currLayer(0) {
@@ -63,7 +64,7 @@ LambdaComm::LambdaComm(CommInfo &commInfo) :
     // Create 'numListeners' workers and detach them.
     for (unsigned i = 0; i < numListeners; ++i) {
         workers.push_back(new LambdaWorker(this));
-        worker_threads.push_back(new std::thread(std::bind(&LambdaWorker::work, workers[i])));
+        worker_threads.push_back(new std::thread(std::bind(&LambdaWorker::work, workers[i], i)));
     }
 
     forwardLambdaTable = new bool[numLambdasForward];
