@@ -123,10 +123,9 @@ private:
 
     std::vector<Matrix> *vtxNNSavedTensors; // intermediate data for vertex NN backward computation.
     std::vector<Matrix> *edgNNSavedTensors; // intermediate data for edge NN backward computation.
-    std::map<std::string, Matrix> savedVtxTensors;
 
     std::vector< TensorMap > savedNNTensors;
-    std::vector< std::map<std::string, Matrix> > savedNNTensors;
+    std::vector< ETensorMap > savedEdgeTensors;
 
     // intermediate data for backward computation.
     std::vector<Matrix> *savedTensors;
