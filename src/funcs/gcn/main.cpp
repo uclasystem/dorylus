@@ -67,6 +67,7 @@ finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
     Matrix& W = weights[0];
 
     Matrix Z = AH.dot(W);
+
     Matrix preds = softmax(Z);
     deleteMatrix(Z);
     Matrix& labels = matrices[1];
