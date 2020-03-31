@@ -96,6 +96,7 @@ private:
 };
 
 typedef std::map<std::string, Matrix> TensorMap;
+typedef std::map<std::string, FeatType**> ETensorMap;
 
 
 #endif
