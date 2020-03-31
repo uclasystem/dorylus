@@ -71,12 +71,26 @@ parseName(const char* buf) {
     return std::string(buf + sizeof(unsigned));
 }
 
+// For summing standard tensors
 static inline float
 sumTensor(unsigned rows, unsigned cols, FeatType* tensor) {
     unsigned items = rows * cols;
     float sum = 0;
     for (unsigned u = 0; u < items; ++u) {
         sum += tensor[u];
+    }
+
+    return sum;
+}
+
+// For summing edge tensors
+static inline float
+sumTensor(unsigned rows, unsigned cols, FeatType** tensor) {
+    float sum = 0;
+    for (unsigned ur = 0; ur < rows; ++ur) {
+        for (unsigned uc = 0; uc < cols; ++uc) {
+            sum += tensor[ur][uc];
+        }
     }
 
     return sum;
