@@ -207,7 +207,7 @@ forwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, unsigned
     Matrix Z = AH.dot(W);
     Z.setName("z");
     deleteMatrix(AH);
-    deleteMatrix(Z);
+    deleteMatrix(W);
 
     Matrix H_l = tanh(Z);
     H_l.setName("h");

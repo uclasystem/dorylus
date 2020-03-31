@@ -49,7 +49,7 @@ void
 sendMatrices(Matrix& zResult, Matrix& actResult, zmq::socket_t& socket, unsigned id) {
     // Send push header.
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::PUSH_FORWARD, id, zResult.getRows(), zResult.getCols());
+    populateHeader((char *) header.data(), OP::PUSH_VTX_FORWARD, id, zResult.getRows(), zResult.getCols());
     socket.send(header, ZMQ_SNDMORE);
 
     // Send zData and actData.
@@ -89,7 +89,7 @@ void
 sendMatrix(Matrix& matrix, zmq::socket_t& socket, unsigned id) {
     // Send push header.
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *) header.data(), OP::PUSH_BACKWARD, id, matrix.getRows(),
+    populateHeader((char *) header.data(), OP::PUSH_VTX_BACKWARD, id, matrix.getRows(),
                    matrix.getCols());
     socket.send(header, ZMQ_SNDMORE);
 
@@ -185,8 +185,9 @@ void sendTensors(zmq::socket_t& socket, unsigned partId, unsigned layer,
     populateHeader(header.data(), OP::PUSH, partId, layer);
     socket.send(header, ZMQ_SNDMORE);
     for (uint32_t u = 0; u < matrices.size(); ++u) {
+        std::cout << "Sending tensor << " << matrices[u].name() << std::endl;
         zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
-        populateHeader(tensorHeader.data(), OP::PULL, matrices[u].name().c_str(), layer,
+        populateHeader(tensorHeader.data(), OP::PUSH, matrices[u].name().c_str(), layer,
           matrices[u].getRows(), matrices[u].getCols());
         zmq::message_t tensorData(matrices[u].getDataSize());
         std::memcpy(tensorData.data(), matrices[u].getData(), matrices[u].getDataSize());
