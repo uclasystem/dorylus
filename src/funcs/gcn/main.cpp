@@ -189,16 +189,12 @@ forwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, unsigned
         if (M.empty()){
             std::cout << M.name() << " is empty" << std::endl;
             return constructResp(false, partId, M.name() + " is empty");
-        } else {
-            std::cout << "GOT " << M.name() << std::endl;
         }
     }
     for (auto& W : weights) {
         if (W.empty()){
             std::cout << W.name() << " is empty" << std::endl;
             return constructResp(false, partId, W.name() + " is empty");
-        } else {
-            std::cout << "GOT " << W.name() << std::endl;
         }
     }
 
