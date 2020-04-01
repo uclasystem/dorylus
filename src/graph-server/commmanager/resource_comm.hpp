@@ -56,7 +56,7 @@ public:
     virtual void applyEdgeBackward(unsigned layer, unsigned lambdaId, bool lastLayer) = 0;
     virtual void waitResBackward(unsigned layer, bool lastLayer) = 0;
 
-    virtual void requestInvoke(unsigned layer, unsigned lambdaId,
+    virtual void applyVertex(unsigned layer, unsigned lambdaId,
       PROP_TYPE prop_dir, bool lastLayer) = 0;
     virtual void waitLambda(unsigned layer, PROP_TYPE prop_dir, bool lastLayer) = 0;
 

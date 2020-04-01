@@ -444,7 +444,7 @@ LambdaComm::relaunchLambda(unsigned layer, unsigned lambdaId,
 
 
 void
-LambdaComm::requestInvoke(unsigned layer, unsigned lambdaId,
+LambdaComm::applyVertex(unsigned layer, unsigned lambdaId,
   PROP_TYPE prop_dir, bool lastLayer) {
     __sync_bool_compare_and_swap(forwardLambdaTable + lambdaId, false, true);
     if (lambdaId == 0) {

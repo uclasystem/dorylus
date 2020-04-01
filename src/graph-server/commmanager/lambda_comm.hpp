@@ -100,7 +100,7 @@ public:
     void relaunchLambda(unsigned layer, unsigned lambdaId, PROP_TYPE prop_dir,
       bool lastLayer);
 
-    void requestInvoke(unsigned layer, unsigned lambdaId, PROP_TYPE prop_dir,
+    void applyVertex(unsigned layer, unsigned lambdaId, PROP_TYPE prop_dir,
       bool lastLayer);
     void waitLambda(unsigned layer, PROP_TYPE prop_dir, bool lastLayer);
 
