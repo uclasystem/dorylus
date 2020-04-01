@@ -39,11 +39,8 @@ struct LabelsHeaderType {
     unsigned labelKinds;
 };
 
-struct Chunk {
-    unsigned chunkId;
-    unsigned layer;
-    PROP_TYPE dir;
-};
+
+enum GNN { GCN };
 
 
 /**
@@ -55,6 +52,9 @@ class Engine {
 public:
     // Public APIs for benchmarks.
     void init(int argc, char *argv[]);
+    void preallocate_tensors(GNN gnn_type);
+    void preallocateGCN();
+
     FeatType *runForward(unsigned epoch);
     void runBackward(FeatType *backwardInitData);
 
@@ -66,6 +66,7 @@ public:
     void destroy();
     bool master();
 
+    // HIGH LEVEL SAGA FUNCITONS
     FeatType* aggregate(FeatType **eVFeatsTensor, unsigned edgsCnt,
                         unsigned featDim, AGGREGATOR aggregator);
     FeatType* applyVertex(FeatType *vtcsTensor, unsigned vtcsCnt,
@@ -200,6 +201,7 @@ private:
     bool undirected = false;
 
     unsigned iteration = 0;
+    unsigned currEpoch = -1;
 
     // Timing stuff.
     double timeInit = 0.0;
@@ -216,12 +218,6 @@ private:
     std::vector<unsigned> epochMs;
 
     Barrier barComp;
-
-    // Deep pipeline stuff
-    std::queue<Chunk> taskQueue;
-
-    ThreadPool* workers = NULL;
-    // End Deep pipeline stuff
 
 
     void calcAcc(FeatType *predicts, FeatType *labels, unsigned vtcsCnt,
@@ -240,8 +236,8 @@ private:
     void gatherApplyBPCompute(unsigned tid, void *args);
 
     // transform from vtxFeats/edgFeats to edgFeats/vtxFeats
-    FeatType** srcVFeats2eFeats(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
-    FeatType** dstVFeats2eFeats(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
+    FeatType** srcVFeats2eFeats(FeatType *vtcsTensor, FeatType* ghostTensor, unsigned vtcsCnt, unsigned featDim);
+    FeatType** dstVFeats2eFeats(FeatType *vtcsTensor, FeatType* ghostTensor, unsigned vtcsCnt, unsigned featDim);
     // FeatType* eFeats2dstVFeats(FeatType **edgsTensor, unsigned edgsCnt, unsigned featDim);
     // FeatType* eFeats2srcVFeats(FeatType **edgsTensor, unsigned edgsCnt, unsigned featDim);
 
@@ -271,9 +267,12 @@ private:
     FeatType* aggregateApplyPhase(FeatType* gradTensor, unsigned vtcsCnt,
       unsigned inFeatDim, unsigned outFeatDim, bool scatter);
 
+    ChunkQueue aggregateQueue;
+    Lock aggregateConsumerLock;
+    ChunkQueue scatterQueue;
     PairQueue rangesToScatter;
-    bool* partsScatteredTable;
     Lock consumerQueueLock;
+    bool* partsScatteredTable;
 
     bool pipeline = false;
     // END Pipeline related functions/members
