@@ -17,6 +17,8 @@
 #include <queue>
 #include <utility>
 
+#include "../../common/utils.hpp"
+
 
 /** Default vertex ID type and features type. */
 typedef float FeatType;
@@ -25,9 +27,22 @@ typedef float EdgeType;
                                 // From 0 to numGlobalVertices are normal ghost vertices update message,
                                 // From MAX_IDTYPE downto MAX_IDTYPE - numGlobalVertices are receive signals.
 
+struct Chunk {
+    unsigned chunkId;
+    unsigned lowBound;
+    unsigned upBound;
+    unsigned layer;
+    PROP_TYPE dir;
+
+    unsigned epoch;
+
+    bool vertex;
+};
+
 extern std::map<size_t, std::string> typeToFormatSpecifier;
 
 typedef std::function<void(unsigned, unsigned, FeatType*, unsigned)> FuncPtr;
+typedef std::queue< Chunk > ChunkQueue;
 typedef std::queue< std::pair<unsigned, unsigned> > PairQueue;
 
 
