@@ -31,50 +31,6 @@ static ComputingUnit cu = ComputingUnit::getInstance();
 // ======== Debug utils ========
 typedef std::vector< std::vector<unsigned> > opTimes;
 
-// Outputs a matrix "signature" (the sum of the elements) without
-// creating an actual matrix
-void signFile(std::ofstream& outfile, const char* name, FeatType* fptr,
-  unsigned start, unsigned end, unsigned c) {
-    auto matxSum = [](FeatType* ptr, unsigned start, unsigned end, unsigned c) {
-        float sum = 0;
-        for (unsigned u = start; u < end; ++u) {
-            for (unsigned uj = 0; uj < c; ++uj) {
-                sum += ptr[u*c + uj];
-            }
-        }
-        return sum;
-    };
-
-    std::stringstream output;
-    output << "Matrix: " << name << std::endl;
-    output << "Sum: " << matxSum(fptr, start, end, c) << std::endl;
-
-    std::string res = output.str();
-
-    fileMutex.lock();
-    outfile.write(res.c_str(), res.size());
-    outfile << std::endl << std::flush;
-    fileMutex.unlock();
-}
-
-// Outputs a full matrix to a file
-void outputToFile(std::ofstream& outfile, FeatType* fptr, unsigned start,
-  unsigned end, unsigned c) {
-    std::string out = "";
-    for (uint32_t u = start; u < end; ++u) {
-        for (uint32_t uj = 0; uj < c; ++uj) {
-            out += std::to_string(fptr[u * c + uj]) + " ";
-        }
-        out += "\n";
-    }
-    out += "\n";
-
-    fileMutex.lock();
-    outfile.write(out.c_str(), out.size());
-    outfile << std::endl << std::flush;
-    fileMutex.unlock();
-}
-
 // Outputs a string to a file
 void outputToFile(std::ofstream& outfile, std::string str) {
     fileMutex.lock();
@@ -387,7 +343,6 @@ FeatType*
 Engine::runForward(unsigned epoch) {
     currEpoch = epoch;
     // Make sure all nodes start running the forward-prop phase.
-    // nodeManager.barrier();
     printLog(nodeId, "Engine starts running FORWARD...");
 
     timeForwardProcess -= getTimer();
@@ -399,19 +354,11 @@ Engine::runForward(unsigned epoch) {
     //FeatType **eVFeatsTensor = srcVFeats2eFeats(inputTensor, forwardGhostInitData, graph.localVtxCnt, getFeatDim(iteration));
     FeatType** eVFeatsTensor = savedEdgeTensors[0]["fedge"];
     for (iteration = 0; iteration < numLayers; ++iteration) {
-        if (nodeId == 0) { printLog(nodeId, "EFEATS%u SUM: %f", iteration, sumTensor(graph.localInEdgeCnt * 2, getFeatDim(iteration), eVFeatsTensor)); }
         inputTensor = aggregate(eVFeatsTensor, graph.localVtxCnt, getFeatDim(iteration), AGGREGATOR::WSUM);
-        if (nodeId == 0) { printLog(nodeId, "AGG%u SUM: %f", iteration, sumTensor(graph.localVtxCnt, getFeatDim(iteration), inputTensor)); }
         inputTensor = applyVertex(inputTensor, graph.localVtxCnt,
           getFeatDim(iteration), getFeatDim(iteration + 1), iteration == numLayers-1);
-        if (nodeId == 0) {
-            unsigned featDim = getFeatDim(iteration+1);
-            if (iteration == numLayers-1) featDim = getFeatDim(iteration);
-            printLog(nodeId, "INV%u SUM: %f", iteration, sumTensor(graph.localVtxCnt, featDim, inputTensor));
-        }
         if (iteration < numLayers - 1) { // don't need scatter at the last layer.
             eVFeatsTensor = scatter(inputTensor, graph.localVtxCnt, getFeatDim(iteration + 1));
-            if (nodeId == 0) { printLog(nodeId, "GHST%u SUM: %f", iteration+1, sumTensor(graph.srcGhostCnt, getFeatDim(iteration+1), forwardGhostVerticesDataOut)); }
             eVFeatsTensor = applyEdge(NULL, graph.localInEdgeCnt, 0,
                                     eVFeatsTensor, eVFeatsTensor + graph.localInEdgeCnt,
                                     getFeatDim(iteration + 1), getFeatDim(iteration + 1));
@@ -434,7 +381,6 @@ Engine::runForward(unsigned epoch) {
  */
 void
 Engine::runBackward(FeatType *initGradTensor) {
-    // nodeManager.barrier();
     printLog(nodeId, "Engine starts running BACKWARD...");
 
     timeBackwardProcess -= getTimer();
@@ -447,15 +393,11 @@ Engine::runBackward(FeatType *initGradTensor) {
     FeatType **eVGradTensor = NULL;
     for (iteration = numLayers - 1; iteration > 0; --iteration) {
         eVGradTensor = scatterBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration));
-        if (nodeId == 0) printLog(nodeId, "BGHST%u SUM: %f", iteration, sumTensor(graph.dstGhostCnt, getFeatDim(iteration), backwardGhostVerticesDataOut));
-        if (nodeId == 0) printLog(nodeId, "BEFEATS%u SUM: %f", iteration, sumTensor(graph.localOutEdgeCnt*2, getFeatDim(iteration), eVGradTensor));
         eVGradTensor = applyEdgeBackward(NULL, graph.localOutEdgeCnt, 0,
                                     eVGradTensor + graph.localOutEdgeCnt, eVGradTensor,
                                     getFeatDim(iteration), getFeatDim(iteration));
         gradTensor = aggregateBackward(eVGradTensor, graph.localOutEdgeCnt, getFeatDim(iteration), AGGREGATOR::WSUM);
-        if (nodeId == 0) printLog(nodeId, "BAGG%u SUM: %f", iteration, sumTensor(graph.localVtxCnt, getFeatDim(iteration), gradTensor));
         gradTensor = applyVertexBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration - 1), getFeatDim(iteration));
-        if (nodeId == 0) printLog(nodeId, "BINV%u SUM: %f", iteration, sumTensor(graph.localVtxCnt, getFeatDim(iteration-1), gradTensor));
     }
 
     timeBackwardProcess += getTimer();
@@ -818,7 +760,7 @@ Engine::applyVertex(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
             vecTimeLambdaInvoke[iteration] += getTimer() - invTimer;
         }
         double waitTimer = getTimer();
-        resComm->waitResForward(iteration, iteration == numLayers - 1);
+        resComm->waitLambda(iteration, PROP_TYPE::FORWARD, iteration == numLayers - 1);
         if (vecTimeLambdaWait.size() < numLayers) {
             vecTimeLambdaWait.push_back(getTimer() - waitTimer);
         } else {
@@ -1543,8 +1485,9 @@ Engine::applyVertexBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned inF
     resComm->sendInfoMsg(iteration-1);
     resComm->reset(iteration-1);
     for (unsigned u = 0; u < numLambdasForward; ++u) {
-        resComm->applyVertex(iteration-1, u, PROP_TYPE::BACKWARD, iteration == numLayers - 1);
+        resComm->applyVertex(iteration-1, u, PROP_TYPE::BACKWARD, iteration == numLayers-1);
     }
+    resComm->waitLambda(iteration-1, PROP_TYPE::BACKWARD, iteration == numLayers-1);
 
     if (vecTimeApplyVtx.size() < 2 * numLayers) {
         for (unsigned i = vecTimeApplyVtx.size(); i < 2 * numLayers; i++) {

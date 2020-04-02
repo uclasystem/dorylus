@@ -459,20 +459,20 @@ LambdaComm::applyVertex(unsigned layer, unsigned lambdaId,
 void
 LambdaComm::waitLambda(unsigned layer, PROP_TYPE prop_dir, bool lastLayer) {
     while (countForward < numLambdasForward) {
-        if (relaunching) {
-            if (countForward >= 0.8 * numLambdasForward && timeoutPeriod < 1e-8) {
-                timeoutPeriod = std::fmax(MIN_TIMEOUT, 2 * (getTimer() - forwardTimer));
-            }
-            if (getTimer() - forwardTimer > (timeoutPeriod < 1e-8 ? TIMEOUT_PERIOD : timeoutPeriod)) {
-                for (unsigned i = 0; i < numLambdasForward; i++) {
-                    if (forwardLambdaTable[i]) {
-                        relaunchLambda(layer, i, prop_dir, lastLayer);
-                    }
-                }
-                forwardTimer = getTimer();
-                timeoutPeriod *= EXP_BACKOFF_FACTOR;
-            }
-        }
+//        if (relaunching) {
+//            if (countForward >= 0.8 * numLambdasForward && timeoutPeriod < 1e-8) {
+//                timeoutPeriod = std::fmax(MIN_TIMEOUT, 2 * (getTimer() - forwardTimer));
+//            }
+//            if (getTimer() - forwardTimer > (timeoutPeriod < 1e-8 ? TIMEOUT_PERIOD : timeoutPeriod)) {
+//                for (unsigned i = 0; i < numLambdasForward; i++) {
+//                    if (forwardLambdaTable[i]) {
+//                        relaunchLambda(layer, i, prop_dir, lastLayer);
+//                    }
+//                }
+//                forwardTimer = getTimer();
+//                timeoutPeriod *= EXP_BACKOFF_FACTOR;
+//            }
+//        }
         usleep(SLEEP_PERIOD);
     }
 }
