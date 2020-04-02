@@ -131,7 +131,7 @@ Matrix recvTensor(zmq::socket_t& socket) {
     unsigned resp = parse<unsigned>((char*)tensorHeader.data(), 0);
     std::string name = parseName((char*)tensorHeader.data());
     if (resp == ERR_HEADER_FIELD) {
-        std::cerr << "Got error from graph server. Consult graph server output" << std::endl;
+        std::cerr << "Got error from server. Consult graph server output" << std::endl;
         return Matrix();
     }
     socket.recv(&tensorData);
@@ -145,35 +145,42 @@ Matrix recvTensor(zmq::socket_t& socket) {
     return Matrix(name.c_str(), rows, cols, data);
 }
 
-std::vector<Matrix> reqTensors(zmq::socket_t& socket, unsigned partId,
-  unsigned layer, std::vector<std::string>& tensorRequests) {
-    zmq::message_t header(HEADER_SIZE);
-    populateHeader(header.data(), OP::PULL, partId, layer);
-    socket.send(header, ZMQ_SNDMORE);
-    unsigned numTensors = tensorRequests.size();
-    for (unsigned u = 0; u < tensorRequests.size(); ++u) {
-        std::string& name = tensorRequests[u];
-        zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
-        populateHeader(tensorHeader.data(), partId, name.c_str());
-        if (u < numTensors-1) {
-            socket.send(tensorHeader, ZMQ_SNDMORE);
-        } else {
-            socket.send(tensorHeader);
-        }
-    }
-
+std::vector<Matrix> reqTensors(zmq::socket_t& socket, unsigned arg1,
+  unsigned arg2, std::vector<std::string>& tensorRequests) {
+    bool empty = true;
     std::vector<Matrix> matrices;
-    unsigned more = 1;
-    while (more) {
-        Matrix result = recvTensor(socket);
-        if (result.empty()) {
-            // Means there was an error
-            return std::vector<Matrix>();
+    while (empty) {
+        zmq::message_t header(HEADER_SIZE);
+        populateHeader(header.data(), OP::PULL, arg1, arg2);
+        socket.send(header, ZMQ_SNDMORE);
+        unsigned numTensors = tensorRequests.size();
+        for (unsigned u = 0; u < tensorRequests.size(); ++u) {
+            std::string& name = tensorRequests[u];
+            zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
+            populateHeader(tensorHeader.data(), arg1, name.c_str());
+            if (u < numTensors-1) {
+                socket.send(tensorHeader, ZMQ_SNDMORE);
+            } else {
+                socket.send(tensorHeader);
+            }
         }
-        matrices.push_back(result);
 
-        size_t usize = sizeof(more);
-        socket.getsockopt(ZMQ_RCVMORE, &more, &usize);
+        unsigned more = 1;
+        empty = false;
+        while (more && !empty) {
+            Matrix result = recvTensor(socket);
+            if (result.empty()) {
+                empty = result.empty();
+
+                for (auto& M : matrices) deleteMatrix(M);
+                matrices.clear();
+            } else {
+                matrices.push_back(result);
+
+                size_t usize = sizeof(more);
+                socket.getsockopt(ZMQ_RCVMORE, &more, &usize);
+            }
+        }
     }
 
     return matrices;

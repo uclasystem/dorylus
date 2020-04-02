@@ -8,6 +8,8 @@
 #include "../../../common/matrix.hpp"
 #include "../../../common/utils.hpp"
 
+#include "../utils.hpp"
+
 #define SLEEP_PERIOD   1000  // us
 #define TIMEOUT_PERIOD (500) // ms
 
