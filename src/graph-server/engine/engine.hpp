@@ -70,7 +70,7 @@ public:
     FeatType* aggregate(FeatType **eVFeatsTensor, unsigned edgsCnt,
                         unsigned featDim, AGGREGATOR aggregator);
     FeatType* applyVertex(FeatType *vtcsTensor, unsigned vtcsCnt,
-                        unsigned inFeatDim, unsigned outFeatDim);
+                        unsigned inFeatDim, unsigned outFeatDim, bool lastLayer);
     FeatType** scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
     FeatType** applyEdge(EdgeType *edgsTensor, unsigned edgsCnt, unsigned eFeatDim,
                         FeatType **eSrcVFeatsTensor, FeatType **eDstVFeatsTensor,
