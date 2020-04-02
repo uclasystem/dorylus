@@ -57,7 +57,7 @@ private:
       unsigned cols, unsigned& more);
     void sendTensor(Matrix& tensor, unsigned& more);
     //void getPartitionInfo(Matrix& tensor, unsigned partId, unsigned& more);
-    void sendTensors(zmq::message_t& client_id, unsigned layer);
+    void sendTensors(zmq::message_t& client_id, unsigned layer, bool forward);
 
     void recvUpdateTensor(unsigned layer, TensorMap& weights);
     void recvTensors(zmq::message_t& client_id, unsigned layer);
