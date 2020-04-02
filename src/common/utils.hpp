@@ -2,6 +2,7 @@
 #define __GLOBAL_UTILS_HPP__
 
 #include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <iostream>
@@ -135,18 +136,7 @@ timestamp_ms() {
     return duration_cast<milliseconds>(now.time_since_epoch()).count() - BASE_TMSP;
 }
 
-static inline void
-log(const unsigned nodeId, const char* msg, ...) {
-    char* format = new char[strlen(msg) + 1];
-    va_list argptr;
-    va_start(argptr, msg);
-    vsprintf(format, msg, argptr);
-    va_end(argptr);
 
-    fprintf(stderr, "\033[1;33m[ Node %2u | %u ]\033[0m %s\n", nodeId, timestamp_ms(), format);
-
-    delete[] format;
-}
 
 static inline void
 log(std::ofstream& outfile, const char *msg, ...) {
@@ -246,9 +236,23 @@ extern GPUTimers gtimers;
 extern std::ofstream debugFile;
 extern std::mutex fileMutex;
 
+extern FILE* outputFile;
+
 extern std::ofstream matrixFile;
 extern std::mutex mFileMutex;
 
 void matrixToFile(FeatType* fptr, unsigned start, unsigned end, unsigned c);
+
+static inline void
+log(const unsigned nodeId, const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    vfprintf(outputFile, format, args);
+    va_end(args);
+
+    fputc('\n', outputFile);
+
+    fflush(outputFile);
+}
 
 #endif // GLOBAL_UTILS_HPP

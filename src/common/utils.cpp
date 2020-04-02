@@ -5,6 +5,8 @@ GPUTimers gtimers;
 std::ofstream debugFile;
 std::mutex fileMutex;
 
+FILE* outputFile;
+
 std::ofstream matrixFile;
 std::mutex mFileMutex;
 
