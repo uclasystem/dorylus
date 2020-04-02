@@ -22,7 +22,13 @@ case $1 in
         ssh -i /home/thorpedoes/.ssh/id_rsa jothor@${pubip}
         ;;
     "pubip")
-        aws ec2 describe-instances --filter Name=instance-id,Values=${id} --query Reservations[*].Instances[*].PublicIpAddress --output text
+        ip=$( aws ec2 describe-instances --filter Name=instance-id,Values=${id} --query Reservations[*].Instances[*].PublicIpAddress --output text )
+
+        if [[ -z ${ip} ]]; then
+            echo "No IP address found. Check if instance is running"
+            exit
+        fi
+        echo ${ip}
         ;;
     "start")
         aws ec2 start-instances --instance-ids ${id}
