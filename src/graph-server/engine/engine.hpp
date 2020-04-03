@@ -59,7 +59,6 @@ public:
     void runBackward(FeatType *backwardInitData);
 
     void runGCN();
-    void runSynchronous(FeatType* inputTensor);
     void runPipeline();
 
     void output();
