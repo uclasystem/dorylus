@@ -25,7 +25,7 @@
 #define MAX_MSG_SIZE (5 * 1024 * 1024)
 #define NODE_ID_DIGITS 8 // Digits num of node id.
 #define NODE_ID_HEADER "%8X" // Header for node id. For communication.
-#define DATA_HEADER_SIZE (NODE_ID_DIGITS + sizeof(unsigned) + sizeof(unsigned))
+#define DATA_HEADER_SIZE (NODE_ID_DIGITS + sizeof(unsigned) * 5)
 
 
 
@@ -158,6 +158,10 @@ private:
 
     unsigned currId = 0;
 
+    int recvCnt = 0;
+    Lock recvCntLock;
+    Cond recvCntCond;
+
     int fwdRecvCnt = 0;
     Lock fwdRecvCntLock;
     Cond fwdRecvCntCond;
@@ -229,6 +233,8 @@ private:
     void forwardGhostReceiver(unsigned tid);
     void backwardGhostReceiver(unsigned tid, void* _featDim);
 
+    void ghostReceiver(unsigned tid);
+
     void aggregateCompute(unsigned tid, void *args);
     void aggregateBPCompute(unsigned tid, void *args);
 
@@ -254,10 +260,10 @@ private:
     void sendBackwardGhostGradients(FeatType *gradTensor, unsigned featDim);
 
     // All pipeline related functions/members
-    void pipelineForwardGhostUpdates(FeatType* inputTensor, unsigned featDim);
+    void pipelineForwardGhostUpdates(unsigned tid);
     void pipelineBackwardGhostGradients(FeatType* inputTensor, unsigned featDim);
 
-    void pipelineGhostReceiver();
+    void pipelineGhostReceiver(unsigned tid);
 
     // fusedGASBackward phases
     FeatType* applyScatterPhase(FeatType* gradTensor, unsigned vtcsCnt,
