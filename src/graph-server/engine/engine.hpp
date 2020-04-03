@@ -204,7 +204,7 @@ private:
 
     bool undirected = false;
 
-    unsigned iteration = 0;
+    unsigned layer = 0;
     unsigned currEpoch = -1;
 
     // Timing stuff.

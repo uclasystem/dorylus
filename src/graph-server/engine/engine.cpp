@@ -167,54 +167,54 @@ Engine::preallocateGCN() {
     savedEdgeTensors[0]["fedge"] = eVFeatsTensor;
 
     // forward tensor allocation
-    for (iteration = 0; iteration < numLayers; ++iteration) {
-        unsigned featDim = getFeatDim(iteration);
-        unsigned nextFeatDim = getFeatDim(iteration+1);
+    for (layer = 0; layer < numLayers; ++layer) {
+        unsigned featDim = getFeatDim(layer);
+        unsigned nextFeatDim = getFeatDim(layer+1);
 
         // GATHER TENSORS
         FeatType* ahTensor = new FeatType[vtxCnt * featDim];
-        savedNNTensors[iteration]["ah"] = Matrix("ah", vtxCnt, featDim, ahTensor);
+        savedNNTensors[layer]["ah"] = Matrix("ah", vtxCnt, featDim, ahTensor);
 
         // APPLY TENSORS
-        if (iteration < numLayers - 1) {
+        if (layer < numLayers - 1) {
             FeatType* zTensor = new FeatType[vtxCnt * nextFeatDim];
             FeatType* hTensor = new FeatType[vtxCnt * nextFeatDim];
 
-            savedNNTensors[iteration]["z"] = Matrix(vtxCnt, nextFeatDim, zTensor);
-            savedNNTensors[iteration]["h"] = Matrix(vtxCnt, nextFeatDim, hTensor);
+            savedNNTensors[layer]["z"] = Matrix(vtxCnt, nextFeatDim, zTensor);
+            savedNNTensors[layer]["h"] = Matrix(vtxCnt, nextFeatDim, hTensor);
 
             // SCATTER TENSORS
             FeatType* ghostTensor = new FeatType[graph.srcGhostCnt * nextFeatDim];
-            savedNNTensors[iteration+1]["fg"] = Matrix(graph.srcGhostCnt,
+            savedNNTensors[layer+1]["fg"] = Matrix(graph.srcGhostCnt,
               nextFeatDim, ghostTensor);
 
             FeatType** edgeTensor = srcVFeats2eFeats(hTensor, ghostTensor,
               vtxCnt, nextFeatDim);
-            savedEdgeTensors[iteration+1]["fedge"] = edgeTensor;
+            savedEdgeTensors[layer+1]["fedge"] = edgeTensor;
         }
     }
 
     // backward tensor allocation
-    for (iteration = numLayers - 1; iteration > 0; --iteration) {
-        unsigned featDim = getFeatDim(iteration);
-        unsigned prevFeatDim = getFeatDim(iteration-1);
+    for (layer = numLayers - 1; layer > 0; --layer) {
+        unsigned featDim = getFeatDim(layer);
+        unsigned prevFeatDim = getFeatDim(layer-1);
 
         // APPLY TENSORS
         FeatType* gradTensor = new FeatType[vtxCnt * featDim];
-        savedNNTensors[iteration]["grad"] = Matrix("grad", vtxCnt, featDim, gradTensor);
+        savedNNTensors[layer]["grad"] = Matrix("grad", vtxCnt, featDim, gradTensor);
 
         // SCATTER TENSORS
         FeatType* ghostTensor = new FeatType[graph.dstGhostCnt * featDim];
-        savedNNTensors[iteration]["bg"] = Matrix(graph.dstGhostCnt, featDim,
+        savedNNTensors[layer]["bg"] = Matrix(graph.dstGhostCnt, featDim,
           ghostTensor);
 
         FeatType** eFeats = dstVFeats2eFeats(gradTensor, ghostTensor, vtxCnt,
           featDim);
-        savedEdgeTensors[iteration]["bedge"] = eFeats;
+        savedEdgeTensors[layer]["bedge"] = eFeats;
 
         // GATHER TENSORS
         FeatType* aTgTensor = new FeatType[vtxCnt * prevFeatDim];
-        savedNNTensors[iteration-1]["aTg"] = Matrix(vtxCnt, featDim, aTgTensor);
+        savedNNTensors[layer-1]["aTg"] = Matrix(vtxCnt, featDim, aTgTensor);
     }
 
     // JOHN: Implement the FIN version to notify lambda finished without data
@@ -346,22 +346,22 @@ Engine::runForward(unsigned epoch) {
     FeatType *inputTensor = forwardVerticesInitData;
     forwardGhostVerticesDataIn = forwardGhostInitData;
     // For sequential invocation of operations use this block
-    //FeatType **eVFeatsTensor = srcVFeats2eFeats(inputTensor, forwardGhostInitData, graph.localVtxCnt, getFeatDim(iteration));
+    //FeatType **eVFeatsTensor = srcVFeats2eFeats(inputTensor, forwardGhostInitData, graph.localVtxCnt, getFeatDim(layer));
     FeatType** eVFeatsTensor = savedEdgeTensors[0]["fedge"];
-    for (iteration = 0; iteration < numLayers; ++iteration) {
-        inputTensor = aggregate(eVFeatsTensor, graph.localVtxCnt, getFeatDim(iteration), AGGREGATOR::WSUM);
+    for (layer = 0; layer < numLayers; ++layer) {
+        inputTensor = aggregate(eVFeatsTensor, graph.localVtxCnt, getFeatDim(layer), AGGREGATOR::WSUM);
         inputTensor = applyVertex(inputTensor, graph.localVtxCnt,
-          getFeatDim(iteration), getFeatDim(iteration + 1), iteration == numLayers-1);
-        if (iteration < numLayers - 1) { // don't need scatter at the last layer.
-            eVFeatsTensor = scatter(inputTensor, graph.localVtxCnt, getFeatDim(iteration + 1));
+          getFeatDim(layer), getFeatDim(layer + 1), layer == numLayers-1);
+        if (layer < numLayers - 1) { // don't need scatter at the last layer.
+            eVFeatsTensor = scatter(inputTensor, graph.localVtxCnt, getFeatDim(layer + 1));
             eVFeatsTensor = applyEdge(NULL, graph.localInEdgeCnt, 0,
                                     eVFeatsTensor, eVFeatsTensor + graph.localInEdgeCnt,
-                                    getFeatDim(iteration + 1), getFeatDim(iteration + 1));
+                                    getFeatDim(layer + 1), getFeatDim(layer + 1));
         }
     }
 
     timeForwardProcess += getTimer();
-    printLog(nodeId, "Engine completes FORWARD at iter %u.", iteration);
+    printLog(nodeId, "Engine completes FORWARD at iter %u.", layer);
     //calcAcc(inputTensor, localVerticesLabels, graph.localVtxCnt, getFeatDim(numLayers));
 
     return inputTensor;
@@ -386,17 +386,17 @@ Engine::runBackward(FeatType *initGradTensor) {
 
     // Pure sequential
     FeatType **eVGradTensor = NULL;
-    for (iteration = numLayers - 1; iteration > 0; --iteration) {
-        eVGradTensor = scatterBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration));
+    for (layer = numLayers - 1; layer > 0; --layer) {
+        eVGradTensor = scatterBackward(gradTensor, graph.localVtxCnt, getFeatDim(layer));
         eVGradTensor = applyEdgeBackward(NULL, graph.localOutEdgeCnt, 0,
                                     eVGradTensor + graph.localOutEdgeCnt, eVGradTensor,
-                                    getFeatDim(iteration), getFeatDim(iteration));
-        gradTensor = aggregateBackward(eVGradTensor, graph.localOutEdgeCnt, getFeatDim(iteration), AGGREGATOR::WSUM);
-        gradTensor = applyVertexBackward(gradTensor, graph.localVtxCnt, getFeatDim(iteration - 1), getFeatDim(iteration));
+                                    getFeatDim(layer), getFeatDim(layer));
+        gradTensor = aggregateBackward(eVGradTensor, graph.localOutEdgeCnt, getFeatDim(layer), AGGREGATOR::WSUM);
+        gradTensor = applyVertexBackward(gradTensor, graph.localVtxCnt, getFeatDim(layer - 1), getFeatDim(layer));
     }
 
     timeBackwardProcess += getTimer();
-    printLog(nodeId, "Engine completes BACKWARD at iter %u.", iteration);
+    printLog(nodeId, "Engine completes BACKWARD at iter %u.", layer);
 }
 
 
@@ -423,16 +423,16 @@ Engine::runSynchronous(FeatType* inputTensor) {
     unsigned epStart = timestamp_ms();
     forwardGhostVerticesDataIn = forwardGhostInitData;
     FeatType** eVFeatsTensor = srcVFeats2eFeats(inputTensor, forwardGhostInitData, graph.localVtxCnt, getFeatDim(0));
-    for (iteration = 0; iteration < numLayers; ++iteration) {
-        unsigned featDim = getFeatDim(iteration);
-        unsigned nextFeatDim = getFeatDim(iteration + 1);
+    for (layer = 0; layer < numLayers; ++layer) {
+        unsigned featDim = getFeatDim(layer);
+        unsigned nextFeatDim = getFeatDim(layer + 1);
 
         // AGGREGATE FORWARD
         currId = 0;
         unsigned aggStart = timestamp_ms();
         FeatType* ahTensor = new FeatType[graph.localVtxCnt * featDim];
         std::memcpy(ahTensor, underlyingVtcsTensorBuf, sizeof(FeatType) * graph.localVtxCnt * featDim);
-        savedNNTensors[iteration]["ah"] = Matrix(graph.localVtxCnt, featDim, ahTensor);
+        savedNNTensors[layer]["ah"] = Matrix(graph.localVtxCnt, featDim, ahTensor);
 
         AggOPArgs args = {ahTensor, eVFeatsTensor, graph.localVtxCnt, graph.localVtxCnt, featDim};
         auto computeFn = std::bind(&Engine::aggregateCompute, this, std::placeholders::_1,
@@ -441,88 +441,88 @@ Engine::runSynchronous(FeatType* inputTensor) {
         computePool->perform(computeFn, &args);
         computePool->sync();
         unsigned aggEnd = timestamp_ms();
-        printLog(nodeId, "FWD Aggregate %u took %u ms", iteration, aggEnd - aggStart);
+        printLog(nodeId, "FWD Aggregate %u took %u ms", layer, aggEnd - aggStart);
 
         // INVOKE FORWARD
         unsigned invStart = timestamp_ms();
-        if (iteration < numLayers - 1) {
+        if (layer < numLayers - 1) {
             // If middle layer, allocate Z and H tensors
             FeatType* zTensor = new FeatType[graph.localVtxCnt * nextFeatDim];
             FeatType* hTensor = new FeatType[graph.localVtxCnt * nextFeatDim];
-            savedNNTensors[iteration]["z"] = Matrix(graph.localVtxCnt, nextFeatDim, zTensor);
-            savedNNTensors[iteration]["h"] = Matrix(graph.localVtxCnt, nextFeatDim, hTensor);
+            savedNNTensors[layer]["z"] = Matrix(graph.localVtxCnt, nextFeatDim, zTensor);
+            savedNNTensors[layer]["h"] = Matrix(graph.localVtxCnt, nextFeatDim, hTensor);
         } else {
             // If final layer, pre-allocate backward tensor for backward
             FeatType* gradTensor = new FeatType[graph.localVtxCnt * featDim];
-            savedNNTensors[iteration]["grad"] = Matrix(graph.localVtxCnt, featDim, gradTensor);
-            resComm->sendInfoMsg(iteration);
+            savedNNTensors[layer]["grad"] = Matrix(graph.localVtxCnt, featDim, gradTensor);
+            resComm->sendInfoMsg(layer);
        }
 
-        resComm->reset(iteration);
+        resComm->reset(layer);
         for (unsigned u = 0; u < numLambdasForward; ++u) {
-            resComm->applyVertex(iteration, u, PROP_TYPE::FORWARD, iteration == numLayers - 1);
+            resComm->applyVertex(layer, u, PROP_TYPE::FORWARD, layer == numLayers - 1);
         }
 
-        resComm->waitLambda(iteration, PROP_TYPE::FORWARD, iteration == numLayers - 1);
+        resComm->waitLambda(layer, PROP_TYPE::FORWARD, layer == numLayers - 1);
         unsigned invEnd = timestamp_ms();
-        printLog(nodeId, "FWD Invoke %u took %u ms", iteration, invEnd - invStart);
+        printLog(nodeId, "FWD Invoke %u took %u ms", layer, invEnd - invStart);
 
         // SCATTER FORWARD
-        if (iteration < numLayers - 1) {
+        if (layer < numLayers - 1) {
             unsigned scatStart = timestamp_ms();
-            FeatType* hTensor = savedNNTensors[iteration]["h"].getData();
+            FeatType* hTensor = savedNNTensors[layer]["h"].getData();
             eVFeatsTensor = scatter(hTensor, graph.localVtxCnt, nextFeatDim);
-            savedNNTensors[iteration + 1]["fghost"] = Matrix(graph.srcGhostCnt, nextFeatDim, forwardGhostVerticesDataOut);
+            savedNNTensors[layer + 1]["fghost"] = Matrix(graph.srcGhostCnt, nextFeatDim, forwardGhostVerticesDataOut);
             forwardGhostVerticesDataIn = forwardGhostVerticesDataOut;
             unsigned scatEnd = timestamp_ms();
-            printLog(nodeId, "FWD Scatter %u took %u ms", iteration, scatEnd - scatStart);
+            printLog(nodeId, "FWD Scatter %u took %u ms", layer, scatEnd - scatStart);
         }
     }
 
     // BACKWARD PHASE
     FeatType** eVGradTensor = NULL;
-    for (iteration = numLayers - 1; iteration > 0; --iteration) {
-        unsigned featDim = getFeatDim(iteration);
-        unsigned prevFeatDim = getFeatDim(iteration - 1);
+    for (layer = numLayers - 1; layer > 0; --layer) {
+        unsigned featDim = getFeatDim(layer);
+        unsigned prevFeatDim = getFeatDim(layer - 1);
 
         // SCATTER BACKWARD
         unsigned scatStart = timestamp_ms();
-        FeatType* outputGradTensor = savedNNTensors[iteration]["grad"].getData();
+        FeatType* outputGradTensor = savedNNTensors[layer]["grad"].getData();
 
         eVGradTensor = scatterBackward(outputGradTensor, graph.localVtxCnt, featDim);
-        savedNNTensors[iteration]["bghost"] = Matrix(graph.dstGhostCnt, featDim, backwardGhostVerticesDataOut);
+        savedNNTensors[layer]["bghost"] = Matrix(graph.dstGhostCnt, featDim, backwardGhostVerticesDataOut);
         backwardGhostVerticesDataIn = backwardGhostVerticesDataOut;
         unsigned scatEnd = timestamp_ms();
-        printLog(nodeId, "BKWD Scatter %u took %u ms", iteration, scatEnd - scatStart);
+        printLog(nodeId, "BKWD Scatter %u took %u ms", layer, scatEnd - scatStart);
 
         // AGGREGATE BACKWARD
         unsigned aggStart = timestamp_ms();
         // aTg - adjacency.transpose() @ gradient
         FeatType* aTgTensor = new FeatType[graph.localVtxCnt * featDim];
         std::memcpy(aTgTensor, underlyingVtcsTensorBuf, sizeof(FeatType) * graph.localVtxCnt * featDim);
-        savedNNTensors[iteration-1]["aTg"] = Matrix(graph.localVtxCnt, featDim, aTgTensor);
+        savedNNTensors[layer-1]["aTg"] = Matrix(graph.localVtxCnt, featDim, aTgTensor);
         currId = 0;
         AggOPArgs args = {aTgTensor, eVGradTensor, graph.localVtxCnt, graph.localVtxCnt, featDim};
         auto computeFn = std::bind(&Engine::aggregateBPCompute, this, std::placeholders::_1, std::placeholders::_2);
         computePool->perform(computeFn, &args);
         computePool->sync();
         unsigned aggEnd = timestamp_ms();
-        printLog(nodeId, "BKWD Aggregate %u took %u ms", iteration, aggEnd - aggStart);
+        printLog(nodeId, "BKWD Aggregate %u took %u ms", layer, aggEnd - aggStart);
 
         // INVOKE BACKWARD
         unsigned invStart = timestamp_ms();
         FeatType* gradTensor = new FeatType[graph.localVtxCnt * prevFeatDim];
-        savedNNTensors[iteration-1]["grad"] = Matrix(graph.localVtxCnt, prevFeatDim, gradTensor);
+        savedNNTensors[layer-1]["grad"] = Matrix(graph.localVtxCnt, prevFeatDim, gradTensor);
 
-        resComm->sendInfoMsg(iteration-1);
-        resComm->reset(iteration-1);
+        resComm->sendInfoMsg(layer-1);
+        resComm->reset(layer-1);
         for (unsigned u = 0; u < numLambdasForward; ++u) {
-            resComm->applyVertex(iteration-1, u, PROP_TYPE::BACKWARD, iteration == numLayers - 1);
+            resComm->applyVertex(layer-1, u, PROP_TYPE::BACKWARD, layer == numLayers - 1);
         }
 
-        resComm->waitLambda(iteration-1, PROP_TYPE::BACKWARD, iteration == numLayers - 1);
+        resComm->waitLambda(layer-1, PROP_TYPE::BACKWARD, layer == numLayers - 1);
         unsigned invEnd = timestamp_ms();
-        printLog(nodeId, "BKWD Invoke %u took %u ms", iteration-1, invEnd - invStart);
+        printLog(nodeId, "BKWD Invoke %u took %u ms", layer-1, invEnd - invStart);
     }
     unsigned epEnd = timestamp_ms();
     unsigned epTime = epEnd - epStart;
@@ -674,7 +674,7 @@ FeatType *Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned fea
 
     currId = vtcsCnt;
 
-    if (iteration > 0) {
+    if (layer > 0) {
         delete[] forwardGhostVerticesDataIn;
         delete[] vtcsTensor;
     }
@@ -682,7 +682,7 @@ FeatType *Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned fea
     if (vecTimeAggregate.size() < numLayers) {
         vecTimeAggregate.push_back(getTimer() - sttTimer);
     } else {
-        vecTimeAggregate[iteration] += getTimer() - sttTimer;
+        vecTimeAggregate[layer] += getTimer() - sttTimer;
     }
 
     return outputTensor;
@@ -691,12 +691,12 @@ FeatType *Engine::aggregate(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned fea
 FeatType* Engine::aggregate(FeatType **edgsTensor, unsigned edgsCnt, unsigned featDim, AGGREGATOR aggregator) {
     double sttTimer = getTimer();
     // AH
-    FeatType* outputTensor = savedNNTensors[iteration]["ah"].getData();
+    FeatType* outputTensor = savedNNTensors[layer]["ah"].getData();
     FeatType* hTensor = NULL;
-    if (iteration == 0) {
-        hTensor = savedNNTensors[iteration]["x"].getData();
+    if (layer == 0) {
+        hTensor = savedNNTensors[layer]["x"].getData();
     } else {
-        hTensor = savedNNTensors[iteration-1]["h"].getData();
+        hTensor = savedNNTensors[layer-1]["h"].getData();
     }
     currId = 0;
 
@@ -719,7 +719,7 @@ FeatType* Engine::aggregate(FeatType **edgsTensor, unsigned edgsCnt, unsigned fe
     if (vecTimeAggregate.size() < numLayers) {
         vecTimeAggregate.push_back(getTimer() - sttTimer);
     } else {
-        vecTimeAggregate[iteration] += getTimer() - sttTimer;
+        vecTimeAggregate[layer] += getTimer() - sttTimer;
     }
     return outputTensor;
 }
@@ -733,43 +733,43 @@ Engine::applyVertex(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
 
     FeatType* outputTensor = NULL;
     if (lastLayer) {
-        outputTensor = savedNNTensors[iteration]["grad"].getData();
-        resComm->sendInfoMsg(iteration);
+        outputTensor = savedNNTensors[layer]["grad"].getData();
+        resComm->sendInfoMsg(layer);
     } else {
-        outputTensor = savedNNTensors[iteration]["h"].getData();
+        outputTensor = savedNNTensors[layer]["h"].getData();
     }
 
     // Start a new lambda communication context.
-    resComm->reset(iteration);
+    resComm->reset(layer);
     if (mode == LAMBDA) {
         double invTimer = getTimer();
         unsigned availLambdaId = 0;
         while (availLambdaId < numLambdasForward) {
-            resComm->applyVertex(iteration, availLambdaId, PROP_TYPE::FORWARD,
-              iteration == numLayers - 1);
+            resComm->applyVertex(layer, availLambdaId, PROP_TYPE::FORWARD,
+              layer == numLayers - 1);
             availLambdaId++;
         }
         if (vecTimeLambdaInvoke.size() < numLayers) {
             vecTimeLambdaInvoke.push_back(getTimer() - invTimer);
         } else {
-            vecTimeLambdaInvoke[iteration] += getTimer() - invTimer;
+            vecTimeLambdaInvoke[layer] += getTimer() - invTimer;
         }
         double waitTimer = getTimer();
-        resComm->waitLambda(iteration, PROP_TYPE::FORWARD, iteration == numLayers - 1);
+        resComm->waitLambda(layer, PROP_TYPE::FORWARD, layer == numLayers - 1);
         if (vecTimeLambdaWait.size() < numLayers) {
             vecTimeLambdaWait.push_back(getTimer() - waitTimer);
         } else {
-            vecTimeLambdaWait[iteration] += getTimer() - waitTimer;
+            vecTimeLambdaWait[layer] += getTimer() - waitTimer;
         }
     }
     // if in GPU mode we launch gpu computation here and wait the results
     else
-        resComm->requestForward(iteration, iteration == numLayers - 1);
+        resComm->requestForward(layer, layer == numLayers - 1);
 
     if (vecTimeApplyVtx.size() < numLayers) {
         vecTimeApplyVtx.push_back(getTimer() - sttTimer);
     } else {
-        vecTimeApplyVtx[iteration] += getTimer() - sttTimer;
+        vecTimeApplyVtx[layer] += getTimer() - sttTimer;
     }
 
     return outputTensor;
@@ -787,7 +787,7 @@ Engine::applyEdge(EdgeType *edgsTensor, unsigned edgsCnt, unsigned eFeatDim, Fea
     if (vecTimeApplyEdg.size() < numLayers) {
         vecTimeApplyEdg.push_back(getTimer() - sttTimer);
     } else {
-        vecTimeApplyEdg[iteration] += getTimer() - sttTimer;
+        vecTimeApplyEdg[layer] += getTimer() - sttTimer;
     }
 
     return outputTensor;
@@ -799,7 +799,7 @@ Engine::scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim) {
 
     // Start data communicators.
     commHalt = false;
-    //forwardGhostVerticesDataOut = savedNNTensors[iteration+1]["fg"].getData();
+    //forwardGhostVerticesDataOut = savedNNTensors[layer+1]["fg"].getData();
     auto fgc_fp = std::bind(&Engine::ghostReceiver, this,
       std::placeholders::_1);
     dataPool->perform(fgc_fp);
@@ -814,12 +814,12 @@ Engine::scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim) {
     dataPool->sync();
 
     //FeatType **edgsTensor = srcVFeats2eFeats(vtcsTensor, forwardGhostVerticesDataIn, vtcsCnt, featDim);
-    FeatType** edgsTensor = savedEdgeTensors[iteration+1]["fedge"];
+    FeatType** edgsTensor = savedEdgeTensors[layer+1]["fedge"];
     vtcsTensor = NULL;
 
     if (vecTimeScatter.size() < numLayers) {
         vecTimeScatter.push_back(getTimer() - sttTimer);
-    } else { vecTimeScatter[iteration] += getTimer() - sttTimer;
+    } else { vecTimeScatter[layer] += getTimer() - sttTimer;
     }
 
     return edgsTensor;
@@ -863,12 +863,12 @@ Engine::fusedGAS(FeatType* vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     // // Prepare for applyVertex phase
     // bool saveInput = true;
     // if (saveInput) {
-    //     vtxNNSavedTensors[iteration].push_back(Matrix(vtcsCnt, inFeatDim, gatheredTensor));
+    //     vtxNNSavedTensors[layer].push_back(Matrix(vtcsCnt, inFeatDim, gatheredTensor));
     // }
-    // vtxNNSavedTensors[iteration].push_back(Matrix(vtcsCnt, outFeatDim, zTensor));
+    // vtxNNSavedTensors[layer].push_back(Matrix(vtcsCnt, outFeatDim, zTensor));
     // Matrix inputTensor_ = Matrix(vtcsCnt, inFeatDim, gatheredTensor);
     // Matrix outputTensor_ = Matrix(vtcsCnt, outFeatDim, outputTensor);
-    // resComm->newContext(iteration, inputTensor_, outputTensor_, vtxNNSavedTensors, scatter);
+    // resComm->newContext(layer, inputTensor_, outputTensor_, vtxNNSavedTensors, scatter);
 
     // // Start applyVertex phase
     // unsigned currLambdaId = 0;
@@ -878,7 +878,7 @@ Engine::fusedGAS(FeatType* vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     //     while (currId < vtcsCnt) {
     //         unsigned lvid = currId;
     //         while (lvid > availChunkSize) {
-    //             resComm->applyVertexForward(iteration, currLambdaId, iteration == numLayers - 1);
+    //             resComm->applyVertexForward(layer, currLambdaId, layer == numLayers - 1);
     //             ++currLambdaId;
     //             availChunkSize += lambdaChunkSize;
     //         }
@@ -887,13 +887,13 @@ Engine::fusedGAS(FeatType* vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     // }
     // computePool->sync();
     // if (mode != LAMBDA) {
-    //     resComm->requestForward(iteration, iteration == numLayers - 1);
+    //     resComm->requestForward(layer, layer == numLayers - 1);
     // } else {
     //     while (currLambdaId < numLambdasForward) {
-    //         resComm->applyVertexForward(iteration, currLambdaId, iteration == numLayers - 1);
+    //         resComm->applyVertexForward(layer, currLambdaId, layer == numLayers - 1);
     //         ++currLambdaId;
     //     }
-    //     resComm->waitResForward(iteration, iteration == numLayers - 1);
+    //     resComm->waitResForward(layer, layer == numLayers - 1);
     // }
 
     // // Wait for all remote schedulings sent by me to be handled.
@@ -909,7 +909,7 @@ Engine::fusedGAS(FeatType* vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     // if (saveOutput) {
     //     FeatType *outTensorCpy = new FeatType[vtcsCnt * outFeatDim];
     //     memcpy(outTensorCpy, outputTensor, vtcsCnt * outFeatDim * sizeof(FeatType));
-    //     vtxNNSavedTensors[iteration].push_back(Matrix(vtcsCnt, outFeatDim, outTensorCpy));
+    //     vtxNNSavedTensors[layer].push_back(Matrix(vtcsCnt, outFeatDim, outTensorCpy));
     // }
     // if (saveInput) {
     //     gatheredTensor = NULL;
@@ -918,7 +918,7 @@ Engine::fusedGAS(FeatType* vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     // }
 
     // // Clean up the gather phase
-    // if (iteration > 0) {
+    // if (layer > 0) {
     //     delete[] forwardGhostVerticesDataIn;
     //     delete[] vtcsTensor;
     // }
@@ -926,7 +926,7 @@ Engine::fusedGAS(FeatType* vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     // if (vecTimeAggregate.size() < numLayers) {
     //     vecTimeAggregate.push_back(getTimer() - sttTimer);
     // } else {
-    //     vecTimeAggregate[iteration] += getTimer() - sttTimer;
+    //     vecTimeAggregate[layer] += getTimer() - sttTimer;
     // }
 
     // // Set the scattered output as the input for next aggregation phase
@@ -964,7 +964,7 @@ void Engine::aggregateCompute(unsigned tid, void *args) {
  */
 inline void
 Engine::forwardAggregateFromNeighbors(unsigned lvid, FeatType *outputTensor, FeatType **inputTensor, unsigned featDim) {
-    // Read out data of the current iteration of given vertex.
+    // Read out data of the current layer of given vertex.
     FeatType *currDataDst = getVtxFeat(outputTensor, lvid, featDim);
 
     // Apply normalization factor on the current data.
@@ -1096,7 +1096,7 @@ Engine::forwardVerticesPushOut(unsigned receiver, unsigned totCnt, unsigned *lvi
     char *msgPtr = (char *)(msg.data());
     sprintf(msgPtr, NODE_ID_HEADER, receiver);
     msgPtr += NODE_ID_DIGITS;
-    populateHeader(msgPtr, nodeId, totCnt, featDim, iteration+1, PROP_TYPE::FORWARD);
+    populateHeader(msgPtr, nodeId, totCnt, featDim, layer+1, PROP_TYPE::FORWARD);
     msgPtr += sizeof(unsigned) * 5;
 
     for (unsigned i = 0; i < totCnt; ++i) {
@@ -1156,7 +1156,7 @@ Engine::pipelineGhostReceiver(unsigned tid) {
 
                 char *bufPtr = (char *)msgBuf;
                 unsigned recvGhostVCnt = topic;
-                unsigned featDim = getFeatDim(iteration + 1);
+                unsigned featDim = getFeatDim(layer + 1);
                 // Update ghost vertices
                 for (unsigned i = 0; i < recvGhostVCnt; ++i) {
                     unsigned gvid = *(unsigned *)bufPtr;
@@ -1168,7 +1168,7 @@ Engine::pipelineGhostReceiver(unsigned tid) {
 
                 // A respond to a broadcast, and the topic vertex is in my local vertices. I should update the
                 // corresponding recvWaiter's value. If waiters become empty, send a signal in case the workers are
-                // waiting on it to be empty at the iteration barrier.
+                // waiting on it to be empty at the layer barrier.
             } else { // (topic == MAX_IDTYPE - 1)
                 recvCntLock.lock();
                 recvCnt--;
@@ -1261,7 +1261,7 @@ Engine::ghostReceiver(unsigned tid) {
 
                 // A respond to a broadcast, and the topic vertex is in my local vertices. I should update the
                 // corresponding recvWaiter's value. If waiters become empty, send a signal in case the workers are
-                // waiting on it to be empty at the iteration barrier.
+                // waiting on it to be empty at the layer barrier.
             } else { // (topic == MAX_IDTYPE - 1)
                 recvCntLock.lock();
                 recvCnt--;
@@ -1333,7 +1333,7 @@ Engine::forwardGhostReceiver(unsigned tid) {
 
                 char *bufPtr = (char *)msgBuf;
                 unsigned recvGhostVCnt = topic;
-                unsigned featDim = getFeatDim(iteration + 1);
+                unsigned featDim = getFeatDim(layer + 1);
                 // Update ghost vertices
                 for (unsigned i = 0; i < recvGhostVCnt; ++i) {
                     unsigned gvid = *(unsigned *)bufPtr;
@@ -1345,7 +1345,7 @@ Engine::forwardGhostReceiver(unsigned tid) {
 
                 // A respond to a broadcast, and the topic vertex is in my local vertices. I should update the
                 // corresponding recvWaiter's value. If waiters become empty, send a signal in case the workers are
-                // waiting on it to be empty at the iteration barrier.
+                // waiting on it to be empty at the layer barrier.
             } else { // (topic == MAX_IDTYPE - 1)
                 fwdRecvCntLock.lock();
                 fwdRecvCnt--;
@@ -1507,7 +1507,7 @@ Engine::aggregateBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featD
             vecTimeAggregate.push_back(0.0);
         }
     }
-    vecTimeAggregate[numLayers + iteration] += getTimer() - sttTimer;
+    vecTimeAggregate[numLayers + layer] += getTimer() - sttTimer;
 
     return outputTensor;
 }
@@ -1516,8 +1516,8 @@ FeatType*
 Engine::aggregateBackward(FeatType **eVGradTensor, unsigned edgsCnt, unsigned featDim, AGGREGATOR aggregator) {
     double sttTimer = getTimer();
 
-    FeatType* outputTensor = savedNNTensors[iteration-1]["aTg"].getData();
-    FeatType* gradTensor = savedNNTensors[iteration]["grad"].getData();
+    FeatType* outputTensor = savedNNTensors[layer-1]["aTg"].getData();
+    FeatType* gradTensor = savedNNTensors[layer]["grad"].getData();
     currId = 0;
 
     switch (aggregator) {
@@ -1540,7 +1540,7 @@ Engine::aggregateBackward(FeatType **eVGradTensor, unsigned edgsCnt, unsigned fe
             vecTimeAggregate.push_back(0.0);
         }
     }
-    vecTimeAggregate[numLayers + iteration] += getTimer() - sttTimer;
+    vecTimeAggregate[numLayers + layer] += getTimer() - sttTimer;
 
     return outputTensor;
 }
@@ -1553,7 +1553,7 @@ Engine::applyVertexBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned inF
     double sttTimer = getTimer();
 
     assert(vtcsCnt == graph.localVtxCnt);
-    FeatType* outputTensor = savedNNTensors[iteration-1]["grad"].getData();
+    FeatType* outputTensor = savedNNTensors[layer-1]["grad"].getData();
 
     if (vecTimeLambdaInvoke.size() < 2 * numLayers) {
         for (unsigned i = vecTimeLambdaInvoke.size(); i < 2 * numLayers; ++i) {
@@ -1562,19 +1562,19 @@ Engine::applyVertexBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned inF
         }
     }
 
-    resComm->sendInfoMsg(iteration-1);
-    resComm->reset(iteration-1);
+    resComm->sendInfoMsg(layer-1);
+    resComm->reset(layer-1);
     for (unsigned u = 0; u < numLambdasForward; ++u) {
-        resComm->applyVertex(iteration-1, u, PROP_TYPE::BACKWARD, iteration == numLayers-1);
+        resComm->applyVertex(layer-1, u, PROP_TYPE::BACKWARD, layer == numLayers-1);
     }
-    resComm->waitLambda(iteration-1, PROP_TYPE::BACKWARD, iteration == numLayers-1);
+    resComm->waitLambda(layer-1, PROP_TYPE::BACKWARD, layer == numLayers-1);
 
     if (vecTimeApplyVtx.size() < 2 * numLayers) {
         for (unsigned i = vecTimeApplyVtx.size(); i < 2 * numLayers; i++) {
             vecTimeApplyVtx.push_back(0.0);
         }
     }
-    vecTimeApplyVtx[numLayers + iteration - 1] += getTimer() - sttTimer;
+    vecTimeApplyVtx[numLayers + layer - 1] += getTimer() - sttTimer;
     return outputTensor;
 }
 
@@ -1586,7 +1586,7 @@ Engine::applyEdgeBackward(EdgeType *edgsTensor, unsigned edgsCnt, unsigned eFeat
     FeatType **outputTensor = eDstVGradTensor;
     eDstVGradTensor = NULL;
 
-    for (auto &sTensor: edgNNSavedTensors[iteration - 1]) {
+    for (auto &sTensor: edgNNSavedTensors[layer - 1]) {
         delete[] sTensor.getData();
     }
     if (vecTimeApplyEdg.size() < 2 * numLayers) {
@@ -1594,7 +1594,7 @@ Engine::applyEdgeBackward(EdgeType *edgsTensor, unsigned edgsCnt, unsigned eFeat
             vecTimeApplyEdg.push_back(0.0);
         }
     }
-    vecTimeApplyEdg[numLayers + iteration - 1] += getTimer() - sttTimer;
+    vecTimeApplyEdg[numLayers + layer - 1] += getTimer() - sttTimer;
     return outputTensor;
 }
 
@@ -1607,7 +1607,7 @@ Engine::scatterBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim
     // YIFAN: Do we really need reset bkwdRecvCnt? Same question for all 3 reset
     // JOHN: Yifan, no we don't. I implemented that when I suspected that
     //  having a single counter for fwd and bkwd was the problem with pipelining
-    //backwardGhostVerticesDataOut = savedNNTensors[iteration]["bg"].getData();
+    //backwardGhostVerticesDataOut = savedNNTensors[layer]["bg"].getData();
     auto bgr_fp = std::bind(&Engine::ghostReceiver, this,
       std::placeholders::_1);
     dataPool->perform(bgr_fp);
@@ -1622,7 +1622,7 @@ Engine::scatterBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim
     dataPool->sync();
 
     //FeatType **eFeats = dstVFeats2eFeats(gradTensor, backwardGhostVerticesDataIn, vtcsCnt, featDim);
-    FeatType **eFeats = savedEdgeTensors[iteration]["bedge"];
+    FeatType **eFeats = savedEdgeTensors[layer]["bedge"];
     gradTensor = NULL;
 
     if (vecTimeScatter.size() < 2 * numLayers) {
@@ -1630,7 +1630,7 @@ Engine::scatterBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim
             vecTimeScatter.push_back(0.0);
         }
     }
-    vecTimeScatter[numLayers + iteration - 1] += getTimer() - sttTimer;
+    vecTimeScatter[numLayers + layer - 1] += getTimer() - sttTimer;
     return eFeats;
 }
 
@@ -1664,7 +1664,7 @@ Engine::fusedGASBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned inFeat
             vecTimeAggregate.push_back(0.0);
         }
     }
-    vecTimeAggregate[numLayers + iteration - 1] += getTimer() - sttTimer;
+    vecTimeAggregate[numLayers + layer - 1] += getTimer() - sttTimer;
 
     backwardGhostVerticesDataIn = backwardGhostVerticesDataOut;
 
@@ -1699,9 +1699,9 @@ FeatType* Engine::applyScatterPhase(FeatType* gradTensor, unsigned vtcsCnt,
     Matrix inputTensor_ = Matrix(vtcsCnt, outFeatDim, gradTensor);
     Matrix outputTensor_ = Matrix(vtcsCnt, inFeatDim, outputTensor);
     Matrix targetTensor_ = Matrix(vtcsCnt, getFeatDim(numLayers), localVerticesLabels);
-    resComm->newContext(iteration - 1, inputTensor_, outputTensor_, targetTensor_,
+    resComm->newContext(layer - 1, inputTensor_, outputTensor_, targetTensor_,
                         vtxNNSavedTensors, scatter);
-    resComm->requestBackward(iteration - 1, iteration - 1 == numLayers - 1);
+    resComm->requestBackward(layer - 1, layer - 1 == numLayers - 1);
 
     if (scatter) {
         scatterThread.join();
@@ -1710,17 +1710,17 @@ FeatType* Engine::applyScatterPhase(FeatType* gradTensor, unsigned vtcsCnt,
     dataPool->sync();
 
     delete[] gradTensor;
-    for (auto &sTensor : vtxNNSavedTensors[iteration - 1]) {
+    for (auto &sTensor : vtxNNSavedTensors[layer - 1]) {
         delete[] sTensor.getData();
     }
-    vtxNNSavedTensors[iteration - 1].clear();
+    vtxNNSavedTensors[layer - 1].clear();
 
     if (vecTimeApplyVtx.size() < 2 * numLayers) {
         for (unsigned i = vecTimeApplyVtx.size(); i < 2 * numLayers; i++) {
             vecTimeApplyVtx.push_back(0.0);
         }
     }
-    vecTimeApplyVtx[numLayers + iteration - 1] += getTimer() - sttTimer;
+    vecTimeApplyVtx[numLayers + layer - 1] += getTimer() - sttTimer;
 
     return outputTensor;
 }
@@ -1755,7 +1755,7 @@ FeatType* Engine::aggregateApplyScatterPhase(FeatType* gradTensor, unsigned vtcs
     // Matrix inputTensor_ = Matrix(vtcsCnt, outFeatDim, gatheredTensor);
     // Matrix outputTensor_ = Matrix(vtcsCnt, inFeatDim, outputTensor);
     // Matrix targetTensor_ = Matrix(vtcsCnt, getFeatDim(numLayers), localVerticesLabels);
-    // resComm->newContext(iteration - 1, inputTensor_, outputTensor_, targetTensor_,
+    // resComm->newContext(layer - 1, inputTensor_, outputTensor_, targetTensor_,
     //                     vtxNNSavedTensors, scatter);
 
     // // Start applyVertex phase
@@ -1766,7 +1766,7 @@ FeatType* Engine::aggregateApplyScatterPhase(FeatType* gradTensor, unsigned vtcs
     //     while (currId < vtcsCnt) {
     //         unsigned lvid = currId;
     //         if (lvid > availChunkSize) {
-    //             resComm->applyVertexBackward(iteration - 1, currLambdaId, iteration - 1 == numLayers - 1);
+    //             resComm->applyVertexBackward(layer - 1, currLambdaId, layer - 1 == numLayers - 1);
     //             availChunkSize += lambdaChunkSize;
     //             ++currLambdaId;
     //         }
@@ -1775,13 +1775,13 @@ FeatType* Engine::aggregateApplyScatterPhase(FeatType* gradTensor, unsigned vtcs
     // }
     // computePool->sync();
     // if (mode != LAMBDA) {
-    //     resComm->requestBackward(iteration - 1, iteration - 1 == numLayers - 1);
+    //     resComm->requestBackward(layer - 1, layer - 1 == numLayers - 1);
     // } else {
     //     while (currLambdaId < numLambdasBackward) {
-    //         resComm->applyVertexBackward(iteration - 1, currLambdaId, iteration - 1 == numLayers - 1);
+    //         resComm->applyVertexBackward(layer - 1, currLambdaId, layer - 1 == numLayers - 1);
     //         ++currLambdaId;
     //     }
-    //     resComm->waitResBackward(iteration - 1, iteration - 1 == numLayers - 1);
+    //     resComm->waitResBackward(layer - 1, layer - 1 == numLayers - 1);
     // }
 
     // if (scatter) {
@@ -1792,10 +1792,10 @@ FeatType* Engine::aggregateApplyScatterPhase(FeatType* gradTensor, unsigned vtcs
 
     // // Clean up applyVertex phase
     // delete[] gatheredTensor;
-    // for (auto &sTensor : vtxNNSavedTensors[iteration - 1]) {
+    // for (auto &sTensor : vtxNNSavedTensors[layer - 1]) {
     //     delete[] sTensor.getData();
     // }
-    // vtxNNSavedTensors[iteration - 1].clear();
+    // vtxNNSavedTensors[layer - 1].clear();
 
     // // Clean up gather phase
     // delete[] gradTensor;
@@ -1823,7 +1823,7 @@ FeatType* Engine::aggregateApplyPhase(FeatType* gradTensor, unsigned vtcsCnt,
     // Matrix inputTensor_ = Matrix(vtcsCnt, outFeatDim, gatheredTensor);
     // Matrix outputTensor_ = Matrix(vtcsCnt, inFeatDim, outputTensor);
     // Matrix targetTensor_ = Matrix(vtcsCnt, getFeatDim(numLayers), localVerticesLabels);
-    // resComm->newContext(iteration - 1, inputTensor_, outputTensor_, targetTensor_,
+    // resComm->newContext(layer - 1, inputTensor_, outputTensor_, targetTensor_,
     //                     vtxNNSavedTensors, scatter);
 
     // // Start applyVertex phase
@@ -1834,7 +1834,7 @@ FeatType* Engine::aggregateApplyPhase(FeatType* gradTensor, unsigned vtcsCnt,
     //     while (currId < vtcsCnt) {
     //         unsigned lvid = currId;
     //         if (lvid > availChunkSize) {
-    //             resComm->applyVertexBackward(iteration - 1, currLambdaId, iteration - 1 == numLayers - 1);
+    //             resComm->applyVertexBackward(layer - 1, currLambdaId, layer - 1 == numLayers - 1);
     //             availChunkSize += lambdaChunkSize;
     //             ++currLambdaId;
     //         }
@@ -1843,21 +1843,21 @@ FeatType* Engine::aggregateApplyPhase(FeatType* gradTensor, unsigned vtcsCnt,
     // }
     // computePool->sync();
     // if (mode != LAMBDA) {
-    //     resComm->requestBackward(iteration - 1, iteration - 1 == numLayers - 1);
+    //     resComm->requestBackward(layer - 1, layer - 1 == numLayers - 1);
     // } else {
     //     while (currLambdaId < numLambdasBackward) {
-    //         resComm->applyVertexBackward(iteration - 1, currLambdaId, iteration - 1 == numLayers - 1);
+    //         resComm->applyVertexBackward(layer - 1, currLambdaId, layer - 1 == numLayers - 1);
     //         ++currLambdaId;
     //     }
-    //     resComm->waitResBackward(iteration - 1, iteration - 1 == numLayers - 1);
+    //     resComm->waitResBackward(layer - 1, layer - 1 == numLayers - 1);
     // }
 
     // // Clean up applyVertex phase
     // delete[] gatheredTensor;
-    // for (auto &sTensor : vtxNNSavedTensors[iteration - 1]) {
+    // for (auto &sTensor : vtxNNSavedTensors[layer - 1]) {
     //     delete[] sTensor.getData();
     // }
-    // vtxNNSavedTensors[iteration - 1].clear();
+    // vtxNNSavedTensors[layer - 1].clear();
 
     // // Clean up gather phase
     // delete[] gradTensor;
@@ -1868,7 +1868,7 @@ FeatType* Engine::aggregateApplyPhase(FeatType* gradTensor, unsigned vtcsCnt,
     //         vecTimeAggregate.push_back(0.0);
     //     }
     // }
-    // vecTimeAggregate[numLayers + iteration] += getTimer() - sttTimer;
+    // vecTimeAggregate[numLayers + layer] += getTimer() - sttTimer;
 
     // return outputTensor;
 }
@@ -1898,7 +1898,7 @@ void Engine::aggregateBPCompute(unsigned tid, void *args) {
  */
 void
 Engine::backwardAggregateFromNeighbors(unsigned lvid, FeatType *nextGradTensor, FeatType **gradTensor, unsigned featDim) {
-    // Read out data of the current iteration of given vertex.
+    // Read out data of the current layer of given vertex.
     FeatType *currDataDst = getVtxFeat(nextGradTensor, lvid, featDim);
 
     // Apply normalization factor on the current data.
@@ -2037,7 +2037,7 @@ Engine::backwardVerticesPushOut(unsigned receiver, unsigned totCnt, unsigned *lv
     char *msgPtr = (char *)(msg.data());
     sprintf(msgPtr, NODE_ID_HEADER, receiver);
     msgPtr += NODE_ID_DIGITS;
-    populateHeader(msgPtr, nodeId, totCnt, featDim, iteration, PROP_TYPE::BACKWARD);
+    populateHeader(msgPtr, nodeId, totCnt, featDim, layer, PROP_TYPE::BACKWARD);
     msgPtr += sizeof(unsigned) * 5;
 
     for (unsigned i = 0; i < totCnt; ++i) {
@@ -2107,7 +2107,7 @@ Engine::backwardGhostReceiver(unsigned tid, void* _featDim) {
 
                 // A respond to a broadcast, and the topic vertex is in my local vertices. I should update the
                 // corresponding recvWaiter's value. If waiters become empty, send a signal in case the workers are
-                // waiting on it to be empty at the iteration barrier.
+                // waiting on it to be empty at the layer barrier.
             } else { // (topic == MAX_IDTYPE - 1)
                 bkwdRecvCntLock.lock();
                 bkwdRecvCnt--;
