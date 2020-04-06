@@ -32,6 +32,7 @@ LambdaComm::LambdaComm(CommInfo &commInfo) :
         wServersFile(commInfo.wServersFile), weightserverPort(commInfo.weightserverPort),
         nodeId(commInfo.nodeId), numNodes(commInfo.numNodes),
         queuePtr(commInfo.queuePtr), savedVtxTensors(commInfo.savedVtxTensors),
+        scatterQueue(commInfo.scatterQueue),
         savedNNTensors(commInfo.savedNNTensors),
         ctx(4), halt(false), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
         numLambdasForward(commInfo.numLambdasForward), numLambdasBackward(commInfo.numLambdasBackward), numListeners(4), // TODO: Decide numListeners.
@@ -233,10 +234,12 @@ void LambdaComm::callback(const Aws::Lambda::LambdaClient *client,
  * Reset LambdaComm
  */
 void
-LambdaComm::reset(unsigned layer) {
+LambdaComm::reset(unsigned layer, bool _async) {
     countForward = 0;
     currLayer = layer;
     timeoutPeriod = 0.0;
+
+    async = _async;
 }
 
 void
@@ -446,9 +449,11 @@ LambdaComm::relaunchLambda(unsigned layer, unsigned lambdaId,
 void
 LambdaComm::applyVertex(unsigned layer, unsigned lambdaId,
   PROP_TYPE prop_dir, bool lastLayer) {
-    __sync_bool_compare_and_swap(forwardLambdaTable + lambdaId, false, true);
-    if (lambdaId == 0) {
-        forwardTimer = getTimer();
+    if (!async) {
+        __sync_bool_compare_and_swap(forwardLambdaTable + lambdaId, false, true);
+        if (lambdaId == 0) {
+            forwardTimer = getTimer();
+        }
     }
 
     char* weightServerIp = weightservers[(nodeId * numLambdasForward + lambdaId) % weightservers.size()];

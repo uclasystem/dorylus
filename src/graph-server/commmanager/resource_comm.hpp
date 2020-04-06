@@ -23,6 +23,7 @@ struct CommInfo {
 
     unsigned totalLayers; //for weights prefetching
 
+    ChunkQueue* scatterQueue;
     PairQueue* queuePtr;
     TensorMap* savedVtxTensors;
     std::vector< TensorMap >* savedNNTensors;
@@ -34,7 +35,7 @@ public:
     ResourceComm() {};
     virtual ~ResourceComm() {};
 
-    virtual void reset(unsigned layer) = 0;
+    virtual void reset(unsigned layer, bool _async = false) = 0;
     virtual void sendInfoMsg(unsigned layer) = 0;
 
     virtual void newContext(unsigned layer, Matrix &inputTensor_, Matrix &outputTensor_,

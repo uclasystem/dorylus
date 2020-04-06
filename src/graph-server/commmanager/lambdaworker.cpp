@@ -425,9 +425,9 @@ void LambdaWorker::getPartitionInfo(Matrix& tensor, unsigned partId, unsigned& m
 }
 
 void LambdaWorker::sendTensors(unsigned partId, unsigned layer, zmq::message_t& client_id) {
-    if (partId < manager->numLambdasForward
+    if (manager->async || (partId < manager->numLambdasForward
         && manager->forwardLambdaTable[partId]
-        && layer == manager->currLayer) {
+        && layer == manager->currLayer)) {
         unsigned more = 1;
         workersocket.send(client_id, ZMQ_SNDMORE);
 
@@ -508,9 +508,9 @@ int LambdaWorker::storeTensorPart(unsigned partId, TensorMap& savedNNTensors) {
 void LambdaWorker::recvTensors(unsigned partId, unsigned layer, zmq::message_t& client_id) {
     unsigned more = 1;
     size_t usize = sizeof(unsigned);
-    if (partId < manager->numLambdasForward
+    if (manager->async || (partId < manager->numLambdasForward
         && manager->forwardLambdaTable[partId]
-        && layer == manager->currLayer) {
+        && layer == manager->currLayer)) {
         int ret = 0;
         TensorMap& savedNNTensors = (*(manager->savedNNTensors))[layer];
         while (more && ret == 0) {
@@ -541,6 +541,10 @@ void LambdaWorker::recvTensors(unsigned partId, unsigned layer, zmq::message_t& 
     zmq::message_t ack;
     workersocket.send(client_id, ZMQ_SNDMORE);
     workersocket.send(ack);
+
+    if (manager->async) {
+        printLog(manager->nodeId, "Received results for layer %u:%u", layer, partId);
+    }
 }
 // end named-tensors
 

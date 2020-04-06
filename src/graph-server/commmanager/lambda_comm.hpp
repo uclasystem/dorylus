@@ -73,7 +73,7 @@ public:
       const std::shared_ptr<const Aws::Client::AsyncCallerContext> &context);
 
     // Reset LambdaComm state
-    void reset(unsigned layer);
+    void reset(unsigned layer, bool _async = false);
     void sendInfoMsg(unsigned layer);
 
     void newContext(unsigned layer, Matrix &inputTensor_, Matrix &outputTensor_,
@@ -122,6 +122,7 @@ public:
     std::vector< TensorMap >* savedNNTensors;
 
     PairQueue *queuePtr;
+    ChunkQueue* scatterQueue;
 
 // private:
     // AWSSDK Members
@@ -132,6 +133,7 @@ public:
     unsigned numListeners;
 
     bool pipeline;
+    bool async;
     bool forward;
     unsigned currLayer;
 
