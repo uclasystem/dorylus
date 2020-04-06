@@ -232,10 +232,14 @@ private:
     void forwardGhostReceiver(unsigned tid);
     void backwardGhostReceiver(unsigned tid, void* _featDim);
 
+    void aggregator(unsigned tid);
     void ghostReceiver(unsigned tid);
 
     void aggregateCompute(unsigned tid, void *args);
     void aggregateBPCompute(unsigned tid, void *args);
+
+    void aggregateChunk(Chunk& c);
+    void aggregateBPChunk(Chunk& c);
 
     void gatherApplyCompute(unsigned tid, void *args);
     void gatherApplyBPCompute(unsigned tid, void *args);
@@ -259,6 +263,8 @@ private:
     void sendBackwardGhostGradients(FeatType *gradTensor, unsigned featDim);
 
     // All pipeline related functions/members
+    void loadChunks();
+
     void pipelineForwardGhostUpdates(unsigned tid);
     void pipelineBackwardGhostGradients(FeatType* inputTensor, unsigned featDim);
 

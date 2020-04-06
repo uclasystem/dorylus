@@ -269,6 +269,7 @@ Engine::setupCommInfo() {
     commInfo.weightserverPort = weightserverPort;
     commInfo.totalLayers = numLayers;
     commInfo.queuePtr = &rangesToScatter;
+    commInfo.scatterQueue = &scatterQueue;
     commInfo.savedVtxTensors = &savedVtxTensors;
     commInfo.savedNNTensors = &savedNNTensors;
 }
@@ -361,7 +362,7 @@ Engine::runForward(unsigned epoch) {
     }
 
     timeForwardProcess += getTimer();
-    printLog(nodeId, "Engine completes FORWARD at iter %u.", layer);
+    printLog(nodeId, "Engine completes FORWARD at layer %u.", layer);
     //calcAcc(inputTensor, localVerticesLabels, graph.localVtxCnt, getFeatDim(numLayers));
 
     return inputTensor;
@@ -396,7 +397,7 @@ Engine::runBackward(FeatType *initGradTensor) {
     }
 
     timeBackwardProcess += getTimer();
-    printLog(nodeId, "Engine completes BACKWARD at iter %u.", layer);
+    printLog(nodeId, "Engine completes BACKWARD at %u.", layer);
 }
 
 
@@ -406,6 +407,8 @@ Engine::runGCN() {
     savedNNTensors[0]["x"] = Matrix(graph.localVtxCnt, getFeatDim(0), forwardVerticesInitData);
     savedNNTensors[0]["fghost"] = Matrix(graph.srcGhostCnt, getFeatDim(0), forwardGhostInitData);
     savedNNTensors[numLayers-1]["lab"] = Matrix(graph.localVtxCnt, getFeatDim(numLayers), localVerticesLabels);
+
+    loadChunks();
 
     // Run one synchronous epoch
     FeatType* tensor = runForward(0);
@@ -421,6 +424,8 @@ Engine::runGCN() {
  */
 void
 Engine::runPipeline() {
+    resComm->reset(0, true);
+    aggregator(0);
 }
 
 
@@ -840,6 +845,19 @@ void Engine::aggregateCompute(unsigned tid, void *args) {
     }
 }
 
+void
+Engine::aggregateChunk(Chunk& c) {
+    unsigned lvid = c.lowBound;
+    unsigned limit = c.upBound;
+
+    FeatType* aggTensor = savedNNTensors[c.layer]["ah"].getData();
+    FeatType** eFeatsTensor = savedEdgeTensors[c.layer]["fedge"];
+
+    while (lvid < limit) {
+        forwardAggregateFromNeighbors(lvid++, aggTensor, eFeatsTensor, getFeatDim(c.layer));
+    }
+}
+
 
 /**
  *
@@ -1075,6 +1093,44 @@ Engine::pipelineGhostReceiver(unsigned tid) {
     }
 
     delete[] msgBuf;
+}
+
+void
+Engine::aggregator(unsigned tid) {
+    unsigned failedTrials = 0;
+    const int INIT_PERIOD = 256;
+    const int MAX_PERIOD = 4096;
+    int SLEEP_PERIOD = INIT_PERIOD;
+
+    while (true) {
+        aggregateConsumerLock.lock();
+        if (aggregateQueue.empty()) {
+            aggregateConsumerLock.unlock();
+            usleep(SLEEP_PERIOD);
+            failedTrials++;
+            if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
+                failedTrials = 0;
+                SLEEP_PERIOD *= 2;
+            }
+        } else {
+            Chunk c = aggregateQueue.front();
+            printLog(nodeId, "Got chunk %u for layer %u", c.chunkId, c.layer);
+            aggregateQueue.pop();
+            aggregateConsumerLock.unlock();
+
+            if (c.dir == PROP_TYPE::FORWARD) {
+                aggregateChunk(c);
+                //resComm->applyVertex(c);
+            } else {
+                aggregateBPChunk(c);
+                //resComm->applyVertexBackward(c);
+            }
+            resComm->applyVertex(c.layer, c.chunkId, c.dir, c.layer == numLayers-1);
+
+            SLEEP_PERIOD = INIT_PERIOD;
+            failedTrials = 0;
+        }
+    }
 }
 
 void
@@ -1783,6 +1839,20 @@ void Engine::aggregateBPCompute(unsigned tid, void *args) {
 }
 
 
+void
+Engine::aggregateBPChunk(Chunk& c) {
+    unsigned lvid = c.lowBound;
+    unsigned limit = c.upBound;
+
+    FeatType* aggTensor = savedNNTensors[c.layer-1]["aTg"].getData();
+    FeatType** eFeatsTensor = savedEdgeTensors[c.layer-1]["bedge"];
+
+    while (lvid < limit) {
+        backwardAggregateFromNeighbors(lvid++, aggTensor, eFeatsTensor, getFeatDim(c.layer));
+    }
+}
+
+
 /**
  *
  * Aggregate featDim feature values starting from offset from all neighbors (including self). Then write the results to the
@@ -1823,9 +1893,7 @@ Engine::sendBackwardGhostGradients(FeatType *gradTensor, unsigned featDim) {
             continue;
         }
         unsigned backwardGhostVCnt = graph.backwardLocalVtxDsts[nid].size();
-        unsigned cnt = 0;
         for (unsigned ib = 0; ib < backwardGhostVCnt; ib += BATCH_SIZE) {
-            printLog(nodeId, "Sending batch %u to node %u", cnt++, nid);
             unsigned sendBatchSize = (backwardGhostVCnt - ib) < BATCH_SIZE ? (backwardGhostVCnt - ib) : BATCH_SIZE;
 
             backwardVerticesPushOut(nid, sendBatchSize, graph.backwardLocalVtxDsts[nid].data() + ib, gradTensor, featDim);
@@ -1836,7 +1904,6 @@ Engine::sendBackwardGhostGradients(FeatType *gradTensor, unsigned featDim) {
     }
     // Wait for all remote schedulings sent by me to be handled.
     recvCntLock.lock();
-    printLog(nodeId, "Waiting for acks");
     if (recvCnt > 0) {
         recvCntCond.wait();
     }
@@ -1912,6 +1979,7 @@ Engine::pipelineBackwardGhostGradients(FeatType* inputTensor, unsigned featDim) 
 
             delete[] batchedIds;
             failedTrials = 0;
+            SLEEP_PERIOD = INIT_PERIOD;
             partsScattered++;
         }
     }
@@ -2368,6 +2436,19 @@ Engine::readLabelsFile(std::string &labelsFileName) {
 
     infile.close();
     assert(gvid == graph.globalVtxCnt);
+}
+
+void
+Engine::loadChunks() {
+    unsigned partRows = std::ceil((float) graph.localVtxCnt / (float) numLambdasForward);
+    for (unsigned cid = 0; cid < numLambdasForward; ++cid) {
+        unsigned chunkStart = cid * partRows;
+        unsigned chunkEnd = (cid+1) * partRows;
+        if (chunkEnd > graph.localVtxCnt)
+            chunkEnd = graph.localVtxCnt;
+
+        aggregateQueue.push(Chunk{cid, chunkStart, chunkEnd, 0, PROP_TYPE::FORWARD, 1, true});
+    }
 }
 
 Engine engine;
