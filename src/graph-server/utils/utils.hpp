@@ -39,6 +39,8 @@ struct Chunk {
     bool vertex;
 };
 
+Chunk createChunk(unsigned rows, unsigned nChunks, unsigned id, unsigned layer, PROP_TYPE dir, unsigned ep = 0, bool vertex = true);
+
 extern std::map<size_t, std::string> typeToFormatSpecifier;
 
 typedef std::function<void(unsigned, unsigned, FeatType*, unsigned)> FuncPtr;

@@ -1,3 +1,4 @@
+#include <cmath>
 #include <fstream>
 #include <iostream>
 #include <unistd.h>
@@ -7,6 +8,17 @@
 #include <cassert>
 #include "utils.hpp"
 
+
+
+Chunk createChunk(unsigned rows, unsigned nChunks, unsigned id, unsigned layer,
+  PROP_TYPE dir, unsigned ep, bool vertex) {
+    unsigned partRows = std::ceil((float)rows / (float)nChunks);
+    unsigned lowBound = id * partRows;
+    unsigned upBound = (id + 1) * partRows;
+    if (upBound > rows) upBound = rows;
+
+    return Chunk{id, lowBound, upBound, layer, dir, ep, vertex};
+}
 
 /**
  *
