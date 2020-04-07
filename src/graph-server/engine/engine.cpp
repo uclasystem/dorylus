@@ -21,11 +21,14 @@
 #include <unordered_set>
 
 #ifdef _GPU_ENABLED_
+#include "../commmanager/GPU_comm.hpp"
 #include "../GPU-Computation/comp_unit.cuh"
 #include "../../common/utils.hpp"
 static CuMatrix *NormAdjMatrixIn = NULL;
 static CuMatrix *NormAdjMatrixOut = NULL;
 static ComputingUnit cu = ComputingUnit::getInstance();
+#else
+#include "../commmanager/lambda_comm.hpp"
 #endif
 
 // ======== Debug utils ========
@@ -124,11 +127,18 @@ Engine::init(int argc, char *argv[]) {
     dataPool->createPool();
     printLog(nodeId, "Created %u data communicator threads.", dThreads);
 
-    // Creating a function pointer so lambda workers can call back to scatter
-    // on return
-    setupCommInfo();
+    if (nodeId == 0) {
+        weightComm = new WeightComm(weightserverIPFile, weightserverPort);
+        weightComm->updateChunkCnt(numNodes * numLambdasForward); // now set up weight servers only once
+    } else {
+        weightComm = NULL;
+    }
+    if (mode == LAMBDA) { // Lambda
+        resComm = new LambdaComm(this);
+    } else if (mode == GPU) { // GPU
+    } else if (mode == CPU) { // CPU
+    }
 
-    resComm = createResourceComm(mode, commInfo);
 
     timeForwardProcess = 0.0;
     timeInit += getTimer();
@@ -235,9 +245,13 @@ Engine::destroy() {
     recvCntLock.destroy();
     recvCntCond.destroy();
 
-    resComm->sendShutdownMessage();
-
-    destroyResourceComm(mode, resComm);
+    if (nodeId == 0) {
+        weightComm->shutdown();
+        delete weightComm;
+    }
+    if (mode == LAMBDA) {
+        delete resComm;
+    }
 
     delete[] forwardVerticesInitData;
     delete[] forwardGhostInitData;
@@ -245,29 +259,6 @@ Engine::destroy() {
     delete[] localVerticesLabels;
 }
 
-
-/**
-*
-* Initialize the CommInfo struct for lambdaComm and GPUComm
-*
-*/
-void
-Engine::setupCommInfo() {
-    commInfo.nodeIp = nodeManager.getNode(nodeId).prip;
-    commInfo.nodeId = nodeId;
-    commInfo.dataserverPort = dataserverPort;
-    commInfo.numLambdasForward = numLambdasForward;
-    commInfo.numLambdasBackward = numLambdasBackward;
-    commInfo.numNodes = numNodes;
-    commInfo.wServersFile = weightserverIPFile;
-    commInfo.weightserverPort = weightserverPort;
-    commInfo.totalLayers = numLayers;
-    commInfo.queuePtr = &rangesToScatter;
-    commInfo.scatterQueue = &scatterQueue;
-    commInfo.aggregateQueue = &aggregateQueue;
-    commInfo.savedVtxTensors = &savedVtxTensors;
-    commInfo.savedNNTensors = &savedNNTensors;
-}
 
 /**
  *
@@ -378,7 +369,6 @@ Engine::runBackward(FeatType *initGradTensor) {
 
     // Create buffer for first-layer aggregation.
     FeatType *gradTensor = initGradTensor;
-    // TODO: (YIFAN) this backward flow is correct but weird. I know you have thought for a long time, but try again to refine it.
 
     // Pure sequential
     FeatType **eVGradTensor = NULL;
@@ -404,7 +394,6 @@ Engine::runGCN() {
     savedNNTensors[numLayers-1]["lab"] = Matrix(graph.localVtxCnt, getFeatDim(numLayers), localVerticesLabels);
 
     loadChunks();
-    resComm->setVtxCnt(graph.localVtxCnt);
 
     // Run one synchronous epoch
     FeatType* tensor = runForward(0);
@@ -421,8 +410,6 @@ Engine::runGCN() {
  */
 void
 Engine::runPipeline() {
-    resComm->reset(0, true);
-
     commHalt = false;
     auto ghstRcvr = std::bind(&Engine::ghostReceiver, this, std::placeholders::_1);
     std::thread t(ghstRcvr, 0);
@@ -631,19 +618,21 @@ Engine::applyVertex(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
     FeatType* outputTensor = NULL;
     if (lastLayer) {
         outputTensor = savedNNTensors[layer]["grad"].getData();
-        resComm->sendInfoMsg(layer);
     } else {
         outputTensor = savedNNTensors[layer]["h"].getData();
     }
 
     // Start a new lambda communication context.
-    resComm->reset(layer);
     if (mode == LAMBDA) {
         double invTimer = getTimer();
+        const unsigned chunkSize = (vtcsCnt + numLambdasForward - 1) / numLambdasForward;
         unsigned availLambdaId = 0;
         while (availLambdaId < numLambdasForward) {
-            resComm->applyVertex(layer, availLambdaId, PROP_TYPE::FORWARD,
-              layer == numLayers - 1);
+            unsigned lowBound = availLambdaId * chunkSize;
+            unsigned upBound = std::min(lowBound + chunkSize, vtcsCnt);
+            Chunk chunk {availLambdaId, lowBound, upBound, layer, PROP_TYPE::FORWARD, currEpoch, true}; // epoch is not useful in sync version
+            resComm->NNCompute(chunk);
+
             availLambdaId++;
         }
         if (vecTimeLambdaInvoke.size() < numLayers) {
@@ -652,7 +641,7 @@ Engine::applyVertex(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
             vecTimeLambdaInvoke[layer] += getTimer() - invTimer;
         }
         double waitTimer = getTimer();
-        resComm->waitLambda(layer, PROP_TYPE::FORWARD, layer == numLayers - 1);
+        resComm->NNSync();
         if (vecTimeLambdaWait.size() < numLayers) {
             vecTimeLambdaWait.push_back(getTimer() - waitTimer);
         } else {
@@ -660,8 +649,7 @@ Engine::applyVertex(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
         }
     }
     // if in GPU mode we launch gpu computation here and wait the results
-    else
-        resComm->requestForward(layer, layer == numLayers - 1);
+    else {} // TODO: (YIFAN) support for GPU/CPU
 
     if (vecTimeApplyVtx.size() < numLayers) {
         vecTimeApplyVtx.push_back(getTimer() - sttTimer);
@@ -1136,13 +1124,10 @@ Engine::aggregator(unsigned tid) {
 
             if (c.dir == PROP_TYPE::FORWARD) {
                 aggregateChunk(c);
-                resComm->applyVertex(c.layer, c.chunkId, c.dir, c.layer == numLayers-1);
-                //resComm->applyVertex(c);
             } else {
                 aggregateBPChunk(c);
-                resComm->applyVertex(c.layer, c.chunkId, c.dir, c.layer == 1);
-                //resComm->applyVertexBackward(c);
             }
+            resComm->NNCompute(c);
 
             SLEEP_PERIOD = INIT_PERIOD;
             failedTrials = 0;
@@ -1631,12 +1616,18 @@ Engine::applyVertexBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned inF
         }
     }
 
-    resComm->sendInfoMsg(layer-1);
-    resComm->reset(layer-1);
-    for (unsigned u = 0; u < numLambdasForward; ++u) {
-        resComm->applyVertex(layer-1, u, PROP_TYPE::BACKWARD, layer == 1);
+    if (mode == LAMBDA) {
+        for (unsigned u = 0; u < numLambdasForward; ++u) {
+            unsigned chunkSize = (vtcsCnt + numLambdasForward - 1) / numLambdasForward;
+            unsigned lowBound = u * chunkSize;
+            unsigned upBound = std::min(lowBound + chunkSize, vtcsCnt);
+            Chunk chunk {u, lowBound, upBound, layer-1, PROP_TYPE::BACKWARD, currEpoch, true}; // epoch doesn't matter in sync version
+            resComm->NNCompute(chunk);
+        }
+        resComm->NNSync();
+    } else if (mode == GPU) { // TODO: (YIFAN) support for GPU/CPU
+    } else if (mode == CPU) {
     }
-    resComm->waitLambda(layer-1, PROP_TYPE::BACKWARD, layer == numLayers-1);
 
     if (vecTimeApplyVtx.size() < 2 * numLayers) {
         for (unsigned i = vecTimeApplyVtx.size(); i < 2 * numLayers; i++) {
@@ -1748,51 +1739,52 @@ Engine::fusedGASBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned inFeat
 // Backward scatter phase functions
 FeatType* Engine::applyScatterPhase(FeatType* gradTensor, unsigned vtcsCnt,
   unsigned inFeatDim, unsigned outFeatDim, bool scatter) {
-    double sttTimer = getTimer();
+    return NULL;
+    // double sttTimer = getTimer();
 
-    assert(vtcsCnt == graph.localVtxCnt);
-    commHalt = false;
-    bkwdRecvCnt = 0;
+    // assert(vtcsCnt == graph.localVtxCnt);
+    // commHalt = false;
+    // bkwdRecvCnt = 0;
 
-    FeatType *outputTensor = new FeatType[vtcsCnt * inFeatDim];
-    auto bgr_fp = std::bind(&Engine::backwardGhostReceiver, this,
-                    std::placeholders::_1);
-    auto bgu_fp = std::bind(&Engine::pipelineBackwardGhostGradients, this,
-                    std::placeholders::_1, std::placeholders::_2);
-    std::thread scatterThread;
-    if (scatter) {
-        backwardGhostVerticesDataOut = new FeatType[graph.dstGhostCnt * inFeatDim];
-        dataPool->perform(bgr_fp);
-        scatterThread = std::thread(bgu_fp, outputTensor, inFeatDim);
-    }
+    // FeatType *outputTensor = new FeatType[vtcsCnt * inFeatDim];
+    // auto bgr_fp = std::bind(&Engine::backwardGhostReceiver, this,
+    //                 std::placeholders::_1, std::placeholders::_2);
+    // auto bgu_fp = std::bind(&Engine::pipelineBackwardGhostGradients, this,
+    //                 std::placeholders::_1, std::placeholders::_2);
+    // std::thread scatterThread;
+    // if (scatter) {
+    //     backwardGhostVerticesDataOut = new FeatType[graph.dstGhostCnt * inFeatDim];
+    //     dataPool->perform(bgr_fp, (void*) &inFeatDim);
+    //     scatterThread = std::thread(bgu_fp, outputTensor, inFeatDim);
+    // }
 
-    Matrix inputTensor_ = Matrix(vtcsCnt, outFeatDim, gradTensor);
-    Matrix outputTensor_ = Matrix(vtcsCnt, inFeatDim, outputTensor);
-    Matrix targetTensor_ = Matrix(vtcsCnt, getFeatDim(numLayers), localVerticesLabels);
-    resComm->newContext(layer - 1, inputTensor_, outputTensor_, targetTensor_,
-                        vtxNNSavedTensors, scatter);
-    resComm->requestBackward(layer - 1, layer - 1 == numLayers - 1);
+    // Matrix inputTensor_ = Matrix(vtcsCnt, outFeatDim, gradTensor);
+    // Matrix outputTensor_ = Matrix(vtcsCnt, inFeatDim, outputTensor);
+    // Matrix targetTensor_ = Matrix(vtcsCnt, getFeatDim(numLayers), localVerticesLabels);
+    // resComm->newContext(iteration - 1, inputTensor_, outputTensor_, targetTensor_,
+    //                     vtxNNSavedTensors, scatter);
+    // resComm->requestBackward(iteration - 1, iteration - 1 == numLayers - 1);
 
-    if (scatter) {
-        scatterThread.join();
-    }
-    commHalt = true;
-    dataPool->sync();
+    // if (scatter) {
+    //     scatterThread.join();
+    // }
+    // commHalt = true;
+    // dataPool->sync();
 
-    delete[] gradTensor;
-    for (auto &sTensor : vtxNNSavedTensors[layer - 1]) {
-        delete[] sTensor.getData();
-    }
-    vtxNNSavedTensors[layer - 1].clear();
+    // delete[] gradTensor;
+    // for (auto &sTensor : vtxNNSavedTensors[iteration - 1]) {
+    //     delete[] sTensor.getData();
+    // }
+    // vtxNNSavedTensors[iteration - 1].clear();
 
-    if (vecTimeApplyVtx.size() < 2 * numLayers) {
-        for (unsigned i = vecTimeApplyVtx.size(); i < 2 * numLayers; i++) {
-            vecTimeApplyVtx.push_back(0.0);
-        }
-    }
-    vecTimeApplyVtx[numLayers + layer - 1] += getTimer() - sttTimer;
+    // if (vecTimeApplyVtx.size() < 2 * numLayers) {
+    //     for (unsigned i = vecTimeApplyVtx.size(); i < 2 * numLayers; i++) {
+    //         vecTimeApplyVtx.push_back(0.0);
+    //     }
+    // }
+    // vecTimeApplyVtx[numLayers + iteration - 1] += getTimer() - sttTimer;
 
-    return outputTensor;
+    // return outputTensor;
 }
 
 FeatType* Engine::aggregateApplyScatterPhase(FeatType* gradTensor, unsigned vtcsCnt,

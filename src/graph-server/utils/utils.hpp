@@ -37,6 +37,18 @@ struct Chunk {
     unsigned epoch;
 
     bool vertex;
+
+    bool operator<(const Chunk &rhs) const {
+        // TODO: (YIFAN) Assign priority in the computation sequence
+        return
+            epoch < rhs.epoch || (epoch == rhs.epoch && (
+            dir < rhs.dir || (dir == rhs.dir && (
+            layer < rhs.layer || (layer == rhs.layer && (
+            (vertex && !rhs.vertex) || (vertex == rhs.vertex && (
+            chunkId < rhs.chunkId || (chunkId == rhs.chunkId && (
+            lowBound < rhs.lowBound || (lowBound == rhs.lowBound && (
+            upBound < rhs.upBound))))))))))));
+    }
 };
 
 Chunk createChunk(unsigned rows, unsigned nChunks, unsigned id, unsigned layer, PROP_TYPE dir, unsigned ep = 0, bool vertex = true);

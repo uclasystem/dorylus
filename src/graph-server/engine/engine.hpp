@@ -12,6 +12,7 @@
 
 #include "graph.hpp"
 #include "../commmanager/commmanager.hpp"
+#include "../commmanager/weight_comm.hpp"
 #include "../commmanager/resource_comm.hpp"
 #include "../nodemanager/nodemanager.hpp"
 #include "../parallel/threadpool.hpp"
@@ -105,7 +106,7 @@ public:
     void setPipeline(bool _pipelie);
     void addEpochTime(double epochTime);
 
-private:
+// private:
     NodeManager nodeManager;
     CommManager commManager;
 
@@ -194,8 +195,8 @@ private:
     //0: Lambda, 1: GPU, 2: CPU
     unsigned mode = 0;
 
-    ResourceComm *resComm = NULL;
-    CommInfo commInfo;
+    WeightComm *weightComm;
+    ResourceComm *resComm;
     unsigned nodeId;
     unsigned numNodes;
 
@@ -323,8 +324,6 @@ private:
     void readLayerConfigFile(std::string& layerConfigFileName);
     void readFeaturesFile(std::string& featuresFileName);
     void readLabelsFile(std::string& labelsFileName);
-
-    void setupCommInfo();
 
     // Metric printing.
     void printGraphMetrics();
