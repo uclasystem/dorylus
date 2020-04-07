@@ -230,9 +230,12 @@ private:
     void forwardWorker(unsigned tid, void *args);
     void backwardWorker(unsigned tid, void *args);
     void forwardGhostReceiver(unsigned tid);
-    void backwardGhostReceiver(unsigned tid, void* _featDim);
+    void backwardGhostReceiver(unsigned tid);
 
     void aggregator(unsigned tid);
+    void scatterWorker(unsigned tid);
+    void verticesPushOut(unsigned receiver, unsigned totCnt, unsigned *lvids,
+      FeatType *inputTensor, unsigned featDim, Chunk& c);
     void ghostReceiver(unsigned tid);
 
     void aggregateCompute(unsigned tid, void *args);
