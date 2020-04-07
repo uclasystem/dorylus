@@ -58,6 +58,7 @@ public:
     ~LambdaComm();
 
     void NNCompute(Chunk &chunk);
+    void NNSync();
     bool NNRecv(Chunk &chunk);
 
     unsigned getRelaunchCnt() { return relaunchCnt; };

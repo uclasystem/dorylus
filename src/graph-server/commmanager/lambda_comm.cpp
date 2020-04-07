@@ -22,8 +22,6 @@ LambdaComm::LambdaComm(Engine *_engine) :
         numListeners(4), engine(_engine) { // TODO: Decide numListeners.
     nodeId = _engine->nodeId;
 
-    printLog(nodeId, "queue %p", &resQueue);
-
     loadWServerIps(_engine->weightserverIPFile);
     setupAwsClient();
     setupSockets();
@@ -49,6 +47,17 @@ void LambdaComm::NNCompute(Chunk &chunk) {
     timeoutTable[chunk] = timestamp_ms();
     tableMtx.unlock();
     invokeLambda(chunk);
+}
+
+void LambdaComm::NNSync() {
+    while (resQueue.size() != engine->numLambdasForward) {
+        usleep(20*1000);
+    }
+    resLock.lock();
+    for (unsigned u = 0; u < engine->numLambdasForward; ++u) {
+        resQueue.pop();
+    }
+    resLock.unlock();
 }
 
 bool LambdaComm::NNRecv(Chunk &chunk) {

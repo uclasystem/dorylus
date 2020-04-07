@@ -641,12 +641,7 @@ Engine::applyVertex(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
             vecTimeLambdaInvoke[layer] += getTimer() - invTimer;
         }
         double waitTimer = getTimer();
-        while (scatterQueue.size() != numLambdasForward) {
-            usleep(20*1000);
-        }
-        for (unsigned u = 0; u < numLambdasForward; ++u) {
-            scatterQueue.pop();
-        }
+        resComm->NNSync();
         if (vecTimeLambdaWait.size() < numLayers) {
             vecTimeLambdaWait.push_back(getTimer() - waitTimer);
         } else {
@@ -1629,12 +1624,7 @@ Engine::applyVertexBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned inF
             Chunk chunk {u, lowBound, upBound, layer-1, PROP_TYPE::BACKWARD, currEpoch, true}; // epoch doesn't matter in sync version
             resComm->NNCompute(chunk);
         }
-        while (scatterQueue.size() != numLambdasForward) {
-            usleep(20 * 1000);
-        }
-        for (unsigned u = 0; u < numLambdasForward; ++u) {
-            scatterQueue.pop();
-        }
+        resComm->NNSync();
     } else if (mode == GPU) { // TODO: (YIFAN) support for GPU/CPU
     } else if (mode == CPU) {
     }
