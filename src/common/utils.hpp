@@ -25,10 +25,7 @@ typedef float FeatType;
 
 #define TENSOR_NAME_SIZE 8
 
-// base timestamp for profiling
-#define BASE_TMSP (1580333752000ull)
-
-const size_t HEADER_SIZE = sizeof(unsigned) * 5 + sizeof(unsigned) * 2;
+const size_t HEADER_SIZE = sizeof(unsigned) + sizeof(unsigned) * 6 + sizeof(bool); // sizeof(OP) + sizeof(Chunk)
 // OP, TENSOR_NAME, FIELD0, FIELD1, ...
 static const size_t TENSOR_HDR_SIZE = sizeof(unsigned) * 5 + TENSOR_NAME_SIZE;
 enum OP {
@@ -133,7 +130,7 @@ static inline unsigned
 timestamp_ms() {
     using namespace std::chrono;
     auto now = high_resolution_clock::now();
-    return duration_cast<milliseconds>(now.time_since_epoch()).count() - BASE_TMSP;
+    return duration_cast<milliseconds>(now.time_since_epoch()).count() % (1 << 30);
 }
 
 

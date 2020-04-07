@@ -195,9 +195,9 @@ ServerWorker::setBackpropNumLambdas(zmq::message_t& client_id, unsigned numLambd
 void
 ServerWorker::terminateServer(zmq::message_t& client_id) {
     // Send confirm ACK message.
-    zmq::message_t confirm;
-    workersocket.send(client_id, ZMQ_SNDMORE);
-    workersocket.send(confirm);
+    // zmq::message_t confirm;
+    // workersocket.send(client_id, ZMQ_SNDMORE);
+    // workersocket.send(confirm);
 
     std::cerr << "[SHUTDOWN] Server shutting down..." << std::endl;
 

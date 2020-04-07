@@ -48,7 +48,7 @@ main(int argc, char *argv[]) {
 //    }
 
     // Procude the output files.
-//    engine.output();
+    engine.output();
 
     usleep(100000);
 
