@@ -21,12 +21,16 @@ cmake .. -DCMAKE_BUILD_TYPE=Release
 
 if [[ $? -eq 0 ]]; then
 	make
+else
+    exit
 fi
 
 
 # Package up into a .zip file.
 if [[ $? -eq 0 ]]; then
 	make aws-lambda-package-${FUNC_NAME}
+else
+    exit
 fi
 
 

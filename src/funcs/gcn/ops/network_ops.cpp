@@ -186,15 +186,15 @@ std::vector<Matrix> reqTensors(zmq::socket_t& socket, unsigned arg1,
     return matrices;
 }
 
-void sendTensors(zmq::socket_t& socket, unsigned partId, unsigned layer,
+void sendTensors(zmq::socket_t& socket, unsigned arg1, unsigned arg2, unsigned arg3,
   std::vector<Matrix>& matrices, bool ack) {
     zmq::message_t header(HEADER_SIZE);
-    populateHeader(header.data(), OP::PUSH, partId, layer);
+    populateHeader(header.data(), OP::PUSH, arg1, arg2, arg3);
     socket.send(header, ZMQ_SNDMORE);
     for (uint32_t u = 0; u < matrices.size(); ++u) {
         std::cout << "Sending tensor " << matrices[u].name() << std::endl;
         zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
-        populateHeader(tensorHeader.data(), OP::PUSH, matrices[u].name().c_str(), layer,
+        populateHeader(tensorHeader.data(), OP::PUSH, matrices[u].name().c_str(), arg2,
           matrices[u].getRows(), matrices[u].getCols());
         zmq::message_t tensorData(matrices[u].getDataSize());
         std::memcpy(tensorData.data(), matrices[u].getData(), matrices[u].getDataSize());
@@ -206,6 +206,20 @@ void sendTensors(zmq::socket_t& socket, unsigned partId, unsigned layer,
             socket.send(tensorData);
         }
     }
+
+    if (ack) {
+        std::cout << "Waiting on ACK" << std::endl;
+        zmq::message_t ack;
+        socket.recv(&ack);
+        std::cout << "Received ACK" << std::endl;
+    }
+}
+
+void sendFinishedMessage(zmq::socket_t& socket, unsigned arg1, unsigned arg2, unsigned arg3,
+  bool ack) {
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader(header.data(), OP::FIN, arg1, arg2, arg3);
+    socket.send(header);
 
     if (ack) {
         std::cout << "Waiting on ACK" << std::endl;

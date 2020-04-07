@@ -89,10 +89,10 @@ finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
     d_weights.setName("w");
 
     std::vector<Matrix> weightUpdates{d_weights};
-    sendTensors(weights_socket, layer, layer, weightUpdates);
+    sendTensors(weights_socket, layer, layer, PROP_TYPE::BACKWARD, weightUpdates);
 
     std::vector<Matrix> toSend{interGrad};
-    sendTensors(data_socket, partId, layer, toSend, true);
+    sendTensors(data_socket, partId, layer, PROP_TYPE::BACKWARD, toSend, true);
 
     std::cout << "SENT tensors and weight updates" << std::endl;
 
@@ -108,7 +108,7 @@ finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
 
 invocation_response
 backwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
-  unsigned partId, unsigned layer) {
+  unsigned partId, unsigned layer, bool lastLayer) {
     std::cout << "BACKWARD LAYER" << std::endl;
     std::vector<std::string> dataReqs{"ah", "z", "aTg"};
     std::vector<std::string> weightReqs{"w"};
@@ -123,16 +123,12 @@ backwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
         if (M.empty()){
             std::cout << M.name() << " is empty" << std::endl;
             return constructResp(false, partId, M.name() + " is empty");
-        } else {
-            std::cout << "GOT " << M.name() << std::endl;
         }
     }
     for (auto& W : weights) {
         if (W.empty()){
             std::cout << W.name() << " is empty" << std::endl;
             return constructResp(false, partId, W.name() + " is empty");
-        } else {
-            std::cout << "GOT " << W.name() << std::endl;
         }
     }
 
@@ -149,24 +145,32 @@ backwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
     deleteMatrix(grad);
     deleteMatrix(actDeriv);
 
-    Matrix resultGrad = interGrad.dot(W, false, true);
-    deleteMatrix(W);
-
     Matrix d_weights = AH.dot(interGrad, true, false);
     deleteMatrix(AH);
-    deleteMatrix(interGrad);
 
     d_weights.setName("w");
-    resultGrad.setName("grad");
 
     std::vector<Matrix> weightUpdates{d_weights};
-    std::vector<Matrix> toSend{resultGrad};
 
-    sendTensors(weights_socket, layer, layer, weightUpdates);
-    sendTensors(data_socket, partId, layer, toSend, true);
+    sendTensors(weights_socket, layer, layer, PROP_TYPE::BACKWARD, weightUpdates);
 
-    for (auto& M : toSend)
-        deleteMatrix(M);
+    if (!lastLayer) {
+        std::cout << "Computing gradient for layer " << layer << std::endl;
+        Matrix resultGrad = interGrad.dot(W, false, true);
+        deleteMatrix(W);
+        resultGrad.setName("grad");
+        deleteMatrix(interGrad);
+        std::vector<Matrix> toSend{resultGrad};
+
+        sendTensors(data_socket, partId, layer, PROP_TYPE::BACKWARD, toSend, true);
+
+        for (auto& M : toSend)
+            deleteMatrix(M);
+    } else {
+        std::cout << "Sending finished message" << std::endl;
+        sendFinishedMessage(data_socket, partId, layer, 0, true);
+    }
+
     for (auto& M : weightUpdates)
         deleteMatrix(M);
 
@@ -215,7 +219,7 @@ forwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, unsigned
     toSend.push_back(Z);
     toSend.push_back(H_l);
 
-    sendTensors(data_socket, partId, layer, toSend, true);
+    sendTensors(data_socket, partId, layer, PROP_TYPE::FORWARD, toSend, true);
 
     std::cout << "SENT tensors Z, H" << std::endl;
 
@@ -276,7 +280,7 @@ apply_phase(std::string dataserver, std::string weightserver, unsigned dport,
     } else if (prop_dir == PROP_TYPE::FORWARD && lastLayer) {
         return finalLayer(data_socket, weights_socket, id, layer);
     } else if (prop_dir == PROP_TYPE::BACKWARD) {
-        return backwardLayer(data_socket, weights_socket, id, layer);
+        return backwardLayer(data_socket, weights_socket, id, layer, lastLayer);
     }
 
     std::cout << "Returning from function" << std::endl;
