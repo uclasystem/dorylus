@@ -18,7 +18,8 @@ LambdaComm::LambdaComm(Engine *_engine) :
         // Since we don't have scatter now, I set it to aggregateQueue for testing.
         // Change both resLock and resQueue to scatter ones later!
         savedNNTensors(_engine->savedNNTensors), resLock(_engine->consumerQueueLock),
-        resQueue(_engine->scatterQueue), aggQueue(_engine->aggregateQueue),
+        resQueue(_engine->scatterQueue),
+        aggLock(_engine->aggregateConsumerLock), aggQueue(_engine->aggregateQueue),
         ctx(4), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
         numListeners(4), engine(_engine) { // TODO: Decide numListeners.
     nodeId = _engine->nodeId;
@@ -105,9 +106,9 @@ bool LambdaComm::enqueueAggChunk(Chunk& chunk) {
         chunk.layer = 0;
         chunk.dir = PROP_TYPE::FORWARD;
         chunk.epoch += 1;
-        resLock.lock();
+        aggLock.lock();
         aggQueue.push(chunk);
-        resLock.unlock();
+        aggLock.unlock();
     }
 
     return true;

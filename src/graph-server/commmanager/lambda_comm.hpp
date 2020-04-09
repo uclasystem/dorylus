@@ -70,6 +70,7 @@ public:
     std::vector<TensorMap>& savedNNTensors;
     Lock &resLock;
     ChunkQueue& resQueue;
+    Lock &aggLock;
     ChunkQueue& aggQueue;
 
     std::thread *relaunchThd;
