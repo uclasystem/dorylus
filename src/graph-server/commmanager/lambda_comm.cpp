@@ -12,12 +12,13 @@ LambdaComm::LambdaComm(Engine *_engine) :
         nodeIp(_engine->nodeManager.getNode(_engine->nodeId).prip),
         numNodes(_engine->numNodes),
         numChunk(_engine->numLambdasForward),
-        relaunchCnt(0),
+        relaunchCnt(0), async(false),
         dport(_engine->dataserverPort), wport(_engine->weightserverPort),
         // TODO: (YIFAN) WARNING!!! Here we should push results back to scatterQueue.
         // Since we don't have scatter now, I set it to aggregateQueue for testing.
         // Change both resLock and resQueue to scatter ones later!
-        savedNNTensors(_engine->savedNNTensors), resLock(_engine->consumerQueueLock), resQueue(_engine->scatterQueue),
+        savedNNTensors(_engine->savedNNTensors), resLock(_engine->consumerQueueLock),
+        resQueue(_engine->scatterQueue), aggQueue(_engine->aggregateQueue),
         ctx(4), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
         numListeners(4), engine(_engine) { // TODO: Decide numListeners.
     nodeId = _engine->nodeId;
@@ -42,7 +43,13 @@ LambdaComm::~LambdaComm() {
     ctx.close();
 }
 
+void LambdaComm::setAsync(bool _async) {
+    async = _async;
+}
+
 void LambdaComm::NNCompute(Chunk &chunk) {
+    printLog(nodeId, "NNComp: %u:%u:%s", chunk.layer, chunk.chunkId,
+      chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
     tableMtx.lock();
     timeoutTable[chunk] = timestamp_ms();
     tableMtx.unlock();
@@ -53,6 +60,7 @@ void LambdaComm::NNSync() {
     while (resQueue.size() != engine->numLambdasForward) {
         usleep(20*1000);
     }
+
     resLock.lock();
     for (unsigned u = 0; u < engine->numLambdasForward; ++u) {
         resQueue.pop();
@@ -61,6 +69,8 @@ void LambdaComm::NNSync() {
 }
 
 bool LambdaComm::NNRecv(Chunk &chunk) {
+    printLog(nodeId, "NNRecv: %u:%u:%s", chunk.layer, chunk.chunkId,
+      chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
     tableMtx.lock();
     if (timeoutTable.find(chunk) == timeoutTable.end()) {
         tableMtx.unlock();
@@ -70,10 +80,36 @@ bool LambdaComm::NNRecv(Chunk &chunk) {
         timeoutTable.erase(chunk);
         tableMtx.unlock();
 
+        // If final layer, switch direction
+        if (chunk.layer == 1) chunk.dir = PROP_TYPE::BACKWARD;
+        if (chunk.dir == PROP_TYPE::FORWARD) chunk.layer += 1;
+        if (chunk.dir == PROP_TYPE::BACKWARD) chunk.layer -= 1;
         resLock.lock();
         resQueue.push(chunk);
         resLock.unlock();
     }
+    return true;
+}
+
+bool LambdaComm::enqueueAggChunk(Chunk& chunk) {
+    printLog(nodeId, "NNEnq: %u:%u", chunk.layer, chunk.chunkId,
+      chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
+    tableMtx.lock();
+    if (timeoutTable.find(chunk) == timeoutTable.end()) {
+        tableMtx.unlock();
+        return false;
+    } else {
+        timeoutTable.erase(chunk);
+        tableMtx.unlock();
+
+        chunk.layer = 0;
+        chunk.dir = PROP_TYPE::FORWARD;
+        chunk.epoch += 1;
+        resLock.lock();
+        aggQueue.push(chunk);
+        resLock.unlock();
+    }
+
     return true;
 }
 

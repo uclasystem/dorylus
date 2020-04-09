@@ -184,7 +184,9 @@ void LambdaWorker::markFinish(zmq::message_t& client_id, Chunk &chunk) {
     manager->tableMtx.unlock();
     if (exist) {
         zmq::message_t ack(3 * sizeof(unsigned));
-        if (manager->NNRecv(chunk)) {
+        if (manager->async && manager->enqueueAggChunk(chunk)) {
+            *(int *)(ack.data()) = 0;
+        } else if (manager->NNRecv(chunk)) {
             *(int *)(ack.data()) = 0;
         } else { // Error, Give up this chunk
             *(int *)(ack.data()) = -1;

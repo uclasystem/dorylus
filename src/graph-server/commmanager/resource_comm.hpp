@@ -14,6 +14,8 @@ class ResourceComm {
 public:
     virtual ~ResourceComm() {};
 
+    virtual void setAsync(bool _async) = 0;
+
     virtual void NNCompute(Chunk &chunk) = 0;
     virtual void NNSync() = 0;
 
