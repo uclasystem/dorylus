@@ -14,7 +14,7 @@ case $1 in
             ssh -i /home/thorpedoes/.ssh/id_rsa jothor@${pubip} "rm -rf func-testing"
         fi
 
-        rsync -zz -auzh -e "ssh -i /home/thorpedoes/.ssh/id_rsa" ../funcs ../common jothor@${pubip}:func-testing/
+        rsync -zz -auzh -e "ssh -i /home/thorpedoes/.ssh/id_rsa" ../graph-server/utils ../funcs ../common jothor@${pubip}:func-testing/
         ;;
     "ssh")
         pubip=$( ./ec2-instance.sh pubip )
