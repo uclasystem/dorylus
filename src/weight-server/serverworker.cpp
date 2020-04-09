@@ -249,20 +249,20 @@ void ServerWorker::sendTensors(zmq::message_t& client_id, unsigned layer, bool f
     unsigned more = 1;
     workersocket.send(client_id, ZMQ_SNDMORE);
     // Weights are not yet up to date
-    if (layer == 0 && forward && !ws.servers_updates_done) {
-        zmq::message_t header(TENSOR_HDR_SIZE);
-        populateHeader(header.data(), ERR_HEADER_FIELD);
-        workersocket.send(header);
+    // if (layer == 0 && forward && !ws.servers_updates_done) {
+    //     zmq::message_t header(TENSOR_HDR_SIZE);
+    //     populateHeader(header.data(), ERR_HEADER_FIELD);
+    //     workersocket.send(header);
 
-        // clear buffer of requests before returning
-        size_t usize = sizeof(more);
-        while (more) {
-            zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
-            workersocket.recv(&tensorHeader);
+    //     // clear buffer of requests before returning
+    //     size_t usize = sizeof(more);
+    //     while (more) {
+    //         zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
+    //         workersocket.recv(&tensorHeader);
 
-            workersocket.getsockopt(ZMQ_RCVMORE, &more, &usize);
-        }
-    }
+    //         workersocket.getsockopt(ZMQ_RCVMORE, &more, &usize);
+    //     }
+    // }
 
     TensorMap& weights = weightsStore[layer];
     while (more) {
