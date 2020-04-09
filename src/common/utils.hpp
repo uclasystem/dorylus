@@ -9,6 +9,7 @@
 #include <iomanip>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 #include <map>
 
@@ -239,6 +240,11 @@ extern std::ofstream matrixFile;
 extern std::mutex mFileMutex;
 
 void matrixToFile(FeatType* fptr, unsigned start, unsigned end, unsigned c);
+
+static inline void
+sleep_ms(unsigned t) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(t));
+}
 
 static inline void
 log(const unsigned nodeId, const char *format, ...) {
