@@ -49,8 +49,8 @@ void LambdaComm::setAsync(bool _async) {
 }
 
 void LambdaComm::NNCompute(Chunk &chunk) {
-    printLog(nodeId, "NNComp: %u:%u:%s", chunk.layer, chunk.chunkId,
-      chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
+//    printLog(nodeId, "NNComp: %u:%u:%s", chunk.layer, chunk.chunkId,
+//      chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
     tableMtx.lock();
     timeoutTable[chunk] = timestamp_ms();
     tableMtx.unlock();
@@ -70,8 +70,8 @@ void LambdaComm::NNSync() {
 }
 
 bool LambdaComm::NNRecv(Chunk &chunk) {
-    printLog(nodeId, "NNRecv: %u:%u:%s", chunk.layer, chunk.chunkId,
-      chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
+//    printLog(nodeId, "NNRecv: %u:%u:%s", chunk.layer, chunk.chunkId,
+//      chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
     tableMtx.lock();
     if (timeoutTable.find(chunk) == timeoutTable.end()) {
         tableMtx.unlock();
@@ -93,8 +93,8 @@ bool LambdaComm::NNRecv(Chunk &chunk) {
 }
 
 bool LambdaComm::enqueueAggChunk(Chunk& chunk) {
-    printLog(nodeId, "NNEnq: %u:%u", chunk.layer, chunk.chunkId,
-      chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
+//    printLog(nodeId, "NNEnq: %u:%u", chunk.layer, chunk.chunkId,
+//      chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
     tableMtx.lock();
     if (timeoutTable.find(chunk) == timeoutTable.end()) {
         tableMtx.unlock();

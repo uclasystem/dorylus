@@ -247,7 +247,7 @@ sleep_ms(unsigned t) {
 }
 
 static inline void
-log(const unsigned nodeId, const char *format, ...) {
+log(const char *format, ...) {
     va_list args;
     va_start(args, format);
     vfprintf(outputFile, format, args);

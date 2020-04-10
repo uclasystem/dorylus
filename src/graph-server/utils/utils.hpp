@@ -41,13 +41,13 @@ struct Chunk {
     bool operator<(const Chunk &rhs) const {
         // TODO: (YIFAN) Assign priority in the computation sequence
         return
-            epoch < rhs.epoch || (epoch == rhs.epoch && (
-            dir < rhs.dir || (dir == rhs.dir && (
-            layer < rhs.layer || (layer == rhs.layer && (
+            epoch > rhs.epoch || (epoch == rhs.epoch && (
+            dir > rhs.dir || (dir == rhs.dir && (
+            layer > rhs.layer || (layer == rhs.layer && (
             (vertex && !rhs.vertex) || (vertex == rhs.vertex && (
-            chunkId < rhs.chunkId || (chunkId == rhs.chunkId && (
-            lowBound < rhs.lowBound || (lowBound == rhs.lowBound && (
-            upBound < rhs.upBound))))))))))));
+            chunkId > rhs.chunkId || (chunkId == rhs.chunkId && (
+            lowBound > rhs.lowBound || (lowBound == rhs.lowBound && (
+            upBound > rhs.upBound))))))))))));
     }
 };
 

@@ -56,6 +56,8 @@ Engine::init(int argc, char *argv[]) {
 
     parseArgs(argc, argv);
 
+    outputFile = fopen("output", "w");
+
     // Initialize the node manager and communication manager.
     nodeManager.init(dshMachinesFile, myPrIpFile, myPubIpFile);    // NodeManger should go first.
 
@@ -236,6 +238,8 @@ void
 Engine::destroy() {
     printLog(nodeId, "Destroying the engine...");
 
+    fclose(outputFile);
+
     nodeManager.destroy();
     commManager.destroy();
     computePool->destroyPool();
@@ -327,22 +331,32 @@ Engine::runForward(unsigned epoch) {
     printLog(nodeId, "Engine starts running FORWARD...");
 
     timeForwardProcess -= getTimer();
+    log("EPOCH %u", epoch);
 
     // Create buffer for first-layer aggregation.
     FeatType *inputTensor = forwardVerticesInitData;
     forwardGhostVerticesDataIn = forwardGhostInitData;
+
+    log("XM: %f", savedNNTensors[0]["x"].sum());
+    log("GINITM: %f", savedNNTensors[0]["fg"].sum());
     // For sequential invocation of operations use this block
     //FeatType **eVFeatsTensor = srcVFeats2eFeats(inputTensor, forwardGhostInitData, graph.localVtxCnt, getFeatDim(layer));
     FeatType** eVFeatsTensor = savedEdgeTensors[0]["fedge"];
+    log("EVFEATSIN: %f", sumTensor(graph.localInEdgeCnt * 2, getFeatDim(0), eVFeatsTensor));
+    sleep_ms(500);
     for (layer = 0; layer < numLayers; ++layer) {
         inputTensor = aggregate(eVFeatsTensor, graph.localVtxCnt, getFeatDim(layer), AGGREGATOR::WSUM);
+        if (nodeId == 0) log("AGG%u: %f", layer, sumTensor(graph.localVtxCnt, getFeatDim(layer), inputTensor));
         inputTensor = applyVertex(inputTensor, graph.localVtxCnt,
           getFeatDim(layer), getFeatDim(layer + 1), layer == numLayers-1);
         if (layer < numLayers - 1) { // don't need scatter at the last layer.
+            if (nodeId == 0) log("INV%u: %f", layer, sumTensor(graph.localVtxCnt, getFeatDim(layer+1), inputTensor));
             eVFeatsTensor = scatter(inputTensor, graph.localVtxCnt, getFeatDim(layer + 1));
+            if (nodeId == 0) log("FGHST%u: %f", layer, savedNNTensors[layer+1]["fg"].sum());
             eVFeatsTensor = applyEdge(NULL, graph.localInEdgeCnt, 0,
                                     eVFeatsTensor, eVFeatsTensor + graph.localInEdgeCnt,
                                     getFeatDim(layer + 1), getFeatDim(layer + 1));
+            if (nodeId == 0) log("EFEATS%u: %f", layer, sumTensor(graph.localInEdgeCnt * 2, getFeatDim(layer+1), eVFeatsTensor));
         }
     }
 
@@ -368,17 +382,23 @@ Engine::runBackward(FeatType *initGradTensor) {
 
     // Create buffer for first-layer aggregation.
     FeatType *gradTensor = initGradTensor;
+    layer = numLayers - 1;
+    if (nodeId == 0) log("BINV%u: %f", layer, sumTensor(graph.localVtxCnt, getFeatDim(layer), gradTensor));
 
     // Pure sequential
     FeatType **eVGradTensor = NULL;
     for (layer = numLayers - 1; layer > 0; --layer) {
         eVGradTensor = scatterBackward(gradTensor, graph.localVtxCnt, getFeatDim(layer));
+        if (nodeId == 0) log("BGHST%u: %f", layer, savedNNTensors[layer-1]["bg"].sum());
         eVGradTensor = applyEdgeBackward(NULL, graph.localOutEdgeCnt, 0,
                                     eVGradTensor + graph.localOutEdgeCnt, eVGradTensor,
                                     getFeatDim(layer), getFeatDim(layer));
+        if (nodeId == 0) log("BEVFEATS%u: %f", layer, sumTensor(graph.localOutEdgeCnt * 2, getFeatDim(layer), eVGradTensor));
         gradTensor = aggregateBackward(eVGradTensor, graph.localOutEdgeCnt, getFeatDim(layer), AGGREGATOR::WSUM);
+        if (nodeId == 0) log("BAGG%u: %f", layer, sumTensor(graph.localVtxCnt, getFeatDim(layer), gradTensor));
         gradTensor = applyVertexBackward(gradTensor, graph.localVtxCnt, getFeatDim(layer - 1), getFeatDim(layer));
     }
+    log("\n");
 
     timeBackwardProcess += getTimer();
     printLog(nodeId, "Engine completes BACKWARD at %u.", layer);
@@ -413,6 +433,62 @@ Engine::runPipeline() {
     auto ghstRcvr = std::bind(&Engine::ghostReceiver, this, std::placeholders::_1);
     std::thread t(ghstRcvr, 0);
     t.detach();
+
+    unsigned my_epoch = 0;
+    while (true) {
+        unsigned poll_cnt = 0;
+        while (aggregateQueue.size() != numLambdasForward
+          && scatterQueue.size() != numLambdasForward) {
+            usleep(20 * 1000);
+            if (poll_cnt++ % 1000 == 0) printLog(nodeId, "Still waiting");
+        }
+
+        if (aggregateQueue.size() == numLambdasForward) {
+            nodeManager.barrier();
+
+            Chunk c = aggregateQueue.front();
+            PROP_TYPE dir = c.dir;
+            unsigned this_layer = c.layer;
+            my_epoch = c.epoch;
+
+            if (aggregateQueue.front().layer == 0 && aggregateQueue.front().dir == PROP_TYPE::FORWARD) {
+                if (my_epoch == 10) break;
+                printLog(nodeId, "Starting epoch %u", aggregateQueue.front().epoch);
+                if (nodeId == 0) log("\nEPOCH %u", my_epoch);
+                //sleep_ms(2000);
+            }
+
+            aggregator(0);
+            if (nodeId == 0) {
+                if (dir == PROP_TYPE::FORWARD) {
+                    log("AGG%u: %f", this_layer, savedNNTensors[this_layer]["ah"].sum());
+                    if (layer == numLayers - 1)
+                        log("BINV%u: %f", this_layer, savedNNTensors[this_layer]["grad"].sum());
+                    else
+                        log("INV%u: %f", this_layer, savedNNTensors[this_layer]["h"].sum());
+                } else {
+                    log("BAGG%u: %f", this_layer+1, savedNNTensors[this_layer]["aTg"].sum());
+                }
+            }
+        } else if (scatterQueue.size() == numLambdasForward) {
+            Chunk c = scatterQueue.front();
+            Chunk cc = c;
+
+            scatterWorker(0);
+
+            if (nodeId == 0) {
+                if (cc.dir == PROP_TYPE::FORWARD) {
+                    log("FGHST%u: %f", cc.layer-1, savedNNTensors[cc.layer]["fg"].sum());
+                    log("EVFEATS%u: %f", cc.layer-1, sumTensor(graph.localInEdgeCnt * 2, getFeatDim(cc.layer), savedEdgeTensors[cc.layer]["fedge"]));
+                } else {
+                    log("BGHST%u: %f", cc.layer+1, savedNNTensors[cc.layer]["bg"].sum());
+                    log("EVFEATS%u: %f", cc.layer+1, sumTensor(graph.localOutEdgeCnt * 2, getFeatDim(cc.layer+1), savedEdgeTensors[cc.layer]["bedge"]));
+                }
+            }
+        } else {
+            printLog(nodeId, "Ya done fucked up");
+        }
+    }
 
     auto scttrWrkr = std::bind(&Engine::scatterWorker, this, std::placeholders::_1);
     std::thread t2(scttrWrkr, 1);
@@ -848,14 +924,21 @@ void
 Engine::aggregateChunk(Chunk& c) {
     unsigned lvid = c.lowBound;
     unsigned limit = c.upBound;
+    unsigned featDim = getFeatDim(c.layer);
 
-    printLog(nodeId, "AGGREGATE: Requesting 'ah' for layer %u", c.layer);
+    FeatType* featTensor = NULL;
+    if (c.layer == 0)
+        featTensor = getVtxFeat(savedNNTensors[c.layer]["x"].getData(), lvid, featDim);
+    else
+        featTensor = getVtxFeat(savedNNTensors[c.layer-1]["h"].getData(), lvid, featDim);
+
     FeatType* aggTensor = savedNNTensors[c.layer]["ah"].getData();
-    printLog(nodeId, "AGGREGATE: Requesting 'fedge' for layer %u", c.layer);
     FeatType** eFeatsTensor = savedEdgeTensors[c.layer]["fedge"];
 
+    FeatType* chunkPtr = getVtxFeat(aggTensor, lvid, featDim);
+    std::memcpy(chunkPtr, featTensor, sizeof(FeatType) * (limit - lvid) * featDim);
     while (lvid < limit) {
-        forwardAggregateFromNeighbors(lvid++, aggTensor, eFeatsTensor, getFeatDim(c.layer));
+        forwardAggregateFromNeighbors(lvid++, aggTensor, eFeatsTensor, featDim);
     }
 }
 
@@ -1105,18 +1188,22 @@ Engine::aggregator(unsigned tid) {
     const int INIT_PERIOD = 256;
     const int MAX_PERIOD = 4096;
     int SLEEP_PERIOD = INIT_PERIOD;
+    failedTrials = MAX_PERIOD;
+    failedTrials = SLEEP_PERIOD;
+    failedTrials++;
 
-    while (true) {
-        aggregateConsumerLock.lock();
-        if (aggregateQueue.empty()) {
-            aggregateConsumerLock.unlock();
-            usleep(SLEEP_PERIOD);
-            failedTrials++;
-            if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
-                failedTrials = 0;
-                SLEEP_PERIOD *= 2;
-            }
-        } else {
+//    while (true) {
+//        aggregateConsumerLock.lock();
+//        if (aggregateQueue.empty()) {
+//            aggregateConsumerLock.unlock();
+//            usleep(SLEEP_PERIOD);
+//            failedTrials++;
+//            if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
+//                failedTrials = 0;
+//                SLEEP_PERIOD *= 2;
+//            }
+//        } else {
+    while (!aggregateQueue.empty()) {
             Chunk c = aggregateQueue.front();
             printLog(nodeId, "AGGREGATE: Got chunk %u:%u:%s", c.layer, c.chunkId,
               c.dir == PROP_TYPE::FORWARD ? "F" : "B");
@@ -1133,7 +1220,7 @@ Engine::aggregator(unsigned tid) {
             SLEEP_PERIOD = INIT_PERIOD;
             failedTrials = 0;
             //sleep_ms(750);
-        }
+//        }
     }
 }
 
@@ -1144,20 +1231,24 @@ Engine::scatterWorker(unsigned tid) {
     const int INIT_PERIOD = 256;
     const int MAX_PERIOD = 4096;
     int SLEEP_PERIOD = INIT_PERIOD;
+    failedTrials = MAX_PERIOD;
+    failedTrials = SLEEP_PERIOD;
+    failedTrials++;
 
     // Check queue to see if partition ready
-    while (!commHalt) {
-        consumerQueueLock.lock();
-        if (scatterQueue.empty()) {
-            consumerQueueLock.unlock();
-            // sleep with backoff
-            usleep(SLEEP_PERIOD); // sleep a little and give up CPUs
-            failedTrials++;
-            if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
-                failedTrials = 0;
-                SLEEP_PERIOD *= 2;
-            }
-        } else {
+//    while (!commHalt) {
+//        consumerQueueLock.lock();
+//        if (scatterQueue.empty() || scatterQueue.size() < numLambdasForward) {
+//            consumerQueueLock.unlock();
+//            // sleep with backoff
+//            usleep(SLEEP_PERIOD); // sleep a little and give up CPUs
+//            failedTrials++;
+//            if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
+//                failedTrials = 0;
+//                SLEEP_PERIOD *= 2;
+//            }
+//        } else {
+    while (!scatterQueue.empty()) {
             Chunk c = scatterQueue.front();
             scatterQueue.pop();
             consumerQueueLock.unlock();
@@ -1236,7 +1327,7 @@ Engine::scatterWorker(unsigned tid) {
             delete[] batchedIds;
             failedTrials = 0;
             SLEEP_PERIOD = INIT_PERIOD;
-        }
+//        }
     }
 }
 
@@ -1317,7 +1408,7 @@ Engine::ghostReceiver(unsigned tid) {
                 std::map<unsigned, unsigned>& globalToGhostVtcs = dir == PROP_TYPE::FORWARD
                   ? graph.srcGhostVtcs : graph.dstGhostVtcs;
 
-                printLog(nodeId, "RECEIVER: Got msg %u:%f", layer,
+                printLog(nodeId, "RECEIVER: Got msg %u:%s", layer,
                   dir == PROP_TYPE::FORWARD ? "F" : "B");
                 FeatType* ghostData = savedNNTensors[layer][tensorName].getData();
                 if (ghostData == NULL) {
@@ -1977,12 +2068,17 @@ void
 Engine::aggregateBPChunk(Chunk& c) {
     unsigned lvid = c.lowBound;
     unsigned limit = c.upBound;
+    unsigned featDim = getFeatDim(c.layer + 1);
+
+    FeatType* featTensor = getVtxFeat(savedNNTensors[c.layer+1]["grad"].getData(), lvid, featDim);
 
     FeatType* aggTensor = savedNNTensors[c.layer]["aTg"].getData();
     FeatType** eFeatsTensor = savedEdgeTensors[c.layer]["bedge"];
 
+    FeatType* chunkPtr = getVtxFeat(aggTensor, lvid, featDim);
+    std::memcpy(chunkPtr, featTensor, sizeof(FeatType) * (limit - lvid) * featDim);
     while (lvid < limit) {
-        backwardAggregateFromNeighbors(lvid++, aggTensor, eFeatsTensor, getFeatDim(c.layer+1));
+        backwardAggregateFromNeighbors(lvid++, aggTensor, eFeatsTensor, featDim);
     }
 }
 
