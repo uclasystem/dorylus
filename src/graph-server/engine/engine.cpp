@@ -848,12 +848,17 @@ void
 Engine::aggregateChunk(Chunk& c) {
     unsigned lvid = c.lowBound;
     unsigned limit = c.upBound;
+    unsigned featDim = getFeatDim(c.layer);
 
-    printLog(nodeId, "AGGREGATE: Requesting 'ah' for layer %u", c.layer);
+    FeatType* featTensor = NULL;
+    if (c.layer == 0) featTensor = getVtxFeat(savedNNTensors[c.layer]["x"].getData(), lvid, featDim);
+    else featTensor = getVtxFeat(savedNNTensors[c.layer-1]["h"].getData(), lvid, featDim);
+
     FeatType* aggTensor = savedNNTensors[c.layer]["ah"].getData();
-    printLog(nodeId, "AGGREGATE: Requesting 'fedge' for layer %u", c.layer);
     FeatType** eFeatsTensor = savedEdgeTensors[c.layer]["fedge"];
 
+    FeatType* chunkPtr = getVtxFeat(aggTensor, lvid, featDim);
+    std::memcpy(chunkPtr, featTensor, sizeof(FeatType) * (limit - lvid) * featDim);
     while (lvid < limit) {
         forwardAggregateFromNeighbors(lvid++, aggTensor, eFeatsTensor, getFeatDim(c.layer));
     }
@@ -1977,12 +1982,17 @@ void
 Engine::aggregateBPChunk(Chunk& c) {
     unsigned lvid = c.lowBound;
     unsigned limit = c.upBound;
+    unsigned featDim = getFeatDim(c.layer + 1);
 
+    FeatType* featTensor = getVtxFeat(savedNNTensors[c.layer + 1]["grad"].getData(),
+      lvid, featDim);
     FeatType* aggTensor = savedNNTensors[c.layer]["aTg"].getData();
     FeatType** eFeatsTensor = savedEdgeTensors[c.layer]["bedge"];
 
+    FeatType* chunkPtr = getVtxFeat(aggTensor, lvid, featDim);
+    std::memcpy(chunkPtr, featTensor, sizeof(FeatType) * (limit - lvid) * featDim);
     while (lvid < limit) {
-        backwardAggregateFromNeighbors(lvid++, aggTensor, eFeatsTensor, getFeatDim(c.layer+1));
+        backwardAggregateFromNeighbors(lvid++, aggTensor, eFeatsTensor, featDim);
     }
 }
 
