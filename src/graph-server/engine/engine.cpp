@@ -1123,8 +1123,8 @@ Engine::aggregator(unsigned tid) {
             }
         } else {
             Chunk c = aggregateQueue.front();
-            printLog(nodeId, "AGGREGATE: Got chunk %u:%u:%s", c.layer, c.chunkId,
-              c.dir == PROP_TYPE::FORWARD ? "F" : "B");
+            // printLog(nodeId, "AGGREGATE: Got chunk %u:%u:%s", c.layer, c.chunkId,
+            //   c.dir == PROP_TYPE::FORWARD ? "F" : "B");
             aggregateQueue.pop();
             aggregateConsumerLock.unlock();
 
@@ -1168,7 +1168,7 @@ Engine::scatterWorker(unsigned tid) {
             consumerQueueLock.unlock();
 
             std::string name = c.dir == PROP_TYPE::FORWARD ? "F" : "B";
-            printLog(nodeId, "SCATTER: Got chunk %u:%u:%s", c.layer, c.chunkId, name.c_str());
+            // printLog(nodeId, "SCATTER: Got chunk %u:%u:%s", c.layer, c.chunkId, name.c_str());
 
             // Get the layer output you want to scatter
             // If forward then it was the previous layer output
@@ -1192,7 +1192,7 @@ Engine::scatterWorker(unsigned tid) {
             unsigned startId = c.lowBound;
             unsigned endId = c.upBound;
             unsigned featDim = getFeatDim(featLayer);
-            printLog(nodeId, "SCATTER: FeatDim for layer %u = %u", c.layer, featDim);
+            // printLog(nodeId, "SCATTER: FeatDim for layer %u = %u", c.layer, featDim);
 
             PROP_TYPE dir = c.dir;
             std::map<unsigned, std::vector<unsigned>>& ghostMap = dir == PROP_TYPE::FORWARD ?
@@ -1234,7 +1234,7 @@ Engine::scatterWorker(unsigned tid) {
 
             }
             // Add chunk into appropriate aggregate queue
-            printLog(nodeId, "SCATTER: Finished chunk %u:%u:%s", c.layer, c.chunkId, name.c_str());
+            // printLog(nodeId, "SCATTER: Finished chunk %u:%u:%s", c.layer, c.chunkId, name.c_str());
             //sleep_ms(750);
             aggregateQueue.push(c);
 
@@ -1322,8 +1322,8 @@ Engine::ghostReceiver(unsigned tid) {
                 std::map<unsigned, unsigned>& globalToGhostVtcs = dir == PROP_TYPE::FORWARD
                   ? graph.srcGhostVtcs : graph.dstGhostVtcs;
 
-                printLog(nodeId, "RECEIVER: Got msg %u:%f", layer,
-                  dir == PROP_TYPE::FORWARD ? "F" : "B");
+                // printLog(nodeId, "RECEIVER: Got msg %u:%s", layer,
+                //   dir == PROP_TYPE::FORWARD ? "F" : "B");
                 FeatType* ghostData = savedNNTensors[layer][tensorName].getData();
                 if (ghostData == NULL) {
                     printLog(nodeId, "RECEIVER: Coudn't find tensor '%s' for layer %u",

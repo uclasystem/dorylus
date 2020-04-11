@@ -66,6 +66,10 @@ LambdaWorker::work(unsigned _wid) {
                     recvTensors(identity, chunk);
                     break;
                 }
+                case (OP::EVAL): {
+                    recvEvalData(identity, chunk);
+                    break;
+                }
                 case (OP::FIN): {
                     markFinish(identity, chunk);
                     break;
@@ -86,9 +90,9 @@ LambdaWorker::work(unsigned _wid) {
  *
  */
 void LambdaWorker::sendTensors(zmq::message_t& client_id, Chunk &chunk) {
-    manager->tableMtx.lock();
+    manager->timeoutMtx.lock();
     bool exist = manager->timeoutTable.find(chunk) != manager->timeoutTable.end();
-    manager->tableMtx.unlock();
+    manager->timeoutMtx.unlock();
     if (exist) {
         workersocket.send(client_id, ZMQ_SNDMORE);
 
@@ -134,9 +138,9 @@ void LambdaWorker::sendTensors(zmq::message_t& client_id, Chunk &chunk) {
 }
 
 void LambdaWorker::recvTensors(zmq::message_t& client_id, Chunk &chunk) {
-    manager->tableMtx.lock();
+    manager->timeoutMtx.lock();
     bool exist = manager->timeoutTable.find(chunk) != manager->timeoutTable.end();
-    manager->tableMtx.unlock();
+    manager->timeoutMtx.unlock();
     if (exist) {
         int ret = 0;
         unsigned more = 1;
@@ -178,10 +182,40 @@ void LambdaWorker::recvTensors(zmq::message_t& client_id, Chunk &chunk) {
     }
 }
 
-void LambdaWorker::markFinish(zmq::message_t& client_id, Chunk &chunk) {
-    manager->tableMtx.lock();
+void LambdaWorker::recvEvalData(zmq::message_t &client_id, Chunk &chunk) {
+    manager->timeoutMtx.lock();
     bool exist = manager->timeoutTable.find(chunk) != manager->timeoutTable.end();
-    manager->tableMtx.unlock();
+    manager->timeoutMtx.unlock();
+    if (exist) {
+        zmq::message_t evalMsg(2 * sizeof(float));
+        workersocket.recv(&evalMsg);
+
+        float acc = *((float *)evalMsg.data());
+        float loss = *(((float *)evalMsg.data()) + 1);
+
+        manager->accMtx.lock();
+        auto &accLoss = manager->accLossTable[chunk.epoch];
+        accLoss.acc += acc;
+        accLoss.loss += loss;
+        accLoss.vtcsCnt += chunk.upBound - chunk.lowBound;
+        accLoss.chunkCnt++;
+        // printLog(manager->nodeId, "epoch %u, chunk %u/%u, acc %.3f, loss %.3f", chunk.epoch, accLoss.chunkCnt, manager->engine->numLambdasForward,
+        //                 accLoss.acc / accLoss.vtcsCnt, accLoss.loss / accLoss.vtcsCnt);
+        if (accLoss.chunkCnt == manager->engine->numLambdasForward) {
+            printLog(manager->nodeId, "epoch %u, acc %.3f, loss %.3f", chunk.epoch, accLoss.acc / accLoss.vtcsCnt, accLoss.loss / accLoss.vtcsCnt);
+        }
+        manager->accMtx.unlock();
+    } else {
+        std::string errMsg = "[ ERROR ] when receiving from " + std::to_string(chunk.chunkId) + ": ";
+        errMsg += "Received duplicate results. Discarding...";
+        printLog(manager->nodeId, errMsg.c_str());
+    }
+}
+
+void LambdaWorker::markFinish(zmq::message_t& client_id, Chunk &chunk) {
+    manager->timeoutMtx.lock();
+    bool exist = manager->timeoutTable.find(chunk) != manager->timeoutTable.end();
+    manager->timeoutMtx.unlock();
     if (exist) {
         zmq::message_t ack(3 * sizeof(unsigned));
         if (manager->async && manager->enqueueAggChunk(chunk)) {
