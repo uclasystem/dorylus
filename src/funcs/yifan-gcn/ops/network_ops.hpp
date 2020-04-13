@@ -31,6 +31,8 @@ void sendTensors(zmq::socket_t& socket, unsigned partId, unsigned layer,
 void sendTensors(zmq::socket_t& socket, Chunk &chunk,
     std::vector<Matrix>& matrices, bool ack = false);
 
+void sendAccLoss(zmq::socket_t &socket, Matrix &predicts, Matrix &labels, Chunk &chunk);
+
 void sendFinMsg(zmq::socket_t& socket, Chunk &chunk);
 
 static inline void
