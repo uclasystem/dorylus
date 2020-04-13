@@ -49,14 +49,21 @@ struct Chunk {
             lowBound > rhs.lowBound || (lowBound == rhs.lowBound && (
             upBound > rhs.upBound))))))))))));
     }
+
+    std::string str() {
+        char buf[128];
+        sprintf(buf, "%u:%s:%u:%u", epoch, dir == PROP_TYPE::FORWARD ? "F" : "B",
+          layer, chunkId);
+
+        return std::string(buf);
+    }
 };
 
 Chunk createChunk(unsigned rows, unsigned nChunks, unsigned id, unsigned layer, PROP_TYPE dir, unsigned ep = 0, bool vertex = true);
 
 extern std::map<size_t, std::string> typeToFormatSpecifier;
 
-typedef std::function<void(unsigned, unsigned, FeatType*, unsigned)> FuncPtr;
-typedef std::queue< Chunk > ChunkQueue;
+typedef std::priority_queue< Chunk > ChunkQueue;
 typedef std::queue< std::pair<unsigned, unsigned> > PairQueue;
 
 
