@@ -169,6 +169,37 @@ void sendTensors(zmq::socket_t& socket, unsigned partId, unsigned layer,
     }
 }
 
+/**
+ *
+ * Calculate batch loss and accuracy based on local forward predicts and labels.
+ */
+void sendAccLoss(zmq::socket_t &socket, Matrix &predicts, Matrix &labels, Chunk &chunk) {
+    float acc = 0.0;
+    float loss = 0.0;
+    const unsigned vtcsCnt = chunk.upBound - chunk.lowBound;
+    const unsigned featDim = labels.getCols();
+    FeatType *currLabel = labels.getData();
+    FeatType *currPred = predicts.getData();
+    for (unsigned i = 0; i < vtcsCnt; i++) {
+        acc += currLabel[argmax(currPred, currPred + featDim)];
+        loss -= std::log(currPred[argmax(currLabel, currLabel + featDim)]);
+
+        currLabel += featDim;
+        currPred += featDim;
+    }
+
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader(header.data(), OP::EVAL, chunk);
+    zmq::message_t payload(2 * sizeof(float));
+    char *bufPtr = (char *)payload.data();
+    memcpy(bufPtr, &acc, sizeof(float));
+    bufPtr += sizeof(float);
+    memcpy(bufPtr, &loss, sizeof(float));
+
+    socket.send(header, ZMQ_SNDMORE);
+    socket.send(payload);
+}
+
 void sendFinMsg(zmq::socket_t& socket, Chunk &chunk) {
     zmq::message_t header(HEADER_SIZE);
     populateHeader(header.data(), OP::FIN, chunk);

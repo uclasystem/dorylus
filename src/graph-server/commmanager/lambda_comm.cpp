@@ -14,9 +14,6 @@ LambdaComm::LambdaComm(Engine *_engine) :
         numChunk(_engine->numLambdasForward),
         relaunchCnt(0), async(false),
         dport(_engine->dataserverPort), wport(_engine->weightserverPort),
-        // TODO: (YIFAN) WARNING!!! Here we should push results back to scatterQueue.
-        // Since we don't have scatter now, I set it to aggregateQueue for testing.
-        // Change both resLock and resQueue to scatter ones later!
         savedNNTensors(_engine->savedNNTensors),
         resQueue(_engine->scatterQueue), aggQueue(_engine->aggregateQueue),
         ctx(4), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
@@ -51,11 +48,11 @@ void LambdaComm::setAsync(bool _async) {
 }
 
 void LambdaComm::NNCompute(Chunk &chunk) {
-//    printLog(nodeId, "NNComp: %u:%u:%s", chunk.layer, chunk.chunkId,
-//      chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
-    tableMtx.lock();
+    // printLog(nodeId, "NNComp: %u:%u:%s", chunk.layer, chunk.chunkId,
+    //   chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
+    timeoutMtx.lock();
     timeoutTable[chunk] = timestamp_ms();
-    tableMtx.unlock();
+    timeoutMtx.unlock();
     invokeLambda(chunk);
 }
 
@@ -72,16 +69,16 @@ void LambdaComm::NNSync() {
 }
 
 bool LambdaComm::NNRecv(Chunk &chunk) {
-//    printLog(nodeId, "NNRecv: %u:%u:%s", chunk.layer, chunk.chunkId,
-//      chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
-    tableMtx.lock();
+    // printLog(nodeId, "NNRecv: %u:%u:%s", chunk.layer, chunk.chunkId,
+    //   chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
+    timeoutMtx.lock();
     if (timeoutTable.find(chunk) == timeoutTable.end()) {
-        tableMtx.unlock();
+        timeoutMtx.unlock();
         // This chunk has already finished
         return false;
     } else {
         timeoutTable.erase(chunk);
-        tableMtx.unlock();
+        timeoutMtx.unlock();
 
         // If final layer, switch direction
         if (chunk.layer == 1) chunk.dir = PROP_TYPE::BACKWARD;
@@ -98,15 +95,15 @@ bool LambdaComm::NNRecv(Chunk &chunk) {
 // This was made specifically with GCNs in mind and is
 // missing an enqueue for a whole phase of computation
 bool LambdaComm::enqueueAggChunk(Chunk& chunk) {
-//    printLog(nodeId, "NNEnq: %u:%u", chunk.layer, chunk.chunkId,
-//      chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
-    tableMtx.lock();
+    // printLog(nodeId, "NNEnq: %u:%u", chunk.layer, chunk.chunkId,
+    //   chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
+    timeoutMtx.lock();
     if (timeoutTable.find(chunk) == timeoutTable.end()) {
-        tableMtx.unlock();
+        timeoutMtx.unlock();
         return false;
     } else {
         timeoutTable.erase(chunk);
-        tableMtx.unlock();
+        timeoutMtx.unlock();
 
         // If bounded-staleness enabled, increment the finished chunks for this epoch
         // If the min epoch has finished, allow chunks to move to the next epoch
@@ -156,10 +153,10 @@ void LambdaComm::asyncRelaunchLoop() {
 
 void LambdaComm::relaunchLambda(const Chunk &chunk) {
     printLog(nodeId, "Relaunch lambda %u for layer %u...", chunk.chunkId, chunk.layer);
-    tableMtx.lock();
+    timeoutMtx.lock();
     timeoutTable[chunk] = timestamp_ms();
     ++relaunchCnt;
-    tableMtx.unlock();
+    timeoutMtx.unlock();
     invokeLambda(chunk);
 }
 
@@ -181,6 +178,7 @@ void LambdaComm::invokeLambda(const Chunk &chunk) {
     jsonPayload.WithString("wserver", wserver);
     jsonPayload.WithInteger("dport", dport);
     jsonPayload.WithInteger("wport", wport);
+    jsonPayload.WithBool("eval", chunk.epoch % 5 == 0);
 
     jsonPayload.WithInteger("id", chunk.chunkId);
     jsonPayload.WithInteger("lb", chunk.lowBound);

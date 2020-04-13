@@ -41,7 +41,7 @@
 
 static const bool relaunching = false;
 
-#define LAMBDA_VTX_NN "john-gcn"
+#define LAMBDA_VTX_NN "yifan-gcn"
 #define ALLOCATION_TAG "LambdaComm"
 
 class LambdaWorker;
@@ -77,8 +77,18 @@ public:
     void asyncRelaunchLoop();
     void relaunchLambda(const Chunk &chunk);
     unsigned relaunchCnt;
-    std::mutex tableMtx;
+    std::mutex timeoutMtx;
     std::map<Chunk, unsigned> timeoutTable;
+
+
+    struct AccLoss {
+        float acc = 0.0;
+        float loss = 0.0;
+        unsigned vtcsCnt = 0;
+        unsigned chunkCnt = 0;
+    };
+    std::mutex accMtx;
+    std::map<unsigned, AccLoss> accLossTable; // epoch -> AccLoss
 
     // Invoke lambda function
     void invokeLambda(const Chunk &chunk);

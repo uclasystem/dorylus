@@ -1248,7 +1248,7 @@ Engine::scatterWorker(unsigned tid) {
 
             }
             // Add chunk into appropriate aggregate queue
-            printLog(nodeId, "SCATTER: Finished %s", c.str().c_str());
+            //printLog(nodeId, "SCATTER: Finished %s", c.str().c_str());
             aggregateQueue.push(c);
 
             delete[] batchedIds;
@@ -1335,8 +1335,8 @@ Engine::ghostReceiver(unsigned tid) {
                 std::map<unsigned, unsigned>& globalToGhostVtcs = dir == PROP_TYPE::FORWARD
                   ? graph.srcGhostVtcs : graph.dstGhostVtcs;
 
-                printLog(nodeId, "RECEIVER: Got msg %u:%s", layer,
-                  dir == PROP_TYPE::FORWARD ? "F" : "B");
+                // printLog(nodeId, "RECEIVER: Got msg %u:%s", layer,
+                //   dir == PROP_TYPE::FORWARD ? "F" : "B");
                 FeatType* ghostData = savedNNTensors[layer][tensorName].getData();
                 if (ghostData == NULL) {
                     printLog(nodeId, "RECEIVER: Coudn't find tensor '%s' for layer %u",

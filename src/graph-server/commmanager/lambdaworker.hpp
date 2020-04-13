@@ -43,6 +43,7 @@ public:
     void work(unsigned wid);
     void sendTensors(zmq::message_t& client_id, Chunk &chunk);
     void recvTensors(zmq::message_t& client_id, Chunk &chunk);
+    void recvEvalData(zmq::message_t& client_id, Chunk &chunk);
     void markFinish(zmq::message_t& client_id, Chunk &chunk);
 
     LambdaComm *manager;
