@@ -14,9 +14,8 @@ LambdaComm::LambdaComm(Engine *_engine) :
         numChunk(_engine->numLambdasForward),
         relaunchCnt(0), async(false),
         dport(_engine->dataserverPort), wport(_engine->weightserverPort),
-        savedNNTensors(_engine->savedNNTensors), resLock(_engine->consumerQueueLock),
-        resQueue(_engine->scatterQueue),
-        aggLock(_engine->aggregateConsumerLock), aggQueue(_engine->aggregateQueue),
+        savedNNTensors(_engine->savedNNTensors),
+        resQueue(_engine->scatterQueue), aggQueue(_engine->aggregateQueue),
         ctx(4), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
         numListeners(4), engine(_engine) { // TODO: Decide numListeners.
     nodeId = _engine->nodeId;
@@ -26,6 +25,9 @@ LambdaComm::LambdaComm(Engine *_engine) :
     setupSockets();
     createWorkers();
     startRelaunchThd();
+
+    resLock.init();
+    aggLock.init();
 
     lambdaOut = std::ofstream(std::string("lambdats") + std::to_string(numChunk) + std::string(".txt"), std::ofstream::out);
 }
@@ -89,6 +91,9 @@ bool LambdaComm::NNRecv(Chunk &chunk) {
     return true;
 }
 
+// JOHN: This function may make more sense after apply edge?
+// This was made specifically with GCNs in mind and is
+// missing an enqueue for a whole phase of computation
 bool LambdaComm::enqueueAggChunk(Chunk& chunk) {
     // printLog(nodeId, "NNEnq: %u:%u", chunk.layer, chunk.chunkId,
     //   chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
@@ -99,6 +104,17 @@ bool LambdaComm::enqueueAggChunk(Chunk& chunk) {
     } else {
         timeoutTable.erase(chunk);
         timeoutMtx.unlock();
+
+        // If bounded-staleness enabled, increment the finished chunks for this epoch
+        // If the min epoch has finished, allow chunks to move to the next epoch
+        if (engine->staleness != UINT_MAX) {
+            unsigned ind = engine->staleness != 0 ? chunk.epoch % engine->staleness : 0;
+            if (++(engine->numFinishedEpoch[ind]) == numChunk
+              && chunk.epoch == engine->minEpoch) {
+                ++(engine->minEpoch);
+                engine->numFinishedEpoch[ind] = 0;
+            }
+        }
 
         chunk.layer = 0;
         chunk.dir = PROP_TYPE::FORWARD;

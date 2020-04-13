@@ -99,6 +99,9 @@ Engine::init(int argc, char *argv[]) {
     savedNNTensors.resize(numLayers);
     savedEdgeTensors.resize(numLayers);
 
+    // Track the number of chunks finished at each epoch;
+    if (staleness != UINT_MAX) numFinishedEpoch.resize(staleness+1);
+
     // Init it here for collecting data when reading files
     forwardVerticesInitData = new FeatType[getFeatDim(0) * graph.localVtxCnt];
     forwardGhostInitData = new FeatType[getFeatDim(0) * graph.srcGhostCnt];
@@ -114,7 +117,8 @@ Engine::init(int argc, char *argv[]) {
     recvCntLock.init();
     recvCntCond.init(recvCntLock);
 
-    consumerQueueLock.init();
+    aggQueueLock.init();
+    scatQueueLock.init();
 
     // Initialize computation thread barrier.
     barComp.init(cThreads);
@@ -1112,9 +1116,9 @@ Engine::aggregator(unsigned tid) {
     int SLEEP_PERIOD = INIT_PERIOD;
 
     while (true) {
-        aggregateConsumerLock.lock();
+        aggQueueLock.lock();
         if (aggregateQueue.empty()) {
-            aggregateConsumerLock.unlock();
+            aggQueueLock.unlock();
             usleep(SLEEP_PERIOD);
             failedTrials++;
             if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
@@ -1122,22 +1126,34 @@ Engine::aggregator(unsigned tid) {
                 SLEEP_PERIOD *= 2;
             }
         } else {
-            Chunk c = aggregateQueue.front();
-            // printLog(nodeId, "AGGREGATE: Got chunk %u:%u:%s", c.layer, c.chunkId,
-            //   c.dir == PROP_TYPE::FORWARD ? "F" : "B");
-            aggregateQueue.pop();
-            aggregateConsumerLock.unlock();
+            Chunk c = aggregateQueue.top();
 
-            if (c.dir == PROP_TYPE::FORWARD) {
-                aggregateChunk(c);
+            // There is a chunk but it is beyond the staleness bound
+            if (staleness != UINT_MAX && c.layer == 0 && c.dir == PROP_TYPE::FORWARD
+              && c.epoch > minEpoch + staleness) {
+                aggQueueLock.unlock();
+                usleep(SLEEP_PERIOD);
+                failedTrials++;
+                if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
+                    failedTrials = 0;
+                    SLEEP_PERIOD *= 2;
+                }
+            // There is a chunk to process that is within the bound
             } else {
-                aggregateBPChunk(c);
-            }
-            resComm->NNCompute(c);
+                printLog(nodeId, "AGGREGATE: Got %s", c.str().c_str());
+                aggregateQueue.pop();
+                aggQueueLock.unlock();
 
-            SLEEP_PERIOD = INIT_PERIOD;
-            failedTrials = 0;
-            //sleep_ms(750);
+                if (c.dir == PROP_TYPE::FORWARD) {
+                    aggregateChunk(c);
+                } else {
+                    aggregateBPChunk(c);
+                }
+                resComm->NNCompute(c);
+
+                SLEEP_PERIOD = INIT_PERIOD;
+                failedTrials = 0;
+            }
         }
     }
 }
@@ -1152,9 +1168,9 @@ Engine::scatterWorker(unsigned tid) {
 
     // Check queue to see if partition ready
     while (!commHalt) {
-        consumerQueueLock.lock();
+        scatQueueLock.lock();
         if (scatterQueue.empty()) {
-            consumerQueueLock.unlock();
+            scatQueueLock.unlock();
             // sleep with backoff
             usleep(SLEEP_PERIOD); // sleep a little and give up CPUs
             failedTrials++;
@@ -1163,12 +1179,11 @@ Engine::scatterWorker(unsigned tid) {
                 SLEEP_PERIOD *= 2;
             }
         } else {
-            Chunk c = scatterQueue.front();
+            Chunk c = scatterQueue.top();
             scatterQueue.pop();
-            consumerQueueLock.unlock();
+            scatQueueLock.unlock();
 
-            std::string name = c.dir == PROP_TYPE::FORWARD ? "F" : "B";
-            // printLog(nodeId, "SCATTER: Got chunk %u:%u:%s", c.layer, c.chunkId, name.c_str());
+            printLog(nodeId, "SCATTER: Got %s", c.str().c_str());
 
             // Get the layer output you want to scatter
             // If forward then it was the previous layer output
@@ -1192,7 +1207,6 @@ Engine::scatterWorker(unsigned tid) {
             unsigned startId = c.lowBound;
             unsigned endId = c.upBound;
             unsigned featDim = getFeatDim(featLayer);
-            // printLog(nodeId, "SCATTER: FeatDim for layer %u = %u", c.layer, featDim);
 
             PROP_TYPE dir = c.dir;
             std::map<unsigned, std::vector<unsigned>>& ghostMap = dir == PROP_TYPE::FORWARD ?
@@ -1234,8 +1248,7 @@ Engine::scatterWorker(unsigned tid) {
 
             }
             // Add chunk into appropriate aggregate queue
-            // printLog(nodeId, "SCATTER: Finished chunk %u:%u:%s", c.layer, c.chunkId, name.c_str());
-            //sleep_ms(750);
+            //printLog(nodeId, "SCATTER: Finished %s", c.str().c_str());
             aggregateQueue.push(c);
 
             delete[] batchedIds;
@@ -1723,39 +1736,40 @@ Engine::scatterBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned featDim
 
 FeatType*
 Engine::fusedGASBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned inFeatDim, unsigned outFeatDim, bool aggregate, bool scatter) {
-    double sttTimer = getTimer();
-
-    consumerQueueLock.lock();
-    while (!rangesToScatter.empty()) rangesToScatter.pop();
-    consumerQueueLock.unlock();
-
-    // Case 1 - First phase, no aggregate needed
-    FeatType* outputTensor = nullptr;
-    if (!aggregate && scatter) {
-        outputTensor = applyScatterPhase(gradTensor, vtcsCnt, inFeatDim, outFeatDim, scatter);
-    }
-    // Case 2 - Full phase including gather, apply, and scatter
-    else if (aggregate && scatter) {
-        outputTensor = aggregateApplyScatterPhase(gradTensor, vtcsCnt, inFeatDim, outFeatDim, scatter);
-    }
-    // Case 3 - Final phase, no scatter needed
-    else if (aggregate && !scatter) {
-        outputTensor = aggregateApplyPhase(gradTensor, vtcsCnt, inFeatDim, outFeatDim, scatter);
-    }
-    else {
-        printLog(nodeId, "\033[1;33m[ UNKOWN ]\033[0m No scatter or aggregate phase");
-    }
-
-    if (vecTimeAggregate.size() < 2 * numLayers) {
-        for (unsigned i = vecTimeAggregate.size(); i < 2 * numLayers; i++) {
-            vecTimeAggregate.push_back(0.0);
-        }
-    }
-    vecTimeAggregate[numLayers + layer - 1] += getTimer() - sttTimer;
-
-    backwardGhostVerticesDataIn = backwardGhostVerticesDataOut;
-
-    return outputTensor;
+    return NULL;
+//    double sttTimer = getTimer();
+//
+//    consumerQueueLock.lock();
+//    while (!rangesToScatter.empty()) rangesToScatter.pop();
+//    consumerQueueLock.unlock();
+//
+//    // Case 1 - First phase, no aggregate needed
+//    FeatType* outputTensor = nullptr;
+//    if (!aggregate && scatter) {
+//        outputTensor = applyScatterPhase(gradTensor, vtcsCnt, inFeatDim, outFeatDim, scatter);
+//    }
+//    // Case 2 - Full phase including gather, apply, and scatter
+//    else if (aggregate && scatter) {
+//        outputTensor = aggregateApplyScatterPhase(gradTensor, vtcsCnt, inFeatDim, outFeatDim, scatter);
+//    }
+//    // Case 3 - Final phase, no scatter needed
+//    else if (aggregate && !scatter) {
+//        outputTensor = aggregateApplyPhase(gradTensor, vtcsCnt, inFeatDim, outFeatDim, scatter);
+//    }
+//    else {
+//        printLog(nodeId, "\033[1;33m[ UNKOWN ]\033[0m No scatter or aggregate phase");
+//    }
+//
+//    if (vecTimeAggregate.size() < 2 * numLayers) {
+//        for (unsigned i = vecTimeAggregate.size(); i < 2 * numLayers; i++) {
+//            vecTimeAggregate.push_back(0.0);
+//        }
+//    }
+//    vecTimeAggregate[numLayers + layer - 1] += getTimer() - sttTimer;
+//
+//    backwardGhostVerticesDataIn = backwardGhostVerticesDataOut;
+//
+//    return outputTensor;
 }
 
 
@@ -2056,84 +2070,84 @@ Engine::sendBackwardGhostGradients(FeatType *gradTensor, unsigned featDim) {
 
 inline void
 Engine::pipelineBackwardGhostGradients(FeatType* inputTensor, unsigned featDim) {
-    int failedTrials = 0;
-    const int INIT_PERIOD = 256;
-    const int MAX_PERIOD = 4096;
-    int SLEEP_PERIOD = INIT_PERIOD;
-    unsigned partsScattered = 0;
-
-    partsScatteredTable = new bool[numLambdasBackward];
-    std::memset(partsScatteredTable, 0, sizeof(bool) * numLambdasBackward);
-
-    // Check queue to see if partition ready
-    while (partsScattered < numLambdasBackward) {
-        consumerQueueLock.lock();
-        if (rangesToScatter.empty()) {
-            consumerQueueLock.unlock();
-            // sleep with backoff
-            usleep(SLEEP_PERIOD); // sleep a little and give up CPUs
-            failedTrials++;
-            if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
-                failedTrials = 0;
-                SLEEP_PERIOD *= 2;
-            }
-        } else {
-            std::pair<unsigned, unsigned> partitionInfo = rangesToScatter.front();
-            rangesToScatter.pop();
-            // Has this partition already been processed
-            if (partsScatteredTable[partitionInfo.first]) {
-                consumerQueueLock.unlock();
-                continue;
-            }
-            partsScatteredTable[partitionInfo.first] = true;
-            consumerQueueLock.unlock();
-
-            // Partition Info: (partId, rowsPerPartition)
-            unsigned startId = partitionInfo.first * partitionInfo.second;
-            unsigned endId = (partitionInfo.first + 1) * partitionInfo.second;
-            endId = endId > graph.localVtxCnt ? graph.localVtxCnt : endId;
-
-            // Create a series of buckets for batching sendout messages to nodes
-            std::vector<unsigned>* batchedIds = new std::vector<unsigned>[numNodes];
-            for (unsigned lvid = startId; lvid < endId; ++lvid) {
-                for (unsigned nid : graph.backwardGhostMap[lvid]) {
-                    batchedIds[nid].push_back(lvid);
-                }
-            }
-
-            // batch sendouts similar to the sequential version
-            bool batchFlag = true;
-            unsigned BATCH_SIZE = std::max(((batchFlag ? MAX_MSG_SIZE : 4096) - DATA_HEADER_SIZE) /
-                                           (sizeof(unsigned) + sizeof(FeatType) * featDim), 1ul); // at least send one vertex
-            for (unsigned nid = 0; nid < numNodes; ++nid) {
-                if (nid == nodeId) {
-                    continue;
-                }
-
-                unsigned backwardGhostVCnt = batchedIds[nid].size();
-                for (unsigned ib = 0; ib < backwardGhostVCnt; ib += BATCH_SIZE) {
-                    unsigned sendBatchSize = (backwardGhostVCnt - ib) < BATCH_SIZE ? (backwardGhostVCnt - ib) : BATCH_SIZE;
-
-                    backwardVerticesPushOut(nid, sendBatchSize, batchedIds[nid].data() + ib, inputTensor, featDim);
-                    recvCntLock.lock();
-                    recvCnt++;
-                    recvCntLock.unlock();
-                }
-            }
-
-            delete[] batchedIds;
-            failedTrials = 0;
-            SLEEP_PERIOD = INIT_PERIOD;
-            partsScattered++;
-        }
-    }
-
-    // Once all partitions scattered, wait on all acks
-    recvCntLock.lock();
-    if (recvCnt > 0) {
-        recvCntCond.wait();
-    }
-    recvCntLock.unlock();
+//    int failedTrials = 0;
+//    const int INIT_PERIOD = 256;
+//    const int MAX_PERIOD = 4096;
+//    int SLEEP_PERIOD = INIT_PERIOD;
+//    unsigned partsScattered = 0;
+//
+//    partsScatteredTable = new bool[numLambdasBackward];
+//    std::memset(partsScatteredTable, 0, sizeof(bool) * numLambdasBackward);
+//
+//    // Check queue to see if partition ready
+//    while (partsScattered < numLambdasBackward) {
+//        consumerQueueLock.lock();
+//        if (rangesToScatter.empty()) {
+//            consumerQueueLock.unlock();
+//            // sleep with backoff
+//            usleep(SLEEP_PERIOD); // sleep a little and give up CPUs
+//            failedTrials++;
+//            if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
+//                failedTrials = 0;
+//                SLEEP_PERIOD *= 2;
+//            }
+//        } else {
+//            std::pair<unsigned, unsigned> partitionInfo = rangesToScatter.front();
+//            rangesToScatter.pop();
+//            // Has this partition already been processed
+//            if (partsScatteredTable[partitionInfo.first]) {
+//                consumerQueueLock.unlock();
+//                continue;
+//            }
+//            partsScatteredTable[partitionInfo.first] = true;
+//            consumerQueueLock.unlock();
+//
+//            // Partition Info: (partId, rowsPerPartition)
+//            unsigned startId = partitionInfo.first * partitionInfo.second;
+//            unsigned endId = (partitionInfo.first + 1) * partitionInfo.second;
+//            endId = endId > graph.localVtxCnt ? graph.localVtxCnt : endId;
+//
+//            // Create a series of buckets for batching sendout messages to nodes
+//            std::vector<unsigned>* batchedIds = new std::vector<unsigned>[numNodes];
+//            for (unsigned lvid = startId; lvid < endId; ++lvid) {
+//                for (unsigned nid : graph.backwardGhostMap[lvid]) {
+//                    batchedIds[nid].push_back(lvid);
+//                }
+//            }
+//
+//            // batch sendouts similar to the sequential version
+//            bool batchFlag = true;
+//            unsigned BATCH_SIZE = std::max(((batchFlag ? MAX_MSG_SIZE : 4096) - DATA_HEADER_SIZE) /
+//                                           (sizeof(unsigned) + sizeof(FeatType) * featDim), 1ul); // at least send one vertex
+//            for (unsigned nid = 0; nid < numNodes; ++nid) {
+//                if (nid == nodeId) {
+//                    continue;
+//                }
+//
+//                unsigned backwardGhostVCnt = batchedIds[nid].size();
+//                for (unsigned ib = 0; ib < backwardGhostVCnt; ib += BATCH_SIZE) {
+//                    unsigned sendBatchSize = (backwardGhostVCnt - ib) < BATCH_SIZE ? (backwardGhostVCnt - ib) : BATCH_SIZE;
+//
+//                    backwardVerticesPushOut(nid, sendBatchSize, batchedIds[nid].data() + ib, inputTensor, featDim);
+//                    recvCntLock.lock();
+//                    recvCnt++;
+//                    recvCntLock.unlock();
+//                }
+//            }
+//
+//            delete[] batchedIds;
+//            failedTrials = 0;
+//            SLEEP_PERIOD = INIT_PERIOD;
+//            partsScattered++;
+//        }
+//    }
+//
+//    // Once all partitions scattered, wait on all acks
+//    recvCntLock.lock();
+//    if (recvCnt > 0) {
+//        recvCntCond.wait();
+//    }
+//    recvCntLock.unlock();
 }
 
 inline void
@@ -2385,7 +2399,9 @@ Engine::parseArgs(int argc, char *argv[]) {
     ("validationFrequency", boost::program_options::value<unsigned>(), "Number of epochs to run before validation")
 
     ("MODE", boost::program_options::value<unsigned>(), "0: Lambda, 1: GPU, 2: CPU")
-    ("pipeline", boost::program_options::value<bool>(), "0: Sequential, 1: Pipelined");
+    ("pipeline", boost::program_options::value<bool>(), "0: Sequential, 1: Pipelined")
+    ("staleness", boost::program_options::value<unsigned>()->default_value(unsigned(UINT_MAX)),
+      "Bound on staleness")
     ;
 
     boost::program_options::variables_map vm;
@@ -2468,6 +2484,9 @@ Engine::parseArgs(int argc, char *argv[]) {
 
     assert(vm.count("pipeline"));
     pipeline = vm["pipeline"].as<bool>();
+
+    assert(vm.count("staleness"));
+    staleness = vm["staleness"].as<unsigned>();
 
     printLog(404, "Parsed configuration: dThreads = %u, cThreads = %u, datasetDir = %s, featuresFile = %s, dshMachinesFile = %s, "
              "myPrIpFile = %s, myPubIpFile = %s, undirected = %s, data port set -> %u, control port set -> %u, node port set -> %u",
@@ -2594,6 +2613,10 @@ Engine::loadChunks() {
 
         aggregateQueue.push(Chunk{cid, lowBound, upBound, 0, PROP_TYPE::FORWARD, 1, true});
     }
+
+    // Set the initial bound chunk as epoch 1 layer 0
+    minEpoch = 1;
+    memset(numFinishedEpoch.data(), 0, sizeof(unsigned) * numFinishedEpoch.size());
 }
 
 Engine engine;
