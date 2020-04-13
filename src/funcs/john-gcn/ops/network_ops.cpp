@@ -67,6 +67,11 @@ std::vector<Matrix> reqTensors(zmq::socket_t& socket, Chunk &chunk,
 
 std::vector<Matrix> reqTensors(zmq::socket_t& socket, unsigned arg1,
   unsigned arg2, std::vector<std::string>& tensorRequests) {
+    unsigned failedTrials = 0;
+    const int INIT_PERIOD = 256;
+    const int MAX_PERIOD = 4096;
+    int SLEEP_PERIOD = INIT_PERIOD;
+
     // TODO: (JOHN) This way of implementing repeated requests is
     //  a little weird... hopefully think of some way to make this
     //  cleaner
@@ -99,6 +104,12 @@ std::vector<Matrix> reqTensors(zmq::socket_t& socket, unsigned arg1,
                 matrices.clear();
                 size_t usize = sizeof(more);
                 socket.getsockopt(ZMQ_RCVMORE, &more, &usize);
+
+                usleep(SLEEP_PERIOD);
+                if (++failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
+                    failedTrials = 0;
+                    SLEEP_PERIOD *= 2;
+                }
             } else {
                 matrices.push_back(result);
 
@@ -106,6 +117,11 @@ std::vector<Matrix> reqTensors(zmq::socket_t& socket, unsigned arg1,
                 socket.getsockopt(ZMQ_RCVMORE, &more, &usize);
             }
         }
+
+        // I think I need to clear the rest of the messages on the
+        // socket... Unless error is always the last message sent
+        // on server side
+        // Maybe better to check anyway
     }
 
     return matrices;
