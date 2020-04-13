@@ -162,14 +162,6 @@ public:
     Lock recvCntLock;
     Cond recvCntCond;
 
-    int fwdRecvCnt = 0;
-    Lock fwdRecvCntLock;
-    Cond fwdRecvCntCond;
-
-    int bkwdRecvCnt = 0;
-    Lock bkwdRecvCntLock;
-    Cond bkwdRecvCntCond;
-
     std::string datasetDir;
     std::string outFile;
     std::string featuresFile;
@@ -283,11 +275,13 @@ public:
       unsigned inFeatDim, unsigned outFeatDim, bool scatter);
 
     ChunkQueue aggregateQueue;
-    Lock aggregateConsumerLock;
+    Lock aggQueueLock;
     ChunkQueue scatterQueue;
-    PairQueue rangesToScatter;
-    Lock consumerQueueLock;
-    bool* partsScatteredTable;
+    Lock scatQueueLock;
+
+    unsigned staleness;
+    unsigned minEpoch;
+    std::vector<unsigned> numFinishedEpoch;
 
     bool pipeline = false;
     // END Pipeline related functions/members

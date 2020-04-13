@@ -17,9 +17,8 @@ LambdaComm::LambdaComm(Engine *_engine) :
         // TODO: (YIFAN) WARNING!!! Here we should push results back to scatterQueue.
         // Since we don't have scatter now, I set it to aggregateQueue for testing.
         // Change both resLock and resQueue to scatter ones later!
-        savedNNTensors(_engine->savedNNTensors), resLock(_engine->consumerQueueLock),
-        resQueue(_engine->scatterQueue),
-        aggLock(_engine->aggregateConsumerLock), aggQueue(_engine->aggregateQueue),
+        savedNNTensors(_engine->savedNNTensors),
+        resQueue(_engine->scatterQueue), aggQueue(_engine->aggregateQueue),
         ctx(4), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
         numListeners(4), engine(_engine) { // TODO: Decide numListeners.
     nodeId = _engine->nodeId;
@@ -29,6 +28,9 @@ LambdaComm::LambdaComm(Engine *_engine) :
     setupSockets();
     createWorkers();
     startRelaunchThd();
+
+    resLock.init();
+    aggLock.init();
 
     lambdaOut = std::ofstream(std::string("lambdats") + std::to_string(numChunk) + std::string(".txt"), std::ofstream::out);
 }
@@ -49,8 +51,8 @@ void LambdaComm::setAsync(bool _async) {
 }
 
 void LambdaComm::NNCompute(Chunk &chunk) {
-    printLog(nodeId, "NNComp: %u:%u:%s", chunk.layer, chunk.chunkId,
-      chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
+//    printLog(nodeId, "NNComp: %u:%u:%s", chunk.layer, chunk.chunkId,
+//      chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
     tableMtx.lock();
     timeoutTable[chunk] = timestamp_ms();
     tableMtx.unlock();
@@ -70,8 +72,8 @@ void LambdaComm::NNSync() {
 }
 
 bool LambdaComm::NNRecv(Chunk &chunk) {
-    printLog(nodeId, "NNRecv: %u:%u:%s", chunk.layer, chunk.chunkId,
-      chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
+//    printLog(nodeId, "NNRecv: %u:%u:%s", chunk.layer, chunk.chunkId,
+//      chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
     tableMtx.lock();
     if (timeoutTable.find(chunk) == timeoutTable.end()) {
         tableMtx.unlock();
@@ -92,9 +94,12 @@ bool LambdaComm::NNRecv(Chunk &chunk) {
     return true;
 }
 
+// JOHN: This function may make more sense after apply edge?
+// This was made specifically with GCNs in mind and is
+// missing an enqueue for a whole phase of computation
 bool LambdaComm::enqueueAggChunk(Chunk& chunk) {
-    printLog(nodeId, "NNEnq: %u:%u", chunk.layer, chunk.chunkId,
-      chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
+//    printLog(nodeId, "NNEnq: %u:%u", chunk.layer, chunk.chunkId,
+//      chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
     tableMtx.lock();
     if (timeoutTable.find(chunk) == timeoutTable.end()) {
         tableMtx.unlock();
@@ -102,6 +107,17 @@ bool LambdaComm::enqueueAggChunk(Chunk& chunk) {
     } else {
         timeoutTable.erase(chunk);
         tableMtx.unlock();
+
+        // If bounded-staleness enabled, increment the finished chunks for this epoch
+        // If the min epoch has finished, allow chunks to move to the next epoch
+        if (engine->staleness != UINT_MAX) {
+            unsigned ind = engine->staleness != 0 ? chunk.epoch % engine->staleness : 0;
+            if (++(engine->numFinishedEpoch[ind]) == numChunk
+              && chunk.epoch == engine->minEpoch) {
+                ++(engine->minEpoch);
+                engine->numFinishedEpoch[ind] = 0;
+            }
+        }
 
         chunk.layer = 0;
         chunk.dir = PROP_TYPE::FORWARD;

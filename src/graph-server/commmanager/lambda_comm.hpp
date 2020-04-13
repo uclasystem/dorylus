@@ -68,9 +68,9 @@ public:
     bool halt;
     bool async;
     std::vector<TensorMap>& savedNNTensors;
-    Lock &resLock;
+    Lock resLock;
     ChunkQueue& resQueue;
-    Lock &aggLock;
+    Lock aggLock;
     ChunkQueue& aggQueue;
 
     std::thread *relaunchThd;
