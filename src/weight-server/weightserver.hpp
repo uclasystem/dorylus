@@ -26,6 +26,8 @@
 #include "../common/utils.hpp"
 
 
+#define NUM_LISTENERS 2
+
 enum CTRL_MSG { MASTERUP, WORKERUP, INITDONE, ACK };
 const float LEARNING_RATE = 0.01;
 
@@ -81,17 +83,13 @@ class WeightServer {
     void distributeWeightMatrices();
 
     std::vector<unsigned> dims;
-    std::vector<Matrix> weightMats;
-    std::vector<Matrix> biases;
 
     std::vector< TensorMap > weightsStore;
     std::vector< TensorMap > updateStore;
+    std::vector<Matrix> biases;
 
     // Adam descent variables
     bool adam;  // whether to use standard SGD or Adam Opt
-
-    // List of Matrices for holding updates until they are ready to be applied.
-    std::vector<Matrix> updateMats;
 
     // Number of lambdas requests at backprop.
     unsigned numLambdas;

@@ -14,27 +14,20 @@ extern bool finished;
  *
  */
 ServerWorker::ServerWorker(zmq::context_t& ctx_, WeightServer& _ws,
-                           std::vector<Matrix>& weights_,
-                           std::vector<Matrix>& updates_,
                            std::vector< TensorMap >& updateStore_,
                            std::vector< TensorMap >& _weightsStore,
                            unsigned& numLambdas_,unsigned& lambdaRecved_)
     : ctx(ctx_), workersocket(ctx, ZMQ_DEALER), ws(_ws),
-      weightMats(weights_), updateMats(updates_),
       updateStore(updateStore_), weightsStore(_weightsStore),
       numLambdas(numLambdas_),lambdaRecved(lambdaRecved_) {
-    workersocket.setsockopt(ZMQ_LINGER, 0);
     workersocket.setsockopt(ZMQ_BACKLOG, 500);
     workersocket.connect("inproc://backend");
 }
 
 
 ServerWorker::~ServerWorker() {
-    std::cout << "Closing sockets" << std::endl;
+    workersocket.setsockopt(ZMQ_LINGER, 0);
     workersocket.close();
-
-    std::cout << "Closing context" << std::endl;
-    ctx.close();
 }
 
 
@@ -45,7 +38,7 @@ ServerWorker::~ServerWorker() {
  */
 void
 ServerWorker::work() {
-    std::cout << "[Weight] Starts listening for lambdas' requests..." << std::endl;
+    std::cout << "[ Weight ] Starts listening for lambdas' requests..." << std::endl;
     try {
         while (true) {
             zmq::message_t identity;
@@ -59,26 +52,7 @@ ServerWorker::work() {
 
             bool forward = arg == PROP_TYPE::FORWARD;
 
-            // std::string accMsg;
-            // if (op == OP::PULL_VTX_FORWARD)
-            //     accMsg = "[ACCEPTED] Pull FORWARD for layer " + std::to_string(arg) + ".";
-            // else if (op == OP::PULL_VTX_BACKWARD)
-            //     accMsg = "[ACCEPTED] Pull BACKWARD from layer " + std::to_string(arg) + ".";
-            // else if (op == OP::PUSH_VTX_BACKWARD)
-            //     accMsg = "[ UPDATE ] Push BACKWARD from layer " + std::to_string(arg) + ".";
-            // if (!accMsg.empty())
-            //     std::cout << accMsg << std::endl;
-
             switch (op) {
-                case (OP::PULL_VTX_FORWARD):
-                    sendWeights(identity, arg, true);
-                    break;
-                case (OP::PULL_VTX_BACKWARD):
-                    sendWeights(identity, arg, false);
-                    break;
-                case (OP::PUSH_VTX_BACKWARD):
-                    recvUpdate(identity, arg);
-                    break;
                 case (OP::PUSH):
                     recvTensors(identity, arg2);
                     break;
@@ -101,113 +75,6 @@ ServerWorker::work() {
 }
 
 
-/**
- *
- * Send weight matrix to lambdas.
- *
- */
-void
-ServerWorker::sendWeights(zmq::message_t& client_id, unsigned layer, bool forward) {
-    if (layer >= weightMats.size()) {
-        std::cerr << "[ERROR] No such weights corresponding to layer " << layer << std::endl;
-    }
-
-    workersocket.send(client_id, ZMQ_SNDMORE);    // The identity message will be implicitly consumed to route to the correct client.
-    if (forward && layer == 0 && ws.servers_updates_done == false) {
-        zmq::message_t header(HEADER_SIZE);
-        populateHeader((char *) header.data(), OP::RESP, -1);
-        workersocket.send(header);
-    } else {
-        zmq::message_t header(HEADER_SIZE);
-        populateHeader((char *) header.data(), OP::RESP, 0, weightMats[layer].getRows(), weightMats[layer].getCols());
-        workersocket.send(header, ZMQ_SNDMORE);
-
-        zmq::message_t weightData(weightMats[layer].getDataSize());
-        std::memcpy((char *) weightData.data(), weightMats[layer].getData(), weightMats[layer].getDataSize());
-        workersocket.send(weightData);
-    }
-}
-
-
-
-/**
- *
- * Receive a given update from a worker. If all udpates have been received, alert the weight server that it is
- * time to average and apply them.
- *
- */
-void
-ServerWorker::recvUpdate(zmq::message_t& client_id, unsigned layer) {
-    zmq::message_t updateMsg;
-    workersocket.recv(&updateMsg);
-
-    // Send confirm ACK message.
-    zmq::message_t confirm;
-    workersocket.send(client_id, ZMQ_SNDMORE);
-    workersocket.send(confirm);
-    {
-        // Grab lock then sum the data received in this update matrix.
-        std::lock_guard<std::mutex> update_lock(update_mutex);
-        lambdaRecved++;
-        // if (numLambdas == lambdaRecved) { ws.servers_updates_done = false; }
-        if (ws.servers_updates_done) {
-            ws.servers_updates_done = false;
-        }
-
-        float *updateSum = updateMats[layer].getData();
-        float *updateNew = (float *) updateMsg.data();
-        for (unsigned u = 0; u < updateMats[layer].getNumElemts(); ++u)
-            updateSum[u] +=  updateNew[u];
-    }
-
-    // If this is the final update, begin global aggregation.
-    if (numLambdas == lambdaRecved) {
-        std::string wname = "w";
-        ws.applyUpdate(layer, wname);
-    }
-}
-
-/**
- *
- * Update the weightserver with number of lambdas being called for this iteration.
- * Therefore it knows when to average.
- *
- */
-void
-ServerWorker::setBackpropNumLambdas(zmq::message_t& client_id, unsigned numLambdas_) {
-    std::lock_guard<std::mutex> update_lock(update_mutex);
-    numLambdas = numLambdas_;
-    std::cout << "[  INFO  ] Number of lambdas set to " << numLambdas << "." << std::endl;
-
-    // Send confirm ACK message.
-    zmq::message_t confirm;
-    workersocket.send(client_id, ZMQ_SNDMORE);
-    workersocket.send(confirm);
-}
-
-
-/**
- *
- * After receiving the termination message from the graph server alert
- * the main thread that it can shutdown.
- *
- */
-void
-ServerWorker::terminateServer(zmq::message_t& client_id) {
-    // Send confirm ACK message.
-    // zmq::message_t confirm;
-    // workersocket.send(client_id, ZMQ_SNDMORE);
-    // workersocket.send(confirm);
-
-    std::cerr << "[SHUTDOWN] Server shutting down..." << std::endl;
-
-    std::lock_guard<std::mutex> lk(term_mutex);
-    finished = true;
-    cv.notify_one();
-}
-
-
-// named-tensors
 void ServerWorker::sendTensor(FeatType* dptr, std::string tensorName, unsigned rows,
   unsigned cols, unsigned& more) {
     zmq::message_t responseHeader(TENSOR_HDR_SIZE);
@@ -306,7 +173,8 @@ void ServerWorker::recvUpdateTensor(unsigned layer, TensorMap& weights) {
 
         FeatType* updateSum = updateStore[layer][name].getData();
         FeatType* newUpdate = (FeatType*) tensorData.data();
-        for (unsigned u = 0; u < updateMats[layer].getNumElemts(); ++u)
+        const unsigned numElemts = updateStore[layer][name].getNumElemts();
+        for (unsigned u = 0; u < numElemts; ++u)
             updateSum[u] += newUpdate[u];
     }
 
@@ -324,4 +192,43 @@ void ServerWorker::recvTensors(zmq::message_t& client_id, unsigned layer) {
         workersocket.getsockopt(ZMQ_RCVMORE, &more, &usize);
     }
 }
-// end named-tensors
+
+
+/**
+ *
+ * Update the weightserver with number of lambdas being called for this iteration.
+ * Therefore it knows when to average.
+ *
+ */
+void
+ServerWorker::setBackpropNumLambdas(zmq::message_t& client_id, unsigned numLambdas_) {
+    std::lock_guard<std::mutex> update_lock(update_mutex);
+    numLambdas = numLambdas_;
+    std::cout << "[  INFO  ] Number of lambdas set to " << numLambdas << "." << std::endl;
+
+    // Send confirm ACK message.
+    zmq::message_t confirm;
+    workersocket.send(client_id, ZMQ_SNDMORE);
+    workersocket.send(confirm);
+}
+
+
+/**
+ *
+ * After receiving the termination message from the graph server alert
+ * the main thread that it can shutdown.
+ *
+ */
+void
+ServerWorker::terminateServer(zmq::message_t& client_id) {
+    // Send confirm ACK message.
+    // zmq::message_t confirm;
+    // workersocket.send(client_id, ZMQ_SNDMORE);
+    // workersocket.send(confirm);
+
+    std::cerr << "[SHUTDOWN] Server shutting down..." << std::endl;
+
+    std::lock_guard<std::mutex> lk(term_mutex);
+    finished = true;
+    cv.notify_one();
+}

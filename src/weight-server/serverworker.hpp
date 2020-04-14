@@ -34,8 +34,6 @@ class WeightServer;
 class ServerWorker {
 public:
     ServerWorker(zmq::context_t& ctx_, WeightServer& _ws,
-                 std::vector<Matrix>& weights_,
-                 std::vector<Matrix>& updates_,
                  std::vector< TensorMap >& updateStore_,
                  std::vector< TensorMap >& _weightsStore,
                  unsigned& numLambdas_, unsigned& lambdaRecved_);
@@ -68,9 +66,6 @@ private:
 
     std::vector< TensorMap >& weightsStore;
     std::vector< TensorMap >& updateStore;
-
-    std::vector<Matrix>& updateMats;
-    std::vector<Matrix>& weightMats;
 
     unsigned& numLambdas;
     unsigned& lambdaRecved;

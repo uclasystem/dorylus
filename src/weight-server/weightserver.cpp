@@ -13,9 +13,6 @@ static std::ofstream outfile;
 // set true to write weights to `output_0` for correctness checking.
 static bool checkCorrectnessFlag = true;
 
-#define NUM_LISTENERS 2
-
-
 /** Logging utility. */
 void
 WeightServer::serverLog(std::string info) {
@@ -70,7 +67,8 @@ WeightServer::~WeightServer() {
     std::cout << "[SHUTDOWN] Deleting workers" << std::endl;
 
     if (adam && master && adamOpt) {
-        delete[] adamOpt;
+        delete adamOpt;
+        adamOpt = NULL;
     }
 
     // Delete allocated resources.
@@ -79,16 +77,30 @@ WeightServer::~WeightServer() {
         delete worker_threads[i];
     }
 
-    for (Matrix &mat : weightMats)
-        delete[] mat.getData();
+    unsigned numLayers = weightsStore.size();
+    for (unsigned i = 0; i < numLayers; ++i) {
+        for (auto &kv : weightsStore[i]) {
+            // std::cout << "delete Weight Mat " << kv.first << " " << kv.second.getData() << std::endl;
+            delete[] kv.second.getData();
+        }
+        for (auto &kv : updateStore[i]) {
+            // std::cout << "delete Update Mat " << kv.first << " " << kv.second.getData() << std::endl;
+            delete[] kv.second.getData();
+        }
+    }
 
     std::cout << "[SHUTDOWN] Closing ZMQ" << std::endl;
+    frontend.setsockopt(ZMQ_LINGER, 0);
     frontend.close();
+    backend.setsockopt(ZMQ_LINGER, 0);
     backend.close();
-    ctx.close();
 
+    publisher.setsockopt(ZMQ_LINGER, 0);
     publisher.close();
+    subscriber.setsockopt(ZMQ_LINGER, 0);
     subscriber.close();
+
+    ctx.close();
     dataCtx.close();
 }
 
@@ -108,12 +120,10 @@ WeightServer::run() {
     frontend.bind(host_port);
     backend.bind("inproc://backend");
 
-    std::vector<ServerWorker *> workers;
-    std::vector<std::thread *> worker_threads;
     WeightServer &me = *this;
     for (int i = 0; i < NUM_LISTENERS; ++i) {
-        workers.push_back(new ServerWorker(ctx, me, weightMats, updateMats,
-          updateStore, weightsStore, numLambdas, lambdaRecved));
+        workers.push_back(new ServerWorker(ctx, me, updateStore, weightsStore,
+                                            numLambdas, lambdaRecved));
         worker_threads.push_back(new std::thread(std::bind(&ServerWorker::work, workers[i])));
         worker_threads[i]->detach();
     }
@@ -137,29 +147,31 @@ void WeightServer::applyUpdate(unsigned layer, std::string& name) {
     if (master) {
         // For all nodes.
         FeatType *updateSum = updateStore[layer][name].getData();
+        const unsigned numElemts = updateStore[layer][name].getNumElemts();
         for (unsigned i = 0; i < allNodeIps.size() - 1; ++i) {
             // Recv update info from other weight servers and aggregate.
             zmq::message_t updateMsg;
             subscriber.recv(&updateMsg);
 
             FeatType *updateNew = (FeatType *) updateMsg.data();
-            for (unsigned u = 0; u < updateMats[layer].getNumElemts(); ++u)
+            for (unsigned u = 0; u < numElemts; ++u)
                 updateSum[u] += updateNew[u];
         }
 
-        FeatType *weightData = weightsStore[layer][name].getData();
+        Matrix &weightMat = weightsStore[layer][name];
+        FeatType *weightData = weightMat.getData();
+        assert(numElemts == weightMat.getNumElemts());
         if (adam) {
             adamOpt->update(layer, weightData, updateSum);
         } else {
             // Once all updates have been aggregated, apply to the weights matrices.
-            for (unsigned u = 0; u < weightMats[layer].getNumElemts(); ++u)
-                weightData[u] -=  LEARNING_RATE * updateSum[u];
+            for (unsigned u = 0; u < numElemts; ++u)
+                weightData[u] -= LEARNING_RATE * updateSum[u];
         }
 
         // Send out the updated weights.
-        Matrix &weightMat = weightMats[layer];
         zmq::message_t weightDataMsg(weightMat.getDataSize());
-        std::memcpy(weightDataMsg.data(), weightMat.getData(), weightMat.getDataSize());
+        std::memcpy(weightDataMsg.data(), weightData, weightMat.getDataSize());
 
         publisher.send(weightDataMsg);
 
@@ -183,23 +195,23 @@ void WeightServer::applyUpdate(unsigned layer, std::string& name) {
         // Uncomment below to write updated weights results to `output_0` for correctness checking.
         //
         if (checkCorrectnessFlag) {
+            Matrix &updateMat = updateStore[layer]["w"];
             float tmp = 0.0;
-            for (unsigned i = 0; i < updateMats[layer].getNumElemts(); i++) {
-                tmp += std::fabs(updateMats[layer].getData()[i]);
+            for (unsigned i = 0; i < updateMat.getNumElemts(); i++) {
+                tmp += std::fabs(updateMat.getData()[i]);
             }
 
-            std::cout << "Layer " << layer << " Weight Grad Agg: " << tmp << " Max element: " << *(std::max_element(updateMats[layer].getData(), updateMats[layer].getData() + updateMats[layer].getNumElemts())) << " Min element: " << *(std::min_element(updateMats[layer].getData(), updateMats[layer].getData() + updateMats[layer].getNumElemts())) << std::endl;
-            // std::cout << "[";
-            // for (unsigned i = 0; i < 10; i++) {
-            //     std::cout << updateMats[layer].getData()[i] << " ";
-            // }
-            // std::cout << "]\n";
+            std::cout << "Layer " << layer << " Weight Grad Agg: " << tmp <<
+                " Max element: " <<
+                *(std::max_element(updateMat.getData(), updateMat.getData() + updateMat.getNumElemts())) <<
+                " Min element: " <<
+                *(std::min_element(updateMat.getData(), updateMat.getData() + updateMat.getNumElemts())) << std::endl;
         }
 
         // Worker code.
     } else {
         // Send the updated weight matrices to the master for aggregation.
-        Matrix &updateMat = updateMats[layer];
+        Matrix &updateMat = updateStore[layer][name];
         zmq::message_t updateDataMsg(updateMat.getDataSize());
         std::memcpy(updateDataMsg.data(), updateMat.getData(), updateMat.getDataSize());
         publisher.send(updateDataMsg);
@@ -208,7 +220,7 @@ void WeightServer::applyUpdate(unsigned layer, std::string& name) {
         zmq::message_t updatedWeightMsg;
         subscriber.recv(&updatedWeightMsg);
 
-        Matrix &weightMat = weightMats[layer];
+        Matrix &weightMat = weightsStore[layer][name];
         assert(weightMat.getDataSize() == updatedWeightMsg.size());
 
         // If there are no errors, copy the new data into the weight matrix.
@@ -229,133 +241,14 @@ void WeightServer::applyUpdate(unsigned layer, std::string& name) {
     outfile << "U: " << updateTimer.getTime() << std::endl;     // Output timing results.
 
     // Clear the update buffer.
-    float *updateData = updateMats[layer].getData();
-    for (unsigned u = 0; u < updateMats[layer].getNumElemts(); ++u)
+    float *updateData = updateStore[layer][name].getData();
+    for (unsigned u = 0; u < updateStore[layer][name].getNumElemts(); ++u)
         updateData[u] = 0.;
 
     // Reset number of lambdas.
     lambdaRecved = 0;
 }
 
-void WeightServer::applyUpdates() {
-    Timer updateTimer;
-    updateTimer.start();
-
-    // Master code.
-    if (master) {
-
-        // For all nodes.
-        for (unsigned i = 0; i < allNodeIps.size() - 1; ++i) {
-
-            // For all layers.
-            for (unsigned l = 0; l < updateMats.size(); ++l) {
-
-                // Recv update info from other weight servers and aggregate.
-                zmq::message_t updateMsg;
-                subscriber.recv(&updateMsg);
-
-                FeatType *updateSum = updateMats[l].getData();
-                FeatType *updateNew = (FeatType *) updateMsg.data();
-                for (unsigned u = 0; u < updateMats[l].getNumElemts(); ++u)
-                    updateSum[u] += updateNew[u];
-            }
-        }
-
-        // If adam is enabled, apply the momentum and decay computation
-        if (adam) {
-            for (unsigned i = 0; i < updateMats.size(); ++i) {
-            }
-        }
-
-        // Once all updates have been aggregated, apply to the weights matrices.
-        for (unsigned l = 0; l < weightMats.size(); ++l) {
-            FeatType *weightData = weightMats[l].getData();
-            FeatType *updateSum = updateMats[l].getData();
-            for (unsigned u = 0; u < weightMats[l].getNumElemts(); ++u)
-                weightData[u] -= updateSum[u];
-        }
-
-        // Send out the updated weights.
-        for (unsigned l = 0; l < weightMats.size(); ++l) {
-            Matrix &weightMat = weightMats[l];
-            zmq::message_t weightDataMsg(weightMat.getDataSize());
-            std::memcpy(weightDataMsg.data(), weightMat.getData(), weightMat.getDataSize());
-
-            if (l == weightMats.size() - 1)
-                publisher.send(weightDataMsg);
-            else
-                publisher.send(weightDataMsg, ZMQ_SNDMORE);
-        }
-
-        // Wait for all ACK messages.
-        zmq::message_t inMsg;
-        unsigned acksNeeded = allNodeIps.size() - 1;
-        while (acksNeeded > 0) {
-            subscriber.recv(&inMsg);
-
-            unsigned msgType;
-            std::memcpy(&msgType, inMsg.data(), inMsg.size());
-            if (msgType == CTRL_MSG::ACK)
-                acksNeeded--;
-        }
-
-        serverLog("Finished updating the weights.");
-
-        //
-        // Uncomment below to write updated weights results to `output_0` for correctness checking.
-        //
-        if (checkCorrectnessFlag) {
-            for (Matrix &mat : weightMats)
-                outfile << mat.str() << std::endl;
-        }
-
-        // Worker code.
-    } else {
-        // Send all updated weight matrices to the master for aggregation.
-        for (unsigned i = 0; i < updateMats.size(); ++i) {
-            Matrix &updateMat = updateMats[i];
-            zmq::message_t updateDataMsg(updateMat.getDataSize());
-            std::memcpy(updateDataMsg.data(), updateMat.getData(), updateMat.getDataSize());
-
-            if (i == updateMats.size() - 1)
-                publisher.send(updateDataMsg);
-            else
-                publisher.send(updateDataMsg, ZMQ_SNDMORE);
-        }
-
-        // Wait for the master to reply with the aggregated and averaged weight values.
-        for (Matrix &weightMat : weightMats) {
-            zmq::message_t updatedWeightMsg;
-            subscriber.recv(&updatedWeightMsg);
-
-            assert(weightMat.getDataSize() == updatedWeightMsg.size());
-
-            // If there are no errors, copy the new data into the weight matrix.
-            std::memcpy(weightMat.getData(), updatedWeightMsg.data(), weightMat.getDataSize());
-        }
-
-        // Send back confirm ACK message.
-        unsigned msgType = CTRL_MSG::ACK;
-        zmq::message_t ackMsg(sizeof(unsigned));
-        std::memcpy(ackMsg.data(), &msgType, sizeof(unsigned));
-        publisher.send(ackMsg);
-
-        serverLog("All workers weights updated.");
-    }
-
-    updateTimer.stop();
-    outfile << "U: " << updateTimer.getTime() << std::endl;     // Output timing results.
-
-    // Clear the update buffer.
-    for (unsigned l = 0; l < updateMats.size(); ++l) {
-        float *updateData = updateMats[l].getData();
-        for (unsigned u = 0; u < updateMats[l].getNumElemts(); ++u)
-            updateData[u] = 0.;
-    }
-
-    // Reset number of lambdas.
-    lambdaRecved = 0;
-}
 
 void
 WeightServer::synchronize(unsigned layer) {
@@ -514,16 +407,15 @@ WeightServer::initializeWeightMatrices(std::string &configFileName) {
     // Assert there is at least one layer (input -> output).
     assert(dims.size() > 1);
 
-    updateStore.resize(dims.size());
-    weightsStore.resize(dims.size());
+    updateStore.resize(dims.size() - 1);
+    weightsStore.resize(dims.size() - 1);
 
     // If master node, initialize the weight matrices according to the layer config.
     if (master) {
-        for (unsigned u = 0; u < dims.size() - 1; ++u) {
+        for (unsigned u = 0; u < weightsStore.size(); ++u) {
             // Hardcoding this to xavier init for now. Eventually need to make it
             // configurable
             Matrix w = xavierInitialization(dims[u], dims[u + 1]);
-            weightMats.push_back(w);
             weightsStore[u]["w"] = w;
 
             // Initialize layer biases
@@ -531,23 +423,15 @@ WeightServer::initializeWeightMatrices(std::string &configFileName) {
             //  Make this configurable based on whether or not a bias matrix is requested
             //  for a NN module
             Matrix b = initBias(dims[u + 1]);
-            biases.push_back(b);
             weightsStore[u]["b"] = b;
         }
 
-        for (unsigned u = 0; u < weightMats.size(); ++u)
-            serverLog("Layer " + std::to_string(u) + " - Weights: " + weightMats[u].shape());
-
-        // // for checking correctness
-        // if (checkCorrectnessFlag) {
-        //     for (Matrix& mat : weightMats) {
-        //         outfile << mat.str() << std::endl;
-        //     }
-        // }
+        for (unsigned u = 0; u < weightsStore.size(); ++u)
+            serverLog("Layer " + std::to_string(u) + " - Weights: " + weightsStore[u]["w"].shape());
     }
 
     // For all nodes, initialize empty update matrices buffers.
-    for (unsigned u = 0; u < dims.size() - 1; ++u) {
+    for (unsigned u = 0; u < weightsStore.size(); ++u) {
         unsigned dataSize = dims[u] * dims[u + 1];
         float *dptr = new float[dataSize];
 
@@ -555,7 +439,6 @@ WeightServer::initializeWeightMatrices(std::string &configFileName) {
             dptr[ui] = 0.;
 
         Matrix updateMat = Matrix(dims[u], dims[u+1], dptr);
-        updateMats.push_back(updateMat);
         updateStore[u]["w"] = updateMat;
     }
 }
@@ -656,13 +539,13 @@ void
 WeightServer::distributeWeightMatrices() {
     if (master) {
         // Master sends all the weight matrices to the worker nodes.
-        for (unsigned i = 0; i < weightMats.size(); ++i) {
-            Matrix &weights = weightMats[i];
+        for (unsigned i = 0; i < weightsStore.size(); ++i) {
+            Matrix &weights = weightsStore[i]["w"];
 
             zmq::message_t weightData(weights.getDataSize());
             std::memcpy((char *) weightData.data(), weights.getData(), weights.getDataSize());
 
-            if (i == weightMats.size() - 1)
+            if (i == weightsStore.size() - 1)
                 publisher.send(weightData);
             else
                 publisher.send(weightData, ZMQ_SNDMORE);
@@ -692,7 +575,6 @@ WeightServer::distributeWeightMatrices() {
             std::memcpy(matxData, weightData.data(), weightData.size());
 
             Matrix w(dims[count], dims[count+1], (FeatType*)matxData);
-            weightMats.push_back(w);
             weightsStore[count]["w"] = w;
             ++count;
 
