@@ -49,7 +49,6 @@ class WeightServer {
 
     // Average and apply update batches.
     void applyUpdate(unsigned layer, std::string& name);
-    void applyUpdates();
     void synchronize(unsigned layer);
 
     //For sync

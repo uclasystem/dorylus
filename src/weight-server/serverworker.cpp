@@ -47,72 +47,41 @@ ServerWorker::work() {
             workersocket.recv(&header);
 
             OP op = parse<OP>((char *) header.data(), 0);
-            unsigned arg = parse<unsigned>((char *) header.data(), 1);
-            unsigned arg2 = parse<unsigned>((char*) header.data(), 2);
-
-            bool forward = arg == PROP_TYPE::FORWARD;
 
             switch (op) {
-                case (OP::PUSH):
-                    recvTensors(identity, arg2);
+                case (OP::PUSH): {
+                    Chunk chunk;
+                    memcpy(&chunk, (char *)header.data() + sizeof(OP), sizeof(Chunk));
+                    recvTensors(identity, chunk);
                     break;
-                case (OP::PULL):
-                    sendTensors(identity, arg2, forward);
+                }
+                case (OP::PULL): {
+                    Chunk chunk;
+                    memcpy(&chunk, (char *)header.data() + sizeof(OP), sizeof(Chunk));
+                    sendTensors(identity, chunk);
                     break;
-                case (OP::INFO):    // Used to tell how many lambda threads it should expect for this round.
+                }
+                case (OP::INFO): { // Used to tell how many lambda threads it should expect for this round.
+                    unsigned arg = parse<unsigned>((char *) header.data(), 1);
                     setBackpropNumLambdas(identity, arg);
                     break;
-                case (OP::TERM):
+                }
+                case (OP::TERM): {
                     terminateServer(identity);
                     break;
-                default:
+                }
+                default: {
                     std::cout << "Unknown op, message size: " << identity.size() << " " <<
                     header.size() << std::endl;
                     break;  /** Not an op that I care about. */
+                }
             }
         }
     } catch (std::exception& ex) { /** Context Termintated. */ }
 }
 
 
-void ServerWorker::sendTensor(FeatType* dptr, std::string tensorName, unsigned rows,
-  unsigned cols, unsigned& more) {
-    zmq::message_t responseHeader(TENSOR_HDR_SIZE);
-    populateHeader(responseHeader.data(), OP::PULL, tensorName.c_str(),
-      rows, cols);
-    unsigned bufSize = rows * cols * sizeof(FeatType);
-    zmq::message_t tensorData(dptr, bufSize, nofree, NULL);
-
-    workersocket.send(responseHeader, ZMQ_SNDMORE);
-
-    size_t usize = sizeof(unsigned);
-    workersocket.getsockopt(ZMQ_RCVMORE, &more, &usize);
-    if (!more) {
-        workersocket.send(tensorData);
-    } else {
-        workersocket.send(tensorData, ZMQ_SNDMORE);
-    }
-}
-
-void ServerWorker::sendTensor(Matrix& tensor, unsigned& more) {
-    zmq::message_t responseHeader(TENSOR_HDR_SIZE);
-    populateHeader(responseHeader.data(), OP::PULL, tensor.name().c_str(),
-      tensor.getRows(), tensor.getCols());
-    unsigned bufSize = tensor.getRows() * tensor.getCols() * sizeof(FeatType);
-    zmq::message_t tensorData(tensor.getData(), bufSize, nofree, NULL);
-
-    workersocket.send(responseHeader, ZMQ_SNDMORE);
-
-    size_t usize = sizeof(unsigned);
-    workersocket.getsockopt(ZMQ_RCVMORE, &more, &usize);
-    if (!more) {
-        workersocket.send(tensorData);
-    } else {
-        workersocket.send(tensorData, ZMQ_SNDMORE);
-    }
-}
-
-void ServerWorker::sendTensors(zmq::message_t& client_id, unsigned layer, bool forward) {
+void ServerWorker::sendTensors(zmq::message_t& client_id, Chunk &chunk) {
     unsigned more = 1;
     workersocket.send(client_id, ZMQ_SNDMORE);
     // Weights are not yet up to date
@@ -131,7 +100,7 @@ void ServerWorker::sendTensors(zmq::message_t& client_id, unsigned layer, bool f
     //     }
     // }
 
-    TensorMap& weights = weightsStore[layer];
+    TensorMap& weights = weightsStore[chunk.layer];
     while (more) {
         zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
         workersocket.recv(&tensorHeader);
@@ -148,6 +117,36 @@ void ServerWorker::sendTensors(zmq::message_t& client_id, unsigned layer, bool f
             Matrix& reqMatrix = found->second;
             sendTensor(reqMatrix, more);
         }
+    }
+}
+
+
+void ServerWorker::recvTensors(zmq::message_t& client_id, Chunk &chunk) {
+    unsigned more = 1;
+    TensorMap& weights = weightsStore[chunk.layer];
+    while (more) {
+        recvUpdateTensor(chunk.layer, weights);
+
+        size_t usize = sizeof(more);
+        workersocket.getsockopt(ZMQ_RCVMORE, &more, &usize);
+    }
+}
+
+void ServerWorker::sendTensor(Matrix& tensor, unsigned& more) {
+    zmq::message_t responseHeader(TENSOR_HDR_SIZE);
+    populateHeader(responseHeader.data(), OP::PULL, tensor.name().c_str(),
+      tensor.getRows(), tensor.getCols());
+    unsigned bufSize = tensor.getRows() * tensor.getCols() * sizeof(FeatType);
+    zmq::message_t tensorData(tensor.getData(), bufSize, nofree, NULL);
+
+    workersocket.send(responseHeader, ZMQ_SNDMORE);
+
+    size_t usize = sizeof(unsigned);
+    workersocket.getsockopt(ZMQ_RCVMORE, &more, &usize);
+    if (!more) {
+        workersocket.send(tensorData);
+    } else {
+        workersocket.send(tensorData, ZMQ_SNDMORE);
     }
 }
 
@@ -181,18 +180,6 @@ void ServerWorker::recvUpdateTensor(unsigned layer, TensorMap& weights) {
     if (numLambdas == lambdaRecved)
         ws.applyUpdate(layer, name);
 }
-
-void ServerWorker::recvTensors(zmq::message_t& client_id, unsigned layer) {
-    unsigned more = 1;
-    TensorMap& weights = weightsStore[layer];
-    while (more) {
-        recvUpdateTensor(layer, weights);
-
-        size_t usize = sizeof(more);
-        workersocket.getsockopt(ZMQ_RCVMORE, &more, &usize);
-    }
-}
-
 
 /**
  *

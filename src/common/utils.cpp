@@ -1,15 +1,22 @@
 #include "utils.hpp"
+#include <cmath>
 
 GPUTimers gtimers;
-
-std::ofstream debugFile;
-std::mutex fileMutex;
-
 FILE* outputFile;
+
+
+Chunk createChunk(unsigned rows, unsigned nChunks, unsigned id, unsigned layer,
+  PROP_TYPE dir, unsigned ep, bool vertex) {
+    unsigned partRows = std::ceil((float)rows / (float)nChunks);
+    unsigned lowBound = id * partRows;
+    unsigned upBound = (id + 1) * partRows;
+    if (upBound > rows) upBound = rows;
+
+    return Chunk{id, lowBound, upBound, layer, dir, ep, vertex};
+}
 
 std::ofstream matrixFile;
 std::mutex mFileMutex;
-
 
 void matrixToFile(std::string name, FeatType* fptr, unsigned start, unsigned end, unsigned c) {
     matrixFile.open(name, std::ofstream::trunc | std::ofstream::out);

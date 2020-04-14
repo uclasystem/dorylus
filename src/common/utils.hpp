@@ -1,6 +1,7 @@
 #ifndef __GLOBAL_UTILS_HPP__
 #define __GLOBAL_UTILS_HPP__
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <cstring>
@@ -23,11 +24,11 @@
 
 /** Feature type is float, so be consistent. */
 typedef float FeatType;
-
-#define TENSOR_NAME_SIZE 8
+typedef float EdgeType;
 
 const size_t HEADER_SIZE = sizeof(unsigned) + sizeof(unsigned) * 6 + sizeof(bool); // sizeof(OP) + sizeof(Chunk)
 // OP, TENSOR_NAME, FIELD0, FIELD1, ...
+static const size_t TENSOR_NAME_SIZE = 8;
 static const size_t TENSOR_HDR_SIZE = sizeof(unsigned) * 5 + TENSOR_NAME_SIZE;
 enum OP {
     REQ_VTX_FORWARD, PUSH_VTX_FORWARD, PULL_VTX_FORWARD,
@@ -45,6 +46,41 @@ enum AGGREGATOR { WSUM, MEAN, ADD, MIN, MAX };
 
 #define ERR_HEADER_FIELD UINT_MAX
 
+struct Chunk {
+    unsigned chunkId;
+    unsigned lowBound;
+    unsigned upBound;
+    unsigned layer;
+    PROP_TYPE dir;
+
+    unsigned epoch;
+
+    bool vertex;
+
+    bool operator<(const Chunk &rhs) const {
+        // TODO: (YIFAN) Assign priority in the computation sequence
+        return
+            epoch > rhs.epoch || (epoch == rhs.epoch && (
+            dir > rhs.dir || (dir == rhs.dir && (
+            layer > rhs.layer || (layer == rhs.layer && (
+            (vertex && !rhs.vertex) || (vertex == rhs.vertex && (
+            chunkId > rhs.chunkId || (chunkId == rhs.chunkId && (
+            lowBound > rhs.lowBound || (lowBound == rhs.lowBound && (
+            upBound > rhs.upBound))))))))))));
+    }
+
+    std::string str() {
+        char buf[128];
+        sprintf(buf, "%u:%s:%u:%u", epoch, dir == PROP_TYPE::FORWARD ? "F" : "B",
+          layer, chunkId);
+
+        return std::string(buf);
+    }
+};
+
+Chunk createChunk(unsigned rows, unsigned nChunks, unsigned id, unsigned layer, PROP_TYPE dir, unsigned ep = 0, bool vertex = true);
+
+inline size_t argmax(FeatType* first, FeatType* last) { return std::distance(first, std::max_element(first, last)); }
 
 /**
  *

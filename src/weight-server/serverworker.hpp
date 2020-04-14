@@ -50,16 +50,11 @@ private:
     void setBackpropNumLambdas(zmq::message_t& client_id, unsigned numLambdas_);
     void terminateServer(zmq::message_t& client_id);
 
-    // named-tensors
-    void sendTensor(FeatType* dptr, std::string tensorName, unsigned rows,
-      unsigned cols, unsigned& more);
     void sendTensor(Matrix& tensor, unsigned& more);
-    //void getPartitionInfo(Matrix& tensor, unsigned partId, unsigned& more);
-    void sendTensors(zmq::message_t& client_id, unsigned layer, bool forward);
+    void sendTensors(zmq::message_t& client_id, Chunk &chunk);
 
     void recvUpdateTensor(unsigned layer, TensorMap& weights);
-    void recvTensors(zmq::message_t& client_id, unsigned layer);
-    // end named-tensors
+    void recvTensors(zmq::message_t& client_id, Chunk &chunk);
 
     zmq::context_t &ctx;
     zmq::socket_t workersocket;
