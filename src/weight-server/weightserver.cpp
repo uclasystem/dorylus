@@ -5,23 +5,12 @@ std::mutex term_mutex, update_mutex;
 std::condition_variable cv;
 bool finished = false;
 
-
 static std::vector<ServerWorker *> workers;
 static std::vector<std::thread *> worker_threads;
 static std::ofstream outfile;
 
 // set true to write weights to `output_0` for correctness checking.
 static bool checkCorrectnessFlag = true;
-
-/** Logging utility. */
-void
-WeightServer::serverLog(std::string info) {
-    char msg[512];
-    sprintf(msg, "[ %s ] %s\n", master ? "MASTER" : "WORKER", info.c_str());
-    std::string msgBase = master ? "[ MASTER ] " : "[ WORKER ] ";
-    fprintf(stdout, "%s", msg);
-}
-
 
 /**
  *
@@ -64,28 +53,29 @@ WeightServer::WeightServer(std::string &weightServersFile, std::string &myPrIpFi
 }
 
 WeightServer::~WeightServer() {
-    std::cout << "[SHUTDOWN] Deleting workers" << std::endl;
-
-    if (adam && master && adamOpt) {
+    if (adamOpt) {
         delete adamOpt;
         adamOpt = NULL;
     }
 
     // Delete allocated resources.
+    std::cout << "[SHUTDOWN] Deleting workers" << std::endl;
     for (int i = 0; i < NUM_LISTENERS; ++i) {
-        delete workers[i];
         delete worker_threads[i];
+        delete workers[i];
     }
 
     unsigned numLayers = weightsStore.size();
     for (unsigned i = 0; i < numLayers; ++i) {
-        for (auto &kv : weightsStore[i]) {
-            // std::cout << "delete Weight Mat " << kv.first << " " << kv.second.getData() << std::endl;
-            delete[] kv.second.getData();
+        for (auto &kkv : weightsStore[i]) {
+            for (auto &kv : kkv.second.ver2Mat) {
+                // std::cout << "delete Weight Mat " << kkv.first << " " << kv.second.mat.getData() << std::endl;
+                kv.second.mat.free();
+            }
         }
         for (auto &kv : updateStore[i]) {
             // std::cout << "delete Update Mat " << kv.first << " " << kv.second.getData() << std::endl;
-            delete[] kv.second.getData();
+            kv.second.free();
         }
     }
 
@@ -158,7 +148,7 @@ void WeightServer::applyUpdate(unsigned layer, std::string& name) {
                 updateSum[u] += updateNew[u];
         }
 
-        Matrix &weightMat = weightsStore[layer][name];
+        Matrix &weightMat = weightsStore[layer][name].updateVersion();
         FeatType *weightData = weightMat.getData();
         assert(numElemts == weightMat.getNumElemts());
         if (adam) {
@@ -220,7 +210,7 @@ void WeightServer::applyUpdate(unsigned layer, std::string& name) {
         zmq::message_t updatedWeightMsg;
         subscriber.recv(&updatedWeightMsg);
 
-        Matrix &weightMat = weightsStore[layer][name];
+        Matrix &weightMat = weightsStore[layer][name].updateVersion();
         assert(weightMat.getDataSize() == updatedWeightMsg.size());
 
         // If there are no errors, copy the new data into the weight matrix.
@@ -416,18 +406,21 @@ WeightServer::initializeWeightMatrices(std::string &configFileName) {
             // Hardcoding this to xavier init for now. Eventually need to make it
             // configurable
             Matrix w = xavierInitialization(dims[u], dims[u + 1]);
-            weightsStore[u]["w"] = w;
+            weightsStore[u]["w"] = VersionMatrix(w);
 
             // Initialize layer biases
             // TODO:
             //  Make this configurable based on whether or not a bias matrix is requested
             //  for a NN module
-            Matrix b = initBias(dims[u + 1]);
-            weightsStore[u]["b"] = b;
+            bool initBiasFlag = false;
+            if (initBiasFlag) {
+                Matrix b = initBias(dims[u + 1]);
+                weightsStore[u]["b"] = b;
+            }
         }
 
         for (unsigned u = 0; u < weightsStore.size(); ++u)
-            serverLog("Layer " + std::to_string(u) + " - Weights: " + weightsStore[u]["w"].shape());
+            serverLog("Layer " + std::to_string(u) + " - Weights: " + weightsStore[u]["w"].currMat().shape());
     }
 
     // For all nodes, initialize empty update matrices buffers.
@@ -463,7 +456,7 @@ WeightServer::xavierInitialization(unsigned dim1, unsigned dim2) {
     float normFactor = std::sqrt(6.0 / (float (dim1 + dim2)));
     for (unsigned ui = 0; ui < dataSize; ++ui)
         dptr[ui] *= normFactor;
-    return Matrix(dim1, dim2, dptr);
+    return Matrix("w", dim1, dim2, dptr);
 }
 
 /**
@@ -487,7 +480,7 @@ WeightServer::kaimingInitialization(unsigned dim1, unsigned dim2) {
     for (unsigned ui = 0; ui < dataSize; ++ui)
         dptr[ui] *= normFactor;
 
-    return Matrix(dim1, dim2, dptr);
+    return Matrix("w", dim1, dim2, dptr);
 }
 
 /**
@@ -508,7 +501,7 @@ WeightServer::randomInitialization(unsigned dim1, unsigned dim2,
     for (unsigned ui = 0; ui < dataSize; ++ui)
         dptr[ui] = dist(dre);
 
-    return Matrix(dim1, dim2, dptr);
+    return Matrix("w", dim1, dim2, dptr);
 }
 
 /**
@@ -525,7 +518,7 @@ WeightServer::initBias(unsigned dim, float initVal) {
     for (unsigned ui = 0; ui < dim; ++ui)
         dptr[ui] = initVal;
 
-    return Matrix(dim, 1, dptr);
+    return Matrix("b", dim, 1, dptr);
 }
 
 
@@ -540,7 +533,7 @@ WeightServer::distributeWeightMatrices() {
     if (master) {
         // Master sends all the weight matrices to the worker nodes.
         for (unsigned i = 0; i < weightsStore.size(); ++i) {
-            Matrix &weights = weightsStore[i]["w"];
+            Matrix &weights = weightsStore[i]["w"].currMat();
 
             zmq::message_t weightData(weights.getDataSize());
             std::memcpy((char *) weightData.data(), weights.getData(), weights.getDataSize());
@@ -575,7 +568,7 @@ WeightServer::distributeWeightMatrices() {
             std::memcpy(matxData, weightData.data(), weightData.size());
 
             Matrix w(dims[count], dims[count+1], (FeatType*)matxData);
-            weightsStore[count]["w"] = w;
+            weightsStore[count]["w"] = VersionMatrix(w);
             ++count;
 
             size_t more_size = sizeof(more);
@@ -591,6 +584,15 @@ WeightServer::distributeWeightMatrices() {
 
     if (master)
         serverLog("All nodes up to date.");
+}
+
+/** Logging utility. */
+void
+WeightServer::serverLog(std::string info) {
+    char msg[512];
+    sprintf(msg, "[ %s ] %s\n", master ? "MASTER" : "WORKER", info.c_str());
+    std::string msgBase = master ? "[ MASTER ] " : "[ WORKER ] ";
+    fprintf(stdout, "%s", msg);
 }
 
 

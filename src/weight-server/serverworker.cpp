@@ -15,7 +15,7 @@ extern bool finished;
  */
 ServerWorker::ServerWorker(zmq::context_t& ctx_, WeightServer& _ws,
                            std::vector< TensorMap >& updateStore_,
-                           std::vector< TensorMap >& _weightsStore,
+                           std::vector<VersionTensorMap>& _weightsStore,
                            unsigned& numLambdas_,unsigned& lambdaRecved_)
     : ctx(ctx_), workersocket(ctx, ZMQ_DEALER), ws(_ws),
       updateStore(updateStore_), weightsStore(_weightsStore),
@@ -99,8 +99,7 @@ void ServerWorker::sendTensors(zmq::message_t& client_id, Chunk &chunk) {
     //         workersocket.getsockopt(ZMQ_RCVMORE, &more, &usize);
     //     }
     // }
-
-    TensorMap& weights = weightsStore[chunk.layer];
+    VersionTensorMap& weights = weightsStore[chunk.layer];
     while (more) {
         zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
         workersocket.recv(&tensorHeader);
@@ -114,18 +113,19 @@ void ServerWorker::sendTensors(zmq::message_t& client_id, Chunk &chunk) {
             workersocket.send(errorHeader);
             return;
         } else {
-            Matrix& reqMatrix = found->second;
+            ws.wstoreMtx.lock();
+            Matrix& reqMatrix = found->second.getMat(chunk);
+            ws.wstoreMtx.unlock();
             sendTensor(reqMatrix, more);
         }
     }
 }
 
-
 void ServerWorker::recvTensors(zmq::message_t& client_id, Chunk &chunk) {
     unsigned more = 1;
-    TensorMap& weights = weightsStore[chunk.layer];
+    VersionTensorMap& weights = weightsStore[chunk.layer];
     while (more) {
-        recvUpdateTensor(chunk.layer, weights);
+        recvUpdateTensor(chunk, weights);
 
         size_t usize = sizeof(more);
         workersocket.getsockopt(ZMQ_RCVMORE, &more, &usize);
@@ -150,7 +150,7 @@ void ServerWorker::sendTensor(Matrix& tensor, unsigned& more) {
     }
 }
 
-void ServerWorker::recvUpdateTensor(unsigned layer, TensorMap& weights) {
+void ServerWorker::recvUpdateTensor(Chunk &chunk, VersionTensorMap& weights) {
     zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
     zmq::message_t tensorData;
 
@@ -158,9 +158,14 @@ void ServerWorker::recvUpdateTensor(unsigned layer, TensorMap& weights) {
     workersocket.recv(&tensorData);
 
     std::string name = parseName((char*)tensorHeader.data());
-    if (weights.find(name) == weights.end()) {
+    auto found = weights.find(name);
+    if (found == weights.end()) {
         std::cerr << "Pushed tensor '" << name
           << "' not found. Make sure to allocate it before starting workers!" << std::endl;
+    } else {
+        ws.wstoreMtx.lock();
+        found->second.decRef(chunk);
+        ws.wstoreMtx.unlock();
     }
 
     {
@@ -170,15 +175,18 @@ void ServerWorker::recvUpdateTensor(unsigned layer, TensorMap& weights) {
             ws.servers_updates_done = false;
         }
 
-        FeatType* updateSum = updateStore[layer][name].getData();
         FeatType* newUpdate = (FeatType*) tensorData.data();
-        const unsigned numElemts = updateStore[layer][name].getNumElemts();
+
+        Matrix &updMat = updateStore[chunk.layer][name];
+        FeatType* updateSum = updMat.getData();
+        const unsigned numElemts = updMat.getNumElemts();
         for (unsigned u = 0; u < numElemts; ++u)
             updateSum[u] += newUpdate[u];
     }
 
-    if (numLambdas == lambdaRecved)
-        ws.applyUpdate(layer, name);
+    if (numLambdas == lambdaRecved) {
+        ws.applyUpdate(chunk.layer, name);
+    }
 }
 
 /**

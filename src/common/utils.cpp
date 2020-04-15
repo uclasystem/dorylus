@@ -3,7 +3,7 @@
 
 GPUTimers gtimers;
 FILE* outputFile;
-
+std::mutex fileMutex;
 
 Chunk createChunk(unsigned rows, unsigned nChunks, unsigned id, unsigned layer,
   PROP_TYPE dir, unsigned ep, bool vertex) {

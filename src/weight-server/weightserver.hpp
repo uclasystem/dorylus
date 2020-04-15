@@ -16,12 +16,14 @@
 #include <thread>
 #include <vector>
 #include <map>
+#include <mutex>
 
 #include <zmq.hpp>
 #include <boost/algorithm/string/trim.hpp>
 
 #include "serverworker.hpp"
 #include "AdamOptimizer.hpp"
+#include "versionmatrix.hpp"
 #include "../common/matrix.hpp"
 #include "../common/utils.hpp"
 
@@ -56,7 +58,7 @@ class WeightServer {
     std::condition_variable servers_updates_cv;
     bool servers_updates_done;
 
-  private:
+//   private:
     // For debugging.
     void serverLog(std::string info);
 
@@ -83,9 +85,11 @@ class WeightServer {
 
     std::vector<unsigned> dims;
 
-    std::vector< TensorMap > weightsStore;
+    // [layer][name][version] -> versioned weight tensor
+    std::vector<VersionTensorMap> weightsStore;
+    std::mutex wstoreMtx;
+
     std::vector< TensorMap > updateStore;
-    std::vector<Matrix> biases;
 
     // Adam descent variables
     bool adam;  // whether to use standard SGD or Adam Opt
@@ -112,6 +116,5 @@ class WeightServer {
 
     AdamOptimizer *adamOpt;
 };
-
 
 #endif

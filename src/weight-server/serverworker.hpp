@@ -18,6 +18,7 @@
 #include <zmq.hpp>
 #include <boost/algorithm/string/trim.hpp>
 
+#include "versionmatrix.hpp"
 #include "weightserver.hpp"
 #include "../common/matrix.hpp"
 #include "../common/utils.hpp"
@@ -35,7 +36,7 @@ class ServerWorker {
 public:
     ServerWorker(zmq::context_t& ctx_, WeightServer& _ws,
                  std::vector< TensorMap >& updateStore_,
-                 std::vector< TensorMap >& _weightsStore,
+                 std::vector<VersionTensorMap>& _weightsStore,
                  unsigned& numLambdas_, unsigned& lambdaRecved_);
 
     ~ServerWorker();
@@ -53,13 +54,13 @@ private:
     void sendTensor(Matrix& tensor, unsigned& more);
     void sendTensors(zmq::message_t& client_id, Chunk &chunk);
 
-    void recvUpdateTensor(unsigned layer, TensorMap& weights);
+    void recvUpdateTensor(Chunk &chunk, VersionTensorMap& weights);
     void recvTensors(zmq::message_t& client_id, Chunk &chunk);
 
     zmq::context_t &ctx;
     zmq::socket_t workersocket;
 
-    std::vector< TensorMap >& weightsStore;
+    std::vector<VersionTensorMap>& weightsStore;
     std::vector< TensorMap >& updateStore;
 
     unsigned& numLambdas;
