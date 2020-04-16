@@ -37,4 +37,6 @@ fi
 # Upload to AWS cloud.
 if [[ $? -eq 0 ]]; then
 	aws lambda update-function-code --function-name ${FUNC_NAME} --zip-file fileb://${ZIP_FILE}
+else
+    exit
 fi

@@ -77,6 +77,7 @@ bool LambdaComm::NNRecv(Chunk &chunk) {
         // This chunk has already finished
         return false;
     } else {
+        if (async) engine->vecTimeLambdaWait[chunk.dir * engine->numLayers + chunk.layer] += timestamp_ms() - timeoutTable[chunk];
         timeoutTable.erase(chunk);
         timeoutMtx.unlock();
 
@@ -102,6 +103,7 @@ bool LambdaComm::enqueueAggChunk(Chunk& chunk) {
         timeoutMtx.unlock();
         return false;
     } else {
+        if (async) engine->vecTimeLambdaWait[chunk.dir * engine->numLayers + chunk.layer] += timestamp_ms() - timeoutTable[chunk];
         timeoutTable.erase(chunk);
         timeoutMtx.unlock();
 

@@ -9,6 +9,7 @@
 #include "../../../common/utils.hpp"
 
 #include "../utils.hpp"
+#include "../../../utils/utils.hpp"
 
 #define SLEEP_PERIOD   1000  // us
 #define TIMEOUT_PERIOD (500) // ms
@@ -16,41 +17,30 @@
 #define SND_MORE true
 #define NO_MORE false
 
-/**
- *
- * Request a tensor from a server
- *
- */
-Matrix requestTensor(zmq::socket_t& socket, OP op, unsigned partId,
-  TYPE type = TYPE::AH, unsigned layer = 0);
-
-/**
- *
- * Send multiplied matrix result back to dataserver.
- *
- */
-void sendMatrices(Matrix& zResult, Matrix& actResult,
-  zmq::socket_t& socket, unsigned id);
-
-/**
- *
- * Send matrix back to a server.
- *
- */
-void sendMatrix(Matrix& matrix, OP op, zmq::socket_t& socket, unsigned id);
-
-// named-tensors
 Matrix recvTensor(zmq::socket_t& socket);
 
 std::vector<Matrix> reqTensors(zmq::socket_t& socket, unsigned partId,
-  unsigned layer, std::vector<std::string>& tensorRequests);
+            unsigned layer, std::vector<std::string>& tensorRequests);
 
-void sendTensors(zmq::socket_t& socket, unsigned arg1, unsigned arg2,
-  unsigned arg3, std::vector<Matrix>& matrices, bool ack = false);
+std::vector<Matrix> reqTensors(zmq::socket_t& socket, Chunk &chunk,
+                            std::vector<std::string>& tensorRequests);
 
-void sendFinishedMessage(zmq::socket_t& socket, unsigned arg1, unsigned arg2 = 0,
-  unsigned arg3 = 0, bool ack = false);
-// end named-tensors
+void sendTensors(zmq::socket_t& socket, unsigned partId, unsigned layer,
+    std::vector<Matrix>& matrices, bool ack = false);
+
+void sendTensors(zmq::socket_t& socket, Chunk &chunk,
+    std::vector<Matrix>& matrices, bool ack = false);
+
+void sendAccLoss(zmq::socket_t &socket, Matrix &predicts, Matrix &labels, Chunk &chunk);
+
+void sendFinMsg(zmq::socket_t& socket, Chunk &chunk);
+
+static inline void
+populateHeader(void* header, unsigned op, Chunk &chunk) {
+    char *ptr = (char *)header;
+    memcpy(ptr, &op, sizeof(unsigned));
+    memcpy(ptr + sizeof(unsigned), &chunk, sizeof(chunk));
+}
 
 
 #endif

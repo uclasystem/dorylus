@@ -59,7 +59,7 @@ public:
     FeatType *runForward(unsigned epoch);
     void runBackward(FeatType *backwardInitData);
 
-    void runGCN();
+    void run();
     void runPipeline();
 
     void output();
@@ -282,6 +282,7 @@ public:
     unsigned staleness;
     unsigned minEpoch;
     std::vector<unsigned> numFinishedEpoch;
+    unsigned finishedChunks;
 
     bool pipeline = false;
     // END Pipeline related functions/members
