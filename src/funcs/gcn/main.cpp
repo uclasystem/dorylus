@@ -18,7 +18,6 @@
 #include "utils.hpp"
 #include "../../common/matrix.hpp"
 #include "../../common/utils.hpp"
-#include "../../utils/utils.hpp"
 
 #include "ops/forward_ops.hpp"
 #include "ops/backward_ops.hpp"
@@ -39,7 +38,7 @@ finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chu
     std::vector<std::string> weightRequests{"w"};
 
     std::vector<Matrix> matrices = reqTensors(data_socket, chunk, dataRequests);
-    std::vector<Matrix> weights = reqTensors(weights_socket, PROP_TYPE::FORWARD, chunk.layer, weightRequests);
+    std::vector<Matrix> weights = reqTensors(weights_socket, chunk, weightRequests);
 
     if (matrices.empty() || weights.empty()) {
         return constructResp(false, chunk.chunkId, "Got error message from server");
@@ -93,7 +92,7 @@ finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chu
     d_weights.setName("w");
 
     std::vector<Matrix> weightUpdates{d_weights};
-    sendTensors(weights_socket, chunk.layer, chunk.layer, weightUpdates);
+    sendTensors(weights_socket, chunk, weightUpdates);
 
     std::vector<Matrix> toSend{interGrad};
     sendTensors(data_socket, chunk, toSend, true);
@@ -116,7 +115,7 @@ backwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &
     std::vector<std::string> dataReqs{"ah", "z", "aTg"};
     std::vector<std::string> weightReqs{"w"};
     std::vector<Matrix> matrices = reqTensors(data_socket, chunk, dataReqs);
-    std::vector<Matrix> weights = reqTensors(weights_socket, PROP_TYPE::BACKWARD, chunk.layer, weightReqs);
+    std::vector<Matrix> weights = reqTensors(weights_socket, chunk, weightReqs);
 
     if (matrices.empty() || weights.empty()) {
         return constructResp(false, chunk.chunkId, "Got error message from server");
@@ -163,7 +162,7 @@ backwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &
     resultGrad.setName("grad");
 
     std::vector<Matrix> weightUpdates{d_weights};
-    sendTensors(weights_socket, chunk.layer, chunk.layer, weightUpdates);
+    sendTensors(weights_socket, chunk, weightUpdates);
 
     std::vector<Matrix> toSend{resultGrad};
     if (chunk.layer != 0) {
@@ -189,7 +188,7 @@ forwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &c
     std::cerr << "req data" << std::endl;
     std::vector<Matrix> matrices = reqTensors(data_socket, chunk, dataRequests);
     std::cerr << "fin data\nreq weights" << std::endl;
-    std::vector<Matrix> weights = reqTensors(weights_socket, PROP_TYPE::FORWARD, chunk.layer, weightRequests);
+    std::vector<Matrix> weights = reqTensors(weights_socket, chunk, weightRequests);
     std::cerr << "fin weights" << std::endl;
 
     if (matrices.empty() || weights.empty()) {
