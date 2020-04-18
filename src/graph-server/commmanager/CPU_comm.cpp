@@ -1,15 +1,6 @@
 #include "CPU_comm.hpp"
 #include <omp.h>
 
-extern "C" ResourceComm *createComm(CommInfo &commInfo) {
-    return new CPUComm(commInfo.nodeId, commInfo.numNodes, commInfo.dataserverPort,
-                       commInfo.wServersFile, commInfo.weightserverPort, commInfo.totalLayers);
-}
-
-extern "C" void destroyComm(CPUComm *cpuComm) {
-    delete cpuComm;
-}
-
 void loadWeightServers(std::vector<char *> &addresses, const std::string &wServersFile) {
     std::ifstream infile(wServersFile);
     if (!infile.good())

@@ -30,7 +30,7 @@ class ComputingServer {
     // void evaluateModel(Matrix& activations);
 
     //For backward
-    void processBackward(unsigned layer, bool lastLayer);
+    void processBackward(unsigned layer);
     void gradLayer(unsigned layer);
     void gradLoss(unsigned layer);
 
@@ -44,8 +44,6 @@ class ComputingServer {
     GPUComm *gpuComm;
     unsigned totalLayers;
     CuMatrix* weights; //Weight Matrices Array
-    // CuMatrix features;
-    // CuMatrix
 };
 
 #endif

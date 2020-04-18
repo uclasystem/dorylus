@@ -3,7 +3,6 @@
 
 
 #include "../GPU-Computation/comp_server.cuh"
-
 #include <chrono>
 #include <cmath>
 #include <iostream>
@@ -15,6 +14,7 @@
 #include "../utils/utils.hpp"
 #include "../../common/matrix.hpp"
 #include "../../common/utils.hpp"
+#include "../engine/engine.hpp"
 
 class ComputingServer;
 
@@ -26,30 +26,15 @@ class ComputingServer;
 class GPUComm : public ResourceComm {
   public:
 
-    GPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_, const std::string &wServersFile, unsigned wPort_, unsigned totalLayers_);
-
-    void newContext(unsigned layer, Matrix &inputTensor_, Matrix &outputTensor_, std::vector<Matrix> *savedTensors_);
-    void newContext(unsigned layer, Matrix &inputTensor_, Matrix &outputTensor_, Matrix &targetTensor_, std::vector<Matrix> *savedTensors_);
-
-    // For forward-prop.
-    void requestForward(unsigned layer, bool lastLayer);
-
-    void applyVertexForward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
-    void applyEdgeForward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
-    void waitResForward(unsigned layer, bool lastLayer) {};
-
-    // For backward-prop.
-    void requestBackward(unsigned layer, bool lastLayer);
-
-    void applyVertexBackward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
-    void applyEdgeBackward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
-    void waitResBackward(unsigned layer, bool lastLayer) {};
-
-    //cannot be called if newContextBackward is never called due to the assignment of targetmatrix
-    void sendTargetMatrix();
+    GPUComm(Engine *engine_);
+    ~GPUComm();
+    
+    void setAsync(bool _async){};//GPU always run synchronously
+    unsigned getRelaunchCnt() { return 0u; };
+    void NNCompute(Chunk &chunk);
+    void NNSync() {};
 
     void sendShutdownMessage();
-
     friend class ComputingServer;
 
   private:
@@ -65,14 +50,11 @@ class GPUComm : public ResourceComm {
     //ntw related objs
     unsigned dPort;
     unsigned wPort;
-
-
-    Matrix &inputTensor;
-    Matrix &outputTensor;
-    Matrix &targetTensor;
-    std::vector<Matrix> *savedTensors;
+    
+    TensorMap * tensorMap;
 
     ComputingServer *comp_server;
+    Engine *engine;
 };
 
 

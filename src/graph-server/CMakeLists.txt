@@ -17,6 +17,7 @@ endif()
 # Subdirectories, each needs a CMakeLists.txt.
 if(BACKEND STREQUAL gpu)
     add_definitions(-D_GPU_ENABLED_)
+    add_definitions(-D_BUILD_GPU_)
     add_subdirectory(GPU-Computation)
 endif()
 add_subdirectory(commmanager)
