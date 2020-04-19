@@ -57,7 +57,7 @@ Engine::init(int argc, char *argv[]) {
     parseArgs(argc, argv);
 
     // Initialize the node manager and communication manager.
-    nodeManager.init(dshMachinesFile, myPrIpFile, myPubIpFile);    // NodeManger should go first.
+    nodeManager.init(dshMachinesFile, myPrIpFile, myPubIpFile, this);    // NodeManger should go first.
 
     nodeId = nodeManager.getMyNodeId();
     numNodes = nodeManager.getNumNodes();
@@ -100,7 +100,10 @@ Engine::init(int argc, char *argv[]) {
     savedEdgeTensors.resize(numLayers);
 
     // Track the number of chunks finished at each epoch;
-    if (staleness != UINT_MAX) numFinishedEpoch.resize(staleness + 1);
+    if (staleness != UINT_MAX) {
+        nodesFinishedEpoch.resize(staleness + 1);
+        numFinishedEpoch.resize(staleness + 1);
+    }
 
     // Init it here for collecting data when reading files
     forwardVerticesInitData = new FeatType[getFeatDim(0) * graph.localVtxCnt];
@@ -1127,6 +1130,7 @@ Engine::aggregator(unsigned tid) {
     const int INIT_PERIOD = 256;
     const int MAX_PERIOD = 4096;
     int SLEEP_PERIOD = INIT_PERIOD;
+    unsigned trials = 0;
 
     while (true) {
         aggQueueLock.lock();
@@ -1156,12 +1160,23 @@ Engine::aggregator(unsigned tid) {
             } else if (staleness != UINT_MAX && c.layer == 0 && c.dir == PROP_TYPE::FORWARD
               && c.epoch > minEpoch + staleness) {
                 aggQueueLock.unlock();
+
+                trials++;
                 usleep(SLEEP_PERIOD);
                 failedTrials++;
                 if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
                     failedTrials = 0;
                     SLEEP_PERIOD *= 2;
                 }
+
+                if (trials % 1000 == 0) {
+                    printLog(nodeId, "Blocking. MinE %u, Finished %u", minEpoch,
+                      nodesFinishedEpoch[minEpoch % staleness]);
+                }
+
+                // Read incoming message buffer to see if there are
+                //  updates to the minEpoch
+                nodeManager.readEpochUpdates();
             // There is a chunk to process that is within the bound
             } else {
                 //printLog(nodeId, "AGGREGATE: Got %s", c.str().c_str());
@@ -1406,6 +1421,15 @@ Engine::ghostReceiver(unsigned tid) {
     }
 
     delete[] msgBuf;
+}
+
+
+/**
+ * Callback for the LambdaComm to access the NodeManager's epoch update broadcast
+ */
+void
+Engine::sendEpochUpdate(unsigned currEpoch) {
+    nodeManager.sendEpochUpdate(currEpoch);
 }
 
 
@@ -2644,8 +2668,12 @@ Engine::loadChunks() {
     }
 
     // Set the initial bound chunk as epoch 1 layer 0
+    myEpoch = 1;
     minEpoch = 1;
     memset(numFinishedEpoch.data(), 0, sizeof(unsigned) * numFinishedEpoch.size());
+    memset(numFinishedEpoch.data(), 0, sizeof(unsigned) * nodesFinishedEpoch.size());
+
+    finishedChunks = 0;
 }
 
 Engine engine;

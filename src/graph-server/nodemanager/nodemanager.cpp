@@ -7,6 +7,8 @@
 #include "nodemanager.hpp"
 #include "../utils/utils.hpp"
 
+#include "../engine/engine.hpp"
+
 
 /**
  *
@@ -15,7 +17,8 @@
  *
  */
 void
-NodeManager::init(std::string dshMachinesFile, std::string myPrIpFile, std::string myPubIpFile) {
+NodeManager::init(std::string dshMachinesFile, std::string myPrIpFile, std::string myPubIpFile,
+  Engine* _engine) {
     printLog(404, "NodeManager starts initialization...");
     getPrIP(myPrIpFile, me.ip);
     parseNodeConfig(dshMachinesFile);
@@ -26,6 +29,9 @@ NodeManager::init(std::string dshMachinesFile, std::string myPrIpFile, std::stri
         printLog(404, "NodeManger finds only itself");
         return;
     }
+    numNodes = allNodes.size();
+
+    engine = _engine;
 
     // Initialize node barriering sockets.
     nodePublisher = new zmq::socket_t(nodeContext, ZMQ_PUB);
@@ -48,11 +54,10 @@ NodeManager::init(std::string dshMachinesFile, std::string myPrIpFile, std::stri
     // The master node keeps polling on incoming respond WORKERUP messages until everyone else
     // has finished initialization.
     if (me.master) {
-        unsigned remaining = getNumNodes() - 1;
+        remaining = getNumNodes() - 1;
 
         // Keeps polling until all workers' respond processed.
         while (remaining > 0) {
-
             // Send MASTERUP.
             zmq::message_t outMsg(sizeof(NodeMessage));
             NodeMessage nMsg(MASTERUP);
@@ -79,7 +84,6 @@ NodeManager::init(std::string dshMachinesFile, std::string myPrIpFile, std::stri
 
     // Worker nodes, when received master's MASTERUP message, respond a WORKERUP message.
     } else {
-
         // Wait for master's polling request.
         zmq::message_t inMsg;
         while (nodeSubscriber->recv(&inMsg)) {
@@ -125,13 +129,23 @@ NodeManager::barrier() {
     nodePublisher->send(outMsg);
 
     // Keeps receiving BARRIER messages until heard from all (including self).
-    unsigned remaining = allNodes.size();
+    remaining = allNodes.size();
     zmq::message_t inMsg;
     while (remaining > 0) {
         nodeSubscriber->recv(&inMsg);
         NodeMessage nMsg = *((NodeMessage *) inMsg.data());
-        if (nMsg.messageType == BARRIER)
+        if (nMsg.messageType == BARRIER) {
             --remaining;
+        } else if (nMsg.messageType == EPOCH) {
+            unsigned epoch = nMsg.info;
+            unsigned ind = engine->staleness != 0 ? epoch % engine->staleness : 0;
+            engine->finishedChunkLock.lock();
+            if (++(engine->numFinishedEpoch[ind] = numNodes)){
+                ++(engine->minEpoch);
+                engine->numFinishedEpoch[ind] = 0;
+            }
+            engine->finishedChunkLock.unlock();
+        }
     }
 
     // No redundant messages sent, so there should be no remaining messages in flight or in someone's
@@ -139,6 +153,43 @@ NodeManager::barrier() {
 
     inBarrier = false;
     // printLog(me.id, "Left that global barrier |xxx|.");
+}
+
+
+/**
+ * Update all other nodes with the current epoch I am running
+ */
+void NodeManager::sendEpochUpdate(unsigned currEpoch) {
+    zmq::message_t outMsg(sizeof(NodeMessage));
+    NodeMessage nMsg(EPOCH, currEpoch);
+    std::memcpy(outMsg.data(), &nMsg, sizeof(NodeMessage));
+
+    nodePublisher->send(outMsg);
+}
+
+/**
+ * Read any epoch update messages from the buffer
+ */
+void NodeManager::readEpochUpdates() {
+    zmq::message_t inMsg;
+    while (nodeSubscriber->krecv(&inMsg, ZMQ_DONTWAIT)) {
+        NodeMessage nMsg = *(NodeMessage*) inMsg.data();
+        if (nMsg.messageType == EPOCH) {
+            unsigned epoch = nMsg.info;
+            unsigned ind = engine->staleness != 0 ? epoch % engine->staleness : 0;
+            printLog(me.id, "Got update for epoch %u, Total %u", epoch,
+              engine->nodesFinishedEpoch[ind] + 1);
+            engine->finishedNodeLock.lock();
+            if (++(engine->nodesFinishedEpoch[ind]) == numNodes + 1) {
+                ++(engine->minEpoch);
+                printLog(nodeId, "New minE %u", engine->minEpoch);
+                engine->nodesFinishedEpoch[ind] = 0;
+            }
+            engine->finishedNodeLock.unlock();
+        } else if (nMsg.messageType == BARRIER) {
+            --remaining;
+        }
+    }
 }
 
 

@@ -109,12 +109,26 @@ bool LambdaComm::enqueueAggChunk(Chunk& chunk) {
 
         // If bounded-staleness enabled, increment the finished chunks for this epoch
         // If the min epoch has finished, allow chunks to move to the next epoch
+        // TODO (JOHN): Consider using __sync_fetch ops here to make code cleaner and
+        //  still achieve synchronization
         if (engine->staleness != UINT_MAX) {
             unsigned ind = engine->staleness != 0 ? chunk.epoch % engine->staleness : 0;
-            if (++(engine->numFinishedEpoch[ind]) == numChunk
-              && chunk.epoch == engine->minEpoch) {
-                ++(engine->minEpoch);
+            engine->finishedChunkLock.lock();
+            if (++(engine->numFinishedEpoch[ind]) == numChunk) {
+                engine->finishedChunkLock.unlock();
+                printLog(nodeId, "Finished epoch %u. Total %u", chunk.epoch, engine->nodesFinishedEpoch[ind]+1);
                 engine->numFinishedEpoch[ind] = 0;
+
+                engine->sendEpochUpdate(chunk.epoch);
+                engine->finishedNodeLock.lock();
+                if (++(engine->nodesFinishedEpoch[ind]) == numNodes + 1) {
+                    ++(engine->minEpoch);
+                    printLog(nodeId, "New MinE %u", engine->minEpoch);
+                    engine->nodesFinishedEpoch[ind] = 0;
+                }
+                engine->finishedNodeLock.unlock();
+            } else {
+                engine->finishedChunkLock.unlock();
             }
         }
 
