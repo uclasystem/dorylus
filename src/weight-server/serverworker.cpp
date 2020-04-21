@@ -3,23 +3,13 @@
 
 static void nofree(void* data, void* hint) {}
 
-extern std::mutex term_mutex, update_mutex;
-extern std::condition_variable cv;
-extern bool finished;
-
-
 /**
  *
  * ServerWorker constructor & destructor.
  *
  */
-ServerWorker::ServerWorker(zmq::context_t& ctx_, WeightServer& _ws,
-                           std::vector< TensorMap >& updateStore_,
-                           std::vector<VersionTensorMap>& _weightsStore,
-                           unsigned& numLambdas_,unsigned& lambdaRecved_)
-    : ctx(ctx_), workersocket(ctx, ZMQ_DEALER), ws(_ws),
-      updateStore(updateStore_), weightsStore(_weightsStore),
-      numLambdas(numLambdas_),lambdaRecved(lambdaRecved_) {
+ServerWorker::ServerWorker(zmq::context_t& ctx_, WeightServer& _ws)
+    : ctx(ctx_), workersocket(ctx, ZMQ_DEALER), ws(_ws) {
     workersocket.setsockopt(ZMQ_BACKLOG, 500);
     workersocket.connect("inproc://backend");
 }
@@ -63,7 +53,7 @@ ServerWorker::work() {
                 }
                 case (OP::INFO): { // Used to tell how many lambda threads it should expect for this round.
                     unsigned arg = parse<unsigned>((char *) header.data(), 1);
-                    setBackpropNumLambdas(identity, arg);
+                    setNumLambdas(identity, arg);
                     break;
                 }
                 case (OP::TERM): {
@@ -84,22 +74,7 @@ ServerWorker::work() {
 void ServerWorker::sendTensors(zmq::message_t& client_id, Chunk &chunk) {
     unsigned more = 1;
     workersocket.send(client_id, ZMQ_SNDMORE);
-    // Weights are not yet up to date
-    // if (layer == 0 && forward && !ws.servers_updates_done) {
-    //     zmq::message_t header(TENSOR_HDR_SIZE);
-    //     populateHeader(header.data(), ERR_HEADER_FIELD);
-    //     workersocket.send(header);
-
-    //     // clear buffer of requests before returning
-    //     size_t usize = sizeof(more);
-    //     while (more) {
-    //         zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
-    //         workersocket.recv(&tensorHeader);
-
-    //         workersocket.getsockopt(ZMQ_RCVMORE, &more, &usize);
-    //     }
-    // }
-    VersionTensorMap& weights = weightsStore[chunk.layer];
+    WeightTensorMap& weights = ws.weightsStore[chunk.layer];
     while (more) {
         zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
         workersocket.recv(&tensorHeader);
@@ -113,9 +88,7 @@ void ServerWorker::sendTensors(zmq::message_t& client_id, Chunk &chunk) {
             workersocket.send(errorHeader);
             return;
         } else {
-            ws.wstoreMtx.lock();
             Matrix& reqMatrix = found->second.getMat(chunk);
-            ws.wstoreMtx.unlock();
             sendTensor(reqMatrix, more);
         }
     }
@@ -123,7 +96,7 @@ void ServerWorker::sendTensors(zmq::message_t& client_id, Chunk &chunk) {
 
 void ServerWorker::recvTensors(zmq::message_t& client_id, Chunk &chunk) {
     unsigned more = 1;
-    VersionTensorMap& weights = weightsStore[chunk.layer];
+    WeightTensorMap& weights = ws.weightsStore[chunk.layer];
     while (more) {
         recvUpdateTensor(chunk, weights);
 
@@ -150,7 +123,7 @@ void ServerWorker::sendTensor(Matrix& tensor, unsigned& more) {
     }
 }
 
-void ServerWorker::recvUpdateTensor(Chunk &chunk, VersionTensorMap& weights) {
+void ServerWorker::recvUpdateTensor(Chunk &chunk, WeightTensorMap& weights) {
     zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
     zmq::message_t tensorData;
 
@@ -163,28 +136,13 @@ void ServerWorker::recvUpdateTensor(Chunk &chunk, VersionTensorMap& weights) {
         std::cerr << "Pushed tensor '" << name
           << "' not found. Make sure to allocate it before starting workers!" << std::endl;
     } else {
-        ws.wstoreMtx.lock();
         found->second.decRef(chunk);
-        ws.wstoreMtx.unlock();
     }
 
-    {
-        std::lock_guard<std::mutex> update_lock(update_mutex);
-        lambdaRecved++;
-        if (ws.servers_updates_done) {
-            ws.servers_updates_done = false;
-        }
+    FeatType* newUpdate = (FeatType*) tensorData.data();
+    unsigned localUpdCnt = ws.weightsStore[chunk.layer][name].localUpdate(newUpdate);
 
-        FeatType* newUpdate = (FeatType*) tensorData.data();
-
-        Matrix &updMat = updateStore[chunk.layer][name];
-        FeatType* updateSum = updMat.getData();
-        const unsigned numElemts = updMat.getNumElemts();
-        for (unsigned u = 0; u < numElemts; ++u)
-            updateSum[u] += newUpdate[u];
-    }
-
-    if (numLambdas == lambdaRecved) {
+    if (ws.numLambdas == localUpdCnt) {
         ws.applyUpdate(chunk.layer, name);
     }
 }
@@ -196,15 +154,14 @@ void ServerWorker::recvUpdateTensor(Chunk &chunk, VersionTensorMap& weights) {
  *
  */
 void
-ServerWorker::setBackpropNumLambdas(zmq::message_t& client_id, unsigned numLambdas_) {
-    std::lock_guard<std::mutex> update_lock(update_mutex);
-    numLambdas = numLambdas_;
-    std::cout << "[  INFO  ] Number of lambdas set to " << numLambdas << "." << std::endl;
-
+ServerWorker::setNumLambdas(zmq::message_t& client_id, unsigned numLambdas) {
     // Send confirm ACK message.
     zmq::message_t confirm;
     workersocket.send(client_id, ZMQ_SNDMORE);
     workersocket.send(confirm);
+
+    ws.setLocalUpdTot(numLambdas);
+    std::cout << "[  INFO  ] Number of lambdas set to " << numLambdas << "." << std::endl;
 }
 
 
@@ -216,14 +173,9 @@ ServerWorker::setBackpropNumLambdas(zmq::message_t& client_id, unsigned numLambd
  */
 void
 ServerWorker::terminateServer(zmq::message_t& client_id) {
-    // Send confirm ACK message.
-    // zmq::message_t confirm;
-    // workersocket.send(client_id, ZMQ_SNDMORE);
-    // workersocket.send(confirm);
-
     std::cerr << "[SHUTDOWN] Server shutting down..." << std::endl;
 
-    std::lock_guard<std::mutex> lk(term_mutex);
-    finished = true;
-    cv.notify_one();
+    std::lock_guard<std::mutex> lk(ws.termMtx);
+    ws.term = true;
+    ws.termCV.notify_one();
 }
