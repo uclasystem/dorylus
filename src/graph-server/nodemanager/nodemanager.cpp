@@ -182,7 +182,7 @@ void NodeManager::readEpochUpdates() {
             engine->finishedNodeLock.lock();
             if (++(engine->nodesFinishedEpoch[ind]) == numNodes + 1) {
                 ++(engine->minEpoch);
-                printLog(nodeId, "New minE %u", engine->minEpoch);
+                printLog(me.id, "New minE %u", engine->minEpoch);
                 engine->nodesFinishedEpoch[ind] = 0;
             }
             engine->finishedNodeLock.unlock();
