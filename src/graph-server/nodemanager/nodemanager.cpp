@@ -138,7 +138,10 @@ NodeManager::barrier() {
             --remaining;
         } else if (nMsg.messageType == EPOCH) {
             unsigned epoch = nMsg.info;
-            unsigned ind = engine->staleness != 0 ? epoch % engine->staleness : 0;
+            unsigned ind = epoch % (engine->staleness + 1);
+            //printLog(me.id, "Got update for epoch %u, Total %u", epoch,
+            //  engine->nodesFinishedEpoch[ind] + 1);
+
             engine->finishedChunkLock.lock();
             if (++(engine->numFinishedEpoch[ind] = numNodes)){
                 ++(engine->minEpoch);
@@ -176,13 +179,13 @@ void NodeManager::readEpochUpdates() {
         NodeMessage nMsg = *(NodeMessage*) inMsg.data();
         if (nMsg.messageType == EPOCH) {
             unsigned epoch = nMsg.info;
-            unsigned ind = engine->staleness != 0 ? epoch % engine->staleness : 0;
-            printLog(me.id, "Got update for epoch %u, Total %u", epoch,
-              engine->nodesFinishedEpoch[ind] + 1);
+            unsigned ind = epoch % (engine->staleness + 1);
+            //printLog(me.id, "Got update for epoch %u, Total %u", epoch,
+            //  engine->nodesFinishedEpoch[ind] + 1);
+
             engine->finishedNodeLock.lock();
             if (++(engine->nodesFinishedEpoch[ind]) == numNodes + 1) {
                 ++(engine->minEpoch);
-                printLog(me.id, "New minE %u", engine->minEpoch);
                 engine->nodesFinishedEpoch[ind] = 0;
             }
             engine->finishedNodeLock.unlock();

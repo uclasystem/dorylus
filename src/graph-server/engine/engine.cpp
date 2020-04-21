@@ -1130,7 +1130,6 @@ Engine::aggregator(unsigned tid) {
     const int INIT_PERIOD = 256;
     const int MAX_PERIOD = 4096;
     int SLEEP_PERIOD = INIT_PERIOD;
-    unsigned trials = 0;
 
     while (true) {
         aggQueueLock.lock();
@@ -1161,7 +1160,6 @@ Engine::aggregator(unsigned tid) {
               && c.epoch > minEpoch + staleness) {
                 aggQueueLock.unlock();
 
-                trials++;
                 usleep(SLEEP_PERIOD);
                 failedTrials++;
                 if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
@@ -1169,10 +1167,11 @@ Engine::aggregator(unsigned tid) {
                     SLEEP_PERIOD *= 2;
                 }
 
-                if (trials % 1000 == 0) {
-                    printLog(nodeId, "Blocking. MinE %u, Finished %u", minEpoch,
-                      nodesFinishedEpoch[minEpoch % staleness]);
-                }
+                // Messages to check how often a node is blocking
+                //if (++trials % 1000 == 0) {
+                //    printLog(nodeId, "Blocking. MinE %u, Finished %u", minEpoch,
+                //      nodesFinishedEpoch[minEpoch % (staleness + 1)]);
+                //}
 
                 // Read incoming message buffer to see if there are
                 //  updates to the minEpoch
@@ -1182,6 +1181,9 @@ Engine::aggregator(unsigned tid) {
                 //printLog(nodeId, "AGGREGATE: Got %s", c.str().c_str());
                 aggregateQueue.pop();
                 aggQueueLock.unlock();
+                if (c.layer == 0 && c.dir == PROP_TYPE::FORWARD && c.epoch == currEpoch + 1) {
+                    printLog(nodeId, "STARTING epoch %u [%u]", ++currEpoch, c.epoch);
+                }
 
                 double startAgg = getTimer();
                 if (c.dir == PROP_TYPE::FORWARD) {
@@ -2406,8 +2408,8 @@ Engine::printEngineMetrics() {
  */
 void
 Engine::printGraphMetrics() {
-    printLog(nodeId, "<GM>: %u global vertices, %llu global edges, %u local vertices.",
-             graph.globalVtxCnt, graph.globalEdgeCnt, graph.localVtxCnt);
+    printLog(nodeId, "<GM>: %u global vertices, %llu global edges,\n\t\t%u local vertices, %llu local in edges, %llu local out edges",
+             graph.globalVtxCnt, graph.globalEdgeCnt, graph.localVtxCnt, graph.localInEdgeCnt, graph.localOutEdgeCnt);
 }
 
 
@@ -2667,8 +2669,9 @@ Engine::loadChunks() {
         aggregateQueue.push(Chunk{cid, lowBound, upBound, 0, PROP_TYPE::FORWARD, 1, true});
     }
 
+    currEpoch = 0;
+
     // Set the initial bound chunk as epoch 1 layer 0
-    myEpoch = 1;
     minEpoch = 1;
     memset(numFinishedEpoch.data(), 0, sizeof(unsigned) * numFinishedEpoch.size());
     memset(numFinishedEpoch.data(), 0, sizeof(unsigned) * nodesFinishedEpoch.size());

@@ -281,7 +281,6 @@ public:
     Lock scatQueueLock;
 
     unsigned staleness;
-    unsigned myEpoch;
     unsigned minEpoch;
     // Tracking how many chunks have finished each epoch in the
     // local partition

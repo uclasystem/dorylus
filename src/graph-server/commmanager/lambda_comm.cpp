@@ -112,18 +112,17 @@ bool LambdaComm::enqueueAggChunk(Chunk& chunk) {
         // TODO (JOHN): Consider using __sync_fetch ops here to make code cleaner and
         //  still achieve synchronization
         if (engine->staleness != UINT_MAX) {
-            unsigned ind = engine->staleness != 0 ? chunk.epoch % engine->staleness : 0;
+            unsigned ind = chunk.epoch % (engine->staleness + 1);
             engine->finishedChunkLock.lock();
             if (++(engine->numFinishedEpoch[ind]) == numChunk) {
                 engine->finishedChunkLock.unlock();
-                printLog(nodeId, "Finished epoch %u. Total %u", chunk.epoch, engine->nodesFinishedEpoch[ind]+1);
+                printLog(nodeId, "FINISHED epoch %u. Total finished %u", chunk.epoch, engine->nodesFinishedEpoch[ind]+1);
                 engine->numFinishedEpoch[ind] = 0;
 
                 engine->sendEpochUpdate(chunk.epoch);
                 engine->finishedNodeLock.lock();
                 if (++(engine->nodesFinishedEpoch[ind]) == numNodes + 1) {
                     ++(engine->minEpoch);
-                    printLog(nodeId, "New MinE %u", engine->minEpoch);
                     engine->nodesFinishedEpoch[ind] = 0;
                 }
                 engine->finishedNodeLock.unlock();
