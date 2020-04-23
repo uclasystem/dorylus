@@ -398,15 +398,32 @@ void Engine::runGCN() {
     savedNNTensors[numLayers - 1]["lab"] =
         Matrix(graph.localVtxCnt, getFeatDim(numLayers), localVerticesLabels);
 
-    // Run one synchronous epoch
-    FeatType *tensor = runForward(0);
-    runBackward(tensor);
+    if (pipeline) {
+        // Run one synchronous epoch
+        FeatType *tensor = runForward(0);
+        runBackward(tensor);
+        printLog(nodeId, "Finished SYNCHRONOUS epoch, starting PIPELINE");
+        loadChunks();
+        resComm->setAsync(true);
+        // Start pipeline
+        runPipeline();
 
-    printLog(nodeId, "Finished SYNCHRONOUS epoch, starting PIPELINE");
-    loadChunks();
-    resComm->setAsync(true);
-    // Start pipeline
-    runPipeline();
+    } else {
+        // unsigned valFreq = 1;
+        Timer epochTimer;
+        for (unsigned epoch = 0; epoch < getNumEpochs(); ++epoch) {
+            epochTimer.start();
+            printLog(getNodeId(), "Starting Epoch %u", epoch + 1);
+            FeatType *predictData = runForward(epoch);
+            // Do a backward-prop phase.
+            runBackward(predictData);
+            epochTimer.stop();
+
+            printLog(getNodeId(), "Time for epoch %u: %f ms", epoch + 1,
+                     epochTimer.getTime());
+            addEpochTime(epochTimer.getTime());
+        }
+    }
 }
 
 /**
@@ -545,6 +562,8 @@ void Engine::output() {
 FeatType *Engine::aggregate(FeatType **edgsTensor, unsigned edgsCnt,
                             unsigned featDim, AGGREGATOR aggregator) {
     double sttTimer = getTimer();
+    std::cout << "Start GPU aggregation\n";
+
     // Loading tensor in CPU
     FeatType *outputTensor = savedNNTensors[layer]["ah"].getData();
     FeatType *gTensor = (layer == 0) ? forwardGhostInitData
@@ -552,6 +571,10 @@ FeatType *Engine::aggregate(FeatType **edgsTensor, unsigned edgsCnt,
     FeatType *hTensor = (layer == 0) ? savedNNTensors[layer]["x"].getData()
                                      : savedNNTensors[layer - 1]["h"].getData();
 
+    for (unsigned i = 0; i <graph.srcGhostCnt;++i){
+        if (i%1000==0)
+            std::cout<<gTensor[i]<<std::endl;
+    }
     // Load Feature into GPU memory
     CuMatrix feat;
     feat.loadSpDense(hTensor, gTensor, graph.localVtxCnt, graph.srcGhostCnt,
@@ -564,13 +587,15 @@ FeatType *Engine::aggregate(FeatType **edgsTensor, unsigned edgsCnt,
 
             out.setData(outputTensor);
             out.updateMatrixFromGPU();
+            cudaDeviceSynchronize();
+            std::cout << "Finish GPU aggregation\n";
+
             break;
         }
         default:
             printLog(nodeId, "Invalid Aggregator %d.", aggregator);
             break;
     }
-
     currId = graph.localVtxCnt;
 
     if (vecTimeAggregate.size() < numLayers) {

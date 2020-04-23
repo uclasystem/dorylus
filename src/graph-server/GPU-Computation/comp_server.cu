@@ -1,6 +1,8 @@
+#include <iostream>
+
 #include "../../common/utils.hpp"
 #include "comp_server.cuh"
-
+using namespace std;
 void loadWeightServers(std::vector<char *> &addresses,
                        const std::string &wServersFile) {
     std::ifstream infile(wServersFile);
@@ -53,26 +55,28 @@ void ComputingServer::terminate() {
 void ComputingServer::processForward(unsigned layer, bool lastLayer) {
     if (layer == 0) CuMatrix::freeGPU();
 
-    Matrix outputTensor = (*gpuComm->tensorMap)["h"];
-    Matrix savedTensor = (*gpuComm->tensorMap)["z"];
     Matrix feats = (*gpuComm->tensorMap)["ah"];
-
-    FeatType *z_data = savedTensor.getData();
-    FeatType *act_z = outputTensor.getData();
-
     Matrix weight = msgService.getWeightMatrix(layer);
     CuMatrix z = cu.dot(feats, weight);
-    memcpy(z_data, z.getData(), z.getDataSize());
+
+    // for (unsigned i = 0; i <feats.getNumElemts();++i){
+    //     if (i%1000==0)
+    //         std::cout<<feats.getData()[i]<<endl;
+    // }
+    // cout<<"   \n\n";
     if (!lastLayer) {
+        Matrix savedTensor = (*gpuComm->tensorMap)["z"];
+        Matrix outputTensor = (*gpuComm->tensorMap)["h"];
+        FeatType *act_z = outputTensor.getData();
+        FeatType *z_data = savedTensor.getData();
+        memcpy(z_data, z.getData(), z.getDataSize());
         cu.activate(z);  // z data get activated ...
         z.updateMatrixFromGPU();
         memcpy(act_z, z.getData(), z.getDataSize());
-    } else { //do the last layer + the bp with it
+
+    } else {  // do the last layer + the bp with it
         CuMatrix cuPredictions = cu.softmaxRows(z);
-        cuPredictions.updateMatrixFromGPU();
-        memcpy(act_z, cuPredictions.getData(), z.getDataSize());
-        delete[] cuPredictions.getData();
-        gradLoss(layer);
+        gradLoss(layer, cuPredictions);
     }
     delete[] z.getData();
 }
@@ -88,12 +92,14 @@ void ComputingServer::gradLayer(unsigned layer) {
     Matrix z = (*gpuComm->tensorMap)["z"];
     CuMatrix cuZ = cu.wrapMatrix(z);
     CuMatrix interGrad = cu.activateBackward(cuZ, cuGrad);
-
     Matrix weight = msgService.getWeightMatrix(layer);
     CuMatrix cuWeights = cu.wrapMatrix(weight);
-    CuMatrix resultGrad = interGrad.dot(cuWeights, false, true);
-    resultGrad.setData((*gpuComm->tensorMap)["grad"].getData());
-    resultGrad.updateMatrixFromGPU();
+    if (layer != 0) {
+        CuMatrix resultGrad = interGrad.dot(cuWeights, false, true);
+        resultGrad.setData((*gpuComm->tensorMap)["grad"].getData());
+        resultGrad.updateMatrixFromGPU();
+    }
+
     Matrix ah = (*gpuComm->tensorMap)["ah"];
     CuMatrix cuAh = cu.wrapMatrix(ah);
     CuMatrix cuWeightUpdates = cuAh.dot(interGrad, true, false);
@@ -102,15 +108,18 @@ void ComputingServer::gradLayer(unsigned layer) {
     msgService.sendWeightUpdate(weightUpdates, layer);
 }
 
-void ComputingServer::gradLoss(unsigned layer) {
+void ComputingServer::gradLoss(unsigned layer, CuMatrix pred, bool report) {
     // here it can be optimized by fetching directly from Forward;
-    Matrix predictions = (*gpuComm->tensorMap)["h"];
     Matrix labels = (*gpuComm->tensorMap)["lab"];
-
-    CuMatrix cuPredictions = cu.wrapMatrix(predictions);
     CuMatrix cuLabels = cu.wrapMatrix(labels);
+    CuMatrix d_output = cu.hadamardSub(pred, cuLabels);
 
-    CuMatrix d_output = cu.hadamardSub(cuPredictions, cuLabels);
+    if (report) {
+        float acc, loss;
+        cu.getTrainStat(pred, cuLabels, acc, loss);
+        printLog(nodeId, "batch Acc: %f, Loss: %f\n", acc, loss);
+    }
+
     Matrix weight = msgService.getWeightMatrix(layer);
     CuMatrix cuWeights = cu.wrapMatrix(weight);
     CuMatrix interGrad = d_output.dot(cuWeights, false, true);
@@ -123,17 +132,3 @@ void ComputingServer::gradLoss(unsigned layer) {
     Matrix weightUpdates = cuWeightUpdates.getMatrix();
     msgService.sendWeightUpdate(weightUpdates, layer);
 }
-
-// void ComputingServer::evaluateModel(Matrix& activations){
-//     CuMatrix labels = cu.wrapMatrix(msgService.requestMatrix());
-//     CuMatrix cuAct =cu.wrapMatrix(activations);
-//     CuMatrix cuPredictions = cu.softmaxRows(cuAct);
-
-//     // Check if the label with the highest probability after softmax is equal
-//     to the
-//     // target label
-//     unsigned totalCorrect = cu.checkAccuracy(cuPredictions, labels);
-
-//     // Sum the individual losses of each vertex for this validation partition
-//     float lossThisPart = cu.checkLoss(cuPredictions, labels);
-// }

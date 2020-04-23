@@ -22,6 +22,7 @@ void GPUComm::NNCompute(Chunk &chunk) {
         printLog(nodeId, "GPU BACKWARD NN started");
         comp_server->processBackward(currLayer);
     }
+    printLog(nodeId, "GPU NN Done");
 }
 
 void GPUComm::sendShutdownMessage() {
@@ -30,6 +31,4 @@ void GPUComm::sendShutdownMessage() {
     comp_server->terminate();
 }
 
-GPUComm::~GPUComm(){
-    sendShutdownMessage();
-}
+GPUComm::~GPUComm() { sendShutdownMessage(); }
