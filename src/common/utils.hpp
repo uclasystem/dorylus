@@ -26,7 +26,7 @@
 typedef float FeatType;
 typedef float EdgeType;
 
-const size_t HEADER_SIZE = sizeof(unsigned) + sizeof(unsigned) * 6 + sizeof(bool); // sizeof(OP) + sizeof(Chunk)
+#define HEADER_SIZE (sizeof(unsigned) + sizeof(Chunk)) // sizeof(OP) + sizeof(Chunk)
 // OP, TENSOR_NAME, FIELD0, FIELD1, ...
 static const size_t TENSOR_NAME_SIZE = 8;
 static const size_t TENSOR_HDR_SIZE = sizeof(unsigned) * 5 + TENSOR_NAME_SIZE;
@@ -47,7 +47,8 @@ enum AGGREGATOR { WSUM, MEAN, ADD, MIN, MAX };
 #define ERR_HEADER_FIELD UINT_MAX
 
 struct Chunk {
-    unsigned chunkId;
+    unsigned localId;
+    unsigned globalId;
     unsigned lowBound;
     unsigned upBound;
     unsigned layer;
@@ -64,15 +65,16 @@ struct Chunk {
             dir > rhs.dir || (dir == rhs.dir && (
             layer > rhs.layer || (layer == rhs.layer && (
             (vertex && !rhs.vertex) || (vertex == rhs.vertex && (
-            chunkId > rhs.chunkId || (chunkId == rhs.chunkId && (
+            localId > rhs.localId || (localId == rhs.localId && (
+            globalId > rhs.globalId || (globalId == rhs.globalId && (
             lowBound > rhs.lowBound || (lowBound == rhs.lowBound && (
-            upBound > rhs.upBound))))))))))));
+            upBound > rhs.upBound))))))))))))));
     }
 
-    std::string str() {
+    std::string str() const {
         char buf[128];
-        sprintf(buf, "%u:%s:%u:%u", epoch, dir == PROP_TYPE::FORWARD ? "F" : "B",
-          layer, chunkId);
+        sprintf(buf, "%u:%s:%u:%u/%u", epoch, dir == PROP_TYPE::FORWARD ? "F" : "B",
+          layer, localId, globalId);
 
         return std::string(buf);
     }

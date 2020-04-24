@@ -5,14 +5,14 @@ GPUTimers gtimers;
 FILE* outputFile;
 std::mutex fileMutex;
 
-Chunk createChunk(unsigned rows, unsigned nChunks, unsigned id, unsigned layer,
+Chunk createChunk(unsigned rows, unsigned nChunks, unsigned id, unsigned globalId, unsigned layer,
   PROP_TYPE dir, unsigned ep, bool vertex) {
     unsigned partRows = std::ceil((float)rows / (float)nChunks);
     unsigned lowBound = id * partRows;
     unsigned upBound = (id + 1) * partRows;
     if (upBound > rows) upBound = rows;
 
-    return Chunk{id, lowBound, upBound, layer, dir, ep, vertex};
+    return Chunk{id, globalId, lowBound, upBound, layer, dir, ep, vertex};
 }
 
 std::ofstream matrixFile;

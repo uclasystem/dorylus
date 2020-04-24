@@ -136,7 +136,7 @@ Engine::init(int argc, char *argv[]) {
 
     if (nodeId == 0) {
         weightComm = new WeightComm(weightserverIPFile, weightserverPort);
-        weightComm->updateChunkCnt(1); // now set up weight servers only once
+        weightComm->updateChunkCnt(numNodes * numLambdasForward); // now set up weight servers only once
     } else {
         weightComm = NULL;
     }
@@ -649,7 +649,8 @@ Engine::applyVertex(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned inFeatDim,
         while (availLambdaId < numLambdasForward) {
             unsigned lowBound = availLambdaId * chunkSize;
             unsigned upBound = std::min(lowBound + chunkSize, vtcsCnt);
-            Chunk chunk {availLambdaId, lowBound, upBound, layer, PROP_TYPE::FORWARD, currEpoch, true}; // epoch is not useful in sync version
+            Chunk chunk {availLambdaId, nodeId * numLambdasForward + availLambdaId,
+                        lowBound, upBound, layer, PROP_TYPE::FORWARD, currEpoch, true}; // epoch is not useful in sync version
             resComm->NNCompute(chunk);
 
             availLambdaId++;
@@ -1178,7 +1179,7 @@ Engine::aggregator(unsigned tid) {
                 nodeManager.readEpochUpdates();
             // There is a chunk to process that is within the bound
             } else {
-                //printLog(nodeId, "AGGREGATE: Got %s", c.str().c_str());
+                // printLog(nodeId, "AGGREGATE: Got %s", c.str().c_str());
                 aggregateQueue.pop();
                 aggQueueLock.unlock();
                 if (c.layer == 0 && c.dir == PROP_TYPE::FORWARD && c.epoch == currEpoch + 1) {
@@ -1228,7 +1229,7 @@ Engine::scatterWorker(unsigned tid) {
 
             unsigned startScat = timestamp_ms();
 
-            //printLog(nodeId, "SCATTER: Got %s", c.str().c_str());
+            // printLog(nodeId, "SCATTER: Got %s", c.str().c_str());
 
             // Get the layer output you want to scatter
             // If forward then it was the previous layer output
@@ -1716,7 +1717,8 @@ Engine::applyVertexBackward(FeatType *gradTensor, unsigned vtcsCnt, unsigned inF
             unsigned chunkSize = (vtcsCnt + numLambdasForward - 1) / numLambdasForward;
             unsigned lowBound = u * chunkSize;
             unsigned upBound = std::min(lowBound + chunkSize, vtcsCnt);
-            Chunk chunk {u, lowBound, upBound, layer-1, PROP_TYPE::BACKWARD, currEpoch, true}; // epoch doesn't matter in sync version
+            Chunk chunk {u, nodeId * numLambdasForward + u,
+                        lowBound, upBound, layer-1, PROP_TYPE::BACKWARD, currEpoch, true}; // epoch doesn't matter in sync version
             resComm->NNCompute(chunk);
         }
         resComm->NNSync();
@@ -2666,7 +2668,8 @@ Engine::loadChunks() {
         unsigned lowBound = cid * chunkSize;
         unsigned upBound = std::min(lowBound + chunkSize, vtcsCnt);
 
-        aggregateQueue.push(Chunk{cid, lowBound, upBound, 0, PROP_TYPE::FORWARD, 1, true});
+        aggregateQueue.push(Chunk{cid, nodeId * numLambdasForward + cid,
+                                    lowBound, upBound, 0, PROP_TYPE::FORWARD, 1, true});
     }
 
     currEpoch = 0;

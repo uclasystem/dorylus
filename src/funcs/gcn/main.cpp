@@ -41,7 +41,7 @@ finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chu
     std::vector<Matrix> weights = reqTensors(weights_socket, chunk, weightRequests);
 
     if (matrices.empty() || weights.empty()) {
-        return constructResp(false, chunk.chunkId, "Got error message from server");
+        return constructResp(false, chunk.localId, "Got error message from server");
     }
 
     for (auto& M : matrices) {
@@ -50,7 +50,7 @@ finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chu
             for (auto& W : weights) deleteMatrix(W);
 
             std::cout << M.name() << " is empty" << std::endl;
-            return constructResp(false, chunk.chunkId, M.name() + " is empty");
+            return constructResp(false, chunk.localId, M.name() + " is empty");
         }
     }
     for (auto& W : weights) {
@@ -59,7 +59,7 @@ finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chu
             for (auto& W : weights) deleteMatrix(W);
 
             std::cout << W.name() << " is empty" << std::endl;
-            return constructResp(false, chunk.chunkId, W.name() + " is empty");
+            return constructResp(false, chunk.localId, W.name() + " is empty");
         }
     }
 
@@ -106,7 +106,7 @@ finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chu
         deleteMatrix(M);
     std::cout << "Data cleaned up" << std::endl;
 
-    return constructResp(true, chunk.chunkId, "Finished final layer");
+    return constructResp(true, chunk.localId, "Finished final layer");
 }
 
 invocation_response
@@ -118,13 +118,13 @@ backwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &
     std::vector<Matrix> weights = reqTensors(weights_socket, chunk, weightReqs);
 
     if (matrices.empty() || weights.empty()) {
-        return constructResp(false, chunk.chunkId, "Got error message from server");
+        return constructResp(false, chunk.localId, "Got error message from server");
     }
 
     for (auto& M : matrices) {
         if (M.empty()){
             std::cout << M.name() << " is empty" << std::endl;
-            return constructResp(false, chunk.chunkId, M.name() + " is empty");
+            return constructResp(false, chunk.localId, M.name() + " is empty");
         } else {
             std::cout << "GOT " << M.name() << std::endl;
         }
@@ -132,7 +132,7 @@ backwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &
     for (auto& W : weights) {
         if (W.empty()){
             std::cout << W.name() << " is empty" << std::endl;
-            return constructResp(false, chunk.chunkId, W.name() + " is empty");
+            return constructResp(false, chunk.localId, W.name() + " is empty");
         } else {
             std::cout << "GOT " << W.name() << std::endl;
         }
@@ -176,7 +176,7 @@ backwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &
     for (auto& M : weightUpdates)
         deleteMatrix(M);
 
-    return constructResp(true, chunk.chunkId, "Finished backward layer");
+    return constructResp(true, chunk.localId, "Finished backward layer");
 }
 
 invocation_response
@@ -192,19 +192,19 @@ forwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &c
     std::cerr << "fin weights" << std::endl;
 
     if (matrices.empty() || weights.empty()) {
-        return constructResp(false, chunk.chunkId, "Got error message from server");
+        return constructResp(false, chunk.localId, "Got error message from server");
     }
 
     for (auto& M : matrices) {
         if (M.empty()){
             std::cout << M.name() << " is empty" << std::endl;
-            return constructResp(false, chunk.chunkId, M.name() + " is empty");
+            return constructResp(false, chunk.localId, M.name() + " is empty");
         }
     }
     for (auto& W : weights) {
         if (W.empty()){
             std::cout << W.name() << " is empty" << std::endl;
-            return constructResp(false, chunk.chunkId, W.name() + " is empty");
+            return constructResp(false, chunk.localId, W.name() + " is empty");
         }
     }
 
@@ -232,7 +232,7 @@ forwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &c
         deleteMatrix(M);
     std::cout << "Data cleaned up" << std::endl;
 
-    return constructResp(true, chunk.chunkId, "Finished forward layer");
+    return constructResp(true, chunk.localId, "Finished forward layer");
 }
 
 
@@ -255,7 +255,7 @@ apply_phase(std::string dataserver, std::string weightserver, unsigned dport, un
     // Creating identity
     size_t identity_len = sizeof(unsigned) * 3 + dataserver.length();
     char identity[identity_len];
-    memcpy(identity, (char *) &chunk.chunkId, sizeof(unsigned));
+    memcpy(identity, (char *) &chunk.localId, sizeof(unsigned));
     std::srand(time(NULL));
     *(unsigned *)(identity + sizeof(unsigned)) = chunk.layer;
     *(unsigned *)(identity + sizeof(unsigned) * 2) = rand();
@@ -274,7 +274,7 @@ apply_phase(std::string dataserver, std::string weightserver, unsigned dport, un
         sprintf(dhost_port, "tcp://%s:%u", dataserver.c_str(), dport);
         data_socket.connect(dhost_port);
     } catch(std::exception& ex) {
-        return constructResp(false, chunk.chunkId, ex.what());
+        return constructResp(false, chunk.localId, ex.what());
     }
 
     if (chunk.dir == PROP_TYPE::FORWARD && chunk.layer < 1) {
@@ -291,7 +291,7 @@ apply_phase(std::string dataserver, std::string weightserver, unsigned dport, un
 //    data_socket.close();
 //    ctx.close();
 
-    return constructResp(false, chunk.chunkId, "Didn't run any config");
+    return constructResp(false, chunk.localId, "Didn't run any config");
 }
 
 
@@ -308,7 +308,8 @@ my_handler(invocation_request const& request) {
     bool eval = v.GetBool("eval");
 
     Chunk chunk;
-    chunk.chunkId = v.GetInteger("id");
+    chunk.localId = v.GetInteger("id");
+    chunk.globalId = v.GetInteger("gid");
     chunk.lowBound = v.GetInteger("lb");
     chunk.upBound = v.GetInteger("ub");
     chunk.layer = v.GetInteger("layer");
@@ -316,7 +317,7 @@ my_handler(invocation_request const& request) {
     chunk.epoch = v.GetInteger("epoch");
     chunk.vertex = v.GetInteger("vtx");
 
-    std::cout << "[ACCEPTED] Thread " << chunk.chunkId << " is requested from "
+    std::cout << "[ACCEPTED] Thread " << chunk.str() << " is requested from "
               << dataserver << ":" << dport << ", FORWARD layer " << chunk.layer
               << "." << std::endl;
 

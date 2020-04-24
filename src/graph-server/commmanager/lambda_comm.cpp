@@ -48,7 +48,7 @@ void LambdaComm::setAsync(bool _async) {
 }
 
 void LambdaComm::NNCompute(Chunk &chunk) {
-    // printLog(nodeId, "NNComp: %u:%u:%s", chunk.layer, chunk.chunkId,
+    // printLog(nodeId, "NNComp: %u:%u:%s", chunk.layer, chunk.localId,
     //   chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
     timeoutMtx.lock();
     timeoutTable[chunk] = timestamp_ms();
@@ -69,7 +69,7 @@ void LambdaComm::NNSync() {
 }
 
 bool LambdaComm::NNRecv(Chunk &chunk) {
-    // printLog(nodeId, "NNRecv: %u:%u:%s", chunk.layer, chunk.chunkId,
+    // printLog(nodeId, "NNRecv: %u:%u:%s", chunk.layer, chunk.localId,
     //   chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
     timeoutMtx.lock();
     if (timeoutTable.find(chunk) == timeoutTable.end()) {
@@ -96,7 +96,7 @@ bool LambdaComm::NNRecv(Chunk &chunk) {
 // This was made specifically with GCNs in mind and is
 // missing an enqueue for a whole phase of computation
 bool LambdaComm::enqueueAggChunk(Chunk& chunk) {
-    // printLog(nodeId, "NNEnq: %u:%u", chunk.layer, chunk.chunkId,
+    // printLog(nodeId, "NNEnq: %u:%u", chunk.layer, chunk.localId,
     //   chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
     timeoutMtx.lock();
     if (timeoutTable.find(chunk) == timeoutTable.end()) {
@@ -167,7 +167,7 @@ void LambdaComm::asyncRelaunchLoop() {
 }
 
 void LambdaComm::relaunchLambda(const Chunk &chunk) {
-    printLog(nodeId, "Relaunch lambda %u for layer %u...", chunk.chunkId, chunk.layer);
+    printLog(nodeId, "Relaunch lambda %s for layer %u...", chunk.str().c_str(), chunk.layer);
     timeoutMtx.lock();
     timeoutTable[chunk] = timestamp_ms();
     ++relaunchCnt;
@@ -189,13 +189,14 @@ void LambdaComm::invokeLambda(const Chunk &chunk) {
 
     Aws::Utils::Json::JsonValue jsonPayload;
     jsonPayload.WithString("dserver", nodeIp);
-    const char *wserver = selectWeightServer(chunk.chunkId);
+    const char *wserver = selectWeightServer(chunk.localId);
     jsonPayload.WithString("wserver", wserver);
     jsonPayload.WithInteger("dport", dport);
     jsonPayload.WithInteger("wport", wport);
     jsonPayload.WithBool("eval", chunk.epoch % 5 == 0);
 
-    jsonPayload.WithInteger("id", chunk.chunkId);
+    jsonPayload.WithInteger("id", chunk.localId);
+    jsonPayload.WithInteger("gid", chunk.globalId);
     jsonPayload.WithInteger("lb", chunk.lowBound);
     jsonPayload.WithInteger("ub", chunk.upBound);
     jsonPayload.WithInteger("layer", chunk.layer);

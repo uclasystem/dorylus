@@ -34,7 +34,7 @@ std::vector<Matrix> reqTensors(zmq::socket_t& socket, Chunk &chunk,
         for (unsigned u = 0; u < tensorRequests.size(); ++u) {
             std::string& name = tensorRequests[u];
             zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
-            populateHeader(tensorHeader.data(), chunk.chunkId, name.c_str());
+            populateHeader(tensorHeader.data(), chunk.localId, name.c_str());
             if (u < numTensors - 1) {
                 socket.send(tensorHeader, ZMQ_SNDMORE);
             } else {
