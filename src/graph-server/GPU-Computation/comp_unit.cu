@@ -2,6 +2,13 @@
 #include "cuda_ops.cuh"
 
 const float alpha = 1.0f, beta = 0.0f;
+using namespace std;
+void cudaErrCheck(cudaError_t stat) {
+    if (stat != cudaSuccess) {
+        fprintf(stderr, "CUDA Error: %s\n", cudaGetErrorString(stat));
+        fprintf(stderr, "CUDA Error: %d\n", (stat));
+    }
+}
 
 ComputingUnit *ComputingUnit::instance = nullptr;
 ComputingUnit &ComputingUnit::getInstance() {
@@ -28,13 +35,16 @@ ComputingUnit::ComputingUnit() {
 
 CuMatrix ComputingUnit::wrapMatrix(Matrix m) { return CuMatrix(m, handle); }
 
-CuMatrix ComputingUnit::aggregate(CuMatrix &sparse, CuMatrix &dense) {
+CuMatrix ComputingUnit::aggregate(CuMatrix &sparse, CuMatrix dense,
+                                  Matrix &norms) {
     CuMatrix C(Matrix(dense.getCols(), sparse.getRows(), (FeatType *)NULL),
                handle);
 
     cusparseSpMatDescr_t desA;
     cusparseDnMatDescr_t desB;
     cusparseDnMatDescr_t desC;
+
+    const float agg_beta = 0;
     auto cusparseStat = cusparseCreateCsr(
         &desA, sparse.getRows(), sparse.getCols(), sparse.nnz, sparse.csrRowPtr,
         sparse.csrColInd, sparse.csrVal, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
@@ -52,33 +62,39 @@ CuMatrix ComputingUnit::aggregate(CuMatrix &sparse, CuMatrix &dense) {
     std::size_t buffer_size;
     cusparseStat = cusparseSpMM_bufferSize(
         spHandle, CUSPARSE_OPERATION_NON_TRANSPOSE,
-        CUSPARSE_OPERATION_TRANSPOSE, &alpha, desA, desB, &beta, desC,
+        CUSPARSE_OPERATION_TRANSPOSE, &alpha, desA, desB, &agg_beta, desC,
         CUDA_R_32F, CUSPARSE_MM_ALG_DEFAULT, &buffer_size);
     assert(CUSPARSE_STATUS_SUCCESS == cusparseStat);
     float *buffer;
-    cudaMalloc((void **)&buffer, buffer_size * sizeof(float));
-    cusparseStat =
-        cusparseSpMM(spHandle, CUSPARSE_OPERATION_NON_TRANSPOSE,
-                     CUSPARSE_OPERATION_TRANSPOSE, &alpha, desA, desB, &beta,
-                     desC, CUDA_R_32F, CUSPARSE_MM_ALG_DEFAULT, buffer);
+    cudaErrCheck(cudaMalloc((void **)&buffer, buffer_size * sizeof(float)));
+    cusparseStat = cusparseSpMM(spHandle, CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                CUSPARSE_OPERATION_TRANSPOSE, &alpha, desA,
+                                desB, &agg_beta, desC, CUDA_R_32F,
+                                CUSPARSE_MM_ALG_DEFAULT, buffer);
     assert(CUSPARSE_STATUS_SUCCESS == cusparseStat);
+    cudaDeviceSynchronize();
 
+    C = C.transpose();
+    scaleRowsByVector(dense, norms);
+
+    hadamardAdd(C, dense);
+    cudaDeviceSynchronize();
     return C;
 }
 
-CuMatrix ComputingUnit::scaleRowsByVector(Matrix m, Matrix v) {
-    CuMatrix cuM = wrapMatrix(m);
+void ComputingUnit::scaleRowsByVector(CuMatrix &cuM, Matrix v) {
     CuMatrix cuV = wrapMatrix(v);
-    thrust::device_ptr<float> m_ptr(cuM.devPtr);
-    thrust::device_ptr<float> v_ptr(cuV.devPtr);
-    thrust::transform(
-        m_ptr, m_ptr + m.getNumElemts(),
-        thrust::make_permutation_iterator(
-            v_ptr, thrust::make_transform_iterator(
-                       thrust::make_counting_iterator(0),
-                       linear_index_to_row_index<int>(m.getCols()))),
-        m_ptr, thrust::multiplies<float>());
-    return cuM;
+    stat = cublasSdgmm(handle, CUBLAS_SIDE_RIGHT, cuM.getCols(), cuV.getRows(),
+                       cuM.devPtr, cuM.getCols(), cuV.devPtr, 1, cuM.devPtr,
+                       cuM.getCols());
+    assert(stat == CUBLAS_STATUS_SUCCESS);
+}
+
+void ComputingUnit::hadamardAdd(CuMatrix &matLeft, CuMatrix &matRight) {
+    thrust::device_ptr<float> cuLeft_ptr(matLeft.devPtr);
+    thrust::device_ptr<float> cuRight_ptr(matRight.devPtr);
+    thrust::transform(cuLeft_ptr, cuLeft_ptr + matLeft.getNumElemts(),
+                      cuRight_ptr, cuLeft_ptr, thrust::plus<float>());
 }
 
 CuMatrix ComputingUnit::hadamardSub(CuMatrix &matLeft, CuMatrix &matRight) {
@@ -224,8 +240,8 @@ float ComputingUnit::checkLoss(CuMatrix &preds, CuMatrix &labels) {
 
 void ComputingUnit::getTrainStat(CuMatrix &preds, CuMatrix &labels, float &acc,
                                  float &loss) {
-    loss = checkLoss(preds, labels)/labels.getRows();
-    acc = checkAccuracy(preds, labels)/(float)labels.getRows();
+    loss = checkLoss(preds, labels) / labels.getRows();
+    acc = checkAccuracy(preds, labels) / (float)labels.getRows();
     // float * l = new float [labels.getNumElemts()];
     // float * p = new float [preds.getNumElemts()];
     // preds.setData(p);

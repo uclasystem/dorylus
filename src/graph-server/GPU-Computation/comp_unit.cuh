@@ -34,12 +34,13 @@ class ComputingUnit {
 
     CuMatrix wrapMatrix(Matrix m);
 
-    CuMatrix scaleRowsByVector(Matrix m, Matrix v);
-    CuMatrix aggregate(CuMatrix &sparse, CuMatrix &dense);
+    void scaleRowsByVector(CuMatrix& CuM, Matrix v);
+    CuMatrix aggregate(CuMatrix &sparse, CuMatrix dense, Matrix& norms);
 
     CuMatrix dot(Matrix &A, Matrix &B);
     void activate(CuMatrix &A);
     CuMatrix softmaxRows(CuMatrix &mat);
+    void hadamardAdd(CuMatrix &matLeft, CuMatrix &matRight);
     CuMatrix hadamardSub(CuMatrix &matLeft, CuMatrix &matRight);
     CuMatrix hadamardMul(CuMatrix &matLeft, CuMatrix &matRight);
     CuMatrix activateBackward(CuMatrix &y, CuMatrix &gradient);

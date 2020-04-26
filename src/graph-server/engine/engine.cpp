@@ -562,34 +562,30 @@ void Engine::output() {
 FeatType *Engine::aggregate(FeatType **edgsTensor, unsigned edgsCnt,
                             unsigned featDim, AGGREGATOR aggregator) {
     double sttTimer = getTimer();
-    std::cout << "Start GPU aggregation\n";
+    std::cout << "Start GPU aggregation forward\n";
 
     // Loading tensor in CPU
     FeatType *outputTensor = savedNNTensors[layer]["ah"].getData();
-    FeatType *gTensor = (layer == 0) ? forwardGhostInitData
-                                     : savedNNTensors[layer]["fg"].getData();
+    FeatType *gTensor = savedNNTensors[layer]["fg"].getData();
     FeatType *hTensor = (layer == 0) ? savedNNTensors[layer]["x"].getData()
                                      : savedNNTensors[layer - 1]["h"].getData();
 
-    for (unsigned i = 0; i <graph.srcGhostCnt;++i){
-        if (i%1000==0)
-            std::cout<<gTensor[i]<<std::endl;
-    }
     // Load Feature into GPU memory
     CuMatrix feat;
     feat.loadSpDense(hTensor, gTensor, graph.localVtxCnt, graph.srcGhostCnt,
                      featDim);
     switch (aggregator) {
         case (AGGREGATOR::WSUM): {
-            CuMatrix out = cu.aggregate(*NormAdjMatrixIn, feat);
-            out = out.transpose();
-            cudaDeviceSynchronize();
-
+            Matrix norms(graph.localVtxCnt, 1, graph.vtxDataVec.data());
+            CuMatrix out = cu.aggregate(*NormAdjMatrixIn, feat, norms);
             out.setData(outputTensor);
             out.updateMatrixFromGPU();
             cudaDeviceSynchronize();
-            std::cout << "Finish GPU aggregation\n";
 
+            // std::cout << "Finish GPU aggregation\n";
+            // for (unsigned i = 0; i < 10; ++i) {
+            //     std::cout << outputTensor[i] << std::endl;
+            // }
             break;
         }
         default:
@@ -633,6 +629,9 @@ FeatType *Engine::aggregate(FeatType **edgsTensor, unsigned edgsCnt,
 
             computePool->perform(computeFn, &args);
             computePool->sync();
+            for (unsigned i = 0; i < 10; ++i) {
+                std::cout << outputTensor[i] << std::endl;
+            }
             break;
         }
         default:
@@ -1688,16 +1687,24 @@ FeatType *Engine::aggregateBackward(FeatType **eVGradTensor, unsigned edgsCnt,
     FeatType *outputTensor = savedNNTensors[layer - 1]["aTg"].getData();
     FeatType *gradTensor = savedNNTensors[layer]["grad"].getData();
 
+    printf("Aggregate start back\n");
     CuMatrix feat;
-    feat.loadSpDense(gradTensor, backwardGhostVerticesDataOut,
+    feat.loadSpDense(gradTensor, savedNNTensors[layer - 1]["bg"].getData(),
                      graph.localVtxCnt, graph.dstGhostCnt, featDim);
-    CuMatrix out = cu.aggregate(*NormAdjMatrixOut, feat);
-    cudaDeviceSynchronize();
-    out = out.transpose();
-    cudaDeviceSynchronize();
-    out.setData(outputTensor);
-    out.updateMatrixFromGPU();
-
+    switch (aggregator) {
+        case (AGGREGATOR::WSUM): {
+            Matrix norms(graph.localVtxCnt, 1, graph.vtxDataVec.data());
+            CuMatrix out = cu.aggregate(*NormAdjMatrixOut, feat, norms);
+            out.setData(outputTensor);
+            out.updateMatrixFromGPU();
+            printf("Aggregate done back\n");
+            std::cout << "Finish GPU aggregation\n";
+            break;
+        }
+        default:
+            printLog(nodeId, "Invalid aggregator %d", aggregator);
+            break;
+    }
     currId = graph.localVtxCnt;
 
     if (vecTimeAggregate.size() < 2 * numLayers) {
@@ -1730,6 +1737,7 @@ FeatType *Engine::aggregateBackward(FeatType **eVGradTensor, unsigned edgsCnt,
                           std::placeholders::_1, std::placeholders::_2);
             computePool->perform(computeFn, &args);
             computePool->sync();
+
             break;
         }
         default:
