@@ -27,6 +27,7 @@
 #include "../commmanager/GPU_comm.hpp"
 static CuMatrix *NormAdjMatrixIn = NULL;
 static CuMatrix *NormAdjMatrixOut = NULL;
+static CuMatrix *Norms = NULL;
 static ComputingUnit cu = ComputingUnit::getInstance();
 #else
 #include "../commmanager/lambda_comm.hpp"
@@ -82,13 +83,6 @@ void Engine::init(int argc, char *argv[]) {
         }
     }
     graph.init(graphFile);
-#ifdef _GPU_ENABLED_
-    printLog(nodeId, "Loading SparseMatrices for GPU");
-    NormAdjMatrixIn = new CuMatrix();
-    NormAdjMatrixOut = new CuMatrix();
-    NormAdjMatrixIn->loadSpCSC(cu.spHandle, graph);
-    NormAdjMatrixOut->loadSpCSR(cu.spHandle, graph);
-#endif
 
     printGraphMetrics();
 
@@ -114,6 +108,18 @@ void Engine::init(int argc, char *argv[]) {
     // Read in initial feature values (input features) & labels.
     readFeaturesFile(featuresFile);
     readLabelsFile(labelsFile);
+
+#ifdef _GPU_ENABLED_
+    printLog(nodeId, "Loading SparseMatrices for GPU");
+    NormAdjMatrixIn = new CuMatrix();
+    NormAdjMatrixOut = new CuMatrix();
+    Matrix norms(graph.localVtxCnt, 1, graph.vtxDataVec.data());
+    Norms = new CuMatrix(norms,cu.handle);
+    CuMatrix::MemoryPool.erase(Norms->devPtr);
+    NormAdjMatrixIn->loadSpCSC(cu.spHandle, graph);
+    NormAdjMatrixOut->loadSpCSR(cu.spHandle, graph);
+#endif
+
 
     // Initialize synchronization utilities.
     recvCnt = 0;
@@ -576,16 +582,11 @@ FeatType *Engine::aggregate(FeatType **edgsTensor, unsigned edgsCnt,
                      featDim);
     switch (aggregator) {
         case (AGGREGATOR::WSUM): {
-            Matrix norms(graph.localVtxCnt, 1, graph.vtxDataVec.data());
-            CuMatrix out = cu.aggregate(*NormAdjMatrixIn, feat, norms);
+            CuMatrix out = cu.aggregate(*NormAdjMatrixIn, feat, *Norms);
             out.setData(outputTensor);
             out.updateMatrixFromGPU();
             cudaDeviceSynchronize();
 
-            // std::cout << "Finish GPU aggregation\n";
-            // for (unsigned i = 0; i < 10; ++i) {
-            //     std::cout << outputTensor[i] << std::endl;
-            // }
             break;
         }
         default:
@@ -629,9 +630,7 @@ FeatType *Engine::aggregate(FeatType **edgsTensor, unsigned edgsCnt,
 
             computePool->perform(computeFn, &args);
             computePool->sync();
-            for (unsigned i = 0; i < 10; ++i) {
-                std::cout << outputTensor[i] << std::endl;
-            }
+
             break;
         }
         default:
@@ -1693,11 +1692,9 @@ FeatType *Engine::aggregateBackward(FeatType **eVGradTensor, unsigned edgsCnt,
                      graph.localVtxCnt, graph.dstGhostCnt, featDim);
     switch (aggregator) {
         case (AGGREGATOR::WSUM): {
-            Matrix norms(graph.localVtxCnt, 1, graph.vtxDataVec.data());
-            CuMatrix out = cu.aggregate(*NormAdjMatrixOut, feat, norms);
+            CuMatrix out = cu.aggregate(*NormAdjMatrixOut, feat, *Norms);
             out.setData(outputTensor);
             out.updateMatrixFromGPU();
-            printf("Aggregate done back\n");
             std::cout << "Finish GPU aggregation\n";
             break;
         }

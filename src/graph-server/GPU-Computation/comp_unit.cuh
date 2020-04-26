@@ -34,8 +34,8 @@ class ComputingUnit {
 
     CuMatrix wrapMatrix(Matrix m);
 
-    void scaleRowsByVector(CuMatrix& CuM, Matrix v);
-    CuMatrix aggregate(CuMatrix &sparse, CuMatrix dense, Matrix& norms);
+    void scaleRowsByVector(CuMatrix &CuM, CuMatrix& cuV);
+    CuMatrix aggregate(CuMatrix &sparse, CuMatrix &dense, CuMatrix &norms);
 
     CuMatrix dot(Matrix &A, Matrix &B);
     void activate(CuMatrix &A);
@@ -49,7 +49,7 @@ class ComputingUnit {
     float checkLoss(CuMatrix &preds, CuMatrix &labels);
     void getTrainStat(CuMatrix &preds, CuMatrix &labels, float &acc,
                       float &loss);
-                      
+
     cudnnHandle_t cudnnHandle;
     cusparseHandle_t spHandle;
     cublasHandle_t handle;

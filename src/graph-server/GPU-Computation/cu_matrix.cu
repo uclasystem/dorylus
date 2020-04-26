@@ -218,10 +218,7 @@ CuMatrix CuMatrix::dot(CuMatrix &B, bool A_trans, bool B_trans, float alpha,
 }
 
 CuMatrix CuMatrix::transpose() {
-    // CuMatrix res(Matrix(getCols(), getRows(),
-    //                     (char *)malloc(getNumElemts() * sizeof(FeatType))),
-    //              handle);
-    CuMatrix res(Matrix(getCols(), getRows(), (FeatType*)NULL), handle);
+    CuMatrix res(Matrix(getCols(), getRows(), (FeatType *)NULL), handle);
     float alpha = 1.0;
     float beta = 0.;
 

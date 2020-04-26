@@ -35,8 +35,8 @@ ComputingUnit::ComputingUnit() {
 
 CuMatrix ComputingUnit::wrapMatrix(Matrix m) { return CuMatrix(m, handle); }
 
-CuMatrix ComputingUnit::aggregate(CuMatrix &sparse, CuMatrix dense,
-                                  Matrix &norms) {
+CuMatrix ComputingUnit::aggregate(CuMatrix &sparse, CuMatrix &dense,
+                                  CuMatrix &norms) {
     CuMatrix C(Matrix(dense.getCols(), sparse.getRows(), (FeatType *)NULL),
                handle);
 
@@ -72,8 +72,6 @@ CuMatrix ComputingUnit::aggregate(CuMatrix &sparse, CuMatrix dense,
                                 desB, &agg_beta, desC, CUDA_R_32F,
                                 CUSPARSE_MM_ALG_DEFAULT, buffer);
     assert(CUSPARSE_STATUS_SUCCESS == cusparseStat);
-    cudaDeviceSynchronize();
-
     C = C.transpose();
     scaleRowsByVector(dense, norms);
 
@@ -81,9 +79,8 @@ CuMatrix ComputingUnit::aggregate(CuMatrix &sparse, CuMatrix dense,
     cudaDeviceSynchronize();
     return C;
 }
-
-void ComputingUnit::scaleRowsByVector(CuMatrix &cuM, Matrix v) {
-    CuMatrix cuV = wrapMatrix(v);
+//This function will scale first nth rows of M based on the length of cuV
+void ComputingUnit::scaleRowsByVector(CuMatrix &cuM, CuMatrix& cuV) {
     stat = cublasSdgmm(handle, CUBLAS_SIDE_RIGHT, cuM.getCols(), cuV.getRows(),
                        cuM.devPtr, cuM.getCols(), cuV.devPtr, 1, cuM.devPtr,
                        cuM.getCols());
