@@ -29,9 +29,15 @@ static CuMatrix *NormAdjMatrixIn = NULL;
 static CuMatrix *NormAdjMatrixOut = NULL;
 static CuMatrix *Norms = NULL;
 static ComputingUnit cu = ComputingUnit::getInstance();
-#else
+#endif
+
+#ifdef _CPU_ENABLED_
+#include "../commmanager/CPU_comm.hpp"
+#endif
+#ifdef _LAMBDA_ENABLED_
 #include "../commmanager/lambda_comm.hpp"
 #endif
+
 
 // ======== Debug utils ========
 typedef std::vector<std::vector<unsigned>> opTimes;
@@ -149,11 +155,15 @@ void Engine::init(int argc, char *argv[]) {
         weightComm = NULL;
     }
 
-    if (mode == CPU) {  // CPU
-    }
-#ifndef _GPU_ENABLED_
+#ifdef _LAMBDA_ENABLED_
     if (mode == LAMBDA) {  // Lambda
         resComm = new LambdaComm(this);
+    }
+#endif
+
+#ifdef _CPU_ENABLED_
+    if (mode == CPU) {  // CPU
+        resComm = new CPUComm(this);
     }
 #endif
 
@@ -1779,12 +1789,11 @@ FeatType *Engine::applyVertexBackward(FeatType *gradTensor, unsigned vtcsCnt,
             resComm->NNCompute(chunk);
         }
         resComm->NNSync();
-    } else if (mode == GPU) {  // TODO: (YIFAN) support for GPU/CPU
+    } else {  // TODO: (YIFAN) support for GPU/CPU
         Chunk chunk{0,         0,   vtcsCnt, layer - 1, PROP_TYPE::BACKWARD,
                     currEpoch, true};
         resComm->NNCompute(chunk);
-    } else if (mode == CPU) {
-    }
+    } 
 
     if (vecTimeApplyVtx.size() < 2 * numLayers) {
         for (unsigned i = vecTimeApplyVtx.size(); i < 2 * numLayers; i++) {

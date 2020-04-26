@@ -59,11 +59,6 @@ void ComputingServer::processForward(unsigned layer, bool lastLayer) {
     Matrix weight = msgService.getWeightMatrix(layer);
     CuMatrix z = cu.dot(feats, weight);
 
-    // for (unsigned i = 0; i <feats.getNumElemts();++i){
-    //     if (i%1000==0)
-    //         std::cout<<feats.getData()[i]<<endl;
-    // }
-    // cout<<"   \n\n";
     if (!lastLayer) {
         Matrix savedTensor = (*gpuComm->tensorMap)["z"];
         Matrix outputTensor = (*gpuComm->tensorMap)["h"];

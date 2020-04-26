@@ -1,10 +1,109 @@
 #include "CPU_comm.hpp"
+
 #include <omp.h>
 
-void loadWeightServers(std::vector<char *> &addresses, const std::string &wServersFile) {
+CPUComm::CPUComm(Engine *engine_) : ResourceComm() {
+    engine = engine_;
+    nodeId = engine->nodeId;
+    totalLayers = engine->numLayers;
+    wServersFile = engine->weightserverIPFile;
+    wPort = engine->weightserverPort;
+    numNodes = engine->numNodes;
+    currLayer = 0;
+
+    msgService = MessageService(wPort, nodeId);
+    loadWeightServers(weightServerAddrs, wServersFile);
+    msgService.setUpWeightSocket(
+        weightServerAddrs.at(nodeId % weightServerAddrs.size()));
+
+    // send INFO to weight server
+    if (nodeId < weightServerAddrs.size()) {
+        unsigned count = 0;
+        for (size_t i = 0; i < numNodes; ++i) {
+            if (i % weightServerAddrs.size() == nodeId) count += 1;
+        }
+        msgService.sendInfoMessage(count);
+    }
+    msgService.prefetchWeightsMatrix(totalLayers);
+}
+void CPUComm::NNCompute(Chunk &chunk) {
+    currLayer = chunk.layer;
+    tensorMap = &engine->savedNNTensors[chunk.layer];
+
+    if (chunk.dir == PROP_TYPE::FORWARD) {
+        printLog(nodeId, "CPU FORWARD NN started");
+        processForward(currLayer, currLayer == (totalLayers - 1));
+    }
+    if (chunk.dir == PROP_TYPE::BACKWARD) {
+        printLog(nodeId, "CPU BACKWARD NN started");
+        processBackward(currLayer);
+    }
+    printLog(nodeId, "CPU NN Done");
+}
+
+void CPUComm::processForward(unsigned layer, bool lastLayer) {
+    Matrix feats = (*tensorMap)["ah"];
+    Matrix weight = msgService.getWeightMatrix(currLayer);
+    Matrix z = feats.dot(weight);
+    if (!lastLayer) {
+        memcpy((*tensorMap)["z"].getData(), z.getData(), z.getDataSize());
+        Matrix act_z = activate(z);  // z data get activated ...
+        memcpy((*tensorMap)["h"].getData(), act_z.getData(),
+               act_z.getDataSize());
+        delete[] act_z.getData();
+    } else {
+        Matrix predictions = softmax(z);
+        Matrix labels = (*tensorMap)["lab"];
+
+        float acc, loss;
+        getTrainStat(predictions, labels, acc, loss);
+        printLog(nodeId, "batch Acc: %f, Loss: %f\n", acc, loss);
+
+        Matrix d_output = hadamardSub(predictions, labels);
+        Matrix weight = msgService.getWeightMatrix(layer);
+        Matrix interGrad = d_output.dot(weight, false, true);
+        memcpy((*tensorMap)["grad"].getData(), interGrad.getData(),
+               interGrad.getDataSize());
+
+        Matrix ah = (*tensorMap)["ah"];
+        Matrix weightUpdates = ah.dot(d_output, true, false);
+        msgService.sendWeightUpdate(weightUpdates, layer);
+        delete[] interGrad.getData();
+        delete[] d_output.getData();
+        delete[] predictions.getData();
+    }
+    delete[] z.getData();
+}
+
+void CPUComm::processBackward(unsigned layer) {
+    Matrix weight = msgService.getWeightMatrix(layer);
+    Matrix grad = (*tensorMap)["aTg"];
+    Matrix z = (*tensorMap)["z"];
+    Matrix actDeriv = activateDerivative(z);
+    Matrix interGrad = grad * actDeriv;
+    Matrix ah = (*tensorMap)["ah"];
+    Matrix weightUpdates = ah.dot(interGrad, true, false);
+
+    msgService.sendWeightUpdate(weightUpdates, layer);
+    if (layer != 0) {
+        Matrix resultGrad = interGrad.dot(weight, false, true);
+        memcpy((*tensorMap)["grad"].getData(), resultGrad.getData(),
+               resultGrad.getDataSize());
+        delete[] resultGrad.getData();
+    }
+
+    delete[] actDeriv.getData();
+    delete[] interGrad.getData();
+
+    if (layer == 0) msgService.prefetchWeightsMatrix(totalLayers);
+}
+
+void loadWeightServers(std::vector<char *> &addresses,
+                       const std::string &wServersFile) {
     std::ifstream infile(wServersFile);
     if (!infile.good())
-        printf("Cannot open weight server file: %s [Reason: %s]\n", wServersFile.c_str(), std::strerror(errno));
+        printf("Cannot open weight server file: %s [Reason: %s]\n",
+               wServersFile.c_str(), std::strerror(errno));
 
     assert(infile.good());
 
@@ -13,8 +112,7 @@ void loadWeightServers(std::vector<char *> &addresses, const std::string &wServe
         std::getline(infile, line);
         boost::algorithm::trim(line);
 
-        if (line.length() == 0)
-            continue;
+        if (line.length() == 0) continue;
 
         char *addr = strdup(line.c_str());
         addresses.push_back(addr);
@@ -25,7 +123,7 @@ Matrix activate(Matrix &mat) {
     FeatType *activationData = new FeatType[mat.getNumElemts()];
     FeatType *zData = mat.getData();
 
-    #pragma omp parallel for
+#pragma omp parallel for
     for (unsigned i = 0; i < mat.getNumElemts(); ++i)
         activationData[i] = std::tanh(zData[i]);
 
@@ -35,7 +133,7 @@ Matrix activate(Matrix &mat) {
 Matrix softmax(Matrix &mat) {
     FeatType *result = new FeatType[mat.getNumElemts()];
 
-    #pragma omp parallel for
+#pragma omp parallel for
     for (unsigned r = 0; r < mat.getRows(); ++r) {
         unsigned length = mat.getCols();
         FeatType *vecSrc = mat.getData() + r * length;
@@ -61,7 +159,7 @@ Matrix hadamardSub(Matrix &A, Matrix &B) {
     FeatType *AData = A.getData();
     FeatType *BData = B.getData();
 
-    #pragma omp parallel for
+#pragma omp parallel for
     for (unsigned ui = 0; ui < A.getNumElemts(); ++ui)
         result[ui] = AData[ui] - BData[ui];
 
@@ -72,125 +170,30 @@ Matrix activateDerivative(Matrix &mat) {
     FeatType *res = new FeatType[mat.getNumElemts()];
     FeatType *zData = mat.getData();
 
-    #pragma omp parallel for
+#pragma omp parallel for
     for (unsigned i = 0; i < mat.getNumElemts(); ++i)
         res[i] = 1 - std::pow(std::tanh(zData[i]), 2);
 
     return Matrix(mat.getRows(), mat.getCols(), res);
 }
 
-CPUComm::CPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_, const std::string &wServersFile_, unsigned wPort_, unsigned totalLayers_):
-    ResourceComm(),
-    totalLayers(totalLayers_),
-    wServersFile(wServersFile_),
-    nodeId(nodeId_),
-    numNodes(numNodes_),
-    currLayer(0),
-    dPort(dataserverPort_),
-    wPort(wPort_),
-    weightSocket(ctx, ZMQ_DEALER) {
-    msgService = MessageService(wPort, nodeId);
-    loadWeightServers(weightServerAddrs, wServersFile);
-    msgService.setUpWeightSocket(weightServerAddrs.at(nodeId % weightServerAddrs.size()));
-
-    //send INFO to weight server
-    if(nodeId < weightServerAddrs.size()) {
-        unsigned count = 0;
-        for (size_t i = 0; i < numNodes; ++i) {
-            if(i % weightServerAddrs.size() == nodeId)
-                count += 1;
-        }
-        msgService.sendInfoMessage(count);
-    }
-    msgService.prefetchWeightsMatrix(totalLayers);
-}
-
-
-void CPUComm::newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData_, FeatType *actData_,
-                                unsigned numLocalVertices_, unsigned numFeats, unsigned numFeatsNext_, bool pipeline) {
-    // Create a new matrix object for workers to access.
-    numLocalVertices = numLocalVertices_;
-    currLayer = layer;
-    actMatrix = Matrix(numLocalVertices_, numFeats, dataBuf);
-
-    zData = zData_;
-    actData = actData_;
-    numFeatsNext = numFeatsNext_;
-    printLog(nodeId, "CPU FORWARD context created.");
-}
-
-void CPUComm::requestForward(unsigned layer, bool lastLayer) {
-    Matrix feats = actMatrix;
-    Matrix weight = msgService.getWeightMatrix(layer);
-    Matrix z = feats.dot(weight);
-    memcpy(zData, z.getData(), z.getDataSize());
-
-    if(!lastLayer) {
-        Matrix act_z = activate(z); //z data get activated ...
-        memcpy(actData, act_z.getData(), act_z.getDataSize());
-        delete[] act_z.getData();
-    } else {
-        Matrix predictions = softmax(z);
-        memcpy(actData, predictions.getData(), predictions.getDataSize());
-        delete[] predictions.getData();
-    }
-    delete[] z.getData();
-}
-
-
-// For backward-prop.
-void CPUComm::newContextBackward(unsigned layer, FeatType *oldGradBuf,
-  FeatType *newGradBuf, std::vector<Matrix> *savedTensors, FeatType *targetBuf,
-  unsigned numLocalVertices, unsigned inFeatDim, unsigned outFeatDim,
-  unsigned targetDim, bool pipeline) {
-    currLayer = layer;
-    // Create new matrices object for workers to access.
-    oldGradMatrix = Matrix(numLocalVertices, outFeatDim, oldGradBuf);
-    newGradMatrix = Matrix(numLocalVertices, inFeatDim, newGradBuf);
-    targetMatrix = Matrix(numLocalVertices, targetDim, targetBuf);
-    this->savedTensors = savedTensors;
-    printLog(nodeId, "CPU BACKWARD context created.");
-}
-
-void CPUComm::requestBackward(unsigned layer, bool lastLayer) {
-    printLog(nodeId, "CPU BACKWARD request. %u", layer);
-    if (lastLayer) {
-        Matrix predictions = savedTensors[layer][TYPE::ACT - 1];
-        Matrix labels = targetMatrix;
-        Matrix d_output = hadamardSub(predictions, labels);
-        Matrix weight = msgService.getWeightMatrix(layer);
-        Matrix interGrad = d_output.dot(weight, false, true);
-        memcpy(newGradMatrix.getData(), interGrad.getData(), interGrad.getDataSize());
-        Matrix ah = savedTensors[layer][TYPE::AH - 1];
-        Matrix weightUpdates = ah.dot(d_output, true, false);
-        msgService.sendWeightUpdate(weightUpdates, layer);
-        delete[] interGrad.getData();
-        delete[] d_output.getData();
-
-    } else {
-        Matrix weight = msgService.getWeightMatrix(layer);
-        Matrix grad = oldGradMatrix;
-        Matrix z = savedTensors[layer][TYPE::Z - 1];
-        Matrix actDeriv = activateDerivative(z);
-        Matrix interGrad = grad * actDeriv;
-        Matrix resultGrad = interGrad.dot(weight, false, true);
-        Matrix ah = savedTensors[layer][TYPE::AH - 1];
-        Matrix weightUpdates = ah.dot(interGrad, true, false);
-
-        msgService.sendWeightUpdate(weightUpdates, layer);
-        memcpy(newGradMatrix.getData(), resultGrad.getData(), resultGrad.getDataSize());
-
-        delete[] actDeriv.getData();
-        delete[] resultGrad.getData();
-        delete[] interGrad.getData();
-
-        if(layer == 0)
-            msgService.prefetchWeightsMatrix(totalLayers);
-    }
-}
-
-
 void CPUComm::sendShutdownMessage() {
     // Send kill message.
     msgService.terminateWeightServers(weightServerAddrs);
+}
+
+void CPUComm::getTrainStat(Matrix &preds, Matrix &labels, float &acc,
+                           float &loss) {
+    acc = 0.0;
+    loss = 0.0;
+    unsigned featDim = labels.getCols();
+    for (unsigned i = 0; i < labels.getRows(); i++) {
+        FeatType *currLabel = labels.getData() + i * labels.getCols();
+        FeatType *currPred = preds.getData() + i * labels.getCols();
+        acc += currLabel[argmax(currPred, currPred + featDim)];
+        loss -= std::log(currPred[argmax(currLabel, currLabel + featDim)]);
+    }
+    acc /= labels.getRows();
+    loss /= labels.getRows();
+    printLog(nodeId, "batch loss %f, batch acc %f", loss, acc);
 }

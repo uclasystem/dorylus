@@ -1,68 +1,41 @@
 #ifndef __CPU_COMM_HPP__
 #define __CPU_COMM_HPP__
 
-
+#include <boost/algorithm/string/trim.hpp>
 #include <chrono>
 #include <cmath>
+#include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 #include <zmq.hpp>
-#include "resource_comm.hpp"
-#include "../utils/utils.hpp"
+
 #include "../../common/matrix.hpp"
 #include "../../common/utils.hpp"
-#include <thread>
-#include <boost/algorithm/string/trim.hpp>
-#include <fstream>
+#include "../engine/engine.hpp"
+#include "../utils/utils.hpp"
 #include "message_service.hpp"
-
+#include "resource_comm.hpp"
 
 class CPUComm : public ResourceComm {
-  public:
-    CPUComm(unsigned nodeId_, unsigned numNodes_, unsigned dataserverPort_, const std::string &wServersFile, unsigned wPort_, unsigned totalLayers_);
+   public:
+    CPUComm(Engine *engine_);
 
-    // For forward-prop.
-    void newContextForward(unsigned layer, FeatType *dataBuf, FeatType *zData_,
-      FeatType *actData_, unsigned numLocalVertices_, unsigned numFeats,
-      unsigned numFeatsNext_, bool pipeline = false);
-    void requestForward(unsigned layer, bool lastLayer);
-    void waitLambdaForward(unsigned layer, bool lastLayer) {};
-    void invokeLambdaForward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
-
-    // For backward-prop.
-    void newContextBackward(unsigned layer, FeatType *oldGradBuf,
-      FeatType *newGradBuf, std::vector<Matrix> *savedTensors,
-      FeatType *targetBuf, unsigned numLocalVertices, unsigned inFeatDim,
-      unsigned outFeatDim, unsigned targetDim, bool pipeline = false);
-    void requestBackward(unsigned layer, bool lastLayer);
-    void invokeLambdaBackward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
-    void waitLambdaBackward(unsigned layer, bool lastLayer) {}
-
-    //cannot be called if newContextBackward is never called due to the assignment of targetmatrix
-    void sendTargetMatrix();
+    void setAsync(bool _async){};  // GPU always run synchronously
+    unsigned getRelaunchCnt() { return 0u; };
+    void NNCompute(Chunk &chunk);
+    void NNSync(){};
 
     void sendShutdownMessage();
 
-    // TODO: (SHEN) resComm interfaces have changed.
-    void newContext(unsigned layer, Matrix &inputTensor_, Matrix &outputTensor_, std::vector<Matrix> *savedTensors_) {};
-    void newContext(unsigned layer, Matrix &inputTensor_, Matrix &outputTensor_, Matrix &targetTensor_, std::vector<Matrix> *savedTensors_) {};
-
-    // For forward-prop.
-    void applyVertexForward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
-    void applyEdgeForward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
-    void waitResForward(unsigned layer, bool lastLayer) {};
-
-    // For backward-prop.
-    void applyVertexBackward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
-    void applyEdgeBackward(unsigned layer, unsigned lambdaId, bool lastLayer) {};
-    void waitResBackward(unsigned layer, bool lastLayer) {};
-
-
-    friend class ComputingServer;
-
-  private:
+    // compute related
+    void processForward(unsigned layer, bool lastLayer);
+    void processBackward(unsigned layer);
+    void getTrainStat(Matrix &preds, Matrix &labels, float &acc,
+                           float &loss);
+   private:
     unsigned totalLayers;
     unsigned nodeId;
     unsigned numNodes;
@@ -72,29 +45,22 @@ class CPUComm : public ResourceComm {
 
     std::string wServersFile;
 
-    //ntw related objs
-    zmq::context_t ctx;
-    zmq::socket_t weightSocket;
+    // ntw related objs
     unsigned dPort;
     unsigned wPort;
 
-    //forward
-    //data related objs
-    Matrix actMatrix;   // Current layer's feats.
-    FeatType *zData;    // Places to store the results from lambda.
-    FeatType *actData;
-    unsigned numFeatsNext;
+    TensorMap *tensorMap;
 
-    //backward
-    Matrix oldGradMatrix;
-    Matrix newGradMatrix;
-    Matrix targetMatrix;
-    std::vector<Matrix> *savedTensors;
+    Engine *engine;
 
     std::vector<char *> weightServerAddrs;
-    std::vector<Matrix *> weights;
     MessageService msgService;
 };
 
-
-#endif // CPU_COMM_HPP
+Matrix activateDerivative(Matrix &mat);
+Matrix hadamardSub(Matrix &A, Matrix &B);
+Matrix softmax(Matrix &mat);
+Matrix activate(Matrix &mat);
+void loadWeightServers(std::vector<char *> &addresses,
+                       const std::string &wServersFile);
+#endif  // CPU_COMM_HPP
