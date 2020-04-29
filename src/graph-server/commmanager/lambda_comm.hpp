@@ -41,7 +41,7 @@
 
 static const bool relaunching = false;
 
-#define LAMBDA_VTX_NN "yifan-gcn"
+#define LAMBDA_VTX_NN "gcn"
 #define ALLOCATION_TAG "LambdaComm"
 
 class LambdaWorker;

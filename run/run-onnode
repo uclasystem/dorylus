@@ -50,7 +50,7 @@ case $1 in
                 NUM_LAMBDAS_BACKWARD=1
             fi
 
-            if [ $var = "pipe" ] || [ $var = "PIPE" ]; then
+            if [ $var = "--p" ] || [ $var = "--pipeline" ]; then
                 PIPELINE=1
             fi
 

@@ -211,7 +211,6 @@ CommManager::destroy() {
 
 void
 CommManager::rawMsgPushOut(zmq::message_t &msg) {
-    
     if (numNodes == 0) return;
     
     lockDataPublisher.lock();
@@ -226,7 +225,6 @@ CommManager::rawMsgPushOut(zmq::message_t &msg) {
  */
 void
 CommManager::dataPushOut(unsigned receiver, unsigned sender, unsigned topic, void *value, unsigned valSize) {
-    
     if (numNodes == 0) return;
     
     zmq::message_t outMsg(sizeof(char) * 8 + sizeof(unsigned) + sizeof(unsigned) + valSize);
@@ -254,7 +252,6 @@ CommManager::dataPushOut(unsigned receiver, unsigned sender, unsigned topic, voi
  */
 bool
 CommManager::dataPullIn(unsigned *sender, unsigned *topic, void *value, unsigned maxValSize) {
-
     if (numNodes == 0) return true;
 
     zmq::message_t inMsg;
@@ -287,7 +284,6 @@ CommManager::dataPullIn(unsigned *sender, unsigned *topic, void *value, unsigned
  */
 void
 CommManager::controlPushOut(unsigned to, void *value, unsigned valSize) {
-
     if (numNodes == 0) return;
 
     assert(to >= 0 && to < numNodes);

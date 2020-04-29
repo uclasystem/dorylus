@@ -72,9 +72,6 @@ readWriteFile(std::string snapFile, std::string bSFile, bool undirected, bool wi
 	std::ofstream bSStream;
 	bSStream.open(bSFile, std::ios::binary);
 
-	if (undirected)
-		header.numEdges *= 2;
-
 	if (withheader)
 		bSStream.write((char *) &header, sizeof(header));
 
@@ -96,6 +93,11 @@ readWriteFile(std::string snapFile, std::string bSFile, bool undirected, bool wi
 	
 		bSStream.write((char *) &src, header.sizeOfVertexType);
 		bSStream.write((char *) &dst, header.sizeOfVertexType);
+
+        if (undirected) {
+            bSStream.write((char*) &dst, header.sizeOfVertexType);
+            bSStream.write((char*) &src, header.sizeOfVertexType);
+        }
 	}
 	
 	snapStream.close();
@@ -110,7 +112,6 @@ readWriteFile(std::string snapFile, std::string bSFile, bool undirected, bool wi
  */
 int
 main(int argc, char* argv[]) {
-
 	if(argc < 4) {
 		std::cout << "Usage: " << argv[0] << " --snapfile=<BsnapFile> --undirected=<0/1> --header=<0/1>" << std::endl;
 		return -1;
@@ -150,8 +151,13 @@ main(int argc, char* argv[]) {
 	header.numVertices = 0;
 	header.numEdges = 0;
 
-	if (withheader)
+	if (withheader) {
 		readFile(snapFile);
+
+        if (undirected) header.numEdges *= 2;
+        std::cout << "Graph info - Vertices: " << header.numVertices
+          << ", Edges: " << header.numEdges << std::endl;
+    }
 
 	std::string bSFile = snapFile + ".bsnap";
 	readWriteFile(snapFile, bSFile, undirected, withheader);

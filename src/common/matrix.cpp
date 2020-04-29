@@ -48,6 +48,13 @@ void Matrix::setCols(unsigned _cols) { cols = _cols; }
 void Matrix::setDims(unsigned _rows, unsigned _cols) { rows = _rows; cols = _cols; }
 void Matrix::setData(FeatType *_data) { data = _data; }
 
+void Matrix::free() {
+    if (data) {
+        delete[] data;
+        data = NULL;
+    }
+}
+
 bool Matrix::empty() { return rows == 0 || cols == 0; }
 
 

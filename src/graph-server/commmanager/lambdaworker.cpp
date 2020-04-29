@@ -75,7 +75,7 @@ LambdaWorker::work(unsigned _wid) {
                     break;
                 }
                 default: {
-                    printLog(manager->nodeId, "unknown op %d, part id %d", op, chunk.chunkId);
+                    printLog(manager->nodeId, "unknown op %d, part id %d", op, chunk.localId);
                     break;  /** Not an op that I care about. */
                 }
             }
@@ -131,8 +131,8 @@ void LambdaWorker::sendTensors(zmq::message_t& client_id, Chunk &chunk) {
         workersocket.send(header);
 
         char errMsg[1024];
-        sprintf(errMsg, "[ ERROR ] when sending chunk: %u %u %u %u %u",
-            chunk.chunkId, chunk.layer, chunk.dir, chunk.epoch, chunk.vertex);
+        sprintf(errMsg, "[ ERROR ] when sending chunk: %s %u",
+            chunk.str().c_str(), chunk.vertex);
         printLog(manager->nodeId, errMsg);
     }
 }
@@ -176,7 +176,7 @@ void LambdaWorker::recvTensors(zmq::message_t& client_id, Chunk &chunk) {
         workersocket.send(client_id, ZMQ_SNDMORE);
         workersocket.send(ack);
 
-        std::string errMsg = "[ ERROR ] when receiving from " + std::to_string(chunk.chunkId) + ": ";
+        std::string errMsg = "[ ERROR ] when receiving from " + chunk.str() + ": ";
         errMsg += "Received duplicate results. Discarding...";
         printLog(manager->nodeId, errMsg.c_str());
     }
@@ -202,11 +202,11 @@ void LambdaWorker::recvEvalData(zmq::message_t &client_id, Chunk &chunk) {
         // printLog(manager->nodeId, "epoch %u, chunk %u/%u, acc %.3f, loss %.3f", chunk.epoch, accLoss.chunkCnt, manager->engine->numLambdasForward,
         //                 accLoss.acc / accLoss.vtcsCnt, accLoss.loss / accLoss.vtcsCnt);
         if (accLoss.chunkCnt == manager->engine->numLambdasForward) {
-            printLog(manager->nodeId, "epoch %u, acc %.3f, loss %.3f", chunk.epoch, accLoss.acc / accLoss.vtcsCnt, accLoss.loss / accLoss.vtcsCnt);
+            printLog(manager->nodeId, "%u: epoch %u, acc %.3f, loss %.3f", timestamp_ms(), chunk.epoch, accLoss.acc / accLoss.vtcsCnt, accLoss.loss / accLoss.vtcsCnt);
         }
         manager->accMtx.unlock();
     } else {
-        std::string errMsg = "[ ERROR ] when receiving from " + std::to_string(chunk.chunkId) + ": ";
+        std::string errMsg = "[ ERROR ] when receiving from " + chunk.str() + ": ";
         errMsg += "Received duplicate results. Discarding...";
         printLog(manager->nodeId, errMsg.c_str());
     }
@@ -233,7 +233,7 @@ void LambdaWorker::markFinish(zmq::message_t& client_id, Chunk &chunk) {
         workersocket.send(client_id, ZMQ_SNDMORE);
         workersocket.send(ack);
 
-        std::string errMsg = "[ ERROR ] when receiving from " + std::to_string(chunk.chunkId) + ": ";
+        std::string errMsg = "[ ERROR ] when receiving from " + chunk.str() + ": ";
         errMsg += "Received duplicate results. Discarding...";
         printLog(manager->nodeId, errMsg.c_str());
     }
@@ -271,8 +271,8 @@ int LambdaWorker::recvTensor(Chunk &chunk) {
     TensorMap& tensorMap = manager->savedNNTensors[chunk.layer];
     auto found = tensorMap.find(name);
     if (found == tensorMap.end()) {
-        printLog(manager->nodeId, "Lambda %u returned unknown tensor '%s'. Make sure to allocate it before running lambdas!",
-                 chunk.chunkId, name.c_str());
+        printLog(manager->nodeId, "Lambda %s returned unknown tensor '%s'. Make sure to allocate it before running lambdas!",
+                 chunk.str().c_str(), name.c_str());
         return 1;
      }
 

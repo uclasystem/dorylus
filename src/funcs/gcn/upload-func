@@ -22,7 +22,7 @@ cmake .. -DCMAKE_BUILD_TYPE=Release
 if [[ $? -eq 0 ]]; then
 	make
 else
-    exit
+	exit
 fi
 
 
@@ -30,11 +30,13 @@ fi
 if [[ $? -eq 0 ]]; then
 	make aws-lambda-package-${FUNC_NAME}
 else
-    exit
+	exit
 fi
 
 
 # Upload to AWS cloud.
 if [[ $? -eq 0 ]]; then
 	aws lambda update-function-code --function-name ${FUNC_NAME} --zip-file fileb://${ZIP_FILE}
+else
+	exit
 fi

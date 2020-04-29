@@ -16,18 +16,27 @@
 #include <thread>
 #include <vector>
 #include <map>
+#include <mutex>
 
 #include <zmq.hpp>
 #include <boost/algorithm/string/trim.hpp>
 
-#include "serverworker.hpp"
 #include "AdamOptimizer.hpp"
+#include "weighttensor.hpp"
 #include "../common/matrix.hpp"
 #include "../common/utils.hpp"
 
 
-enum CTRL_MSG { MASTERUP, WORKERUP, INITDONE, ACK };
+#define NUM_LISTENERS 4
+
+#define UPD_HEADER_SIZE (4 + sizeof(unsigned) * 2)
+#define IDENTITY_SIZE 4
+#define TENSOR_NAME_SIZE 8
+
+enum CTRL_MSG { MASTERUP, WORKERUP, INITDONE, DATA, ACK };
 const float LEARNING_RATE = 0.01;
+
+class ServerWorker;
 
 /**
  *
@@ -36,85 +45,94 @@ const float LEARNING_RATE = 0.01;
  *
  */
 class WeightServer {
-  public:
+public:
     WeightServer(std::string &weightServersFile, std::string &myPrIpFile,
                  unsigned _listenerPort, std::string &configFileName,
                  unsigned _serverPort, std::string &tmpFileName);
     ~WeightServer();
 
-    // Runs the weightserver, start a bunch of worker threads and create a proxy through frontend to backend.
-    void run();
+    bool sync; // sync mode or async pipeline
 
-    // Average and apply update batches.
     void applyUpdate(unsigned layer, std::string& name);
-    void applyUpdates();
-    void synchronize(unsigned layer);
 
-    //For sync
-    std::mutex servers_updates_mutex;
-    std::condition_variable servers_updates_cv;
-    bool servers_updates_done;
-
-  private:
-    // For debugging.
-    void serverLog(std::string info);
+    void receiver();
+    std::thread *recvThd;
+    std::mutex ackCntMtx;
+    std::condition_variable ackCntCV;
+    unsigned ackCnt;
 
     // Use dsh file to open sockets to other weight servers for aggregation.
-    void initializeWeightServerComms(std::string &weightServersFile, std::string &myPrIpFile);
-    std::string parseNodeConfig(std::string &weightServersFile, std::string &myPrIpFile, std::string &myIp);
+    std::vector<std::string> parseNodeConfig(std::string &configFileName, std::string &weightServersFile, std::string &myPrIpFile);
+    void initWServerComm(std::vector<std::string> &allNodeIps);
+    // Members related to communications.
+    unsigned nodeId;
+    unsigned numNode;
 
     // Read in layer configurations. The master constructs the weight matrices and then sends them
     // to the workers.
-    void initializeWeightMatrices(std::string &configFileName);
-
-    // Variations of weight matrix initialization
-    Matrix xavierInitialization(unsigned dim1, unsigned dim2);
-    Matrix kaimingInitialization(unsigned dim1, unsigned dim2);
-    Matrix randomInitialization(unsigned dim1, unsigned dim2,
-                                float lowerBound, float upperBound);
-
-    // Initialize bias vectors
-    Matrix initBias(unsigned dim, float initVal = 0);
-
-    void initializeAdamVariables();
-
-    void distributeWeightMatrices();
-
+    void initWeights();
+    void distributeWeights();
+    void freeWeights();
     std::vector<unsigned> dims;
-    std::vector<Matrix> weightMats;
-    std::vector<Matrix> biases;
+    // [layer][name][version] -> versioned weight tensor
+    std::vector<WeightTensorMap> weightsStore;
+    std::vector<MutexMap> wMtxs;
+    std::vector<MutexMap> uMtxs;
+    std::mutex storeMtx;
 
-    std::vector< TensorMap > weightsStore;
-    std::vector< TensorMap > updateStore;
+    // Helper functions
+    // Runs the weightserver, start a bunch of worker threads and create a proxy through frontend to backend.
+    void run();
+    void stopWorkers();
+    std::vector<ServerWorker *> workers;
+    std::vector<std::thread *> worker_threads;
+    std::mutex termMtx;
+    std::condition_variable termCV;
+    bool term;
 
-    // Adam descent variables
+    void setLocalUpdTot(unsigned localUpdTot);
+    void setGhostUpdTot(unsigned ghostUpdTot);
+    unsigned numLambdas; // Number of update sent back from lambdas at backprop.
+
+    void setupAdamOpt(bool adam);
+    void deleteAdamOpt();
     bool adam;  // whether to use standard SGD or Adam Opt
+    AdamOptimizer *adamOpt;
 
-    // List of Matrices for holding updates until they are ready to be applied.
-    std::vector<Matrix> updateMats;
-
-    // Number of lambdas requests at backprop.
-    unsigned numLambdas;
-    unsigned lambdaRecved;
-    unsigned count;
-
+    void setupSockets();
+    void closeSockets();
+    void fillHeader(zmq::message_t &header, unsigned receiver, unsigned topic);
+    void parseHeader(zmq::message_t &header, unsigned &sender, unsigned &topic);
+    void fillTensorDescriber(zmq::message_t &td, std::string &name, unsigned layer);
+    void parseTensorDescriber(zmq::message_t &td, std::string &name, unsigned &layer);
+    void pushoutMsg(zmq::message_t &msg);
+    void pushoutMsgs(std::vector<zmq::message_t *> &msgs);
     zmq::context_t ctx;
     zmq::socket_t frontend;
     zmq::socket_t backend;
     unsigned listenerPort;
-
-    // Members related to communications.
-    bool master;
-    unsigned nodeId;
-    std::vector<std::string> allNodeIps;
-
+    std::mutex pubMtx;
+    std::mutex subMtx;
     zmq::context_t dataCtx;
     zmq::socket_t publisher;
     zmq::socket_t subscriber;
     unsigned serverPort;
 
-    AdamOptimizer *adamOpt;
-};
+    void createOutputFile(std::string &fileName);
+    void closeOutputFile();
+    std::ofstream outfile;
 
+    // Initializer
+    // Variations of weight matrix initialization
+    Matrix xavierInitializer(unsigned dim1, unsigned dim2);
+    Matrix kaimingInitializer(unsigned dim1, unsigned dim2);
+    Matrix randomInitializer(unsigned dim1, unsigned dim2,
+                            float lowerBound, float upperBound);
+    // Initialize bias vectors
+    Matrix initBias(unsigned dim, float initVal = 0);
+
+    // For debugging.
+    void serverLog(std::string info);
+};
 
 #endif

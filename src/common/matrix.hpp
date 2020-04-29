@@ -43,6 +43,7 @@ public:
     void setCols(unsigned _cols);
     void setDims(unsigned _rows, unsigned _cols);
     void setData(FeatType *_data);
+    void free();
 
     bool empty();
 
