@@ -43,7 +43,7 @@ class ComputingUnit {
     void hadamardAdd(CuMatrix &matLeft, CuMatrix &matRight);
     CuMatrix hadamardSub(CuMatrix &matLeft, CuMatrix &matRight);
     CuMatrix hadamardMul(CuMatrix &matLeft, CuMatrix &matRight);
-    CuMatrix activateBackward(CuMatrix &y, CuMatrix &gradient);
+    CuMatrix activateBackward(CuMatrix &x ,CuMatrix &y, CuMatrix &dy);
 
     unsigned checkAccuracy(CuMatrix &predictions, CuMatrix &labels);
     float checkLoss(CuMatrix &preds, CuMatrix &labels);

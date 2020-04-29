@@ -1,6 +1,8 @@
 #include "comp_unit.cuh"
 #include "cuda_ops.cuh"
 
+#define ACTIVATION CUDNN_ACTIVATION_TANH
+
 const float alpha = 1.0f, beta = 0.0f;
 using namespace std;
 void cudaErrCheck(cudaError_t stat) {
@@ -79,8 +81,8 @@ CuMatrix ComputingUnit::aggregate(CuMatrix &sparse, CuMatrix &dense,
     cudaDeviceSynchronize();
     return C;
 }
-//This function will scale first nth rows of M based on the length of cuV
-void ComputingUnit::scaleRowsByVector(CuMatrix &cuM, CuMatrix& cuV) {
+// This function will scale first nth rows of M based on the length of cuV
+void ComputingUnit::scaleRowsByVector(CuMatrix &cuM, CuMatrix &cuV) {
     stat = cublasSdgmm(handle, CUBLAS_SIDE_RIGHT, cuM.getCols(), cuV.getRows(),
                        cuM.devPtr, cuM.getCols(), cuV.devPtr, 1, cuM.devPtr,
                        cuM.getCols());
@@ -142,24 +144,28 @@ CuMatrix ComputingUnit::softmaxRows(CuMatrix &mat) {
     return res;
 }
 
-CuMatrix ComputingUnit::activateBackward(CuMatrix &y, CuMatrix &gradient) {
+CuMatrix ComputingUnit::activateBackward(CuMatrix &x, CuMatrix &y,
+                                         CuMatrix &dy) {
+    FeatType *x_d = new FeatType[y.getNumElemts()];
+    FeatType *dx_d = new FeatType[y.getNumElemts()];
+    memset(dx_d, 0, y.getDataSize());
+    memset(x_d, 0, y.getDataSize());
+    CuMatrix dx(Matrix(y.getRows(), y.getCols(), dx_d), handle);
+    CuMatrix x_(Matrix(y.getRows(), y.getCols(), x_d), handle);
+
     cudnnActivationDescriptor_t actDesc;
     cudnnCreateActivationDescriptor(&actDesc);
-    cudnnSetActivationDescriptor(actDesc, CUDNN_ACTIVATION_RELU,
-                                 CUDNN_NOT_PROPAGATE_NAN, 1.0);
-
-    cudnnTensorDescriptor_t yDesc, dyDesc;
+    cudnnSetActivationDescriptor(actDesc, ACTIVATION, CUDNN_NOT_PROPAGATE_NAN,
+                                 0.0);
+    cudnnTensorDescriptor_t yDesc;
     cudnnCreateTensorDescriptor(&yDesc);
     cudnnSetTensor4dDescriptor(yDesc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
                                y.getRows(), 1, 1, y.getCols());
-    cudnnCreateTensorDescriptor(&dyDesc);
-    cudnnSetTensor4dDescriptor(dyDesc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
-                               gradient.getRows(), 1, 1, gradient.getCols());
-
-    cudnnActivationBackward(cudnnHandle, actDesc, &alpha, yDesc, y.devPtr,
-                            dyDesc, gradient.devPtr, yDesc, y.devPtr, &beta,
-                            dyDesc, gradient.devPtr);
-    return gradient;
+    auto error = cudnnActivationBackward(cudnnHandle, actDesc, &alpha, yDesc,
+                                         y.devPtr, yDesc, dy.devPtr, yDesc,
+                                         x_.devPtr, &beta, yDesc, dx.devPtr);
+    assert(CUDNN_STATUS_SUCCESS == error);
+    return dx;
 }
 
 CuMatrix ComputingUnit::dot(Matrix &A, Matrix &B) {
@@ -179,8 +185,7 @@ void ComputingUnit::activate(CuMatrix &A) {
 
     cudnnActivationDescriptor_t actDesc;
     cudnnCreateActivationDescriptor(&actDesc);
-    cudnnSetActivationDescriptor(actDesc, CUDNN_ACTIVATION_TANH,
-                                 CUDNN_NOT_PROPAGATE_NAN, 1.0);
+    cudnnSetActivationDescriptor(actDesc, ACTIVATION, CUDNN_PROPAGATE_NAN, 0.0);
     cudnnActivationForward(cudnnHandle, actDesc, &alpha, srcTensorDesc,
                            A.devPtr, &beta, srcTensorDesc, A.devPtr);
 }

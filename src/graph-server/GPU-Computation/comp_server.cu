@@ -1,3 +1,4 @@
+#include <cmath>
 #include <iostream>
 
 #include "../../common/utils.hpp"
@@ -86,7 +87,13 @@ void ComputingServer::gradLayer(unsigned layer) {
     CuMatrix cuGrad = cu.wrapMatrix(grad);
     Matrix z = (*gpuComm->tensorMap)["z"];
     CuMatrix cuZ = cu.wrapMatrix(z);
-    CuMatrix interGrad = cu.activateBackward(cuZ, cuGrad);
+    Matrix ah = (*gpuComm->tensorMap)["ah"];
+    CuMatrix cuAh = cu.wrapMatrix(ah);
+
+    CuMatrix interGrad = cu.activateBackward(cuAh, cuZ, cuGrad);
+    CuMatrix cuWeightUpdates = cuAh.dot(interGrad, true, false);
+
+    Matrix weightUpdates = cuWeightUpdates.getMatrix();
     Matrix weight = msgService.getWeightMatrix(layer);
     CuMatrix cuWeights = cu.wrapMatrix(weight);
     if (layer != 0) {
@@ -94,11 +101,6 @@ void ComputingServer::gradLayer(unsigned layer) {
         resultGrad.setData((*gpuComm->tensorMap)["grad"].getData());
         resultGrad.updateMatrixFromGPU();
     }
-
-    Matrix ah = (*gpuComm->tensorMap)["ah"];
-    CuMatrix cuAh = cu.wrapMatrix(ah);
-    CuMatrix cuWeightUpdates = cuAh.dot(interGrad, true, false);
-    Matrix weightUpdates = cuWeightUpdates.getMatrix();
 
     msgService.sendWeightUpdate(weightUpdates, layer);
 }

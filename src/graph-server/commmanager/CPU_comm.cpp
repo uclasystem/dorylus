@@ -1,7 +1,7 @@
 #include "CPU_comm.hpp"
 
 #include <omp.h>
-
+using namespace std;
 CPUComm::CPUComm(Engine *engine_) : ResourceComm() {
     engine = engine_;
     nodeId = engine->nodeId;
@@ -79,11 +79,12 @@ void CPUComm::processBackward(unsigned layer) {
     Matrix weight = msgService.getWeightMatrix(layer);
     Matrix grad = (*tensorMap)["aTg"];
     Matrix z = (*tensorMap)["z"];
+
     Matrix actDeriv = activateDerivative(z);
     Matrix interGrad = grad * actDeriv;
+
     Matrix ah = (*tensorMap)["ah"];
     Matrix weightUpdates = ah.dot(interGrad, true, false);
-
     msgService.sendWeightUpdate(weightUpdates, layer);
     if (layer != 0) {
         Matrix resultGrad = interGrad.dot(weight, false, true);
