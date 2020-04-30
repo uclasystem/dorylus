@@ -12,7 +12,7 @@ WeightServer::WeightServer(std::string &weightServersFile, std::string &myPrIpFi
     : ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
       listenerPort(_listenerPort), serverPort(_serverPort),
       dataCtx(1), publisher(dataCtx, ZMQ_PUB), subscriber(dataCtx, ZMQ_SUB),
-      numLambdas(0), term(false), adam(true), sync(true) {
+      numLambdas(0), term(false), adam(true), sync(false) {
 
     std::vector<std::string> allNodeIps = parseNodeConfig(configFileName, weightServersFile, myPrIpFile);
     setupSockets();
