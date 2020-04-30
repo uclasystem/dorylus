@@ -2596,86 +2596,49 @@ void Engine::printGraphMetrics() {
  * Parse command line arguments.
  *
  */
-void Engine::parseArgs(int argc, char *argv[]) {
+void
+Engine::parseArgs(int argc, char *argv[]) {
     boost::program_options::options_description desc("Allowed options");
-    desc.add_options()("help", "Produce help message")
+    desc.add_options()
+    ("help", "Produce help message")
 
-        ("datasetdir", boost::program_options::value<std::string>(),
-         "Path to the dataset")(
-            "featuresfile", boost::program_options::value<std::string>(),
-            "Path to the file containing the vertex features")(
-            "layerfile", boost::program_options::value<std::string>(),
-            "Layer configuration file")(
-            "labelsfile", boost::program_options::value<std::string>(),
-            "Target labels file")("dshmachinesfile",
-                                  boost::program_options::value<std::string>(),
-                                  "DSH machines file")(
-            "pripfile", boost::program_options::value<std::string>(),
-            "File containing my private ip")(
-            "pubipfile", boost::program_options::value<std::string>(),
-            "File containing my public ip")
+    ("datasetdir", boost::program_options::value<std::string>(), "Path to the dataset")
+    ("featuresfile", boost::program_options::value<std::string>(), "Path to the file containing the vertex features")
+    ("layerfile", boost::program_options::value<std::string>(), "Layer configuration file")
+    ("labelsfile", boost::program_options::value<std::string>(), "Target labels file")
+    ("dshmachinesfile", boost::program_options::value<std::string>(), "DSH machines file")
+    ("pripfile", boost::program_options::value<std::string>(), "File containing my private ip")
+    ("pubipfile", boost::program_options::value<std::string>(), "File containing my public ip")
 
-            ("tmpdir", boost::program_options::value<std::string>(),
-             "Temporary directory")
+    ("tmpdir", boost::program_options::value<std::string>(), "Temporary directory")
 
-                ("dataserverport", boost::program_options::value<unsigned>(),
-                 "The port exposing to the lambdas")(
-                    "weightserverport",
-                    boost::program_options::value<unsigned>(),
-                    "The port of the listener on the lambdas")(
-                    "wserveripfile",
-                    boost::program_options::value<std::string>(),
-                    "The file contains the public IP addresses of the weight "
-                    "server")
+    ("dataserverport", boost::program_options::value<unsigned>(), "The port exposing to the lambdas")
+    ("weightserverport", boost::program_options::value<unsigned>(), "The port of the listener on the lambdas")
+    ("wserveripfile", boost::program_options::value<std::string>(), "The file contains the public IP addresses of the weight server")
 
-        // Default is directed graph!
-        ("undirected",
-         boost::program_options::value<unsigned>()->default_value(unsigned(0),
-                                                                  "0"),
-         "Graph type is undirected or not")
+    // Default is directed graph!
+    ("undirected", boost::program_options::value<unsigned>()->default_value(unsigned(0), "0"), "Graph type is undirected or not")
 
-            ("dthreads", boost::program_options::value<unsigned>(),
-             "Number of data threads")(
-                "cthreads", boost::program_options::value<unsigned>(),
-                "Number of compute threads")
+    ("dthreads", boost::program_options::value<unsigned>(), "Number of data threads")
+    ("cthreads", boost::program_options::value<unsigned>(), "Number of compute threads")
 
-                ("dataport", boost::program_options::value<unsigned>(),
-                 "Port for data communication")(
-                    "ctrlport", boost::program_options::value<unsigned>(),
-                    "Port start for control communication")(
-                    "nodeport", boost::program_options::value<unsigned>(),
-                    "Port for node manager")
+    ("dataport", boost::program_options::value<unsigned>(), "Port for data communication")
+    ("ctrlport", boost::program_options::value<unsigned>(), "Port start for control communication")
+    ("nodeport", boost::program_options::value<unsigned>(), "Port for node manager")
 
-                    ("numlambdasforward",
-                     boost::program_options::value<unsigned>()->default_value(
-                         unsigned(1), "5"),
-                     "Number of lambdas to request at forward")(
-                        "numlambdasbackward",
-                        boost::program_options::value<unsigned>()
-                            ->default_value(unsigned(1), "20"),
-                        "Number of lambdas to request at backward")(
-                        "numEpochs", boost::program_options::value<unsigned>(),
-                        "Number of epochs to run")(
-                        "validationFrequency",
-                        boost::program_options::value<unsigned>(),
-                        "Number of epochs to run before validation")
+    ("numlambdasforward", boost::program_options::value<unsigned>()->default_value(unsigned(1), "5"), "Number of lambdas to request at forward")
+    ("numlambdasbackward", boost::program_options::value<unsigned>()->default_value(unsigned(1), "20"), "Number of lambdas to request at backward")
+    ("numEpochs", boost::program_options::value<unsigned>(), "Number of epochs to run")
+    ("validationFrequency", boost::program_options::value<unsigned>(), "Number of epochs to run before validation")
 
-                        ("MODE", boost::program_options::value<unsigned>(),
-                         "0: Lambda, 1: GPU, 2: CPU")(
-                            "pipeline", boost::program_options::value<bool>(),
-                            "0: Sequential, 1: Pipelined")(
-                            "staleness",
-                            boost::program_options::value<unsigned>()
-                                ->default_value(unsigned(UINT_MAX)),
-                            "Bound on staleness");
+    ("MODE", boost::program_options::value<unsigned>(), "0: Lambda, 1: GPU, 2: CPU")
+    ("pipeline", boost::program_options::value<bool>(), "0: Sequential, 1: Pipelined")
+    ("staleness", boost::program_options::value<unsigned>()->default_value(unsigned(UINT_MAX)),
+      "Bound on staleness")
+    ;
 
     boost::program_options::variables_map vm;
-    boost::program_options::store(
-        boost::program_options::command_line_parser(argc, argv)
-            .options(desc)
-            .allow_unregistered()
-            .run(),
-        vm);
+    boost::program_options::store(boost::program_options::command_line_parser(argc, argv).options(desc).allow_unregistered().run(), vm);
     boost::program_options::notify(vm);
 
     if (vm.count("help")) {
@@ -2684,10 +2647,10 @@ void Engine::parseArgs(int argc, char *argv[]) {
     }
 
     assert(vm.count("dthreads"));
-    dThreads = vm["dthreads"].as<unsigned>();  // Communicator threads.
+    dThreads = vm["dthreads"].as<unsigned>();   // Communicator threads.
 
     assert(vm.count("cthreads"));
-    cThreads = vm["cthreads"].as<unsigned>();  // Computation threads.
+    cThreads = vm["cthreads"].as<unsigned>();   // Computation threads.
 
     assert(vm.count("datasetdir"));
     datasetDir = vm["datasetdir"].as<std::string>();
@@ -2711,9 +2674,7 @@ void Engine::parseArgs(int argc, char *argv[]) {
     myPubIpFile = vm["pubipfile"].as<std::string>();
 
     assert(vm.count("tmpdir"));
-    outFile = vm["tmpdir"].as<std::string>() +
-              "/output_";  // Still needs to append the node id, after node
-                           // manager set up.
+    outFile = vm["tmpdir"].as<std::string>() + "/output_";  // Still needs to append the node id, after node manager set up.
 
     assert(vm.count("dataserverport"));
     dataserverPort = vm["dataserverport"].as<unsigned>();
@@ -2760,14 +2721,10 @@ void Engine::parseArgs(int argc, char *argv[]) {
     assert(vm.count("staleness"));
     staleness = vm["staleness"].as<unsigned>();
 
-    printLog(404,
-             "Parsed configuration: dThreads = %u, cThreads = %u, datasetDir = "
-             "%s, featuresFile = %s, dshMachinesFile = %s, "
-             "myPrIpFile = %s, myPubIpFile = %s, undirected = %s, data port "
-             "set -> %u, control port set -> %u, node port set -> %u",
-             dThreads, cThreads, datasetDir.c_str(), featuresFile.c_str(),
-             dshMachinesFile.c_str(), myPrIpFile.c_str(), myPubIpFile.c_str(),
-             undirected ? "true" : "false", data_port, ctrl_port, node_port);
+    printLog(404, "Parsed configuration: dThreads = %u, cThreads = %u, datasetDir = %s, featuresFile = %s, dshMachinesFile = %s, "
+             "myPrIpFile = %s, myPubIpFile = %s, undirected = %s, data port set -> %u, control port set -> %u, node port set -> %u",
+             dThreads, cThreads, datasetDir.c_str(), featuresFile.c_str(), dshMachinesFile.c_str(),
+             myPrIpFile.c_str(), myPubIpFile.c_str(), undirected ? "true" : "false", data_port, ctrl_port, node_port);
 }
 
 /**
