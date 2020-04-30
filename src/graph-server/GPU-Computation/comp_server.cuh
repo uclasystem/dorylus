@@ -1,51 +1,50 @@
 #ifndef __COMP_SERVER_HPP__
 #define __COMP_SERVER_HPP__
 
-#include "../commmanager/GPU_comm.hpp"
-#include <chrono>
-#include <iostream>
-#include <fstream>
-#include <string>
-#include <cstring>
-#include <sstream>
-#include <boost/algorithm/string/trim.hpp>
-#include <vector>
-#include "comp_unit.cuh"
-#include "../utils/utils.hpp"
-#include "../commmanager/message_service.hpp"
 #include <time.h>
+
+#include <boost/algorithm/string/trim.hpp>
+#include <chrono>
+#include <cstring>
+#include <fstream>
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <vector>
+
+#include "../commmanager/GPU_comm.hpp"
+#include "../commmanager/message_service.hpp"
+#include "../utils/utils.hpp"
+#include "comp_unit.cuh"
 
 unsigned nodeId;
 class GPUComm;
 
 class ComputingServer {
-  public:
+   public:
     ComputingServer();
     ComputingServer(GPUComm *gpu_comm);
 
-    //For forward
+    // For forward
     void processForward(unsigned layer, bool lastLayer);
 
-    //For validation
+    // For validation
     // void evaluateModel(Matrix& activations);
 
-    //For backward
-    void processBackward(unsigned layer, bool lastLayer);
+    // For backward
+    void processBackward(unsigned layer);
     void gradLayer(unsigned layer);
-    void gradLoss(unsigned layer);
+    void gradLoss(unsigned layer, CuMatrix pred, bool report = true);
 
     void terminate();
 
-  private:
-
+   private:
     std::vector<char *> weightServerAddrs;
     MessageService msgService;
     ComputingUnit cu;
     GPUComm *gpuComm;
     unsigned totalLayers;
-    CuMatrix* weights; //Weight Matrices Array
-    // CuMatrix features;
-    // CuMatrix
+    CuMatrix *weights;  // Weight Matrices Array
 };
 
 #endif
