@@ -1,24 +1,24 @@
 #ifndef __MSG_SRV_HPP__
 #define __MSG_SRV_HPP__
 
-#include <zmq.hpp>
-#include "../utils/utils.hpp"
-#include "../../common/matrix.hpp"
-#include "../../common/utils.hpp"
+#include <chrono>
 #include <thread>
 #include <vector>
-#include <chrono>
+#include <zmq.hpp>
 
-//This class is used for CPU/GPU <-> weight server communication
+#include "../../common/matrix.hpp"
+#include "../../common/utils.hpp"
+#include "../utils/utils.hpp"
+
+// This class is used for CPU/GPU <-> weight server communication
 class MessageService {
-  public:
-    MessageService() {};
+   public:
+    MessageService(){};
     MessageService(unsigned wPort_, unsigned nodeId_);
 
-    //weight server related
+    // weight server related
     void setUpWeightSocket(char *addr);
     void prefetchWeightsMatrix(unsigned totalLayers);
-    void sendInfoMessage(unsigned numLambdas);
 
     void sendWeightUpdate(Matrix &matrix, unsigned layer);
     void terminateWeightServers(std::vector<char *> &weightServerAddrs);
@@ -26,7 +26,7 @@ class MessageService {
 
     Matrix getWeightMatrix(unsigned layer);
 
-  private:
+   private:
     static char weightAddr[50];
     zmq::context_t wctx;
     zmq::socket_t *dataSocket;
@@ -36,10 +36,10 @@ class MessageService {
     unsigned wPort;
     bool wsocktReady;
 
+    unsigned epoch;
     std::vector<Matrix *> weights;
     std::thread wReqThread;
     std::thread wSndThread;
-    std::thread infoThread;
 };
 
 #endif

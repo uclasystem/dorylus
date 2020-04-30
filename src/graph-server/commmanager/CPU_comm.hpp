@@ -55,6 +55,8 @@ class CPUComm : public ResourceComm {
 
     std::vector<char *> weightServerAddrs;
     MessageService msgService;
+
+    Chunk c;
 };
 
 Matrix activateDerivative(Matrix &mat);

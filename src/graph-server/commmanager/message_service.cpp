@@ -125,15 +125,18 @@ void MessageService::sendWeightUpdate(Matrix &matrix, unsigned layer) {
         [&](Matrix matrix, unsigned layer) {
             matrix.setName("w");
             std::vector<Matrix> weightUpdates{matrix};
-            Chunk c;
+            Chunk c={0};
             c.layer = layer;
+            c.epoch=epoch;
+            c.globalId=nodeId;
+            c.localId=nodeId;
             sendTensors(*weightSocket, c, weightUpdates);
         },
         matrix, layer);
 }
 
 MessageService::MessageService(unsigned wPort_, unsigned nodeId_)
-    : wctx(1), nodeId(nodeId_), wPort(wPort_), wsocktReady(0), confirm(5) {
+    : wctx(1), nodeId(nodeId_), wPort(wPort_), wsocktReady(0), confirm(5), epoch(-1) {
     weightSocket = new zmq::socket_t(wctx, ZMQ_DEALER);
 }
 
@@ -161,10 +164,8 @@ void MessageService::prefetchWeightsMatrix(unsigned totalLayers) {
     if (wReqThread.joinable()) {
         wReqThread.join();
     }
-    if (infoThread.joinable()) {
-        infoThread.join();
-    }
 
+    epoch++;
     weights = std::vector<Matrix *>(totalLayers, 0);
     wReqThread = std::thread([&, totalLayers]() {
         if (wSndThread.joinable()) wSndThread.join();
@@ -176,8 +177,11 @@ void MessageService::prefetchWeightsMatrix(unsigned totalLayers) {
             }
         }
         for (unsigned j = 0; j < totalLayers; ++j) {
-            Chunk c;
+            Chunk c={0};
             c.layer = j;
+            c.epoch = epoch;
+            c.globalId=nodeId;
+            c.localId=nodeId;
             std::vector<std::string> weightRequests{"w"};
             Matrix m = reqTensors(*weightSocket, c, weightRequests)[0];
             weights[j] = new Matrix(m.getRows(), m.getCols(), m.getData());
@@ -191,16 +195,6 @@ Matrix MessageService::getWeightMatrix(unsigned layer) {
     return *weights.at(layer);
 }
 
-void MessageService::sendInfoMessage(unsigned numLambdas) {
-    infoThread = std::thread([&, numLambdas]() {
-        zmq::message_t header(HEADER_SIZE);
-        populateHeader((char *)header.data(), OP::INFO, numLambdas);
-        weightSocket->send(header);
-        // Wait for info received reply.
-        zmq::message_t confirm;
-        weightSocket->recv(&confirm);
-    });
-}
 
 void MessageService::terminateWeightServers(
     std::vector<char *> &weightServerAddrs) {

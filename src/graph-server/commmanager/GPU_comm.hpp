@@ -42,7 +42,6 @@ class GPUComm : public ResourceComm {
     unsigned nodeId;
     unsigned numNodes;
     unsigned numLocalVertices;
-
     unsigned currLayer;
 
     std::string wServersFile;
@@ -55,6 +54,8 @@ class GPUComm : public ResourceComm {
 
     ComputingServer *comp_server;
     Engine *engine;
+    Chunk c;
+
 };
 
 

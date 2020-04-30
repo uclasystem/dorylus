@@ -700,7 +700,7 @@ FeatType *Engine::applyVertex(FeatType *vtcsTensor, unsigned vtcsCnt,
     // if in GPU mode we launch gpu computation here and wait the results
     else {
         Chunk batch{
-            0,         0,   0, vtcsCnt, layer, PROP_TYPE::FORWARD,
+            nodeId,    nodeId, 0, vtcsCnt, layer, PROP_TYPE::FORWARD,
             currEpoch, true};  // for now it loads the entire feature matrix
         resComm->NNCompute(batch);
     }
@@ -1832,8 +1832,9 @@ FeatType *Engine::applyVertexBackward(FeatType *gradTensor, unsigned vtcsCnt,
             resComm->NNCompute(chunk);
         }
         resComm->NNSync();
-    } else {  // TODO: (YIFAN) support for GPU/CPU
-        Chunk chunk{0,         0,   0, vtcsCnt, layer - 1, PROP_TYPE::BACKWARD,
+    } else {
+        Chunk chunk{nodeId,    nodeId,    0,
+                    vtcsCnt,   layer - 1, PROP_TYPE::BACKWARD,
                     currEpoch, true};
         resComm->NNCompute(chunk);
     }

@@ -16,17 +16,10 @@ CPUComm::CPUComm(Engine *engine_) : ResourceComm() {
     msgService.setUpWeightSocket(
         weightServerAddrs.at(nodeId % weightServerAddrs.size()));
 
-    // send INFO to weight server
-    if (nodeId < weightServerAddrs.size()) {
-        unsigned count = 0;
-        for (size_t i = 0; i < numNodes; ++i) {
-            if (i % weightServerAddrs.size() == nodeId) count += 1;
-        }
-        msgService.sendInfoMessage(count);
-    }
     msgService.prefetchWeightsMatrix(totalLayers);
 }
 void CPUComm::NNCompute(Chunk &chunk) {
+    c=chunk;
     currLayer = chunk.layer;
     tensorMap = &engine->savedNNTensors[chunk.layer];
 

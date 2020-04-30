@@ -34,6 +34,11 @@ case $1 in
         NUM_LAMBDAS_FORWARD=$( < ../numlambdasforward )
         NUM_LAMBDAS_BACKWARD=$( < ../numlambdasbackward )
 
+        # Minor options.
+        UNDIRECTED=0    # Currently are all directed graphs.
+        COMP_THREADS=7  # Default values.
+        COMM_THREADS=1
+
         let MODE=0
         let PIPELINE=0
         let NUM_EPOCHS=10
@@ -44,6 +49,7 @@ case $1 in
                 let MODE=1;
                 NUM_LAMBDAS_FORWARD=1
                 NUM_LAMBDAS_BACKWARD=1
+                COMP_THREADS=1
             elif [ $var = "CPU" ] || [ $var = "cpu" ]; then
                 let MODE=2;
                 NUM_LAMBDAS_FORWARD=1
@@ -100,11 +106,6 @@ case $1 in
         DATASET=/filepool/$2
 
         LAYERFILE=${HOME}/$2.config
-
-        # Minor options.
-        UNDIRECTED=0    # Currently are all directed graphs.
-        COMP_THREADS=7  # Default values.
-        COMM_THREADS=1
 
         # Increment the running mark.
         if [[ ! -f run/run-mark ]]; then
