@@ -36,15 +36,6 @@ ComputingServer::ComputingServer(GPUComm *gpu_comm)
     msgService.setUpWeightSocket(
         weightServerAddrs.at(nodeId % weightServerAddrs.size()));
 
-    // send INFO to weight server
-    unsigned numNodes = gpuComm->numNodes;
-    if (nodeId < weightServerAddrs.size()) {
-        unsigned count = 0;
-        for (size_t i = 0; i < numNodes; ++i) {
-            if (i % weightServerAddrs.size() == nodeId) count += 1;
-        }
-        msgService.sendInfoMessage(count);
-    }
     msgService.prefetchWeightsMatrix(totalLayers);
 }
 

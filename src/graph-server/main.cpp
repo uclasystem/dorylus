@@ -28,12 +28,11 @@ int main(int argc, char *argv[]) {
     engine.makeBarrier();
 
     // Do specified number of epochs.
-    engine.runGCN();
+    Timer epochTimer;
+    engine.run();
 
     // Procude the output files.
     engine.output();
-
-    usleep(100000);
 
     // Destroy the engine.
     engine.destroy();

@@ -2,7 +2,6 @@
 #define __GRAPH_UTILS_HPP__
 
 
-#include <algorithm>
 #include <chrono>
 #include <climits>
 #include <cstdarg>
@@ -20,48 +19,9 @@
 #include "../../common/utils.hpp"
 
 
-/** Default vertex ID type and features type. */
-typedef float FeatType;
-typedef float EdgeType;
 #define MAX_IDTYPE UINT_MAX     // Limit: MAX_IDTYPE must be at least two times the number of global vertices.
                                 // From 0 to numGlobalVertices are normal ghost vertices update message,
                                 // From MAX_IDTYPE downto MAX_IDTYPE - numGlobalVertices are receive signals.
-
-struct Chunk {
-    unsigned chunkId;
-    unsigned lowBound;
-    unsigned upBound;
-    unsigned layer;
-    PROP_TYPE dir;
-
-    unsigned epoch;
-
-    bool vertex;
-
-    bool operator<(const Chunk &rhs) const {
-        // TODO: (YIFAN) Assign priority in the computation sequence
-        return
-            epoch > rhs.epoch || (epoch == rhs.epoch && (
-            dir > rhs.dir || (dir == rhs.dir && (
-            layer > rhs.layer || (layer == rhs.layer && (
-            (vertex && !rhs.vertex) || (vertex == rhs.vertex && (
-            chunkId > rhs.chunkId || (chunkId == rhs.chunkId && (
-            lowBound > rhs.lowBound || (lowBound == rhs.lowBound && (
-            upBound > rhs.upBound))))))))))));
-    }
-
-    std::string str() {
-        char buf[128];
-        sprintf(buf, "%u:%s:%u:%u", epoch, dir == PROP_TYPE::FORWARD ? "F" : "B",
-          layer, chunkId);
-
-        return std::string(buf);
-    }
-};
-
-Chunk createChunk(unsigned rows, unsigned nChunks, unsigned id, unsigned layer, PROP_TYPE dir, unsigned ep = 0, bool vertex = true);
-
-extern std::map<size_t, std::string> typeToFormatSpecifier;
 
 typedef std::priority_queue< Chunk > ChunkQueue;
 typedef std::queue< std::pair<unsigned, unsigned> > PairQueue;
@@ -77,8 +37,5 @@ std::time_t getCurrentTime();
 
 
 void getPrIP(std::string& myPrIpFile, std::string& ip);
-
-
-inline size_t argmax(FeatType* first, FeatType* last) { return std::distance(first, std::max_element(first, last)); }
 
 #endif //__GRAPH_UTILS_HPP__

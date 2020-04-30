@@ -59,7 +59,7 @@ public:
     FeatType *runForward(unsigned epoch);
     void runBackward(FeatType *backwardInitData);
 
-    void runGCN();
+    void run();
     void runPipeline();
 
     void output();
@@ -230,6 +230,7 @@ public:
     void verticesPushOut(unsigned receiver, unsigned totCnt, unsigned *lvids,
       FeatType *inputTensor, unsigned featDim, Chunk& c);
     void ghostReceiver(unsigned tid);
+    void sendEpochUpdate(unsigned currEpoch);
 
     void aggregateCompute(unsigned tid, void *args);
     void aggregateBPCompute(unsigned tid, void *args);
@@ -281,7 +282,15 @@ public:
 
     unsigned staleness;
     unsigned minEpoch;
+    // Tracking how many chunks have finished each epoch in the
+    // local partition
     std::vector<unsigned> numFinishedEpoch;
+    Lock finishedChunkLock;
+    // Tracking how many graph servers have finished a certain epoch
+    // Works just like numFinishedEpoch but with nodes not chunks
+    std::vector<unsigned> nodesFinishedEpoch;
+    Lock finishedNodeLock;
+    unsigned finishedChunks;
 
     bool pipeline = false;
     // END Pipeline related functions/members

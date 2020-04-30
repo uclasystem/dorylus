@@ -38,7 +38,6 @@ static ComputingUnit cu = ComputingUnit::getInstance();
 #include "../commmanager/lambda_comm.hpp"
 #endif
 
-
 // ======== Debug utils ========
 typedef std::vector<std::vector<unsigned>> opTimes;
 
@@ -63,8 +62,8 @@ void Engine::init(int argc, char *argv[]) {
     parseArgs(argc, argv);
 
     // Initialize the node manager and communication manager.
-    nodeManager.init(dshMachinesFile, myPrIpFile,
-                     myPubIpFile);  // NodeManger should go first.
+    nodeManager.init(dshMachinesFile, myPrIpFile, myPubIpFile,
+                     this);  // NodeManger should go first.
 
     nodeId = nodeManager.getMyNodeId();
     numNodes = nodeManager.getNumNodes();
@@ -102,7 +101,10 @@ void Engine::init(int argc, char *argv[]) {
     savedEdgeTensors.resize(numLayers);
 
     // Track the number of chunks finished at each epoch;
-    if (staleness != UINT_MAX) numFinishedEpoch.resize(staleness + 1);
+    if (staleness != UINT_MAX) {
+        nodesFinishedEpoch.resize(staleness + 1);
+        numFinishedEpoch.resize(staleness + 1);
+    }
 
     // Init it here for collecting data when reading files
     forwardVerticesInitData = new FeatType[getFeatDim(0) * graph.localVtxCnt];
@@ -120,12 +122,11 @@ void Engine::init(int argc, char *argv[]) {
     NormAdjMatrixIn = new CuMatrix();
     NormAdjMatrixOut = new CuMatrix();
     Matrix norms(graph.localVtxCnt, 1, graph.vtxDataVec.data());
-    Norms = new CuMatrix(norms,cu.handle);
+    Norms = new CuMatrix(norms, cu.handle);
     CuMatrix::MemoryPool.erase(Norms->devPtr);
     NormAdjMatrixIn->loadSpCSC(cu.spHandle, graph);
     NormAdjMatrixOut->loadSpCSR(cu.spHandle, graph);
 #endif
-
 
     // Initialize synchronization utilities.
     recvCnt = 0;
@@ -405,40 +406,35 @@ void Engine::runBackward(FeatType *initGradTensor) {
     printLog(nodeId, "Engine completes BACKWARD at %u.", layer);
 }
 
-void Engine::runGCN() {
-    // Run synchronous epoch to setup data
-    savedNNTensors[0]["x"] =
-        Matrix(graph.localVtxCnt, getFeatDim(0), forwardVerticesInitData);
-    savedNNTensors[0]["fghost"] =
-        Matrix(graph.srcGhostCnt, getFeatDim(0), forwardGhostInitData);
-    savedNNTensors[numLayers - 1]["lab"] =
-        Matrix(graph.localVtxCnt, getFeatDim(numLayers), localVerticesLabels);
+void Engine::run() {
+    if (!pipeline) {
+        for (unsigned epoch = 0; epoch < numEpochs; ++epoch) {
+            double epochStart = getTimer();
+            FeatType *predictData = runForward(epoch);
+            runBackward(predictData);
 
-    if (pipeline) {
+            double epochTime = getTimer() - epochStart;
+            printLog(nodeId, "Time for epoch %u: %f ms", epoch + 1, epochTime);
+            addEpochTime(epochTime);
+        }
+    } else {
+        // Run synchronous epoch to setup data
+        savedNNTensors[0]["x"] =
+            Matrix(graph.localVtxCnt, getFeatDim(0), forwardVerticesInitData);
+        savedNNTensors[0]["fghost"] =
+            Matrix(graph.srcGhostCnt, getFeatDim(0), forwardGhostInitData);
+        savedNNTensors[numLayers - 1]["lab"] = Matrix(
+            graph.localVtxCnt, getFeatDim(numLayers), localVerticesLabels);
+
         // Run one synchronous epoch
         FeatType *tensor = runForward(0);
         runBackward(tensor);
+
         printLog(nodeId, "Finished SYNCHRONOUS epoch, starting PIPELINE");
         loadChunks();
         resComm->setAsync(true);
         // Start pipeline
         runPipeline();
-
-    } else {
-        // unsigned valFreq = 1;
-        Timer epochTimer;
-        for (unsigned epoch = 0; epoch < getNumEpochs(); ++epoch) {
-            epochTimer.start();
-            printLog(getNodeId(), "Starting Epoch %u", epoch + 1);
-            FeatType *predictData = runForward(epoch);
-            // Do a backward-prop phase.
-            runBackward(predictData);
-            epochTimer.stop();
-
-            printLog(getNodeId(), "Time for epoch %u: %f ms", epoch + 1,
-                     epochTimer.getTime());
-            addEpochTime(epochTimer.getTime());
-        }
     }
 }
 
@@ -510,45 +506,45 @@ void Engine::output() {
 
     sprintf(outBuf, "<EM>: Initialization takes %.3lf ms", timeInit);
     outStream << outBuf << std::endl;
-    if (!pipeline) {
-        sprintf(outBuf, "<EM>: Forward:  Time per stage:");
+
+    float avgDenom = static_cast<float>(numEpochs);
+    if (pipeline) avgDenom = static_cast<float>(numEpochs * numLambdasForward);
+
+    sprintf(outBuf, "<EM>: Forward:  Time per stage:");
+    outStream << outBuf << std::endl;
+    for (unsigned i = 0; i < numLayers; ++i) {
+        sprintf(outBuf, "<EM>    Aggregation   %2u  %.3lf ms", i,
+                vecTimeAggregate[i] / (float)avgDenom);
         outStream << outBuf << std::endl;
-        for (unsigned i = 0; i < numLayers; ++i) {
-            sprintf(outBuf, "<EM>    Aggregation   %2u  %.3lf ms", i,
-                    vecTimeAggregate[i] / (float)numEpochs);
-            outStream << outBuf << std::endl;
-            sprintf(outBuf, "<EM>    ApplyVertex   %2u  %.3lf ms", i,
-                    vecTimeApplyVtx[i] / (float)numEpochs);
-            outStream << outBuf << std::endl;
-            sprintf(outBuf, "<EM>    Scatter       %2u  %.3lf ms", i,
-                    vecTimeScatter[i] / (float)numEpochs);
-            outStream << outBuf << std::endl;
-            sprintf(outBuf, "<EM>    ApplyEdge     %2u  %.3lf ms", i,
-                    vecTimeApplyEdg[i] / (float)numEpochs);
-            outStream << outBuf << std::endl;
-        }
+        sprintf(outBuf, "<EM>    ApplyVertex   %2u  %.3lf ms", i,
+                vecTimeApplyVtx[i] / (float)avgDenom);
+        outStream << outBuf << std::endl;
+        sprintf(outBuf, "<EM>    Scatter       %2u  %.3lf ms", i,
+                vecTimeScatter[i] / (float)avgDenom);
+        outStream << outBuf << std::endl;
+        sprintf(outBuf, "<EM>    ApplyEdge     %2u  %.3lf ms", i,
+                vecTimeApplyEdg[i] / (float)avgDenom);
+        outStream << outBuf << std::endl;
     }
     sprintf(outBuf, "<EM>: Total forward-prop time %.3lf ms",
-            timeForwardProcess / (float)numEpochs);
+            timeForwardProcess / (float)avgDenom);
     outStream << outBuf << std::endl;
 
-    if (!pipeline) {
-        sprintf(outBuf, "<EM>: Backward: Time per stage:");
+    sprintf(outBuf, "<EM>: Backward: Time per stage:");
+    outStream << outBuf << std::endl;
+    for (unsigned i = numLayers; i < 2 * numLayers; i++) {
+        sprintf(outBuf, "<EM>    Aggregation   %2u  %.3lf ms", i,
+                vecTimeAggregate[i] / (float)avgDenom);
         outStream << outBuf << std::endl;
-        for (unsigned i = numLayers; i < 2 * numLayers; i++) {
-            sprintf(outBuf, "<EM>    Aggregation   %2u  %.3lf ms", i,
-                    vecTimeAggregate[i] / (float)numEpochs);
-            outStream << outBuf << std::endl;
-            sprintf(outBuf, "<EM>    ApplyVertex   %2u  %.3lf ms", i,
-                    vecTimeApplyVtx[i] / (float)numEpochs);
-            outStream << outBuf << std::endl;
-            sprintf(outBuf, "<EM>    Scatter       %2u  %.3lf ms", i,
-                    vecTimeScatter[i] / (float)numEpochs);
-            outStream << outBuf << std::endl;
-            sprintf(outBuf, "<EM>    ApplyEdge     %2u  %.3lf ms", i,
-                    vecTimeApplyEdg[i] / (float)numEpochs);
-            outStream << outBuf << std::endl;
-        }
+        sprintf(outBuf, "<EM>    ApplyVertex   %2u  %.3lf ms", i,
+                vecTimeApplyVtx[i] / (float)avgDenom);
+        outStream << outBuf << std::endl;
+        sprintf(outBuf, "<EM>    Scatter       %2u  %.3lf ms", i,
+                vecTimeScatter[i] / (float)avgDenom);
+        outStream << outBuf << std::endl;
+        sprintf(outBuf, "<EM>    ApplyEdge     %2u  %.3lf ms", i,
+                vecTimeApplyEdg[i] / (float)avgDenom);
+        outStream << outBuf << std::endl;
     }
     sprintf(outBuf, "<EM>: Total backward-prop time %.3lf ms",
             timeBackwardProcess);
@@ -680,9 +676,10 @@ FeatType *Engine::applyVertex(FeatType *vtcsTensor, unsigned vtcsCnt,
             unsigned lowBound = availLambdaId * chunkSize;
             unsigned upBound = std::min(lowBound + chunkSize, vtcsCnt);
             Chunk chunk{
-                availLambdaId,      lowBound,  upBound, layer,
-                PROP_TYPE::FORWARD, currEpoch, true};  // epoch is not useful in
-                                                       // sync version
+                availLambdaId, nodeId * numLambdasForward + availLambdaId,
+                lowBound,      upBound,
+                layer,         PROP_TYPE::FORWARD,
+                currEpoch,     true};  // epoch is not useful in sync version
             resComm->NNCompute(chunk);
 
             availLambdaId++;
@@ -703,10 +700,10 @@ FeatType *Engine::applyVertex(FeatType *vtcsTensor, unsigned vtcsCnt,
     // if in GPU mode we launch gpu computation here and wait the results
     else {
         Chunk batch{
-            0,         0,   vtcsCnt, layer, PROP_TYPE::FORWARD,
+            0,         0,   0, vtcsCnt, layer, PROP_TYPE::FORWARD,
             currEpoch, true};  // for now it loads the entire feature matrix
         resComm->NNCompute(batch);
-    }  // TODO: (YIFAN) support for GPU/CPU
+    }
 
     if (vecTimeApplyVtx.size() < numLayers) {
         vecTimeApplyVtx.push_back(getTimer() - sttTimer);
@@ -1224,27 +1221,59 @@ void Engine::aggregator(unsigned tid) {
         } else {
             Chunk c = aggregateQueue.top();
 
-            // There is a chunk but it is beyond the staleness bound
-            if (staleness != UINT_MAX && c.layer == 0 &&
-                c.dir == PROP_TYPE::FORWARD && c.epoch > minEpoch + staleness) {
+            if (c.epoch == numEpochs) {
+                aggregateQueue.pop();
                 aggQueueLock.unlock();
+                if (++finishedChunks == numLambdasForward) {
+                    // Wait for all nodes to finish
+                    nodeManager.barrier();
+
+                    printLog(nodeId, "Finished, shutting down...");
+                    commHalt = true;
+                    return;
+                }
+                // There is a chunk but it is beyond the staleness bound
+            } else if (staleness != UINT_MAX && c.layer == 0 &&
+                       c.dir == PROP_TYPE::FORWARD &&
+                       c.epoch > minEpoch + staleness) {
+                aggQueueLock.unlock();
+
                 usleep(SLEEP_PERIOD);
                 failedTrials++;
                 if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
                     failedTrials = 0;
                     SLEEP_PERIOD *= 2;
                 }
+
+                // Messages to check how often a node is blocking
+                // if (++trials % 1000 == 0) {
+                //    printLog(nodeId, "Blocking. MinE %u, Finished %u",
+                //    minEpoch,
+                //      nodesFinishedEpoch[minEpoch % (staleness + 1)]);
+                //}
+
+                // Read incoming message buffer to see if there are
+                //  updates to the minEpoch
+                nodeManager.readEpochUpdates();
                 // There is a chunk to process that is within the bound
             } else {
-                printLog(nodeId, "AGGREGATE: Got %s", c.str().c_str());
+                // printLog(nodeId, "AGGREGATE: Got %s", c.str().c_str());
                 aggregateQueue.pop();
                 aggQueueLock.unlock();
+                if (c.layer == 0 && c.dir == PROP_TYPE::FORWARD &&
+                    c.epoch == currEpoch + 1) {
+                    printLog(nodeId, "STARTING epoch %u [%u]", ++currEpoch,
+                             c.epoch);
+                }
 
+                double startAgg = getTimer();
                 if (c.dir == PROP_TYPE::FORWARD) {
                     aggregateChunk(c);
                 } else {
                     aggregateBPChunk(c);
                 }
+                vecTimeAggregate[c.dir * numLayers + c.layer] +=
+                    getTimer() - startAgg;
                 resComm->NNCompute(c);
 
                 SLEEP_PERIOD = INIT_PERIOD;
@@ -1278,7 +1307,9 @@ void Engine::scatterWorker(unsigned tid) {
             scatterQueue.pop();
             scatQueueLock.unlock();
 
-            printLog(nodeId, "SCATTER: Got %s", c.str().c_str());
+            unsigned startScat = timestamp_ms();
+
+            // printLog(nodeId, "SCATTER: Got %s", c.str().c_str());
 
             // Get the layer output you want to scatter
             // If forward then it was the previous layer output
@@ -1350,9 +1381,11 @@ void Engine::scatterWorker(unsigned tid) {
                 }
                 recvCntLock.unlock();
             }
+            unsigned endScat = timestamp_ms();
             // Add chunk into appropriate aggregate queue
             // printLog(nodeId, "SCATTER: Finished %s", c.str().c_str());
             aggregateQueue.push(c);
+            vecTimeScatter[c.dir * numLayers + c.layer] += endScat - startScat;
 
             delete[] batchedIds;
             failedTrials = 0;
@@ -1490,6 +1523,14 @@ void Engine::ghostReceiver(unsigned tid) {
     }
 
     delete[] msgBuf;
+}
+
+/**
+ * Callback for the LambdaComm to access the NodeManager's epoch update
+ * broadcast
+ */
+void Engine::sendEpochUpdate(unsigned currEpoch) {
+    nodeManager.sendEpochUpdate(currEpoch);
 }
 
 /**
@@ -1784,16 +1825,18 @@ FeatType *Engine::applyVertexBackward(FeatType *gradTensor, unsigned vtcsCnt,
             unsigned lowBound = u * chunkSize;
             unsigned upBound = std::min(lowBound + chunkSize, vtcsCnt);
             Chunk chunk{
-                u,         lowBound, upBound, layer - 1, PROP_TYPE::BACKWARD,
+                u,         nodeId * numLambdasForward + u,
+                lowBound,  upBound,
+                layer - 1, PROP_TYPE::BACKWARD,
                 currEpoch, true};  // epoch doesn't matter in sync version
             resComm->NNCompute(chunk);
         }
         resComm->NNSync();
     } else {  // TODO: (YIFAN) support for GPU/CPU
-        Chunk chunk{0,         0,   vtcsCnt, layer - 1, PROP_TYPE::BACKWARD,
+        Chunk chunk{0,         0,   0, vtcsCnt, layer - 1, PROP_TYPE::BACKWARD,
                     currEpoch, true};
         resComm->NNCompute(chunk);
-    } 
+    }
 
     if (vecTimeApplyVtx.size() < 2 * numLayers) {
         for (unsigned i = vecTimeApplyVtx.size(); i < 2 * numLayers; i++) {
@@ -2494,34 +2537,33 @@ void Engine::printEngineMetrics() {
     printLog(nodeId, "<EM>: Using %u forward lambdas and %u bacward lambdas",
              numLambdasForward, numLambdasBackward);
     printLog(nodeId, "<EM>: Initialization takes %.3lf ms", timeInit);
-    if (!pipeline) {
-        printLog(nodeId, "<EM>: Forward:  Time per stage:");
-        for (unsigned i = 0; i < numLayers; ++i) {
-            printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i,
-                     vecTimeAggregate[i] / (float)numEpochs);
-            printLog(nodeId, "<EM>    ApplyVertex   %2u  %.3lf ms", i,
-                     vecTimeApplyVtx[i] / (float)numEpochs);
-            printLog(nodeId, "<EM>    Scatter       %2u  %.3lf ms", i,
-                     vecTimeScatter[i] / (float)numEpochs);
-            printLog(nodeId, "<EM>    ApplyEdge     %2u  %.3lf ms", i,
-                     vecTimeApplyEdg[i] / (float)numEpochs);
-        }
+
+    float avgDenom = static_cast<float>(numEpochs);
+    if (pipeline) avgDenom = static_cast<float>(numEpochs * numLambdasForward);
+    printLog(nodeId, "<EM>: Forward:  Time per stage:");
+    for (unsigned i = 0; i < numLayers; ++i) {
+        printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i,
+                 vecTimeAggregate[i] / (float)avgDenom);
+        printLog(nodeId, "<EM>    ApplyVertex   %2u  %.3lf ms", i,
+                 vecTimeApplyVtx[i] / (float)avgDenom);
+        printLog(nodeId, "<EM>    Scatter       %2u  %.3lf ms", i,
+                 vecTimeScatter[i] / (float)avgDenom);
+        printLog(nodeId, "<EM>    ApplyEdge     %2u  %.3lf ms", i,
+                 vecTimeApplyEdg[i] / (float)avgDenom);
     }
     printLog(nodeId, "<EM>: Total forward-prop time %.3lf ms",
-             timeForwardProcess / (float)numEpochs);
+             timeForwardProcess / (float)avgDenom);
 
     printLog(nodeId, "<EM>: Backward: Time per stage:");
-    if (!pipeline) {
-        for (unsigned i = numLayers; i < 2 * numLayers; i++) {
-            printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i,
-                     vecTimeAggregate[i] / (float)numEpochs);
-            printLog(nodeId, "<EM>    ApplyVertex   %2u  %.3lf ms", i,
-                     vecTimeApplyVtx[i] / (float)numEpochs);
-            printLog(nodeId, "<EM>    Scatter       %2u  %.3lf ms", i,
-                     vecTimeScatter[i] / (float)numEpochs);
-            printLog(nodeId, "<EM>    ApplyEdge     %2u  %.3lf ms", i,
-                     vecTimeApplyEdg[i] / (float)numEpochs);
-        }
+    for (unsigned i = numLayers; i < 2 * numLayers; i++) {
+        printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i,
+                 vecTimeAggregate[i] / (float)avgDenom);
+        printLog(nodeId, "<EM>    ApplyVertex   %2u  %.3lf ms", i,
+                 vecTimeApplyVtx[i] / (float)avgDenom);
+        printLog(nodeId, "<EM>    Scatter       %2u  %.3lf ms", i,
+                 vecTimeScatter[i] / (float)avgDenom);
+        printLog(nodeId, "<EM>    ApplyEdge     %2u  %.3lf ms", i,
+                 vecTimeApplyEdg[i] / (float)avgDenom);
     }
     printLog(nodeId, "<EM>: Total backward-prop time %.3lf ms",
              timeBackwardProcess / (float)numEpochs);
@@ -2542,8 +2584,10 @@ void Engine::printEngineMetrics() {
  */
 void Engine::printGraphMetrics() {
     printLog(nodeId,
-             "<GM>: %u global vertices, %llu global edges, %u local vertices.",
-             graph.globalVtxCnt, graph.globalEdgeCnt, graph.localVtxCnt);
+             "<GM>: %u global vertices, %llu global edges,\n\t\t%u local "
+             "vertices, %llu local in edges, %llu local out edges",
+             graph.globalVtxCnt, graph.globalEdgeCnt, graph.localVtxCnt,
+             graph.localInEdgeCnt, graph.localOutEdgeCnt);
 }
 
 /**
@@ -2846,14 +2890,21 @@ void Engine::loadChunks() {
         unsigned lowBound = cid * chunkSize;
         unsigned upBound = std::min(lowBound + chunkSize, vtcsCnt);
 
-        aggregateQueue.push(
-            Chunk{cid, lowBound, upBound, 0, PROP_TYPE::FORWARD, 1, true});
+        aggregateQueue.push(Chunk{cid, nodeId * numLambdasForward + cid,
+                                  lowBound, upBound, 0, PROP_TYPE::FORWARD, 1,
+                                  true});
     }
+
+    currEpoch = 0;
 
     // Set the initial bound chunk as epoch 1 layer 0
     minEpoch = 1;
     memset(numFinishedEpoch.data(), 0,
            sizeof(unsigned) * numFinishedEpoch.size());
+    memset(numFinishedEpoch.data(), 0,
+           sizeof(unsigned) * nodesFinishedEpoch.size());
+
+    finishedChunks = 0;
 }
 
 Engine engine;

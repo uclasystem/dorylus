@@ -1,9 +1,13 @@
 #include "message_service.hpp"
-
+static inline void populateHeader(void *header, unsigned op, Chunk &chunk) {
+    char *ptr = (char *)header;
+    memcpy(ptr, &op, sizeof(unsigned));
+    memcpy(ptr + sizeof(unsigned), &chunk, sizeof(chunk));
+}
 static void doNotFreeBuffer(void *data, void *hint) {}
 
 //-------------These are copied from yifan gcn------------
-//-------------Search"MessageService" to Jump------------- 
+//-------------Search"MessageService" to Jump-------------
 static void deleteMatrix(Matrix &mat) {
     if (!mat.empty()) {
         delete[] mat.getData();
@@ -34,23 +38,19 @@ Matrix recvTensor(zmq::socket_t &socket) {
     return Matrix(name.c_str(), rows, cols, data);
 }
 
-std::vector<Matrix> reqTensors(zmq::socket_t &socket, unsigned arg1,
-                               unsigned arg2,
+std::vector<Matrix> reqTensors(zmq::socket_t &socket, Chunk &chunk,
                                std::vector<std::string> &tensorRequests) {
-    // TODO: (JOHN) This way of implementing repeated requests is
-    //  a little weird... hopefully think of some way to make this
-    //  cleaner
     bool empty = true;
     std::vector<Matrix> matrices;
     while (empty) {
         zmq::message_t header(HEADER_SIZE);
-        populateHeader(header.data(), OP::PULL, arg1, arg2);
+        populateHeader(header.data(), OP::PULL, chunk);
         socket.send(header, ZMQ_SNDMORE);
         unsigned numTensors = tensorRequests.size();
         for (unsigned u = 0; u < tensorRequests.size(); ++u) {
             std::string &name = tensorRequests[u];
             zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
-            populateHeader(tensorHeader.data(), arg1, name.c_str());
+            populateHeader(tensorHeader.data(), chunk.localId, name.c_str());
             if (u < numTensors - 1) {
                 socket.send(tensorHeader, ZMQ_SNDMORE);
             } else {
@@ -81,17 +81,17 @@ std::vector<Matrix> reqTensors(zmq::socket_t &socket, unsigned arg1,
     return matrices;
 }
 
-void sendTensors(zmq::socket_t &socket, unsigned partId, unsigned layer,
+void sendTensors(zmq::socket_t &socket, Chunk &chunk,
                  std::vector<Matrix> &matrices, bool ack = false) {
     zmq::message_t header(HEADER_SIZE);
-    populateHeader(header.data(), OP::PUSH, partId, layer);
+    populateHeader(header.data(), OP::PUSH, chunk);
     socket.send(header, ZMQ_SNDMORE);
     for (uint32_t u = 0; u < matrices.size(); ++u) {
-        // std::cout << "Sending tensor " << matrices[u].name() << std::endl;
+        std::cout << "Sending tensor " << matrices[u].name() << std::endl;
         zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
         populateHeader(tensorHeader.data(), OP::PUSH,
-                       matrices[u].name().c_str(), layer, matrices[u].getRows(),
-                       matrices[u].getCols());
+                       matrices[u].name().c_str(), chunk.layer,
+                       matrices[u].getRows(), matrices[u].getCols());
         zmq::message_t tensorData(matrices[u].getDataSize());
         std::memcpy(tensorData.data(), matrices[u].getData(),
                     matrices[u].getDataSize());
@@ -125,7 +125,9 @@ void MessageService::sendWeightUpdate(Matrix &matrix, unsigned layer) {
         [&](Matrix matrix, unsigned layer) {
             matrix.setName("w");
             std::vector<Matrix> weightUpdates{matrix};
-            sendTensors(*weightSocket, layer, layer, weightUpdates);
+            Chunk c;
+            c.layer = layer;
+            sendTensors(*weightSocket, c, weightUpdates);
         },
         matrix, layer);
 }
@@ -173,11 +175,11 @@ void MessageService::prefetchWeightsMatrix(unsigned totalLayers) {
                 delete weights[i];
             }
         }
-
         for (unsigned j = 0; j < totalLayers; ++j) {
+            Chunk c;
+            c.layer = j;
             std::vector<std::string> weightRequests{"w"};
-            Matrix m = reqTensors(*weightSocket, PROP_TYPE::FORWARD, j,
-                                  weightRequests)[0];
+            Matrix m = reqTensors(*weightSocket, c, weightRequests)[0];
             weights[j] = new Matrix(m.getRows(), m.getCols(), m.getData());
         }
     });

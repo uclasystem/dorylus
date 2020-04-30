@@ -18,7 +18,6 @@
 #include "utils.hpp"
 #include "../../common/matrix.hpp"
 #include "../../common/utils.hpp"
-#include "../../utils/utils.hpp"
 
 #include "ops/forward_ops.hpp"
 #include "ops/backward_ops.hpp"
