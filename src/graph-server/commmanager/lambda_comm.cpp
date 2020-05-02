@@ -1,4 +1,5 @@
 #include "lambda_comm.hpp"
+#include <cmath>
 
 unsigned LambdaComm::nodeId;
 
@@ -15,7 +16,8 @@ LambdaComm::LambdaComm(Engine *_engine) :
         relaunchCnt(0), async(false),
         dport(_engine->dataserverPort), wport(_engine->weightserverPort),
         savedNNTensors(_engine->savedNNTensors),
-        resQueue(_engine->scatterQueue), aggQueue(_engine->aggregateQueue),
+        resLock(_engine->scatQueueLock), resQueue(_engine->scatterQueue),
+        aggLock(_engine->aggQueueLock), aggQueue(_engine->aggregateQueue),
         ctx(4), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
         numListeners(4), engine(_engine) { // TODO: Decide numListeners.
     nodeId = _engine->nodeId;
@@ -25,9 +27,6 @@ LambdaComm::LambdaComm(Engine *_engine) :
     setupSockets();
     createWorkers();
     startRelaunchThd();
-
-    resLock.init();
-    aggLock.init();
 
     lambdaOut = std::ofstream(std::string("lambdats") + std::to_string(numChunk) + std::string(".txt"), std::ofstream::out);
 }
@@ -51,9 +50,13 @@ void LambdaComm::NNCompute(Chunk &chunk) {
     // printLog(nodeId, "NNComp: %u:%u:%s", chunk.layer, chunk.localId,
     //   chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
     timeoutMtx.lock();
-    timeoutTable[chunk] = timestamp_ms();
+    if (timeoutTable.find(chunk) != timeoutTable.end()) {
+        printLog(nodeId, "ERROR! duplicated chunk %s", chunk.str().c_str());
+    } else {
+        timeoutTable[chunk] = timestamp_ms();
+        invokeLambda(chunk);
+    }
     timeoutMtx.unlock();
-    invokeLambda(chunk);
 }
 
 void LambdaComm::NNSync() {
@@ -72,45 +75,31 @@ bool LambdaComm::NNRecv(Chunk &chunk) {
     // printLog(nodeId, "NNRecv: %u:%u:%s", chunk.layer, chunk.localId,
     //   chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
     timeoutMtx.lock();
-    if (timeoutTable.find(chunk) == timeoutTable.end()) {
+    auto entry = timeoutTable.find(chunk);
+    if (entry == timeoutTable.end()) {
         timeoutMtx.unlock();
         // This chunk has already finished
         return false;
-    } else {
-        if (async) engine->vecTimeLambdaWait[chunk.dir * engine->numLayers + chunk.layer] += timestamp_ms() - timeoutTable[chunk];
-        timeoutTable.erase(chunk);
-        timeoutMtx.unlock();
-
-        // If final layer, switch direction
-        if (chunk.layer == 1) chunk.dir = PROP_TYPE::BACKWARD;
-        if (chunk.dir == PROP_TYPE::FORWARD) chunk.layer += 1;
-        if (chunk.dir == PROP_TYPE::BACKWARD) chunk.layer -= 1;
-        resLock.lock();
-        resQueue.push(chunk);
-        resLock.unlock();
     }
-    return true;
-}
 
-// JOHN: This function may make more sense after apply edge?
-// This was made specifically with GCNs in mind and is
-// missing an enqueue for a whole phase of computation
-bool LambdaComm::enqueueAggChunk(Chunk& chunk) {
-    // printLog(nodeId, "NNEnq: %u:%u", chunk.layer, chunk.localId,
-    //   chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
-    timeoutMtx.lock();
-    if (timeoutTable.find(chunk) == timeoutTable.end()) {
-        timeoutMtx.unlock();
-        return false;
+    unsigned exeTime = timestamp_ms() - entry->second;
+    if (async) engine->vecTimeLambdaWait[chunk.dir * engine->numLayers + chunk.layer] += exeTime;
+    timeoutTable.erase(chunk);
+
+    auto recordFound = recordTable.find(getAbsLayer(chunk, 2));
+    if (recordFound == recordTable.end()) {
+        recordTable[getAbsLayer(chunk, 2)] = exeTime;
     } else {
-        if (async) engine->vecTimeLambdaWait[chunk.dir * engine->numLayers + chunk.layer] += timestamp_ms() - timeoutTable[chunk];
-        timeoutTable.erase(chunk);
-        timeoutMtx.unlock();
+        recordTable[getAbsLayer(chunk, 2)] = recordFound->second * 0.95 + exeTime * (1.0 - 0.95);
+    }
+    timeoutMtx.unlock();
 
-        // If bounded-staleness enabled, increment the finished chunks for this epoch
-        // If the min epoch has finished, allow chunks to move to the next epoch
-        // TODO (JOHN): Consider using __sync_fetch ops here to make code cleaner and
-        //  still achieve synchronization
+    // If bounded-staleness enabled, increment the finished chunks for this epoch
+    // If the min epoch has finished, allow chunks to move to the next epoch
+    // TODO (JOHN): Consider using __sync_fetch ops here to make code cleaner and
+    //  still achieve synchronization
+    Chunk nextChunk = incLayer(chunk, 2);
+    if (async && isLastLayer(chunk)) {
         if (engine->staleness != UINT_MAX) {
             unsigned ind = chunk.epoch % (engine->staleness + 1);
             engine->finishedChunkLock.lock();
@@ -131,39 +120,43 @@ bool LambdaComm::enqueueAggChunk(Chunk& chunk) {
             }
         }
 
-        chunk.layer = 0;
-        chunk.dir = PROP_TYPE::FORWARD;
-        chunk.epoch += 1;
         aggLock.lock();
-        aggQueue.push(chunk);
+        aggQueue.push(nextChunk);
         aggLock.unlock();
+    } else {
+        resLock.lock();
+        resQueue.push(nextChunk);
+        resLock.unlock();
     }
 
     return true;
 }
 
 void LambdaComm::asyncRelaunchLoop() {
-#define SLEEP_PERIOD 500000 // sleep SLEEP_PERIOD us and then check the condition.
-#define TIMEOUT_PERIOD 3000 // wait for up to TIMEOUT_PERIOD ms before relaunching
-#define MIN_TIMEOUT 500     // at least wait for MIN_TIMEOUT ms before relaunching
-#define EXP_BACKOFF_FACTOR 1.5 // base of exponential backoff
+#define MIN_TIMEOUT 500u     // at least wait for MIN_TIMEOUT ms before relaunching
+#define TIMEOUT_PERIOD 3000u // wait for up to TIMEOUT_PERIOD ms before relaunching
+#define SLEEP_PERIOD (MIN_TIMEOUT * 1000) // sleep SLEEP_PERIOD us and then check the condition.
 
     if (!relaunching) return;
 
     while (!halt) {
         unsigned currTS = timestamp_ms();
         for (auto &kv : timeoutTable) {
-            if (currTS - kv.second > TIMEOUT_PERIOD) {
+            if (recordTable.find(getAbsLayer(kv.first, 2)) == recordTable.end()) {
+                continue; // No lambda finished.
+            }
+            if (currTS - kv.second > std::max(MIN_TIMEOUT, 3 * recordTable[getAbsLayer(kv.first, 2)])) {
+                printLog(nodeId, "curr %u, timed %u, chunk %s", currTS - kv.second, 3 * recordTable[getAbsLayer(kv.first, 2)],
+                    kv.first.str().c_str());
                 relaunchLambda(kv.first);
             }
         }
         usleep(SLEEP_PERIOD);
     }
 
-#undef SLEEP_PERIOD
-#undef TIMEOUT_PERIOD
 #undef MIN_TIMEOUT
-#undef EXP_BACKOFF_FACTOR
+#undef TIMEOUT_PERIOD
+#undef SLEEP_PERIOD
 }
 
 void LambdaComm::relaunchLambda(const Chunk &chunk) {
@@ -171,8 +164,8 @@ void LambdaComm::relaunchLambda(const Chunk &chunk) {
     timeoutMtx.lock();
     timeoutTable[chunk] = timestamp_ms();
     ++relaunchCnt;
-    timeoutMtx.unlock();
     invokeLambda(chunk);
+    timeoutMtx.unlock();
 }
 
 // LAMBDA INVOCATION AND RETURN FUNCTIONS
@@ -343,4 +336,34 @@ void LambdaComm::startRelaunchThd() {
 void LambdaComm::stopRelaunchThd() {
     relaunchThd->join();
     delete relaunchThd;
+}
+
+
+unsigned getAbsLayer(const Chunk &chunk, unsigned numLayers) {
+    // YIFAN: I set the "numLayers" to 10 here to avoid any conflicts
+    return chunk.dir == PROP_TYPE::FORWARD ? (chunk.layer) : (2 * numLayers - 1 - chunk.layer);
+}
+
+Chunk incLayer(const Chunk &chunk, unsigned numLayers) {
+    Chunk nextChunk = chunk;
+    if (chunk.dir == PROP_TYPE::FORWARD && chunk.layer < numLayers - 1) {
+        // Keep dir as FORWARD and inc layer
+        nextChunk.layer++;
+    } else if (chunk.dir == PROP_TYPE::FORWARD && chunk.layer == numLayers - 1) {
+        // Change dir to BACKWARD and dec layer (the final layer backawrd lambda is merged into the forward lambda)
+        nextChunk.dir = PROP_TYPE::BACKWARD;
+        nextChunk.layer--;
+    } else if (chunk.dir == PROP_TYPE::BACKWARD && chunk.layer > 0) {
+        // Keep dir as BACKWARD and dec layer
+        nextChunk.layer--;
+    } else if (chunk.dir == PROP_TYPE::BACKWARD && chunk.layer == 0) {
+        // Change dir to FORWARD and inc epoch
+        nextChunk.dir = PROP_TYPE::FORWARD;
+        nextChunk.epoch++;
+    }
+    return nextChunk;
+}
+
+bool isLastLayer(const Chunk &chunk) {
+    return chunk.dir == PROP_TYPE::BACKWARD && chunk.layer == 0;
 }

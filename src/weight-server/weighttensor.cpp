@@ -81,14 +81,14 @@ Matrix& WeightTensor::getMat(Chunk &chunk) {
     auto found = chunk2Ver.find(chunk);
     if (found != chunk2Ver.end()) {
         // std::cerr << "GET chunk " << chunk.layer << ":" << chunk.globalId << "-" << chunk.lowBound <<
-        //             " dir: " << dir << " -> ver: " << found->second << "/" << currVer << std::endl;
+        //             " dir: " << chunk.dir << " -> ver: " << found->second << "/" << currVer << std::endl;
         return ver2Mat[found->second].mat;
     } else { // Not found. This is a new chunk
         RefMat &rmat = ver2Mat[currVer];
         rmat.refCnt++;
         chunk2Ver[chunk] = currVer;
         // std::cerr << "GET chunk " << chunk.layer << ":" << chunk.globalId << "-" << chunk.lowBound <<
-        //             " dir: " << dir << " -> ver: " << currVer << "/" << currVer << std::endl;
+        //             " dir: " << chunk.dir << " -> ver: " << currVer << "/" << currVer << std::endl;
         return rmat.mat;
     }
 }
@@ -98,7 +98,13 @@ void WeightTensor::decRef(Chunk &chunk) {
 
     // PROP_TYPE dir = chunk.dir;
     chunk.dir = PROP_TYPE::FORWARD; // force dir to forward to eliminate differences between forward and backward
-    unsigned ver = chunk2Ver[chunk];
+    unsigned ver;
+    auto found = chunk2Ver.find(chunk);
+    if (found != chunk2Ver.end()) {
+        ver = chunk2Ver[chunk];
+    } else {
+        std::cerr << "wrong chunk dec ref! " << chunk.str() << std::endl;
+    }
     RefMat &rmat = ver2Mat[ver];
     rmat.refCnt--;
     if (ver < currVer && rmat.refCnt == 0) { // an old stashed weights is done. We can safely delete it.
@@ -108,7 +114,7 @@ void WeightTensor::decRef(Chunk &chunk) {
     }
     chunk2Ver.erase(chunk);
     // std::cerr << "PUT chunk " << chunk.layer << ":" << chunk.globalId << "-" << chunk.lowBound <<
-    //             " dir: " << dir << " -> ver: " << ver << std::endl;
+    //             " dir: " << chunk.dir << " -> ver: " << ver << std::endl;
 }
 
 
@@ -211,6 +217,8 @@ std::string WeightTensor::tryApplyUpdate(float lr, FeatType *updTensor) {
         sprintf(buf, " Weight Grad Agg: %.5e Max element: %.2f Min element: %.2f",
                     checkSum, maxEle, minEle);
         checkInfo = std::string(buf);
+    } else {
+        checkInfo = "Current version: " + std::to_string(currVer) + ", active weight version cnt: " + std::to_string(ver2Mat.size());
     }
     return checkInfo;
 }
@@ -286,6 +294,15 @@ std::string WeightTensor::tryApplyUpdate(AdamOptimizer *adamOpt, unsigned layer,
         sprintf(buf, " Weight Grad Agg: %.5e Max element: %.2f Min element: %.2f",
                 checkSum, maxEle, minEle);
         checkInfo = std::string(buf);
+    } else {
+        checkInfo = "Current version: " + std::to_string(currVer) + ", active weight version cnt: " + std::to_string(ver2Mat.size())
+                    + " " + std::to_string(localUpdCnt) + ":" + std::to_string(localUpdTot)
+                    + " " + std::to_string(ghostUpdCnt) + ":" + std::to_string(ghostUpdTot)
+                    + " -> (";
+        for (auto &kv : ver2Mat) {
+            checkInfo += std::to_string(kv.first) + ":" + std::to_string(kv.second.refCnt) + ", ";
+        }
+        checkInfo += ")";
     }
     return checkInfo;
 }

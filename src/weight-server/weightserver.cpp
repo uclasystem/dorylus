@@ -8,11 +8,11 @@
  */
 WeightServer::WeightServer(std::string &weightServersFile, std::string &myPrIpFile,
                            unsigned _listenerPort, std::string &configFileName,
-                           unsigned _serverPort, std::string &tmpFileName)
+                           unsigned _serverPort, std::string &tmpFileName, bool _sync)
     : ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
       listenerPort(_listenerPort), serverPort(_serverPort),
       dataCtx(1), publisher(dataCtx, ZMQ_PUB), subscriber(dataCtx, ZMQ_SUB),
-      numLambdas(0), term(false), adam(true), sync(false) {
+      numLambdas(0), term(false), adam(true), sync(_sync) {
 
     std::vector<std::string> allNodeIps = parseNodeConfig(configFileName, weightServersFile, myPrIpFile);
     setupSockets();
@@ -104,8 +104,8 @@ void WeightServer::applyUpdate(unsigned layer, std::string& name) {
     pubMtx.unlock();
 
     std::string checkInfo = weightsStore[layer][name].tryApplyUpdate(adamOpt, layer);
-    if (CORRECT_CHECK && nodeId == 0 && checkInfo != "") {
-        serverLog(std::string("Layer ") + std::to_string(layer) + checkInfo);
+    if (nodeId == 0 && checkInfo != "") {
+        serverLog(std::string("Local Layer ") + std::to_string(layer) + " " + checkInfo);
     }
 
     std::unique_lock<std::mutex> ul(ackCntMtx);
@@ -145,8 +145,8 @@ void WeightServer::receiver() {
             } else {
                 checkInfo = weightsStore[layer][name].tryApplyUpdate(adamOpt, layer, updateData);
             }
-            if (CORRECT_CHECK && nodeId == 0 && checkInfo != "") {
-                serverLog(std::string("Layer ") + std::to_string(layer) + checkInfo);
+            if (nodeId == 0 && checkInfo != "") {
+                serverLog(std::string("Ghost Layer ") + std::to_string(layer) + " " + checkInfo);
             }
         } else if (topic == CTRL_MSG::ACK) {
             subMtx.unlock();

@@ -206,8 +206,11 @@ void LambdaWorker::recvEvalData(zmq::message_t &client_id, Chunk &chunk) {
         }
         manager->accMtx.unlock();
     } else {
+        zmq::message_t evalMsg(2 * sizeof(float));
+        workersocket.recv(&evalMsg);
+
         std::string errMsg = "[ ERROR ] when receiving from " + chunk.str() + ": ";
-        errMsg += "Received duplicate results. Discarding...";
+        errMsg += "Received duplicate accloss. Discarding...";
         printLog(manager->nodeId, errMsg.c_str());
     }
 }
@@ -218,9 +221,7 @@ void LambdaWorker::markFinish(zmq::message_t& client_id, Chunk &chunk) {
     manager->timeoutMtx.unlock();
     if (exist) {
         zmq::message_t ack(3 * sizeof(unsigned));
-        if (manager->async && manager->enqueueAggChunk(chunk)) {
-            *(int *)(ack.data()) = 0;
-        } else if (manager->NNRecv(chunk)) {
+        if (manager->NNRecv(chunk)) {
             *(int *)(ack.data()) = 0;
         } else { // Error, Give up this chunk
             *(int *)(ack.data()) = -1;

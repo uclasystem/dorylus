@@ -39,7 +39,7 @@
 #include "../../common/utils.hpp"
 
 
-static const bool relaunching = false;
+static const bool relaunching = true;
 
 #define LAMBDA_VTX_NN "gcn"
 #define ALLOCATION_TAG "LambdaComm"
@@ -61,16 +61,15 @@ public:
     void NNCompute(Chunk &chunk);
     void NNSync();
     bool NNRecv(Chunk &chunk);
-    bool enqueueAggChunk(Chunk &chunk);
 
     unsigned getRelaunchCnt() { return relaunchCnt; };
 
     bool halt;
     bool async;
     std::vector<TensorMap>& savedNNTensors;
-    Lock resLock;
+    Lock &resLock;
     ChunkQueue& resQueue;
-    Lock aggLock;
+    Lock &aggLock;
     ChunkQueue& aggQueue;
 
     std::thread *relaunchThd;
@@ -79,6 +78,7 @@ public:
     unsigned relaunchCnt;
     std::mutex timeoutMtx;
     std::map<Chunk, unsigned> timeoutTable;
+    std::map<unsigned, unsigned> recordTable; // map layer -> (avg_time)
 
 
     struct AccLoss {
@@ -133,5 +133,10 @@ public:
     void startRelaunchThd();
     void stopRelaunchThd();
 };
+
+
+unsigned getAbsLayer(const Chunk &chunk, unsigned numLayers);
+Chunk incLayer(const Chunk &chunk, unsigned numLayers);
+bool isLastLayer(const Chunk &chunk);
 
 #endif // LAMBDA_COMM_HPP

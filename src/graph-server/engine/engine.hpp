@@ -193,6 +193,7 @@ public:
     unsigned numNodes;
 
     bool commHalt = false;
+    bool aggHalt = false;
 
     bool undirected = false;
 

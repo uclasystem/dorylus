@@ -10,13 +10,14 @@
 
 #include "../utils.hpp"
 
-#define SLEEP_PERIOD   1000  // us
-#define TIMEOUT_PERIOD (500) // ms
+#define TIMEOUT_PERIOD (2000) // ms
 
 #define SND_MORE true
 #define NO_MORE false
 
-Matrix recvTensor(zmq::socket_t& socket);
+#define RESEND false
+
+int recvTensor(zmq::socket_t& socket, Matrix &mat);
 
 std::vector<Matrix> reqTensors(zmq::socket_t& socket, Chunk &chunk,
                             std::vector<std::string>& tensorRequests);

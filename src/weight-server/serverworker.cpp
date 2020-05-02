@@ -137,13 +137,12 @@ void ServerWorker::recvUpdateTensor(Chunk &chunk, WeightTensorMap& weights) {
           << "' not found. Make sure to allocate it before starting workers!" << std::endl;
     } else {
         found->second.decRef(chunk);
-    }
+        FeatType* newUpdate = (FeatType*) tensorData.data();
+        unsigned localUpdCnt = ws.weightsStore[chunk.layer][name].localUpdate(newUpdate);
 
-    FeatType* newUpdate = (FeatType*) tensorData.data();
-    unsigned localUpdCnt = ws.weightsStore[chunk.layer][name].localUpdate(newUpdate);
-
-    if (ws.numLambdas == localUpdCnt) {
-        ws.applyUpdate(chunk.layer, name);
+        if (ws.numLambdas == localUpdCnt) {
+            ws.applyUpdate(chunk.layer, name);
+        }
     }
 }
 
