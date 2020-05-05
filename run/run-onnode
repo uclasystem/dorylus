@@ -83,7 +83,6 @@ case $1 in
         fi
 
         MYPRIPFILE=${HOME}/myprip
-        MYPUBIPFILE=${HOME}/mypubip
         DSHMACHINESFILE=${HOME}/dshmachines
 
         # Kill running graphservers.
@@ -131,7 +130,6 @@ case $1 in
             --labelsfile ${DATASET}/labels.bsnap \
             --dshmachinesfile ${DSHMACHINESFILE} \
             --layerfile ${LAYERFILE} \
-            --pubipfile ${MYPUBIPFILE} \
             --pripfile ${MYPRIPFILE} \
             --dataserverport ${GPORT} \
             --weightserverport ${WPORT} \

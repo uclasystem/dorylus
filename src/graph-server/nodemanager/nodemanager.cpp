@@ -17,7 +17,7 @@
  *
  */
 void
-NodeManager::init(std::string dshMachinesFile, std::string myPrIpFile, std::string myPubIpFile,
+NodeManager::init(std::string dshMachinesFile, std::string myPrIpFile,
   Engine* _engine) {
     printLog(404, "NodeManager starts initialization...");
     getPrIP(myPrIpFile, me.ip);

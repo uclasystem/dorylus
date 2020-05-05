@@ -62,7 +62,7 @@ void Engine::init(int argc, char *argv[]) {
     parseArgs(argc, argv);
 
     // Initialize the node manager and communication manager.
-    nodeManager.init(dshMachinesFile, myPrIpFile, myPubIpFile,
+    nodeManager.init(dshMachinesFile, myPrIpFile,
                      this);  // NodeManger should go first.
 
     nodeId = nodeManager.getMyNodeId();
@@ -2670,9 +2670,6 @@ Engine::parseArgs(int argc, char *argv[]) {
     assert(vm.count("pripfile"));
     myPrIpFile = vm["pripfile"].as<std::string>();
 
-    assert(vm.count("pubipfile"));
-    myPubIpFile = vm["pubipfile"].as<std::string>();
-
     assert(vm.count("tmpdir"));
     outFile = vm["tmpdir"].as<std::string>() + "/output_";  // Still needs to append the node id, after node manager set up.
 
@@ -2722,9 +2719,9 @@ Engine::parseArgs(int argc, char *argv[]) {
     staleness = vm["staleness"].as<unsigned>();
 
     printLog(404, "Parsed configuration: dThreads = %u, cThreads = %u, datasetDir = %s, featuresFile = %s, dshMachinesFile = %s, "
-             "myPrIpFile = %s, myPubIpFile = %s, undirected = %s, data port set -> %u, control port set -> %u, node port set -> %u",
+             "myPrIpFile = %s, undirected = %s, data port set -> %u, control port set -> %u, node port set -> %u",
              dThreads, cThreads, datasetDir.c_str(), featuresFile.c_str(), dshMachinesFile.c_str(),
-             myPrIpFile.c_str(), myPubIpFile.c_str(), undirected ? "true" : "false", data_port, ctrl_port, node_port);
+             myPrIpFile.c_str(), undirected ? "true" : "false", data_port, ctrl_port, node_port);
 }
 
 /**

@@ -52,7 +52,7 @@ typedef struct node {
  */
 class NodeManager {
 public:
-    void init(std::string dshMachinesFile, std::string myPrIpFile, std::string myPubIpFile, Engine* _engine);
+    void init(std::string dshMachinesFile, std::string myPrIpFile, Engine* _engine);
     void destroy();
 
     // Synchronous barrier
