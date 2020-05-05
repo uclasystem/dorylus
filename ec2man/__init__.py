@@ -63,7 +63,6 @@ def process_setup():
     """
     Process the arguments for setting up the machines.
     """
-
     from ec2man.classes import Context
 
     if not os.path.isfile(EC2_DIR + "machines"):
@@ -95,7 +94,6 @@ def get_instances_info(id_list):
     """
     Get instances information through the given instance id.
     """
-
     from ec2man.classes import Instance
 
     responses = ec2_cli.describe_instances(InstanceIds=id_list)
@@ -105,11 +103,12 @@ def get_instances_info(id_list):
         for inst in reversed(res['Instances']):
             inst_id = inst['InstanceId']
             inst_type = inst['InstanceType']
+            inst_place = inst['Placement']['AvailabilityZone']
             prip = inst['PrivateIpAddress']
             pubip = '0'
             if inst['State']['Name'] == 'running':
                 pubip = inst['PublicIpAddress']
-            instances.append(Instance(inst_id, inst_type, prip, pubip))
+            instances.append(Instance(inst_id, inst_type, inst_place, prip, pubip))
 
     instances = sorted(instances, key=lambda x: x.id)
     return instances
@@ -165,7 +164,7 @@ def process_target(ctx, target, args):
             inst = ctx.instances[i]
             response = ec2_cli.describe_instances(InstanceIds=[inst.id])
             state = response['Reservations'][0]['Instances'][0]['State']['Name']
-            print("\t{:2d}  {}  {}  {:15}  {}".format(i, inst.id, inst.type, inst.pr_ip, state))
+            print("  {:2d}  {}  {}  {}  {:15}  {}".format(i, inst.id, inst.type, inst.placement, inst.pr_ip, state))
 
     elif target == 'user':
         print(user_name)
