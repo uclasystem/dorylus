@@ -336,7 +336,9 @@ unsigned Engine::getNodeId() { return nodeId; }
 FeatType *Engine::runForward(unsigned epoch) {
     currEpoch = epoch;
     // Make sure all nodes start running the forward-prop phase.
-    printLog(nodeId, "Engine starts running FORWARD...");
+    if (nodeId == 0) {
+        printLog(nodeId, "Engine starts running FORWARD...");
+    }
 
     timeForwardProcess -= getTimer();
 
@@ -364,7 +366,9 @@ FeatType *Engine::runForward(unsigned epoch) {
     }
 
     timeForwardProcess += getTimer();
-    printLog(nodeId, "Engine completes FORWARD at layer %u.", layer);
+    if (nodeId == 0) {
+        printLog(nodeId, "Engine completes FORWARD at layer %u.", layer);
+    }
     // calcAcc(inputTensor, localVerticesLabels, graph.localVtxCnt,
     // getFeatDim(numLayers));
 
@@ -379,7 +383,9 @@ FeatType *Engine::runForward(unsigned epoch) {
  *
  */
 void Engine::runBackward(FeatType *initGradTensor) {
-    printLog(nodeId, "Engine starts running BACKWARD...");
+    if (nodeId == 0) {
+        printLog(nodeId, "Engine starts running BACKWARD...");
+    }
 
     timeBackwardProcess -= getTimer();
 
@@ -403,7 +409,9 @@ void Engine::runBackward(FeatType *initGradTensor) {
     }
 
     timeBackwardProcess += getTimer();
-    printLog(nodeId, "Engine completes BACKWARD at %u.", layer);
+    if (nodeId == 0) {
+        printLog(nodeId, "Engine completes BACKWARD at %u.", layer);
+    }
 }
 
 void Engine::run() {
@@ -442,6 +450,8 @@ void Engine::run() {
  * Run the deep-pipeline version where all stages happen in parallel
  */
 void Engine::runPipeline() {
+    double stt = getTimer();
+
     commHalt = false;
     auto ghstRcvr =
         std::bind(&Engine::ghostReceiver, this, std::placeholders::_1);
@@ -453,7 +463,23 @@ void Engine::runPipeline() {
     std::thread t2(scttrWrkr, 1);
     t2.detach();
 
-    aggregator(2);
+    auto aggWrkr =
+        std::bind(&Engine::aggregator, this, std::placeholders::_1);
+    std::vector<std::thread> aggWrkrThds;
+    for (unsigned tid = 0; tid < cThreads; ++tid) {
+        aggWrkrThds.push_back(std::thread(aggWrkr, 2 + tid));
+    }
+    for (unsigned tid = 0; tid < cThreads; ++tid) {
+        aggWrkrThds[tid].join();
+    }
+
+    double edt = getTimer();
+    printLog(nodeId, "Avg Epoch Time: %.3f", (edt - stt) / (numEpochs - 1));
+
+    // Wait for all nodes to finish
+    nodeManager.barrier();
+    printLog(nodeId, "Finished, shutting down...");
+    commHalt = true;
 }
 
 /**
@@ -1203,12 +1229,13 @@ void Engine::pipelineGhostReceiver(unsigned tid) {
 
 void Engine::aggregator(unsigned tid) {
     printLog(nodeId, "AGGREGATE: Starting");
+    unsigned trails = 0;
     unsigned failedTrials = 0;
     const int INIT_PERIOD = 256;
     const int MAX_PERIOD = 4096;
     int SLEEP_PERIOD = INIT_PERIOD;
 
-    while (true) {
+    while (!aggHalt) {
         aggQueueLock.lock();
         if (aggregateQueue.empty()) {
             aggQueueLock.unlock();
@@ -1222,21 +1249,15 @@ void Engine::aggregator(unsigned tid) {
             Chunk c = aggregateQueue.top();
 
             if (c.epoch == numEpochs) {
-                aggregateQueue.pop();
+                while (!aggregateQueue.empty()) {
+                    aggregateQueue.pop();
+                    ++finishedChunks;
+                }
                 aggQueueLock.unlock();
-                if (++finishedChunks == numLambdasForward) {
-                    // Wait for all nodes to finish
-                    nodeManager.barrier();
-
-                    printLog(nodeId, "Finished, shutting down...");
-                    commHalt = true;
+                if (finishedChunks == numLambdasForward) {
+                    aggHalt = true;
                     return;
                 }
-                // There is a chunk but it is beyond the staleness bound
-            } else if (staleness != UINT_MAX && c.layer == 0 &&
-                       c.dir == PROP_TYPE::FORWARD &&
-                       c.epoch > minEpoch + staleness) {
-                aggQueueLock.unlock();
 
                 usleep(SLEEP_PERIOD);
                 failedTrials++;
@@ -1244,17 +1265,30 @@ void Engine::aggregator(unsigned tid) {
                     failedTrials = 0;
                     SLEEP_PERIOD *= 2;
                 }
-
-                // Messages to check how often a node is blocking
-                // if (++trials % 1000 == 0) {
-                //    printLog(nodeId, "Blocking. MinE %u, Finished %u",
-                //    minEpoch,
-                //      nodesFinishedEpoch[minEpoch % (staleness + 1)]);
-                //}
+                // There is a chunk but it is beyond the staleness bound
+            } else if (staleness != UINT_MAX && c.layer == 0 &&
+                       c.dir == PROP_TYPE::FORWARD &&
+                       c.epoch > minEpoch + staleness) {
 
                 // Read incoming message buffer to see if there are
                 //  updates to the minEpoch
                 nodeManager.readEpochUpdates();
+                aggQueueLock.unlock();
+
+                usleep(SLEEP_PERIOD);
+                failedTrials++;
+                if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
+                    failedTrials = 0;
+                    SLEEP_PERIOD *= 2;
+                    trails++;
+                }
+
+                // Messages to check how often a node is blocking
+                if ((trails + 1) % 1000 == 0) {
+                    printLog(nodeId, "Blocking. MinE %u, Finished %u",
+                        minEpoch,
+                        nodesFinishedEpoch[minEpoch % (staleness + 1)]);
+                }
                 // There is a chunk to process that is within the bound
             } else {
                 // printLog(nodeId, "AGGREGATE: Got %s", c.str().c_str());
@@ -1278,6 +1312,7 @@ void Engine::aggregator(unsigned tid) {
 
                 SLEEP_PERIOD = INIT_PERIOD;
                 failedTrials = 0;
+                trails = 0;
             }
         }
     }
@@ -1384,8 +1419,10 @@ void Engine::scatterWorker(unsigned tid) {
             unsigned endScat = timestamp_ms();
             // Add chunk into appropriate aggregate queue
             // printLog(nodeId, "SCATTER: Finished %s", c.str().c_str());
+            aggQueueLock.lock();
             aggregateQueue.push(c);
             vecTimeScatter[c.dir * numLayers + c.layer] += endScat - startScat;
+            aggQueueLock.unlock();
 
             delete[] batchedIds;
             failedTrials = 0;

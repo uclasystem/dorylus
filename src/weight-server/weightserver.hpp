@@ -48,7 +48,7 @@ class WeightServer {
 public:
     WeightServer(std::string &weightServersFile, std::string &myPrIpFile,
                  unsigned _listenerPort, std::string &configFileName,
-                 unsigned _serverPort, std::string &tmpFileName);
+                 unsigned _serverPort, std::string &tmpFileName, bool _sync);
     ~WeightServer();
 
     bool sync; // sync mode or async pipeline

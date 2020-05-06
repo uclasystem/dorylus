@@ -14,11 +14,11 @@ main(int argc, char *argv[]) {
     unsigned serverPort = std::atoi(argv[3]);
     unsigned listenerPort = std::atoi(argv[4]);
     std::string configFileName = argv[5];
-
     // Set output file location. Still needs to append nodeId.
     std::string tmpFileName = std::string(argv[6]) + "/output_";
+    bool sync = (bool)(std::atoi(argv[7]));
 
-    WeightServer ws(weightServersFile, myPrIpFile, listenerPort, configFileName, serverPort, tmpFileName);
+    WeightServer ws(weightServersFile, myPrIpFile, listenerPort, configFileName, serverPort, tmpFileName, sync);
 
     // Run in a detached thread because so that we can wait
     // on a condition variable.

@@ -1,17 +1,23 @@
 #include "network_ops.hpp"
+#include <cmath>
 
-Matrix recvTensor(zmq::socket_t& socket) {
+int recvTensor(zmq::socket_t& socket, Matrix &mat) {
     zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
     zmq::message_t tensorData;
 
-    socket.recv(&tensorHeader);
+    if (!socket.recv(&tensorHeader)) {
+        return 0;
+    }
     unsigned resp = parse<unsigned>((char*)tensorHeader.data(), 0);
     if (resp == ERR_HEADER_FIELD) {
         std::cerr << "Got error from server. Consult graph server output" << std::endl;
-        return Matrix();
+        return -1;
     }
     std::string name = parseName((char*)tensorHeader.data());
-    socket.recv(&tensorData);
+
+    if (!socket.recv(&tensorData)) {
+        return 0;
+    }
 
     unsigned rows = parse<unsigned>((char*)tensorHeader.data(), 3);
     unsigned cols = parse<unsigned>((char*)tensorHeader.data(), 4);
@@ -19,14 +25,26 @@ Matrix recvTensor(zmq::socket_t& socket) {
     FeatType* data = new FeatType[rows * cols];
     std::memcpy(data, tensorData.data(), tensorData.size());
 
-    return Matrix(name.c_str(), rows, cols, data);
+    mat.setName(name.c_str());
+    mat.setRows(rows);
+    mat.setCols(cols);
+    mat.setData(data);
+
+    return 0;
 }
 
 std::vector<Matrix> reqTensors(zmq::socket_t& socket, Chunk &chunk,
                         std::vector<std::string>& tensorRequests) {
+
+#define INIT_PERIOD (5 * 1000u) // 5ms
+#define MAX_PERIOD (500 * 1000u)
+#define EXP_FACTOR 1.5
+
+    unsigned sleepPeriod = INIT_PERIOD;
+
     bool empty = true;
     std::vector<Matrix> matrices;
-    while (empty) {
+    while (true) {
         zmq::message_t header(HEADER_SIZE);
         populateHeader(header.data(), OP::PULL, chunk);
         socket.send(header, ZMQ_SNDMORE);
@@ -45,7 +63,13 @@ std::vector<Matrix> reqTensors(zmq::socket_t& socket, Chunk &chunk,
         unsigned more = 1;
         empty = false;
         while (more && !empty) {
-            Matrix result = recvTensor(socket);
+            Matrix result;
+            int ret = recvTensor(socket, result);
+            if (ret == -1) {
+                for (auto& M : matrices) deleteMatrix(M);
+                matrices.clear();
+                return matrices;
+            }
             if (result.empty()) {
                 empty = result.empty();
 
@@ -60,9 +84,21 @@ std::vector<Matrix> reqTensors(zmq::socket_t& socket, Chunk &chunk,
                 socket.getsockopt(ZMQ_RCVMORE, &more, &usize);
             }
         }
+
+        if (RESEND && empty) {
+            usleep(sleepPeriod);
+            sleepPeriod *= EXP_FACTOR;
+            sleepPeriod = std::min(sleepPeriod, MAX_PERIOD);
+        } else {
+            break;
+        }
     }
 
     return matrices;
+
+#undef INIT_PERIOD
+#undef MAX_PERIOD
+#undef EXP_FACTOR
 }
 
 void sendTensors(zmq::socket_t& socket, Chunk &chunk,

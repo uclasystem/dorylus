@@ -8,7 +8,7 @@
 #include "../common/utils.hpp"
 #include "AdamOptimizer.hpp"
 
-#define CORRECT_CHECK true
+#define CORRECT_CHECK false
 
 // Matrix with reference counting
 struct RefMat {

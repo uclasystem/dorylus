@@ -185,6 +185,15 @@ case $1 in
         DSHMACHINESFILE=${HOME}/dshmachines
         LAYERCONFIGFILE=${HOME}/$2.config
 
+        # Minor options.
+        let SYNC=1
+        for var in "$@"
+        do
+            if [ $var = "--p" ] || [ $var = "--pipeline" ]; then
+                SYNC=0
+            fi
+        done
+
         # Kill running weightservers.
         echo -e "\e[33;1mKilling existing 'weightserver' processes...\e[0m"
         dsh -f ${DSHMACHINESFILE} -c "killall -u $( whoami ) weightserver"
@@ -214,7 +223,8 @@ case $1 in
             ${DATAPORT} \
             ${WPORT} \
             ${LAYERCONFIGFILE} \
-            ${TMPFILEDIR}"
+            ${TMPFILEDIR} \
+            ${SYNC}"
         dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ${DSH_COMMAND}"
 
         # Gather the output files.
