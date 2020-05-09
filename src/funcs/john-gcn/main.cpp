@@ -28,40 +28,40 @@ using namespace Aws::Utils::Json;
 using namespace aws::lambda_runtime;
 using namespace std::chrono;
 
-bool lastLayer = false;
-
-
 invocation_response
-finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chunk) {
+finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
+           Chunk &chunk, bool eval, bool check_model) {
     std::cout << "FINAL LAYER" << std::endl;
     std::vector<std::string> dataRequests{"ah", "lab"};
     std::vector<std::string> weightRequests{"w"};
 
+    std::cout << "Request ah and lab" << std::endl;
     std::vector<Matrix> matrices = reqTensors(data_socket, chunk, dataRequests);
-    std::vector<Matrix> weights = reqTensors(weights_socket, PROP_TYPE::FORWARD, chunk.layer, weightRequests);
-
-    if (matrices.empty() || weights.empty()) {
-        return constructResp(false, chunk.chunkId, "Got error message from server");
-    }
-
     for (auto& M : matrices) {
         if (M.empty()){
             for (auto& M : matrices) deleteMatrix(M);
-            for (auto& W : weights) deleteMatrix(W);
 
             std::cout << M.name() << " is empty" << std::endl;
-            return constructResp(false, chunk.chunkId, M.name() + " is empty");
+            return constructResp(false, chunk.localId, M.name() + " is empty");
         }
     }
+
+    std::cout << "Request w" << std::endl;
+    std::vector<Matrix> weights = reqTensors(weights_socket, chunk, weightRequests);
     for (auto& W : weights) {
         if (W.empty()){
             for (auto& M : matrices) deleteMatrix(M);
             for (auto& W : weights) deleteMatrix(W);
 
             std::cout << W.name() << " is empty" << std::endl;
-            return constructResp(false, chunk.chunkId, W.name() + " is empty");
+            return constructResp(false, chunk.localId, W.name() + " is empty");
         }
     }
+
+    if (matrices.empty() || weights.empty()) {
+        return constructResp(false, chunk.localId, "Got error message from server");
+    }
+    std::cout << "Fin Request" << std::endl;
 
     // Forward layer
     Matrix& AH = matrices[0];
@@ -73,6 +73,15 @@ finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chu
     deleteMatrix(Z);
     Matrix& labels = matrices[1];
 
+    if (eval || check_model) {
+        sendAccLoss(data_socket, preds, labels, chunk);
+    }
+
+    // End early because we should not be sending any weight updates
+    if (check_model) {
+        return constructResp(true, chunk.localId, "Finished final layer");
+    }
+
     // Backward computation
     Matrix d_out = preds - labels;
     deleteMatrix(labels);
@@ -83,17 +92,17 @@ finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chu
     Matrix d_weights = AH.dot(d_out, true, false);
     deleteMatrix(AH);
     deleteMatrix(d_out);
+
+    std::cout << "Send interGrad" << std::endl;
     interGrad.setName("grad");
-
-    d_weights.setName("w");
-
-    std::vector<Matrix> weightUpdates{d_weights};
-    sendTensors(weights_socket, chunk.layer, chunk.layer, weightUpdates);
-
     std::vector<Matrix> toSend{interGrad};
     sendTensors(data_socket, chunk, toSend, true);
 
-    std::cout << "SENT tensors and weight updates" << std::endl;
+    std::cout << "Send w" << std::endl;
+    d_weights.setName("w");
+    std::vector<Matrix> weightUpdates{d_weights};
+    sendTensors(weights_socket, chunk, weightUpdates);
+    std::cout << "Fin send" << std::endl;
 
     // Clean up data
     for (auto& M : toSend)
@@ -102,37 +111,40 @@ finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chu
         deleteMatrix(M);
     std::cout << "Data cleaned up" << std::endl;
 
-    return constructResp(true, chunk.chunkId, "Finished final layer");
+    return constructResp(true, chunk.localId, "Finished final layer");
 }
 
 invocation_response
 backwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chunk) {
     std::cout << "BACKWARD LAYER" << std::endl;
+    std::cout << "Request ah z and aTg" << std::endl;
     std::vector<std::string> dataReqs{"ah", "z", "aTg"};
-    std::vector<std::string> weightReqs{"w"};
     std::vector<Matrix> matrices = reqTensors(data_socket, chunk, dataReqs);
-    std::vector<Matrix> weights = reqTensors(weights_socket, PROP_TYPE::BACKWARD, chunk.layer, weightReqs);
-
-    if (matrices.empty() || weights.empty()) {
-        return constructResp(false, chunk.chunkId, "Got error message from server");
-    }
-
     for (auto& M : matrices) {
         if (M.empty()){
             std::cout << M.name() << " is empty" << std::endl;
-            return constructResp(false, chunk.chunkId, M.name() + " is empty");
+            return constructResp(false, chunk.localId, M.name() + " is empty");
         } else {
             std::cout << "GOT " << M.name() << std::endl;
         }
     }
+
+    std::cout << "Request w" << std::endl;
+    std::vector<std::string> weightReqs{"w"};
+    std::vector<Matrix> weights = reqTensors(weights_socket, chunk, weightReqs);
     for (auto& W : weights) {
         if (W.empty()){
             std::cout << W.name() << " is empty" << std::endl;
-            return constructResp(false, chunk.chunkId, W.name() + " is empty");
+            return constructResp(false, chunk.localId, W.name() + " is empty");
         } else {
             std::cout << "GOT " << W.name() << std::endl;
         }
     }
+
+    if (matrices.empty() || weights.empty()) {
+        return constructResp(false, chunk.localId, "Got error message from server");
+    }
+    std::cerr << "Fin Request" << std::endl;
 
     Matrix& AH = matrices[0];
     Matrix& Z = matrices[1];
@@ -157,49 +169,55 @@ backwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &
     d_weights.setName("w");
     resultGrad.setName("grad");
 
+    std::cout << "Send wu" << std::endl;
     std::vector<Matrix> weightUpdates{d_weights};
-    sendTensors(weights_socket, chunk.layer, chunk.layer, weightUpdates);
+    sendTensors(weights_socket, chunk, weightUpdates);
 
+    std::cout << "Send resultGrad" << std::endl;
     std::vector<Matrix> toSend{resultGrad};
     if (chunk.layer != 0) {
         sendTensors(data_socket, chunk, toSend, true);
     } else { // the last backward layer (layer 0), skip sending the grad back
         sendFinMsg(data_socket, chunk);
     }
+    std::cout << "Fin send" << std::endl;
 
     for (auto& M : toSend)
         deleteMatrix(M);
     for (auto& M : weightUpdates)
         deleteMatrix(M);
 
-    return constructResp(true, chunk.chunkId, "Finished backward layer");
+    return constructResp(true, chunk.localId, "Finished backward layer");
 }
 
 invocation_response
 forwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chunk) {
     std::cout << "FORWARD LAYER" << std::endl;
+
     std::vector<std::string> dataRequests{"ah"};
-    std::vector<std::string> weightRequests{"w"};
-
+    std::cerr << "Request AH" << std::endl;
     std::vector<Matrix> matrices = reqTensors(data_socket, chunk, dataRequests);
-    std::vector<Matrix> weights = reqTensors(weights_socket, PROP_TYPE::FORWARD, chunk.layer, weightRequests);
-
-    if (matrices.empty() || weights.empty()) {
-        return constructResp(false, chunk.chunkId, "Got error message from server");
-    }
-
     for (auto& M : matrices) {
         if (M.empty()){
             std::cout << M.name() << " is empty" << std::endl;
-            return constructResp(false, chunk.chunkId, M.name() + " is empty");
+            return constructResp(false, chunk.localId, M.name() + " is empty");
         }
     }
+
+    std::vector<std::string> weightRequests{"w"};
+    std::cerr << "Request w" << std::endl;
+    std::vector<Matrix> weights = reqTensors(weights_socket, chunk, weightRequests);
     for (auto& W : weights) {
         if (W.empty()){
             std::cout << W.name() << " is empty" << std::endl;
-            return constructResp(false, chunk.chunkId, W.name() + " is empty");
+            return constructResp(false, chunk.localId, W.name() + " is empty");
         }
     }
+
+    if (matrices.empty() || weights.empty()) {
+        return constructResp(false, chunk.localId, "Got error message from server");
+    }
+    std::cerr << "Fin Request" << std::endl;
 
     Matrix& AH = matrices[0];
     Matrix& W = weights[0];
@@ -216,16 +234,16 @@ forwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &c
     toSend.push_back(Z);
     toSend.push_back(H_l);
 
+    std::cout << "Send tensors Z, H" << std::endl;
     sendTensors(data_socket, chunk, toSend, true);
-
-    std::cout << "SENT tensors Z, H" << std::endl;
+    std::cout << "Fin send" << std::endl;
 
     // Clean up data
     for (auto& M : toSend)
         deleteMatrix(M);
     std::cout << "Data cleaned up" << std::endl;
 
-    return constructResp(true, chunk.chunkId, "Finished forward layer");
+    return constructResp(true, chunk.localId, "Finished forward layer");
 }
 
 
@@ -242,13 +260,14 @@ forwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &c
  *
  */
 invocation_response
-apply_phase(std::string dataserver, std::string weightserver, unsigned dport, unsigned wport, Chunk &chunk) {
+apply_phase(std::string dataserver, std::string weightserver, unsigned dport, unsigned wport,
+            Chunk &chunk, bool eval, bool check_model) {
     zmq::context_t ctx(2);
 
     // Creating identity
     size_t identity_len = sizeof(unsigned) * 3 + dataserver.length();
     char identity[identity_len];
-    memcpy(identity, (char *) &chunk.chunkId, sizeof(unsigned));
+    memcpy(identity, (char *) &chunk.localId, sizeof(unsigned));
     std::srand(time(NULL));
     *(unsigned *)(identity + sizeof(unsigned)) = chunk.layer;
     *(unsigned *)(identity + sizeof(unsigned) * 2) = rand();
@@ -258,33 +277,42 @@ apply_phase(std::string dataserver, std::string weightserver, unsigned dport, un
     zmq::socket_t data_socket(ctx, ZMQ_DEALER);
     try {
         weights_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
+        if (RESEND) {
+            weights_socket.setsockopt(ZMQ_RCVTIMEO, TIMEOUT_PERIOD);
+        }
         char whost_port[50];
         sprintf(whost_port, "tcp://%s:%u", weightserver.c_str(), wport);
         weights_socket.connect(whost_port);
 
         data_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
+        if (RESEND) {
+            data_socket.setsockopt(ZMQ_RCVTIMEO, TIMEOUT_PERIOD);
+        }
         char dhost_port[50];
         sprintf(dhost_port, "tcp://%s:%u", dataserver.c_str(), dport);
         data_socket.connect(dhost_port);
     } catch(std::exception& ex) {
-        return constructResp(false, chunk.chunkId, ex.what());
+        return constructResp(false, chunk.localId, ex.what());
     }
 
     if (chunk.dir == PROP_TYPE::FORWARD && chunk.layer < 1) {
         return forwardLayer(data_socket, weights_socket, chunk);
     } else if (chunk.dir == PROP_TYPE::FORWARD && chunk.layer == 1) {
-        return finalLayer(data_socket, weights_socket, chunk);
+        return finalLayer(data_socket, weights_socket, chunk, eval,
+                          check_model);
     } else if (chunk.dir == PROP_TYPE::BACKWARD) {
         return backwardLayer(data_socket, weights_socket, chunk);
     }
 
     std::cout << "Returning from function" << std::endl;
 
-//    weights_socket.close();
-//    data_socket.close();
-//    ctx.close();
+    weights_socket.setsockopt(ZMQ_LINGER, 0);
+    weights_socket.close();
+    data_socket.setsockopt(ZMQ_LINGER, 0);
+    data_socket.close();
+    ctx.close();
 
-    return constructResp(false, chunk.chunkId, "Didn't run any config");
+    return constructResp(false, chunk.localId, "Didn't run any config");
 }
 
 
@@ -298,9 +326,12 @@ my_handler(invocation_request const& request) {
     std::string weightserver = v.GetString("wserver");
     unsigned dport = v.GetInteger("dport");
     unsigned wport = v.GetInteger("wport");
+    bool eval = v.GetBool("eval");
+    bool check_model = v.GetBool("check_model");
 
     Chunk chunk;
-    chunk.chunkId = v.GetInteger("id");
+    chunk.localId = v.GetInteger("id");
+    chunk.globalId = v.GetInteger("gid");
     chunk.lowBound = v.GetInteger("lb");
     chunk.upBound = v.GetInteger("ub");
     chunk.layer = v.GetInteger("layer");
@@ -308,11 +339,12 @@ my_handler(invocation_request const& request) {
     chunk.epoch = v.GetInteger("epoch");
     chunk.vertex = v.GetInteger("vtx");
 
-    std::cout << "[ACCEPTED] Thread " << chunk.chunkId << " is requested from "
+    std::cout << "[ACCEPTED] Thread " << chunk.str() << " is requested from "
               << dataserver << ":" << dport << ", FORWARD layer " << chunk.layer
               << "." << std::endl;
 
-    return apply_phase(dataserver, weightserver, dport, wport, chunk);
+    return apply_phase(dataserver, weightserver, dport, wport,
+                       chunk, eval, check_model);
 }
 
 int
