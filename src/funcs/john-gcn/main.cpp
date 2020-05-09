@@ -79,6 +79,8 @@ finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
 
     // End early because we should not be sending any weight updates
     if (check_model) {
+        sendFinMsg(data_socket, chunk);
+
         return constructResp(true, chunk.localId, "Finished final layer");
     }
 
