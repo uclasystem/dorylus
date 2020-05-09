@@ -183,6 +183,9 @@ public:
     unsigned valFreq = 0;
 
     float accuracy = 0.0;
+    // If check_model is true apply will run an eval phase
+    // but will not update weights.
+    bool check_model = false;
 
     //0: Lambda, 1: GPU, 2: CPU
     unsigned mode = 0;

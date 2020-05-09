@@ -345,7 +345,6 @@ FeatType *Engine::runForward(unsigned epoch) {
     // Create buffer for first-layer aggregation.
     FeatType *inputTensor = forwardVerticesInitData;
     forwardGhostVerticesDataIn = forwardGhostInitData;
-    // For sequential invocation of operations use this block
     // FeatType **eVFeatsTensor = srcVFeats2eFeats(inputTensor,
     // forwardGhostInitData, graph.localVtxCnt, getFeatDim(layer));
     FeatType **eVFeatsTensor = savedEdgeTensors[0]["fedge"];
@@ -478,8 +477,15 @@ void Engine::runPipeline() {
 
     // Wait for all nodes to finish
     nodeManager.barrier();
-    printLog(nodeId, "Finished, shutting down...");
+    printLog(nodeId, "All nodes finished pipeline");
     commHalt = true;
+
+    check_model = true;
+    resComm->setAsync(false);
+    runForward(currEpoch);
+
+    nodeManager.barrier();
+    printLog(nodeId, "Finished, shutting down...");
 }
 
 /**
@@ -1228,7 +1234,6 @@ void Engine::pipelineGhostReceiver(unsigned tid) {
 }
 
 void Engine::aggregator(unsigned tid) {
-    printLog(nodeId, "AGGREGATE: Starting");
     unsigned trails = 0;
     unsigned failedTrials = 0;
     const int INIT_PERIOD = 256;
@@ -1296,8 +1301,9 @@ void Engine::aggregator(unsigned tid) {
                 aggQueueLock.unlock();
                 if (c.layer == 0 && c.dir == PROP_TYPE::FORWARD &&
                     c.epoch == currEpoch + 1) {
-                    printLog(nodeId, "STARTING epoch %u [%u]", ++currEpoch,
-                             c.epoch);
+                    ++currEpoch;
+                //    printLog(nodeId, "STARTING epoch %u [%u]", ++currEpoch,
+                //             c.epoch);
                 }
 
                 double startAgg = getTimer();

@@ -41,7 +41,7 @@
 
 static const bool relaunching = true;
 
-#define LAMBDA_VTX_NN "gcn"
+#define LAMBDA_VTX_NN "john-gcn"
 #define ALLOCATION_TAG "LambdaComm"
 
 class LambdaWorker;

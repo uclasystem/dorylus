@@ -187,6 +187,7 @@ void LambdaComm::invokeLambda(const Chunk &chunk) {
     jsonPayload.WithInteger("dport", dport);
     jsonPayload.WithInteger("wport", wport);
     jsonPayload.WithBool("eval", chunk.epoch % 5 == 0);
+    jsonPayload.WithBool("check_model", engine->check_model);
 
     jsonPayload.WithInteger("id", chunk.localId);
     jsonPayload.WithInteger("gid", chunk.globalId);
@@ -254,7 +255,6 @@ void LambdaComm::setupAwsClient() {
     Aws::Client::ClientConfiguration clientConfig;
     clientConfig.requestTimeoutMs = 900000;
     clientConfig.maxConnections = 1000;
-    clientConfig.region = "us-east-2";
     m_client = Aws::MakeShared<Aws::Lambda::LambdaClient>(ALLOCATION_TAG,
                                                           clientConfig);
 }
