@@ -74,7 +74,7 @@ finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chu
     Matrix& labels = matrices[1];
 
     if (eval) {
-        sendAccLoss(data_socket, preds, labels, chunk);
+        sendAccLoss(data_socket, weights_socket, preds, labels, chunk);
     }
 
     // Backward computation

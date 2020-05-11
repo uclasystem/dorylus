@@ -25,7 +25,7 @@ std::vector<Matrix> reqTensors(zmq::socket_t& socket, Chunk &chunk,
 void sendTensors(zmq::socket_t& socket, Chunk &chunk,
     std::vector<Matrix>& matrices, bool ack = false);
 
-void sendAccLoss(zmq::socket_t &socket, Matrix &predicts, Matrix &labels, Chunk &chunk);
+void sendAccLoss(zmq::socket_t &dsocket, zmq::socket_t &wsocket, Matrix &predicts, Matrix &labels, Chunk &chunk);
 
 void sendFinMsg(zmq::socket_t& socket, Chunk &chunk);
 

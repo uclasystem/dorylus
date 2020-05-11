@@ -8,8 +8,8 @@ static void nofree(void* data, void* hint) {}
  * ServerWorker constructor & destructor.
  *
  */
-ServerWorker::ServerWorker(zmq::context_t& ctx_, WeightServer& _ws)
-    : ctx(ctx_), workersocket(ctx, ZMQ_DEALER), ws(_ws) {
+ServerWorker::ServerWorker(zmq::context_t& ctx_, WeightServer& _ws, unsigned _tid)
+    : tid(_tid), ctx(ctx_), workersocket(ctx, ZMQ_DEALER), ws(_ws) {
     workersocket.setsockopt(ZMQ_BACKLOG, 500);
     workersocket.connect("inproc://backend");
 }
@@ -49,6 +49,12 @@ ServerWorker::work() {
                     Chunk chunk;
                     memcpy(&chunk, (char *)header.data() + sizeof(OP), sizeof(Chunk));
                     sendTensors(identity, chunk);
+                    break;
+                }
+                case (OP::EVAL): {
+                    Chunk chunk;
+                    memcpy(&chunk, (char *)header.data() + sizeof(OP), sizeof(Chunk));
+                    recvEvalData(identity, chunk);
                     break;
                 }
                 case (OP::INFO): { // Used to tell how many lambda threads it should expect for this round.
@@ -103,6 +109,16 @@ void ServerWorker::recvTensors(zmq::message_t& client_id, Chunk &chunk) {
         size_t usize = sizeof(more);
         workersocket.getsockopt(ZMQ_RCVMORE, &more, &usize);
     }
+}
+
+void ServerWorker::recvEvalData(zmq::message_t& client_id, Chunk &chunk) {
+    zmq::message_t evalMsg(2 * sizeof(float));
+    workersocket.recv(&evalMsg);
+
+    float acc = *((float *)evalMsg.data());
+    float loss = *(((float *)evalMsg.data()) + 1);
+
+    ws.updateLocalAccLoss(chunk, acc, loss);
 }
 
 void ServerWorker::sendTensor(Matrix& tensor, unsigned& more) {
@@ -160,6 +176,7 @@ ServerWorker::setNumLambdas(zmq::message_t& client_id, unsigned numLambdas) {
     workersocket.send(confirm);
 
     ws.setLocalUpdTot(numLambdas);
+    ws.clearAccLoss();
     std::cout << "[  INFO  ] Number of lambdas set to " << numLambdas << "." << std::endl;
 }
 

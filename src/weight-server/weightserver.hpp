@@ -33,7 +33,7 @@
 #define IDENTITY_SIZE 4
 #define TENSOR_NAME_SIZE 8
 
-enum CTRL_MSG { MASTERUP, WORKERUP, INITDONE, DATA, ACK };
+enum CTRL_MSG { MASTERUP, WORKERUP, INITDONE, DATA, ACK, ACCLOSS };
 const float LEARNING_RATE = 0.01;
 
 class ServerWorker;
@@ -48,7 +48,7 @@ class WeightServer {
 public:
     WeightServer(std::string &weightServersFile, std::string &myPrIpFile,
                  unsigned _listenerPort, std::string &configFileName,
-                 unsigned _serverPort, std::string &tmpFileName, bool _sync);
+                 unsigned _serverPort, std::string &tmpFileName, bool _sync, float _targetAcc);
     ~WeightServer();
 
     bool sync; // sync mode or async pipeline
@@ -59,7 +59,28 @@ public:
     std::thread *recvThd;
     std::mutex ackCntMtx;
     std::condition_variable ackCntCV;
-    unsigned ackCnt;
+    int ackCnt = 0;
+
+    // Accuracy & loss record. For early stop
+    float targetAcc;
+    std::mutex accMtx;
+    struct AccLoss {
+        unsigned epoch = 0;
+        unsigned vtcsCnt = 0;
+        float acc = 0.0;
+        float loss = 0.0;
+
+        AccLoss() = default;
+        AccLoss(unsigned _e, unsigned _v, float _a, float _l) :
+            epoch(_e), vtcsCnt(_v), acc(_a), loss(_l) {};
+    };
+    std::map<unsigned, AccLoss> accLossTable; // chunkId -> accloss
+    // only used by master for recording accloss of slaves
+    std::map<unsigned, AccLoss> wsAccTable; // nodeId -> accloss
+    void updateLocalAccLoss(Chunk &chunk, float acc, float loss);
+    void updateGlobalAccLoss(unsigned node, AccLoss &accloss);
+    void clearAccLoss();
+
 
     // Use dsh file to open sockets to other weight servers for aggregation.
     std::vector<std::string> parseNodeConfig(std::string &configFileName, std::string &weightServersFile, std::string &myPrIpFile);
@@ -94,8 +115,8 @@ public:
     void setGhostUpdTot(unsigned ghostUpdTot);
     unsigned numLambdas; // Number of update sent back from lambdas at backprop.
 
-    void setupAdamOpt(bool adam);
-    void deleteAdamOpt();
+    void initAdamOpt(bool adam);
+    void freeAdamOpt();
     bool adam;  // whether to use standard SGD or Adam Opt
     AdamOptimizer *adamOpt;
 

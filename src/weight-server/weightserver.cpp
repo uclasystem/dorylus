@@ -8,11 +8,12 @@
  */
 WeightServer::WeightServer(std::string &weightServersFile, std::string &myPrIpFile,
                            unsigned _listenerPort, std::string &configFileName,
-                           unsigned _serverPort, std::string &tmpFileName, bool _sync)
+                           unsigned _serverPort, std::string &tmpFileName, bool _sync,
+                           float _targetAcc)
     : ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
       listenerPort(_listenerPort), serverPort(_serverPort),
       dataCtx(1), publisher(dataCtx, ZMQ_PUB), subscriber(dataCtx, ZMQ_SUB),
-      numLambdas(0), term(false), adam(true), sync(_sync) {
+      numLambdas(0), term(false), adam(true), sync(_sync), targetAcc(_targetAcc) {
 
     std::vector<std::string> allNodeIps = parseNodeConfig(configFileName, weightServersFile, myPrIpFile);
     setupSockets();
@@ -21,13 +22,13 @@ WeightServer::WeightServer(std::string &weightServersFile, std::string &myPrIpFi
 
     // Read in layer configurations and initialize weight matrices.
     initWeights();
-    setupAdamOpt(adam);
+    initAdamOpt(adam);
 
     createOutputFile(tmpFileName);
 }
 
 WeightServer::~WeightServer() {
-    deleteAdamOpt();
+    freeAdamOpt();
     stopWorkers();
     freeWeights();
     closeSockets();
@@ -50,7 +51,7 @@ WeightServer::run() {
 
     WeightServer &me = *this;
     for (int i = 0; i < NUM_LISTENERS; ++i) {
-        workers.push_back(new ServerWorker(ctx, me));
+        workers.push_back(new ServerWorker(ctx, me, i));
         worker_threads.push_back(new std::thread(std::bind(&ServerWorker::work, workers[i])));
         worker_threads[i]->detach();
     }
@@ -109,7 +110,7 @@ void WeightServer::applyUpdate(unsigned layer, std::string& name) {
     }
 
     std::unique_lock<std::mutex> ul(ackCntMtx);
-    ackCntCV.wait(ul, [&] { return ackCnt > 0; });
+    ackCntCV.wait(ul, [&] { return ackCnt == 0; });
 }
 
 void WeightServer::receiver() {
@@ -155,8 +156,97 @@ void WeightServer::receiver() {
             if (ackCnt == 0) {
                 ackCntCV.notify_all();
             }
+        } else if (topic == CTRL_MSG::ACCLOSS) {
+            zmq::message_t accLossMsg(sizeof(AccLoss));
+            subscriber.recv(&accLossMsg);
+            subMtx.unlock();
+            AccLoss accloss;
+            memcpy(&accloss, accLossMsg.data(), sizeof(AccLoss));
+            if (nodeId == 0) {
+                updateGlobalAccLoss(sender, accloss);
+            }
         }
     }
+}
+
+
+void WeightServer::updateLocalAccLoss(Chunk &chunk, float acc, float loss) {
+    AccLoss accloss(chunk.epoch, chunk.upBound - chunk.lowBound, acc, loss);
+    accMtx.lock();
+    auto found = accLossTable.find(chunk.globalId);
+    if (found != accLossTable.end()) {
+        // if this chunk has already existed, just update the accloss
+        found->second = accloss;
+        accMtx.unlock();
+        return;
+    }
+    accLossTable[chunk.globalId] = accloss;
+
+    if (accLossTable.size() < numLambdas) {
+        accMtx.unlock();
+    } else {
+        AccLoss alSum;
+        for (auto &kv : accLossTable) {
+            alSum.epoch = std::max(alSum.epoch, kv.second.epoch);
+            alSum.vtcsCnt += kv.second.vtcsCnt;
+            alSum.acc += kv.second.acc;
+            alSum.loss += kv.second.loss;
+        }
+        accLossTable.clear();
+        accMtx.unlock();
+
+        if (nodeId == 0) {
+            updateGlobalAccLoss(nodeId, alSum);
+        } else {
+            zmq::message_t header(UPD_HEADER_SIZE);
+            fillHeader(header, 0, CTRL_MSG::ACCLOSS);
+            zmq::message_t accLossMsg(sizeof(AccLoss));
+            std::memcpy(accLossMsg.data(), &alSum, sizeof(AccLoss));
+            pubMtx.lock();
+            publisher.send(header, ZMQ_SNDMORE);
+            publisher.send(accLossMsg);
+            pubMtx.unlock();
+        }
+    }
+}
+
+void WeightServer::updateGlobalAccLoss(unsigned node, AccLoss &accloss) {
+    std::lock_guard<std::mutex> lg(accMtx);
+
+    auto found = wsAccTable.find(node);
+    if (found != wsAccTable.end()) {
+        // if partial sum has already existed, just update it.
+        found->second = accloss;
+    } else {
+        wsAccTable[node] = accloss;
+
+        if (wsAccTable.size() == numNode) {
+            AccLoss alSum;
+            for (auto &kv : wsAccTable) {
+                alSum.epoch = std::max(alSum.epoch, kv.second.epoch);
+                alSum.vtcsCnt += kv.second.vtcsCnt;
+                alSum.acc += kv.second.acc;
+                alSum.loss += kv.second.loss;
+            }
+            wsAccTable.clear();
+
+            alSum.acc /= alSum.vtcsCnt;
+            alSum.loss /= alSum.vtcsCnt;
+
+            char logBuf[512];
+            sprintf(logBuf, "Epoch %u, acc: %.3f, loss: %.3f",
+                alSum.epoch, alSum.acc, alSum.loss);
+            std::string alLog(logBuf);
+            serverLog(alLog);
+        }
+    }
+}
+
+void WeightServer::clearAccLoss() {
+    std::lock_guard<std::mutex> lg(accMtx);
+
+    accLossTable.clear();
+    wsAccTable.clear();
 }
 
 /**
@@ -612,7 +702,7 @@ void WeightServer::freeWeights() {
     }
 }
 
-void WeightServer::setupAdamOpt(bool adam) {
+void WeightServer::initAdamOpt(bool adam) {
     // Initialize the adam optimizer if this is the master
     if (adam) {
         adamOpt = new AdamOptimizer(LEARNING_RATE, dims);
@@ -621,7 +711,7 @@ void WeightServer::setupAdamOpt(bool adam) {
     }
 }
 
-void WeightServer::deleteAdamOpt() {
+void WeightServer::freeAdamOpt() {
     if (adamOpt) {
         delete adamOpt;
         adamOpt = NULL;

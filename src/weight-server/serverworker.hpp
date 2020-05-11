@@ -34,25 +34,25 @@ class WeightServer;
  */
 class ServerWorker {
 public:
-    ServerWorker(zmq::context_t& ctx_, WeightServer& _ws);
+    ServerWorker(zmq::context_t& ctx_, WeightServer& _ws, unsigned tid);
     ~ServerWorker();
 
     // Listens on lambda threads' request for weights.
     void work();
 
 private:
-    void sendWeights(zmq::message_t& client_id, unsigned layer, bool forward);
-    void recvUpdates(zmq::message_t& client_id);
-    void recvUpdate(zmq::message_t& client_id, unsigned layer);
-    void setNumLambdas(zmq::message_t& client_id, unsigned numLambdas_);
-    void terminateServer(zmq::message_t& client_id);
-
     void sendTensor(Matrix& tensor, unsigned& more);
     void sendTensors(zmq::message_t& client_id, Chunk &chunk);
 
     void recvUpdateTensor(Chunk &chunk, WeightTensorMap& weights);
     void recvTensors(zmq::message_t& client_id, Chunk &chunk);
 
+    void recvEvalData(zmq::message_t& client_id, Chunk &chunk);
+
+    void setNumLambdas(zmq::message_t& client_id, unsigned numLambdas_);
+    void terminateServer(zmq::message_t& client_id);
+
+    unsigned tid;
     zmq::context_t &ctx;
     zmq::socket_t workersocket;
 

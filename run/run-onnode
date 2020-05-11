@@ -186,11 +186,14 @@ case $1 in
         LAYERCONFIGFILE=${HOME}/$2.config
 
         # Minor options.
-        let SYNC=1
+        SYNC=1
+        TARGET_ACC="0.9"
         for var in "$@"
         do
             if [ $var = "--p" ] || [ $var = "--pipeline" ]; then
                 SYNC=0
+            elif [[ $var = --t=* ]] || [[ $var = --targetacc=* ]]; then
+                TARGET_ACC="${var#*=}"
             fi
         done
 
@@ -224,7 +227,8 @@ case $1 in
             ${WPORT} \
             ${LAYERCONFIGFILE} \
             ${TMPFILEDIR} \
-            ${SYNC}"
+            ${SYNC} \
+            ${TARGET_ACC}"
         dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ${DSH_COMMAND}"
 
         # Gather the output files.

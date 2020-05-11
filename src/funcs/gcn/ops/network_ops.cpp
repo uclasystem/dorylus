@@ -134,7 +134,7 @@ void sendTensors(zmq::socket_t& socket, Chunk &chunk,
  *
  * Calculate batch loss and accuracy based on local forward predicts and labels.
  */
-void sendAccLoss(zmq::socket_t &socket, Matrix &predicts, Matrix &labels, Chunk &chunk) {
+void sendAccLoss(zmq::socket_t &dsocket, zmq::socket_t &wsocket, Matrix &predicts, Matrix &labels, Chunk &chunk) {
     float acc = 0.0;
     float loss = 0.0;
     const unsigned vtcsCnt = chunk.upBound - chunk.lowBound;
@@ -149,16 +149,31 @@ void sendAccLoss(zmq::socket_t &socket, Matrix &predicts, Matrix &labels, Chunk 
         currPred += featDim;
     }
 
-    zmq::message_t header(HEADER_SIZE);
-    populateHeader(header.data(), OP::EVAL, chunk);
-    zmq::message_t payload(2 * sizeof(float));
-    char *bufPtr = (char *)payload.data();
-    memcpy(bufPtr, &acc, sizeof(float));
-    bufPtr += sizeof(float);
-    memcpy(bufPtr, &loss, sizeof(float));
+    {
+        zmq::message_t header(HEADER_SIZE);
+        populateHeader(header.data(), OP::EVAL, chunk);
+        zmq::message_t payload(2 * sizeof(float));
+        char *bufPtr = (char *)payload.data();
+        memcpy(bufPtr, &acc, sizeof(float));
+        bufPtr += sizeof(float);
+        memcpy(bufPtr, &loss, sizeof(float));
 
-    socket.send(header, ZMQ_SNDMORE);
-    socket.send(payload);
+        dsocket.send(header, ZMQ_SNDMORE);
+        dsocket.send(payload);
+    }
+
+    {
+        zmq::message_t header(HEADER_SIZE);
+        populateHeader(header.data(), OP::EVAL, chunk);
+        zmq::message_t payload(2 * sizeof(float));
+        char *bufPtr = (char *)payload.data();
+        memcpy(bufPtr, &acc, sizeof(float));
+        bufPtr += sizeof(float);
+        memcpy(bufPtr, &loss, sizeof(float));
+
+        wsocket.send(header, ZMQ_SNDMORE);
+        wsocket.send(payload);
+    }
 }
 
 void sendFinMsg(zmq::socket_t& socket, Chunk &chunk) {

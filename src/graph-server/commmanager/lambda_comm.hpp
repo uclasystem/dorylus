@@ -41,11 +41,10 @@
 
 static const bool relaunching = true;
 
-#define LAMBDA_VTX_NN "john-gcn"
+#define LAMBDA_VTX_NN "yifan-gcn"
 #define ALLOCATION_TAG "LambdaComm"
 
 class LambdaWorker;
-class LockChunkMap;
 
 /**
  *

@@ -162,9 +162,12 @@ void LambdaComm::asyncRelaunchLoop() {
 void LambdaComm::relaunchLambda(const Chunk &chunk) {
     printLog(nodeId, "Relaunch lambda %s for layer %u...", chunk.str().c_str(), chunk.layer);
     timeoutMtx.lock();
-    timeoutTable[chunk] = timestamp_ms();
-    ++relaunchCnt;
-    invokeLambda(chunk);
+    auto entry = timeoutTable.find(chunk);
+    if (entry != timeoutTable.end()) {
+        entry->second = timestamp_ms();
+        ++relaunchCnt;
+        invokeLambda(chunk);
+    }
     timeoutMtx.unlock();
 }
 
@@ -239,7 +242,8 @@ void LambdaComm::callback(const Aws::Lambda::LambdaClient *client,
         }
     // Lambda returns error.
     } else {
-        printLog(nodeId, "\033[1;31m[ ERROR ]\033[0m\treturn error.");
+        printLog(nodeId, "\033[1;31m[ ERROR ]\033[0m\treturn error: %s",
+                    outcome.GetError().GetMessage().c_str());
     }
 }
 // END LAMBDA INVOCATION AND RETURN FUNCTIONS
@@ -255,6 +259,7 @@ void LambdaComm::setupAwsClient() {
     Aws::Client::ClientConfiguration clientConfig;
     clientConfig.requestTimeoutMs = 900000;
     clientConfig.maxConnections = 1000;
+    clientConfig.region = "us-east-2";
     m_client = Aws::MakeShared<Aws::Lambda::LambdaClient>(ALLOCATION_TAG,
                                                           clientConfig);
 }
