@@ -56,6 +56,10 @@ case $1 in
                 NUM_LAMBDAS_BACKWARD=1
             fi
 
+            if [ $var = "--u" ] || [ $var = "--undirected" ]; then
+                UNDIRECTED=1
+            fi
+
             if [ $var = "--p" ] || [ $var = "--pipeline" ]; then
                 PIPELINE=1
             fi
