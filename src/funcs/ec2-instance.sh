@@ -2,7 +2,7 @@
 
 cd $( dirname $0 )
 
-id=i-0507390a688227993
+id=i-0aa46bc9c9691625c
 
 case $1 in
     "id")

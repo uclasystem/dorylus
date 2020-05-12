@@ -29,8 +29,7 @@ using namespace aws::lambda_runtime;
 using namespace std::chrono;
 
 invocation_response
-finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
-           Chunk &chunk, bool eval, bool check_model) {
+finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chunk, bool eval) {
     std::cout << "FINAL LAYER" << std::endl;
     std::vector<std::string> dataRequests{"ah", "lab"};
     std::vector<std::string> weightRequests{"w"};
@@ -63,6 +62,7 @@ finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
     }
     std::cout << "Fin Request" << std::endl;
 
+
     // Forward layer
     Matrix& AH = matrices[0];
     Matrix& W = weights[0];
@@ -73,15 +73,8 @@ finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket,
     deleteMatrix(Z);
     Matrix& labels = matrices[1];
 
-    if (eval || check_model) {
-        sendAccLoss(data_socket, preds, labels, chunk);
-    }
-
-    // End early because we should not be sending any weight updates
-    if (check_model) {
-        sendFinMsg(data_socket, chunk);
-
-        return constructResp(true, chunk.localId, "Finished final layer");
+    if (eval) {
+        sendAccLoss(data_socket, weights_socket, preds, labels, chunk);
     }
 
     // Backward computation
@@ -262,8 +255,7 @@ forwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &c
  *
  */
 invocation_response
-apply_phase(std::string dataserver, std::string weightserver, unsigned dport, unsigned wport,
-            Chunk &chunk, bool eval, bool check_model) {
+apply_phase(std::string dataserver, std::string weightserver, unsigned dport, unsigned wport, Chunk &chunk, bool eval) {
     zmq::context_t ctx(2);
 
     // Creating identity
@@ -300,8 +292,7 @@ apply_phase(std::string dataserver, std::string weightserver, unsigned dport, un
     if (chunk.dir == PROP_TYPE::FORWARD && chunk.layer < 1) {
         return forwardLayer(data_socket, weights_socket, chunk);
     } else if (chunk.dir == PROP_TYPE::FORWARD && chunk.layer == 1) {
-        return finalLayer(data_socket, weights_socket, chunk, eval,
-                          check_model);
+        return finalLayer(data_socket, weights_socket, chunk, eval);
     } else if (chunk.dir == PROP_TYPE::BACKWARD) {
         return backwardLayer(data_socket, weights_socket, chunk);
     }
@@ -329,7 +320,6 @@ my_handler(invocation_request const& request) {
     unsigned dport = v.GetInteger("dport");
     unsigned wport = v.GetInteger("wport");
     bool eval = v.GetBool("eval");
-    bool check_model = v.GetBool("check_model");
 
     Chunk chunk;
     chunk.localId = v.GetInteger("id");
@@ -345,8 +335,7 @@ my_handler(invocation_request const& request) {
               << dataserver << ":" << dport << ", FORWARD layer " << chunk.layer
               << "." << std::endl;
 
-    return apply_phase(dataserver, weightserver, dport, wport,
-                       chunk, eval, check_model);
+    return apply_phase(dataserver, weightserver, dport, wport, chunk, eval);
 }
 
 int
