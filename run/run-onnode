@@ -35,8 +35,8 @@ case $1 in
         NUM_LAMBDAS_BACKWARD=$( < ../numlambdasbackward )
 
         # Minor options.
-        UNDIRECTED=0    # Currently are all directed graphs.
-        COMP_THREADS=7  # Default values.
+        UNDIRECTED=0           # Currently are all directed graphs.
+        COMP_THREADS=$(nproc)  # Default values.
         COMM_THREADS=1
 
         let MODE=0
@@ -179,10 +179,12 @@ case $1 in
         fi
 
         WPORT=$( < ../wserverport )
+        GPORT=$( < ../gserverport )
         DATAPORT=$( < ../dataport )
 
         MYPRIPFILE=${HOME}/myprip
         DSHMACHINESFILE=${HOME}/dshmachines
+        GSERVERFILE=${HOME}/gserverip
         LAYERCONFIGFILE=${HOME}/$2.config
 
         # Minor options.
@@ -223,8 +225,10 @@ case $1 in
         DSH_COMMAND="./build/weightserver \
             ${DSHMACHINESFILE} \
             ${MYPRIPFILE} \
+            ${GSERVERFILE} \
             ${DATAPORT} \
             ${WPORT} \
+            ${GPORT} \
             ${LAYERCONFIGFILE} \
             ${TMPFILEDIR} \
             ${SYNC} \

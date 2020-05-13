@@ -142,11 +142,12 @@ void LambdaComm::asyncRelaunchLoop() {
     while (!halt) {
         unsigned currTS = timestamp_ms();
         for (auto &kv : timeoutTable) {
-            if (recordTable.find(getAbsLayer(kv.first, 2)) == recordTable.end()) {
+            auto found = recordTable.find(getAbsLayer(kv.first, 2));
+            if (found == recordTable.end()) {
                 continue; // No lambda finished.
             }
-            if (currTS - kv.second > std::max(MIN_TIMEOUT, 3 * recordTable[getAbsLayer(kv.first, 2)])) {
-                printLog(nodeId, "curr %u, timed %u, chunk %s", currTS - kv.second, 3 * recordTable[getAbsLayer(kv.first, 2)],
+            if (currTS - kv.second > std::max(MIN_TIMEOUT, 5 * found->second)) {
+                printLog(nodeId, "curr %u, timed %u, chunk %s", currTS - kv.second, 5 * found->second,
                     kv.first.str().c_str());
                 relaunchLambda(kv.first);
             }
@@ -189,7 +190,7 @@ void LambdaComm::invokeLambda(const Chunk &chunk) {
     jsonPayload.WithString("wserver", wserver);
     jsonPayload.WithInteger("dport", dport);
     jsonPayload.WithInteger("wport", wport);
-    jsonPayload.WithBool("eval", chunk.epoch % 5 == 0);
+    jsonPayload.WithBool("eval", (chunk.epoch == 0) || ((chunk.epoch + 1) % 5 == 0));
     jsonPayload.WithBool("check_model", engine->check_model);
 
     jsonPayload.WithInteger("id", chunk.localId);

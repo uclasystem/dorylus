@@ -6,7 +6,7 @@ RefMat::RefMat(unsigned _refCnt, Matrix _mat) :
     refCnt(_refCnt), mat(_mat) {}
 
 WeightTensor::WeightTensor(Matrix &mat, std::mutex *_wmtx, std::mutex *_umtx, bool _sync) :
-    sync(_sync), currVer(0),
+    sync(_sync), currVer(0), stop(false),
     wmtx(_wmtx), umtx(_umtx),
     localUpdTot(-1u), ghostUpdTot(-1u),
     localUpdCnt(0), ghostUpdCnt(0),
@@ -46,6 +46,10 @@ void WeightTensor::free() {
 Matrix& WeightTensor::updateVersion(bool withLock) {
     if (withLock) {
         wmtx->lock();
+    }
+
+    if (stop) {
+        return currMat();
     }
 
     RefMat &rmat = ver2Mat[currVer];
@@ -117,9 +121,18 @@ void WeightTensor::decRef(Chunk &chunk) {
     //             " dir: " << chunk.dir << " -> ver: " << ver << std::endl;
 }
 
+void WeightTensor::stopUpdate() {
+    std::lock_guard<std::mutex> lgw(*wmtx);
+    std::lock_guard<std::mutex> lgu(*umtx);
+    stop = true;
+}
 
 unsigned WeightTensor::localUpdate(FeatType *updTensor) {
     std::lock_guard<std::mutex> lg(*umtx);
+
+    if (stop) {
+        return localUpdCnt;
+    }
 
     FeatType *lPtr = localUpdMat.getData();
     const unsigned numElemts = localUpdMat.getNumElemts();
@@ -133,6 +146,10 @@ unsigned WeightTensor::localUpdate(FeatType *updTensor) {
 
 unsigned WeightTensor::ghostUpdate(FeatType *updTensor) {
     // Since only receiver thread call this function, it is not thread safe
+    if (stop) {
+        return ghostUpdCnt;
+    }
+
     FeatType *gPtr = ghostUpdMat.getData();
     const unsigned numElemts = ghostUpdMat.getNumElemts();
     for (unsigned i = 0; i < numElemts; ++i) {
@@ -147,7 +164,8 @@ unsigned WeightTensor::ghostUpdate(FeatType *updTensor) {
 std::string WeightTensor::tryApplyUpdate(float lr, FeatType *updTensor) {
     std::lock_guard<std::mutex> lgu(*umtx);
     std::lock_guard<std::mutex> lgw(*wmtx);
-    if ((sync && (localUpdCnt < localUpdTot || ghostUpdCnt < ghostUpdTot)) || // not ready for sync update
+    if (stop || // stop updating
+        (sync && (localUpdCnt < localUpdTot || ghostUpdCnt < ghostUpdTot)) || // not ready for sync update
         (!sync && updTensor == NULL && localUpdCnt < localUpdTot)) { // not ready for async local update
         return "";
     }
@@ -227,7 +245,8 @@ std::string WeightTensor::tryApplyUpdate(float lr, FeatType *updTensor) {
 std::string WeightTensor::tryApplyUpdate(AdamOptimizer *adamOpt, unsigned layer, FeatType *updTensor) {
     std::lock_guard<std::mutex> lgu(*umtx);
     std::lock_guard<std::mutex> lgw(*wmtx);
-    if ((sync && (localUpdCnt < localUpdTot || ghostUpdCnt < ghostUpdTot)) || // not ready for sync update
+    if (stop || // stop updating
+        (sync && (localUpdCnt < localUpdTot || ghostUpdCnt < ghostUpdTot)) || // not ready for sync update
         (!sync && updTensor == NULL && localUpdCnt < localUpdTot)) { // not ready for async local update
         return "";
     }

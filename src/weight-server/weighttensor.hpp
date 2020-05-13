@@ -36,7 +36,10 @@ struct WeightTensor {
     Matrix& getMat(Chunk &chunk);
     void decRef(Chunk &chunk);
 
+    void stopUpdate();
+
     bool sync;
+    bool stop;
 
     unsigned localUpdTot;
     unsigned ghostUpdTot;

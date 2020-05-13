@@ -6,16 +6,17 @@
  * Weightserver constructor & destructor.
  *
  */
-WeightServer::WeightServer(std::string &weightServersFile, std::string &myPrIpFile,
-                           unsigned _listenerPort, std::string &configFileName,
-                           unsigned _serverPort, std::string &tmpFileName, bool _sync,
-                           float _targetAcc)
-    : ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
-      listenerPort(_listenerPort), serverPort(_serverPort),
+WeightServer::WeightServer(std::string &wserverFile, std::string &myPrIpFile, std::string &gserverFile,
+                           unsigned _listenerPort, unsigned _serverPort, unsigned _gport,
+                           std::string &configFile, std::string &tmpFile,
+                           bool _sync, float _targetAcc)
+    : ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), // gsocket(ctx, ZMQ_DEALER),
+      listenerPort(_listenerPort), serverPort(_serverPort), gport(_gport),
       dataCtx(1), publisher(dataCtx, ZMQ_PUB), subscriber(dataCtx, ZMQ_SUB),
       numLambdas(0), term(false), adam(true), sync(_sync), targetAcc(_targetAcc) {
 
-    std::vector<std::string> allNodeIps = parseNodeConfig(configFileName, weightServersFile, myPrIpFile);
+    std::vector<std::string> allNodeIps =
+        parseNodeConfig(configFile, wserverFile, myPrIpFile, gserverFile);
     setupSockets();
     // Read the dsh file to get info about all weight server nodes.
     initWServerComm(allNodeIps);
@@ -24,7 +25,7 @@ WeightServer::WeightServer(std::string &weightServersFile, std::string &myPrIpFi
     initWeights();
     initAdamOpt(adam);
 
-    createOutputFile(tmpFileName);
+    createOutputFile(tmpFile);
 }
 
 WeightServer::~WeightServer() {
@@ -211,16 +212,19 @@ void WeightServer::updateLocalAccLoss(Chunk &chunk, float acc, float loss) {
 }
 
 void WeightServer::updateGlobalAccLoss(unsigned node, AccLoss &accloss) {
-    std::lock_guard<std::mutex> lg(accMtx);
+    accMtx.lock();
 
     auto found = wsAccTable.find(node);
     if (found != wsAccTable.end()) {
         // if partial sum has already existed, just update it.
         found->second = accloss;
+        accMtx.unlock();
     } else {
         wsAccTable[node] = accloss;
 
-        if (wsAccTable.size() == numNode) {
+        if (wsAccTable.size() < numNode) {
+            accMtx.unlock();
+        } else { // wsAccTable.size() >= numNode
             AccLoss alSum;
             for (auto &kv : wsAccTable) {
                 alSum.epoch = std::max(alSum.epoch, kv.second.epoch);
@@ -229,6 +233,7 @@ void WeightServer::updateGlobalAccLoss(unsigned node, AccLoss &accloss) {
                 alSum.loss += kv.second.loss;
             }
             wsAccTable.clear();
+            accMtx.unlock();
 
             alSum.acc /= alSum.vtcsCnt;
             alSum.loss /= alSum.vtcsCnt;
@@ -238,6 +243,26 @@ void WeightServer::updateGlobalAccLoss(unsigned node, AccLoss &accloss) {
                 alSum.epoch, alSum.acc, alSum.loss);
             std::string alLog(logBuf);
             serverLog(alLog);
+
+            tryEarlyStop(alSum);
+        }
+    }
+}
+
+void WeightServer::tryEarlyStop(AccLoss &accloss) {
+    if (accloss.acc >= targetAcc) {
+        std::lock_guard<std::mutex> lg(storeMtx);
+
+        for (auto &wtm : weightsStore) {
+            for (auto &kv : wtm) {
+                kv.second.stopUpdate();
+            }
+        }
+
+        for (unsigned i = 0; i < gsockets.size(); ++i) {
+            zmq::message_t header(HEADER_SIZE);
+            populateHeader(header.data(), OP::TERM);
+            gsockets[i].send(header);
         }
     }
 }
@@ -328,12 +353,13 @@ WeightServer::initWServerComm(std::vector<std::string> &allNodeIps) {
         serverLog("All weight servers connected.");
 }
 
-std::vector<std::string> WeightServer::parseNodeConfig(std::string &configFileName, std::string &weightServersFile, std::string &myPrIpFile) {
+std::vector<std::string> WeightServer::parseNodeConfig(std::string &configFile, std::string &wserverFile,
+                                                    std::string &myPrIpFile, std::string &gserverFile) {
     // Read the layer config file. Each line is a number of features.
     {
-        std::ifstream infile(configFileName.c_str());
+        std::ifstream infile(configFile.c_str());
         if (!infile.good())
-            fprintf(stderr, "[ERROR] Cannot open layer configuration file: %s [Reason: %s]\n", configFileName.c_str(), std::strerror(errno));
+            fprintf(stderr, "[ERROR] Cannot open layer configuration file: %s [Reason: %s]\n", configFile.c_str(), std::strerror(errno));
 
         assert(infile.good());
 
@@ -361,7 +387,7 @@ std::vector<std::string> WeightServer::parseNodeConfig(std::string &configFileNa
         std::getline(ipFile, myIp);
         ipFile.close();
 
-        std::ifstream dshFile(weightServersFile);
+        std::ifstream dshFile(wserverFile);
         std::string line, masterIp;
         while (std::getline(dshFile, line)) {
             boost::algorithm::trim(line);
@@ -381,6 +407,36 @@ std::vector<std::string> WeightServer::parseNodeConfig(std::string &configFileNa
             }
         }
         numNode = allNodeIps.size();
+    }
+
+    // read graph server ip file
+    if (nodeId == 0) {
+        std::ifstream ipFile(gserverFile);
+        assert(ipFile.good());
+        std::string line, masterIp;
+        while (std::getline(ipFile, line)) {
+            boost::algorithm::trim(line);
+            if (line.length() > 0) {
+                gserverIps.push_back(line);
+                gsockets.push_back(zmq::socket_t(ctx, ZMQ_DEALER));
+                char hostPort[50];
+                sprintf(hostPort, "tcp://%s:%u", line.c_str(), gport);
+                // serverLog(std::string("gserver: ") + hostPort);
+                unsigned idtyLen = sizeof(unsigned) * 3 + line.size();
+                char identity[idtyLen];
+                char *idtPtr = identity;
+                for (unsigned i = 0; i < 3; ++i) {
+                    *(unsigned *)idtPtr = -1u;
+                    idtPtr += sizeof(unsigned);
+                }
+                memcpy(idtPtr, line.c_str(), line.size());
+                gsockets[gsockets.size() - 1].setsockopt(ZMQ_IDENTITY, identity, idtyLen);
+                gsockets[gsockets.size() - 1].connect(hostPort);
+            }
+        }
+        // // only master node's IP needed
+        // std::getline(ipFile, gserverIp);
+        ipFile.close();
     }
 
     return allNodeIps;
@@ -680,6 +736,11 @@ void WeightServer::setupSockets() {
 
 void WeightServer::closeSockets() {
     std::cout << "[SHUTDOWN] Closing ZMQ" << std::endl;
+
+    for (auto &gs: gsockets) {
+        gs.setsockopt(ZMQ_LINGER, 0);
+        gs.close();
+    }
     frontend.setsockopt(ZMQ_LINGER, 0);
     frontend.close();
     backend.setsockopt(ZMQ_LINGER, 0);
