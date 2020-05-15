@@ -13,7 +13,8 @@ WeightServer::WeightServer(std::string &wserverFile, std::string &myPrIpFile, st
     : ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), // gsocket(ctx, ZMQ_DEALER),
       listenerPort(_listenerPort), serverPort(_serverPort), gport(_gport),
       dataCtx(1), publisher(dataCtx, ZMQ_PUB), subscriber(dataCtx, ZMQ_SUB),
-      numLambdas(0), term(false), adam(true), sync(_sync), targetAcc(_targetAcc) {
+      numLambdas(0), term(false), adam(true), convergeState(CONVERGE_STATE::EARLY),
+      sync(_sync), targetAcc(_targetAcc) {
 
     std::vector<std::string> allNodeIps =
         parseNodeConfig(configFile, wserverFile, myPrIpFile, gserverFile);
@@ -239,7 +240,7 @@ void WeightServer::updateGlobalAccLoss(unsigned node, AccLoss &accloss) {
             alSum.loss /= alSum.vtcsCnt;
 
             char logBuf[512];
-            sprintf(logBuf, "Epoch %u, acc: %.3f, loss: %.3f",
+            sprintf(logBuf, "Epoch %u, acc: %.4f, loss: %.4f",
                 alSum.epoch, alSum.acc, alSum.loss);
             std::string alLog(logBuf);
             serverLog(alLog);
@@ -249,19 +250,29 @@ void WeightServer::updateGlobalAccLoss(unsigned node, AccLoss &accloss) {
     }
 }
 
+// Only master will call this function
 void WeightServer::tryEarlyStop(AccLoss &accloss) {
-    if (accloss.acc >= targetAcc) {
-        std::lock_guard<std::mutex> lg(storeMtx);
+    // static std::string state2str[CONVERGE_STATE::NUM_STATE] = {
+    //     "EARLY", "CLOSE", "DONE", "FLUCTUATE"
+    // };
+    extern std::string CONVERGE_STATE_STR[CONVERGE_STATE::NUM_STATE];
 
-        for (auto &wtm : weightsStore) {
-            for (auto &kv : wtm) {
-                kv.second.stopUpdate();
-            }
-        }
+    CONVERGE_STATE currState =
+        (accloss.acc >= targetAcc)        ? CONVERGE_STATE::DONE : // early stop
+        (accloss.acc >= targetAcc - 0.03) ? CONVERGE_STATE::CLOSE: // switch to sync
+                                            CONVERGE_STATE::EARLY;
 
+    if (currState != CONVERGE_STATE::EARLY && convergeState != currState) {
+        char msg[100];
+        sprintf(msg, "STATE switch: %s -> %s at epoch %u",
+            CONVERGE_STATE_STR[convergeState].c_str(),
+            CONVERGE_STATE_STR[currState].c_str(), accloss.epoch);
+        serverLog(msg);
+
+        convergeState = currState;
         for (unsigned i = 0; i < gsockets.size(); ++i) {
             zmq::message_t header(HEADER_SIZE);
-            populateHeader(header.data(), OP::TERM);
+            populateHeader(header.data(), OP::TERM, convergeState);
             gsockets[i].send(header);
         }
     }

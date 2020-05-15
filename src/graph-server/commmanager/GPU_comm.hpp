@@ -28,8 +28,8 @@ class GPUComm : public ResourceComm {
 
     GPUComm(Engine *engine_);
     ~GPUComm();
-    
-    void setAsync(bool _async){};//GPU always run synchronously
+
+    void setAsync(bool _async, unsigned currEpoch){};//GPU always run synchronously
     unsigned getRelaunchCnt() { return 0u; };
     void NNCompute(Chunk &chunk);
     void NNSync() {};
@@ -49,7 +49,7 @@ class GPUComm : public ResourceComm {
     //ntw related objs
     unsigned dPort;
     unsigned wPort;
-    
+
     TensorMap * tensorMap;
 
     ComputingServer *comp_server;

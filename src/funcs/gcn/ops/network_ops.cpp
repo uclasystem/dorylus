@@ -154,7 +154,8 @@ void sendAccLoss(zmq::socket_t &dsocket, zmq::socket_t &wsocket, Matrix &predict
         currPred += featDim;
     }
 
-    {
+    // send accloss to graph server
+    if (false) {
         zmq::message_t header(HEADER_SIZE);
         populateHeader(header.data(), OP::EVAL, chunk);
         zmq::message_t payload(2 * sizeof(float));
@@ -167,7 +168,9 @@ void sendAccLoss(zmq::socket_t &dsocket, zmq::socket_t &wsocket, Matrix &predict
         dsocket.send(payload);
     }
 
-    {
+
+    // send accloss to weight server
+    if (true) {
         zmq::message_t header(HEADER_SIZE);
         populateHeader(header.data(), OP::EVAL, chunk);
         zmq::message_t payload(2 * sizeof(float));

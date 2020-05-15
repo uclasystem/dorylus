@@ -45,6 +45,11 @@ enum TYPE { GRAD, AH, Z, ACT, LAB };
 enum PROP_TYPE { FORWARD, BACKWARD };
 enum AGGREGATOR { WSUM, MEAN, ADD, MIN, MAX };
 
+enum CONVERGE_STATE { EARLY, CLOSE, DONE, FLUCT, NUM_STATE };
+static std::string CONVERGE_STATE_STR[CONVERGE_STATE::NUM_STATE] = {
+    "EARLY", "CLOSE", "DONE", "FLUCT"
+};
+
 #define ERR_HEADER_FIELD UINT_MAX
 
 struct Chunk {
@@ -78,6 +83,13 @@ struct Chunk {
           layer, localId, globalId);
 
         return std::string(buf);
+    }
+
+    bool isFirstLayer() {
+        return dir == PROP_TYPE::FORWARD && layer == 0;
+    }
+    bool isLastLayer() {
+        return dir == PROP_TYPE::BACKWARD && layer == 0;
     }
 };
 

@@ -64,6 +64,7 @@ public:
 
     // Accuracy & loss record. For early stop
     float targetAcc;
+    CONVERGE_STATE convergeState = CONVERGE_STATE::EARLY;
     std::mutex accMtx;
     struct AccLoss {
         unsigned epoch = 0;

@@ -76,7 +76,8 @@ LambdaWorker::work(unsigned _wid) {
                 }
                 case (OP::TERM): {
                     // terminate by weight server
-                    manager->engine->earlyStop = true;
+                    CONVERGE_STATE cs = (CONVERGE_STATE)parse<int>((char *) header.data(), 1);
+                    manager->engine->convergeState = cs;
                     break;
                 }
                 default: {
@@ -204,10 +205,11 @@ void LambdaWorker::recvEvalData(zmq::message_t &client_id, Chunk &chunk) {
         accLoss.loss += loss;
         accLoss.vtcsCnt += chunk.upBound - chunk.lowBound;
         accLoss.chunkCnt++;
-        // printLog(manager->nodeId, "epoch %u, chunk %u/%u, acc %.3f, loss %.3f", chunk.epoch, accLoss.chunkCnt, manager->engine->numLambdasForward,
-        //                 accLoss.acc / accLoss.vtcsCnt, accLoss.loss / accLoss.vtcsCnt);
+        // printLog(manager->nodeId, "epoch %u, chunk %u/%u, acc %.3f, loss %.3f", chunk.epoch, accLoss.chunkCnt,
+        //     manager->engine->numLambdasForward, accLoss.acc / accLoss.vtcsCnt, accLoss.loss / accLoss.vtcsCnt);
         if (accLoss.chunkCnt == manager->engine->numLambdasForward) {
-            printLog(manager->nodeId, "%u: epoch %u, acc %.3f, loss %.3f", timestamp_ms(), chunk.epoch, accLoss.acc / accLoss.vtcsCnt, accLoss.loss / accLoss.vtcsCnt);
+            printLog(manager->nodeId, "epoch %u, acc %.3f, loss %.3f", chunk.epoch,
+                accLoss.acc / accLoss.vtcsCnt, accLoss.loss / accLoss.vtcsCnt);
         }
         manager->accMtx.unlock();
     } else {

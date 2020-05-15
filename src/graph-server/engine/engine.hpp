@@ -181,12 +181,11 @@ public:
     unsigned numLambdasForward = 0;
     unsigned numLambdasBackward = 0;
     unsigned numEpochs = 0;
+    unsigned numSyncEpochs = 0;
+    unsigned numAsyncEpochs = 0;
     unsigned valFreq = 0;
 
     float accuracy = 0.0;
-    // If check_model is true apply will run an eval phase
-    // but will not update weights.
-    bool check_model = false;
 
     //0: Lambda, 1: GPU, 2: CPU
     unsigned mode = 0;
@@ -198,7 +197,6 @@ public:
 
     bool commHalt = false;
     bool aggHalt = false;
-    bool earlyStop = false;
 
     bool undirected = false;
 
@@ -216,6 +214,7 @@ public:
     std::vector<double> vecTimeApplyEdg;
     std::vector<double> vecTimeScatter;
     std::vector<double> epochTimes;
+    double asyncAvgEpochTime;
 
     std::vector<unsigned> epochMs;
 
@@ -287,7 +286,9 @@ public:
     Lock scatQueueLock;
 
     unsigned staleness;
+    volatile CONVERGE_STATE convergeState = CONVERGE_STATE::EARLY;
     unsigned minEpoch;
+    unsigned maxEpoch;
     // Tracking how many chunks have finished each epoch in the
     // local partition
     std::vector<unsigned> numFinishedEpoch;

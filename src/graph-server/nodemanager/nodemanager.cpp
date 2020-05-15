@@ -188,6 +188,7 @@ void NodeManager::readEpochUpdates() {
                 ++(engine->minEpoch);
                 engine->nodesFinishedEpoch[ind] = 0;
             }
+            maxEpoch = std::max(maxEpoch, epoch + 1);
             engine->finishedNodeLock.unlock();
         } else if (nMsg.messageType == BARRIER) {
             --remaining;
@@ -204,7 +205,7 @@ void NodeManager::readEpochUpdates() {
 void
 NodeManager::destroy() {
     if(standAlone) return;
-    
+
     nodePublisher->close();
     nodeSubscriber->close();
 
