@@ -101,7 +101,7 @@ std::vector<Matrix> reqTensors(zmq::socket_t& socket, Chunk &chunk,
 #undef EXP_FACTOR
 }
 
-void sendTensors(zmq::socket_t& socket, Chunk &chunk,
+int sendTensors(zmq::socket_t& socket, Chunk &chunk,
             std::vector<Matrix>& matrices, bool ack) {
     zmq::message_t header(HEADER_SIZE);
     populateHeader(header.data(), OP::PUSH, chunk);
@@ -122,12 +122,17 @@ void sendTensors(zmq::socket_t& socket, Chunk &chunk,
         }
     }
 
+    int ret = 0;
     if (ack) {
         std::cout << "Waiting on ACK" << std::endl;
         zmq::message_t ack;
         socket.recv(&ack);
+        if (ack.size() == sizeof(int) * 3) {
+            ret = *(int *)ack.data();
+        }
         std::cout << "Received ACK" << std::endl;
     }
+    return ret;
 }
 
 /**
@@ -176,14 +181,20 @@ void sendAccLoss(zmq::socket_t &dsocket, zmq::socket_t &wsocket, Matrix &predict
     }
 }
 
-void sendFinMsg(zmq::socket_t& socket, Chunk &chunk) {
+int sendFinMsg(zmq::socket_t& socket, Chunk &chunk) {
     zmq::message_t header(HEADER_SIZE);
     populateHeader(header.data(), OP::FIN, chunk);
     socket.send(header);
 
+    int ret = 0;
     std::cout << "Waiting on ACK" << std::endl;
     zmq::message_t ack;
     socket.recv(&ack);
+    if (ack.size() == sizeof(int) * 3) {
+        ret = *(int *)ack.data();
+    }
     std::cout << "Received ACK" << std::endl;
+
+    return ret;
 }
 // end named-tensors

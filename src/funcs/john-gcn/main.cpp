@@ -91,7 +91,13 @@ finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chu
     std::cout << "Send interGrad" << std::endl;
     interGrad.setName("grad");
     std::vector<Matrix> toSend{interGrad};
-    sendTensors(data_socket, chunk, toSend, true);
+    int ret = sendTensors(data_socket, chunk, toSend, true);
+    // Clean up data
+    for (auto& M : toSend)
+        deleteMatrix(M);
+    if (ret == -1) {
+        return constructResp(false, chunk.localId, "This chunk is already done");
+    }
 
     std::cout << "Send w" << std::endl;
     d_weights.setName("w");
@@ -99,9 +105,6 @@ finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chu
     sendTensors(weights_socket, chunk, weightUpdates);
     std::cout << "Fin send" << std::endl;
 
-    // Clean up data
-    for (auto& M : toSend)
-        deleteMatrix(M);
     for (auto& M : weightUpdates)
         deleteMatrix(M);
     std::cout << "Data cleaned up" << std::endl;
@@ -161,24 +164,27 @@ backwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &
     deleteMatrix(AH);
     deleteMatrix(interGrad);
 
-    d_weights.setName("w");
+    std::cout << "Send resultGrad" << std::endl;
     resultGrad.setName("grad");
+    std::vector<Matrix> toSend{resultGrad};
+    int ret = 0;
+    if (chunk.layer != 0) {
+        ret = sendTensors(data_socket, chunk, toSend, true);
+    } else { // the last backward layer (layer 0), skip sending the grad back
+        ret = sendFinMsg(data_socket, chunk);
+    }
+    std::cout << "Fin send" << std::endl;
+    for (auto& M : toSend)
+        deleteMatrix(M);
+    if (ret == -1) {
+        return constructResp(false, chunk.localId, "This chunk is already done");
+    }
 
     std::cout << "Send wu" << std::endl;
+    d_weights.setName("w");
     std::vector<Matrix> weightUpdates{d_weights};
     sendTensors(weights_socket, chunk, weightUpdates);
 
-    std::cout << "Send resultGrad" << std::endl;
-    std::vector<Matrix> toSend{resultGrad};
-    if (chunk.layer != 0) {
-        sendTensors(data_socket, chunk, toSend, true);
-    } else { // the last backward layer (layer 0), skip sending the grad back
-        sendFinMsg(data_socket, chunk);
-    }
-    std::cout << "Fin send" << std::endl;
-
-    for (auto& M : toSend)
-        deleteMatrix(M);
     for (auto& M : weightUpdates)
         deleteMatrix(M);
 
@@ -230,15 +236,17 @@ forwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &c
     toSend.push_back(H_l);
 
     std::cout << "Send tensors Z, H" << std::endl;
-    sendTensors(data_socket, chunk, toSend, true);
+    int ret = sendTensors(data_socket, chunk, toSend, true);
     std::cout << "Fin send" << std::endl;
-
     // Clean up data
     for (auto& M : toSend)
         deleteMatrix(M);
     std::cout << "Data cleaned up" << std::endl;
-
-    return constructResp(true, chunk.localId, "Finished forward layer");
+    if (ret == -1) {
+        return constructResp(false, chunk.localId, "This chunk is already done.");
+    } else {
+        return constructResp(true, chunk.localId, "Finished forward layer");
+    }
 }
 
 

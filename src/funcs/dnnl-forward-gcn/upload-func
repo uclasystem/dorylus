@@ -1,0 +1,38 @@
+#! /bin/bash
+
+##
+## Upload the lambda function. You account must have a corresponding lambda function
+## already created (on AWS Lambda console).
+##
+
+cd $( dirname $0 )
+
+if [[ ! -d build ]]; then
+	mkdir build
+fi
+
+FUNC_NAME=forward-gcn
+ZIP_FILE=${FUNC_NAME}.zip
+
+
+# Build.
+cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+
+if [[ $? -eq 0 ]]; then
+	make
+fi
+
+
+if [[ $1 == "up" ]]; then
+    # Package up into a .zip file.
+    if [[ $? -eq 0 ]]; then
+        make aws-lambda-package-${FUNC_NAME}
+    fi
+
+
+    # Upload to AWS cloud.
+    if [[ $? -eq 0 ]]; then
+        aws lambda update-function-code --function-name ${FUNC_NAME} --zip-file fileb://${ZIP_FILE}
+    fi
+fi
