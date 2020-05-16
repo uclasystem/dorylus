@@ -46,9 +46,10 @@ class ServerWorker;
  */
 class WeightServer {
 public:
-    WeightServer(std::string &weightServersFile, std::string &myPrIpFile,
-                 unsigned _listenerPort, std::string &configFileName,
-                 unsigned _serverPort, std::string &tmpFileName, bool _sync, float _targetAcc);
+    WeightServer(std::string &wserverFile, std::string &myPrIpFile, std::string &gserverFile,
+                 unsigned _listenerPort, unsigned _serverPort, unsigned _gport,
+                 std::string &configFile, std::string &tmpFile,
+                 bool _sync, float _targetAcc);
     ~WeightServer();
 
     bool sync; // sync mode or async pipeline
@@ -77,13 +78,18 @@ public:
     std::map<unsigned, AccLoss> accLossTable; // chunkId -> accloss
     // only used by master for recording accloss of slaves
     std::map<unsigned, AccLoss> wsAccTable; // nodeId -> accloss
+    std::vector<zmq::socket_t> gsockets; // send stop message to master graph server
+    std::vector<std::string> gserverIps;
+    unsigned gport;
     void updateLocalAccLoss(Chunk &chunk, float acc, float loss);
     void updateGlobalAccLoss(unsigned node, AccLoss &accloss);
+    void tryEarlyStop(AccLoss &accloss);
     void clearAccLoss();
 
 
     // Use dsh file to open sockets to other weight servers for aggregation.
-    std::vector<std::string> parseNodeConfig(std::string &configFileName, std::string &weightServersFile, std::string &myPrIpFile);
+    std::vector<std::string> parseNodeConfig(std::string &configFile, std::string &wserverFile,
+        std::string &myPrIpFile, std::string &gserverFile);
     void initWServerComm(std::vector<std::string> &allNodeIps);
     // Members related to communications.
     unsigned nodeId;

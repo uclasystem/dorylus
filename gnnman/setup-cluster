@@ -57,6 +57,8 @@ for i in $( seq 0 $(( ${NUM_GRAPH_NODES} - 1 )) ); do
     rm -f myprip
 done
 
+${EC2MAN_CMD} graph all prip > gserverip
 ${EC2MAN_CMD} weight dshfile > dshmachines
-${EC2MAN_CMD} weight all put dshmachines run/dataport run/*.config run/wserverport
+${EC2MAN_CMD} weight all put gserverip dshmachines run/dataport run/*.config run/gserverport run/wserverport
+rm -f gserverip
 rm -f dshmachines

@@ -74,6 +74,11 @@ LambdaWorker::work(unsigned _wid) {
                     markFinish(identity, chunk);
                     break;
                 }
+                case (OP::TERM): {
+                    // terminate by weight server
+                    manager->engine->earlyStop = true;
+                    break;
+                }
                 default: {
                     printLog(manager->nodeId, "unknown op %d, part id %d", op, chunk.localId);
                     break;  /** Not an op that I care about. */

@@ -197,6 +197,7 @@ public:
 
     bool commHalt = false;
     bool aggHalt = false;
+    bool earlyStop = false;
 
     bool undirected = false;
 

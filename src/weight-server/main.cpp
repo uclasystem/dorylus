@@ -8,19 +8,22 @@
 int
 main(int argc, char *argv[]) {
 // TODO: May need to start using an arg parser like boost.
-    assert(argc >= 9);
-    std::string weightServersFile = argv[1];
+    assert(argc >= 11);
+    std::string wserverFile = argv[1];
     std::string myPrIpFile = argv[2];
-    unsigned serverPort = std::atoi(argv[3]);
-    unsigned listenerPort = std::atoi(argv[4]);
-    std::string configFileName = argv[5];
+    std::string gserverFile = argv[3];
+    unsigned serverPort = std::atoi(argv[4]);
+    unsigned listenerPort = std::atoi(argv[5]);
+    unsigned gport = std::atoi(argv[6]);
+    std::string configFile = argv[7];
     // Set output file location. Still needs to append nodeId.
-    std::string tmpFileName = std::string(argv[6]) + "/output_";
-    bool sync = (bool)(std::atoi(argv[7]));
-    float targetAcc = std::atof(argv[8]);
+    std::string tmpFile = std::string(argv[8]) + "/output_";
+    bool sync = (bool)(std::atoi(argv[9]));
+    float targetAcc = std::atof(argv[10]);
 
-    WeightServer ws(weightServersFile, myPrIpFile, listenerPort,
-                    configFileName, serverPort,  tmpFileName,
+    WeightServer ws(wserverFile, myPrIpFile, gserverFile,
+                    listenerPort, serverPort, gport,
+                    configFile, tmpFile,
                     sync, targetAcc);
 
     // Run in a detached thread because so that we can wait

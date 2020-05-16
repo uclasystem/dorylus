@@ -421,8 +421,13 @@ void Engine::run() {
             runBackward(predictData);
 
             double epochTime = getTimer() - epochStart;
-            printLog(nodeId, "Time for epoch %u: %f ms", epoch + 1, epochTime);
+            printLog(nodeId, "Time for epoch %u: %f ms", epoch, epochTime);
             addEpochTime(epochTime);
+            if (earlyStop) {
+                numEpochs = epoch + 1;
+                printLog(nodeId, "Early stop at epoch %u", epoch);
+                break;
+            }
         }
     } else {
         // Run synchronous epoch to setup data
@@ -478,14 +483,17 @@ void Engine::runPipeline() {
     // Wait for all nodes to finish
     nodeManager.barrier();
     printLog(nodeId, "All nodes finished pipeline");
+    sleep(2); // YIFAN: ugly. For responding ongoing lambdas
     commHalt = true;
 
-    check_model = true;
-    resComm->setAsync(false);
-    runForward(currEpoch);
+    if (false) {
+        check_model = true;
+        resComm->setAsync(false);
+        runForward(currEpoch);
 
-    nodeManager.barrier();
-    printLog(nodeId, "Finished, shutting down...");
+        nodeManager.barrier();
+        printLog(nodeId, "Finished, shutting down...");
+    }
 }
 
 /**
@@ -598,8 +606,8 @@ void Engine::output() {
         assert(vecTimeApplyVtx.size() == 2 * numLayers);
         assert(pipeline || vecTimeScatter.size() == 2 * numLayers);
         assert(pipeline || vecTimeApplyEdg.size() == 2 * numLayers);
-        printEngineMetrics();
     }
+    printEngineMetrics();
 }
 
 #ifdef _GPU_ENABLED_
@@ -1253,7 +1261,18 @@ void Engine::aggregator(unsigned tid) {
         } else {
             Chunk c = aggregateQueue.top();
 
-            if (c.epoch == numEpochs) {
+            if (earlyStop) {
+                while (!aggregateQueue.empty()) {
+                    aggregateQueue.pop();
+                    ++finishedChunks;
+                }
+                numEpochs = currEpoch + 1;
+                printLog(nodeId, "Early stop at epoch %u", currEpoch);
+                aggQueueLock.unlock();
+
+                aggHalt = true;
+                return;
+            } else if (c.epoch == numEpochs) {
                 while (!aggregateQueue.empty()) {
                     aggregateQueue.pop();
                     ++finishedChunks;
@@ -2577,48 +2596,52 @@ void Engine::saveTensor(const char *name, unsigned layer, Matrix &mat) {
  *
  */
 void Engine::printEngineMetrics() {
-    gtimers.report();
-    printLog(nodeId, "<EM>: Using %u forward lambdas and %u bacward lambdas",
-             numLambdasForward, numLambdasBackward);
-    printLog(nodeId, "<EM>: Initialization takes %.3lf ms", timeInit);
+    if (master()) {
+        gtimers.report();
+        printLog(nodeId, "<EM>: Using %u forward lambdas and %u bacward lambdas",
+                numLambdasForward, numLambdasBackward);
+        printLog(nodeId, "<EM>: Initialization takes %.3lf ms", timeInit);
 
-    float avgDenom = static_cast<float>(numEpochs);
-    if (pipeline) avgDenom = static_cast<float>(numEpochs * numLambdasForward);
-    printLog(nodeId, "<EM>: Forward:  Time per stage:");
-    for (unsigned i = 0; i < numLayers; ++i) {
-        printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i,
-                 vecTimeAggregate[i] / (float)avgDenom);
-        printLog(nodeId, "<EM>    ApplyVertex   %2u  %.3lf ms", i,
-                 vecTimeApplyVtx[i] / (float)avgDenom);
-        printLog(nodeId, "<EM>    Scatter       %2u  %.3lf ms", i,
-                 vecTimeScatter[i] / (float)avgDenom);
-        printLog(nodeId, "<EM>    ApplyEdge     %2u  %.3lf ms", i,
-                 vecTimeApplyEdg[i] / (float)avgDenom);
-    }
-    printLog(nodeId, "<EM>: Total forward-prop time %.3lf ms",
-             timeForwardProcess / (float)avgDenom);
+        float avgDenom = static_cast<float>(numEpochs);
+        if (pipeline) avgDenom = static_cast<float>(numEpochs * numLambdasForward);
+        printLog(nodeId, "<EM>: Forward:  Time per stage:");
+        for (unsigned i = 0; i < numLayers; ++i) {
+            printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i,
+                    vecTimeAggregate[i] / (float)avgDenom);
+            printLog(nodeId, "<EM>    ApplyVertex   %2u  %.3lf ms", i,
+                    vecTimeApplyVtx[i] / (float)avgDenom);
+            printLog(nodeId, "<EM>    Scatter       %2u  %.3lf ms", i,
+                    vecTimeScatter[i] / (float)avgDenom);
+            printLog(nodeId, "<EM>    ApplyEdge     %2u  %.3lf ms", i,
+                    vecTimeApplyEdg[i] / (float)avgDenom);
+        }
+        printLog(nodeId, "<EM>: Total forward-prop time %.3lf ms",
+                timeForwardProcess / (float)avgDenom);
 
-    printLog(nodeId, "<EM>: Backward: Time per stage:");
-    for (unsigned i = numLayers; i < 2 * numLayers; i++) {
-        printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i,
-                 vecTimeAggregate[i] / (float)avgDenom);
-        printLog(nodeId, "<EM>    ApplyVertex   %2u  %.3lf ms", i,
-                 vecTimeApplyVtx[i] / (float)avgDenom);
-        printLog(nodeId, "<EM>    Scatter       %2u  %.3lf ms", i,
-                 vecTimeScatter[i] / (float)avgDenom);
-        printLog(nodeId, "<EM>    ApplyEdge     %2u  %.3lf ms", i,
-                 vecTimeApplyEdg[i] / (float)avgDenom);
+        printLog(nodeId, "<EM>: Backward: Time per stage:");
+        for (unsigned i = numLayers; i < 2 * numLayers; i++) {
+            printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i,
+                    vecTimeAggregate[i] / (float)avgDenom);
+            printLog(nodeId, "<EM>    ApplyVertex   %2u  %.3lf ms", i,
+                    vecTimeApplyVtx[i] / (float)avgDenom);
+            printLog(nodeId, "<EM>    Scatter       %2u  %.3lf ms", i,
+                    vecTimeScatter[i] / (float)avgDenom);
+            printLog(nodeId, "<EM>    ApplyEdge     %2u  %.3lf ms", i,
+                    vecTimeApplyEdg[i] / (float)avgDenom);
+        }
+        printLog(nodeId, "<EM>: Total backward-prop time %.3lf ms",
+                timeBackwardProcess / (float)numEpochs);
     }
-    printLog(nodeId, "<EM>: Total backward-prop time %.3lf ms",
-             timeBackwardProcess / (float)numEpochs);
 
     double sum = 0.0;
     for (double &d : epochTimes) sum += d;
     printLog(nodeId, "<EM>: Average epoch time %.3lf ms",
              sum / (float)numEpochs);
-    printLog(nodeId, "<EM>: Final accuracy %.3lf", accuracy);
+    if (master()) {
+        printLog(nodeId, "<EM>: Final accuracy %.3lf", accuracy);
 
-    printLog(nodeId, "Relaunched Lambda Cnt: %u", resComm->getRelaunchCnt());
+        printLog(nodeId, "Relaunched Lambda Cnt: %u", resComm->getRelaunchCnt());
+    }
 }
 
 /**
