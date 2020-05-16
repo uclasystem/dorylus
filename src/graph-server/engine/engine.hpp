@@ -172,6 +172,7 @@ public:
     std::string myPubIpFile;
 
     std::time_t start_time;
+    std::time_t end_time;
 
     unsigned dataserverPort;
     unsigned weightserverPort;

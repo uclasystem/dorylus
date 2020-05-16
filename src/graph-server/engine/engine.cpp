@@ -448,6 +448,8 @@ void Engine::run() {
         // Start pipeline
         runPipeline();
     }
+
+    end_time = getCurrentTime();
 }
 
 /**
@@ -486,14 +488,14 @@ void Engine::runPipeline() {
     sleep(2); // YIFAN: ugly. For responding ongoing lambdas
     commHalt = true;
 
-    if (false) {
-        check_model = true;
-        resComm->setAsync(false);
-        runForward(currEpoch);
-
-        nodeManager.barrier();
-        printLog(nodeId, "Finished, shutting down...");
-    }
+//    if (false) {
+//        check_model = true;
+//        resComm->setAsync(false);
+//        runForward(currEpoch);
+//
+//        nodeManager.barrier();
+//    }
+    printLog(nodeId, "Finished, shutting down...");
 }
 
 /**
@@ -531,8 +533,6 @@ void Engine::output() {
     //               << "G: " << vecTimeScatter[i] << std::endl;
     // }
     // outStream << "B: " << timeBackwardProcess << std::endl;
-
-    std::time_t end_time = getCurrentTime();
 
     char outBuf[1024];
     sprintf(outBuf, "<EM>: Run start time: ");
@@ -2598,6 +2598,9 @@ void Engine::saveTensor(const char *name, unsigned layer, Matrix &mat) {
 void Engine::printEngineMetrics() {
     if (master()) {
         gtimers.report();
+
+        printLog(nodeId, "<EM>: Run start time: %s", std::ctime(&start_time));
+        printLog(nodeId, "<EM>: Run end time: %s", std::ctime(&end_time));
         printLog(nodeId, "<EM>: Using %u forward lambdas and %u bacward lambdas",
                 numLambdasForward, numLambdasBackward);
         printLog(nodeId, "<EM>: Initialization takes %.3lf ms", timeInit);
@@ -2651,10 +2654,12 @@ void Engine::printEngineMetrics() {
  */
 void Engine::printGraphMetrics() {
     printLog(nodeId,
-             "<GM>: %u global vertices, %llu global edges,\n\t\t%u local "
-             "vertices, %llu local in edges, %llu local out edges",
+             "<GM>: %u global vertices, %llu global edges,\n"
+             "\t\t%u local vertices, %llu local in edges, %llu local out edges\n"
+             "\t\t%u out ghost vertices, %u in ghost vertices",
              graph.globalVtxCnt, graph.globalEdgeCnt, graph.localVtxCnt,
-             graph.localInEdgeCnt, graph.localOutEdgeCnt);
+             graph.localInEdgeCnt, graph.localOutEdgeCnt,
+             graph.srcGhostCnt, graph.dstGhostCnt);
 }
 
 /**
