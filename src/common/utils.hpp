@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <sys/time.h>
+#include <sys/stat.h>
 #include <limits.h>
 
 
@@ -83,6 +84,16 @@ struct Chunk {
 Chunk createChunk(unsigned rows, unsigned nChunks, unsigned id, unsigned layer, PROP_TYPE dir, unsigned ep = 0, bool vertex = true);
 
 inline size_t argmax(FeatType* first, FeatType* last) { return std::distance(first, std::max_element(first, last)); }
+
+inline size_t getFileSize(const char* fname) {
+    struct stat st;
+    if (stat(fname, &st) != 0) {
+        return 0;
+    }
+
+    return st.st_size;
+}
+
 
 /**
  *
