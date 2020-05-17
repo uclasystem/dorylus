@@ -43,6 +43,7 @@ case $1 in
         let PIPELINE=0
         let NUM_EPOCHS=10
         let STALE_BOUND=4294967295
+        let PREPROCESS=0
         for var in "$@"
         do
             if [ $var = "GPU" ] || [ $var = "gpu" ]; then
@@ -76,6 +77,10 @@ case $1 in
 
             if [[ $var = --s=* ]] || [[ $var = --staleness=* ]]; then
                 STALE_BOUND="${var#*=}"
+            fi
+
+            if [[ $var = --preprocess ]]; then
+                PREPROCESS=1
             fi
         done
 
@@ -151,7 +156,8 @@ case $1 in
             --validationFrequency 1 \
             --MODE ${MODE} \
             --pipeline ${PIPELINE} \
-            --staleness ${STALE_BOUND}"
+            --staleness ${STALE_BOUND} \
+            --preprocess ${PREPROCESS}"
         echo ${DSH_COMMAND}
         dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ${DSH_COMMAND}" 2>&1 | tee ${LOGFILE}
 

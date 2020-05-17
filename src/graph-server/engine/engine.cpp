@@ -68,7 +68,6 @@ void Engine::init(int argc, char *argv[]) {
         datasetDir + "graph." + std::to_string(nodeId) + ".bin";
     // detect whether preprocessed
     {
-        bool forcePreprocess = false;
         std::ifstream gfile(graphFile.c_str(), std::ios::binary);
         if (!gfile.good() || forcePreprocess) {
             DataLoader dl(datasetDir, nodeId, numNodes, undirected);
@@ -166,7 +165,7 @@ void Engine::init(int argc, char *argv[]) {
     timeInit += getTimer();
     printLog(nodeId, "Engine initialization complete.");
 
-    preallocate_tensors(GNN::GCN);
+    preallocate_tensors(GNN::GAT);
     start_time = getCurrentTime();
 }
 
@@ -205,8 +204,75 @@ void Engine::preallocate_tensors(GNN gnn_type) {
         case GNN::GCN:
             preallocateGCN();
             break;
+        case GNN::GAT:
+            preallocateGAT();
+            break;
         default:
             printLog(nodeId, "Unrecognized benchmark type");
+    }
+}
+
+void Engine::preallocateGAT() {
+    unsigned vtxCnt = graph.localVtxCnt;
+
+    // Store input tesnors
+    savedNNTensors[0]["h"] =
+        Matrix(vtxCnt, getFeatDim(0), forwardVerticesInitData);
+    savedNNTensors[0]["fg"] =
+        Matrix(graph.srcGhostCnt, getFeatDim(0), forwardGhostInitData);
+    savedNNTensors[numLayers - 1]["lab"] =
+        Matrix(vtxCnt, getFeatDim(numLayers), localVerticesLabels);
+
+    // forward tensor allocation
+    for (layer = 0; layer < numLayers; ++layer) {
+        unsigned featDim = getFeatDim(layer);
+        unsigned nextFeatDim = getFeatDim(layer + 1);
+
+        // GATHER TENSORS
+        FeatType *ahTensor = new FeatType[vtxCnt * featDim];
+        savedNNTensors[layer]["ah"] = Matrix("ah", vtxCnt, featDim, ahTensor);
+
+        // APPLY TENSORS
+        if (layer < numLayers - 1) {
+            FeatType *zTensor = new FeatType[vtxCnt * nextFeatDim];
+            FeatType *hTensor = new FeatType[vtxCnt * nextFeatDim];
+
+            savedNNTensors[layer]["z"] = Matrix(vtxCnt, nextFeatDim, zTensor);
+            savedNNTensors[layer]["h"] = Matrix(vtxCnt, nextFeatDim, hTensor);
+
+            // SCATTER TENSORS
+            FeatType *ghostTensor =
+                new FeatType[graph.srcGhostCnt * nextFeatDim];
+            savedNNTensors[layer + 1]["fg"] =
+                Matrix(graph.srcGhostCnt, nextFeatDim, ghostTensor);
+
+            FeatType **edgeTensor =
+                srcVFeats2eFeats(hTensor, ghostTensor, vtxCnt, nextFeatDim);
+            savedEdgeTensors[layer + 1]["fedge"] = edgeTensor;
+        }
+    }
+
+    // backward tensor allocation
+    for (layer = numLayers - 1; layer > 0; --layer) {
+        unsigned featDim = getFeatDim(layer);
+
+        // APPLY TENSORS
+        FeatType *gradTensor = new FeatType[vtxCnt * featDim];
+        savedNNTensors[layer]["grad"] =
+            Matrix("grad", vtxCnt, featDim, gradTensor);
+
+        // SCATTER TENSORS
+        FeatType *ghostTensor = new FeatType[graph.dstGhostCnt * featDim];
+        savedNNTensors[layer - 1]["bg"] =
+            Matrix(graph.dstGhostCnt, featDim, ghostTensor);
+
+        FeatType **eFeats =
+            dstVFeats2eFeats(gradTensor, ghostTensor, vtxCnt, featDim);
+        savedEdgeTensors[layer - 1]["bedge"] = eFeats;
+
+        // GATHER TENSORS
+        FeatType *aTgTensor = new FeatType[vtxCnt * featDim];
+        savedNNTensors[layer - 1]["aTg"] = Matrix(vtxCnt, featDim, aTgTensor);
     }
 }
 
@@ -359,17 +425,14 @@ FeatType *Engine::runForward(unsigned epoch) {
 
     // Create buffer for first-layer aggregation.
     FeatType *inputTensor = forwardVerticesInitData;
-    forwardGhostVerticesDataIn = forwardGhostInitData;
+//    forwardGhostVerticesDataIn = forwardGhostInitData;
     // FeatType **eVFeatsTensor = srcVFeats2eFeats(inputTensor,
     // forwardGhostInitData, graph.localVtxCnt, getFeatDim(layer));
     FeatType **eVFeatsTensor = savedEdgeTensors[0]["fedge"];
     for (layer = 0; layer < numLayers; ++layer) {
-        inputTensor = aggregate(eVFeatsTensor, graph.localVtxCnt,
-                                getFeatDim(layer), AGGREGATOR::WSUM);
         inputTensor =
             applyVertex(inputTensor, graph.localVtxCnt, getFeatDim(layer),
                         getFeatDim(layer + 1), layer == numLayers - 1);
-        if (layer < numLayers - 1) {  // don't need scatter at the last layer.
             eVFeatsTensor =
                 scatter(inputTensor, graph.localVtxCnt, getFeatDim(layer + 1));
             eVFeatsTensor =
@@ -377,6 +440,9 @@ FeatType *Engine::runForward(unsigned epoch) {
                           eVFeatsTensor + graph.localInEdgeCnt,
                           getFeatDim(layer + 1), getFeatDim(layer + 1));
         }
+        return inputTensor;
+        inputTensor = aggregate(eVFeatsTensor, graph.localVtxCnt,
+                                getFeatDim(layer), AGGREGATOR::WSUM);
     }
 
     timeForwardProcess += getTimer();

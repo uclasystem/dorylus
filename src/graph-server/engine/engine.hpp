@@ -41,7 +41,7 @@ struct LabelsHeaderType {
 };
 
 
-enum GNN { GCN };
+enum GNN { GCN, GAT };
 
 
 /**
@@ -55,6 +55,7 @@ public:
     void init(int argc, char *argv[]);
     void preallocate_tensors(GNN gnn_type);
     void preallocateGCN();
+    void preallocateGAT();
 
     FeatType *runForward(unsigned epoch);
     void runBackward(FeatType *backwardInitData);
@@ -170,6 +171,8 @@ public:
     std::string dshMachinesFile;
     std::string myPrIpFile;
     std::string myPubIpFile;
+
+    bool forcePreprocess = false;
 
     std::time_t start_time;
     std::time_t end_time;

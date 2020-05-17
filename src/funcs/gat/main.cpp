@@ -250,6 +250,66 @@ forwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &c
 }
 
 
+invocation_response
+apply_edge(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chunk) {
+    std::cout << "FORWARD APPLY EDGE LAYER" << std::endl;
+    return constructResp(false, chunk.localId, "Apply edge not implemented yet");
+}
+
+invocation_response
+apply_vertex(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chunk) {
+    std::cout << "FORWARD APPLY VERTEX LAYER" << std::endl;
+
+    std::vector<std::string> dataRequests{"h"};
+    std::vector<Matrix> matrices = reqTensors(data_socket, chunk, dataRequests);
+    for (auto& M : matrices) {
+        if (M.empty()){
+            std::cout << M.name() << " is empty" << std::endl;
+            return constructResp(false, chunk.localId, M.name() + " is empty");
+        }
+    }
+
+    std::vector<std::string> weightRequests{"w"};
+    std::cerr << "Request w" << std::endl;
+    std::vector<Matrix> weights = reqTensors(weights_socket, chunk, weightRequests);
+    for (auto& W : weights) {
+        if (W.empty()){
+            std::cout << W.name() << " is empty" << std::endl;
+            return constructResp(false, chunk.localId, W.name() + " is empty");
+        }
+    }
+
+    if (matrices.empty() || weights.empty()) {
+        return constructResp(false, chunk.localId, "Got error message from server");
+    }
+
+    Matrix& H = matrices[0];
+    Matrix& W = weights[0];
+
+    Matrix Z = H.dot(W);
+    Z.setName("z");
+    deleteMatrix(H);
+    deleteMatrix(W);
+
+    std::vector<Matrix> toSend;
+    toSend.push_back(Z);
+
+    std::cout << "Sending Z tensor" << std::endl;
+    int ret = sendTensors(data_socket, chunk, toSend, true);
+    std::cout << "Fin send" << std::endl;
+
+    for (auto& M : toSend)
+        deleteMatrix(M);
+
+    std::cout << "Data cleaned up" << std::endl;
+    if (ret == -1) {
+        return constructResp(false, chunk.localId, "This chunk is already done.");
+    } else {
+        return constructResp(true, chunk.localId, "Finished forward layer");
+    }
+    return constructResp(false, chunk.localId, "This chunk is already done.");
+}
+
 /**
  *
  * Main logic:
@@ -277,6 +337,7 @@ apply_phase(std::string dataserver, std::string weightserver, unsigned dport, un
 
     zmq::socket_t weights_socket(ctx, ZMQ_DEALER);
     zmq::socket_t data_socket(ctx, ZMQ_DEALER);
+    std::cout << "Setting up comms" << std::endl;
     try {
         weights_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
         if (RESEND) {
@@ -296,13 +357,12 @@ apply_phase(std::string dataserver, std::string weightserver, unsigned dport, un
     } catch(std::exception& ex) {
         return constructResp(false, chunk.localId, ex.what());
     }
+    std::cout << "Finished comm setup" << std::endl;
 
-    if (chunk.dir == PROP_TYPE::FORWARD && chunk.layer < 1) {
-        return forwardLayer(data_socket, weights_socket, chunk);
-    } else if (chunk.dir == PROP_TYPE::FORWARD && chunk.layer == 1) {
-        return finalLayer(data_socket, weights_socket, chunk, eval);
-    } else if (chunk.dir == PROP_TYPE::BACKWARD) {
-        return backwardLayer(data_socket, weights_socket, chunk);
+    if (chunk.vertex != 0) {
+        return apply_vertex(data_socket, weights_socket, chunk);
+    } else {
+        return apply_edge(data_socket, weights_socket, chunk);
     }
 
     std::cout << "Returning from function" << std::endl;
@@ -341,7 +401,7 @@ my_handler(invocation_request const& request) {
 
     std::cout << "[ACCEPTED] Thread " << chunk.str() << " is requested from "
               << dataserver << ":" << dport << ", FORWARD layer " << chunk.layer
-              << "." << std::endl;
+              << " " << chunk.vertex << std::endl;
 
     return apply_phase(dataserver, weightserver, dport, wport, chunk, eval);
 }
