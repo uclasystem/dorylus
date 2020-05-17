@@ -43,9 +43,8 @@ rm -f dshmachines kill-all wserverip
 NUM_GRAPH_NODES=$(( $( ${EC2MAN_CMD} graph info | wc -l | awk '{print $1}' ) - 1 ))
 for i in $( seq 0 $(( ${NUM_GRAPH_NODES} - 1 )) ); do
     ${EC2MAN_CMD} graph $i prip > myprip
-    ${EC2MAN_CMD} graph $i pubip > mypubip
-    ${EC2MAN_CMD} graph $i put myprip mypubip
-    rm -f myprip mypubip
+    ${EC2MAN_CMD} graph $i put myprip
+    rm -f myprip
 done
 
 # For weight servers.
@@ -58,6 +57,8 @@ for i in $( seq 0 $(( ${NUM_GRAPH_NODES} - 1 )) ); do
     rm -f myprip
 done
 
+${EC2MAN_CMD} graph all prip > gserverip
 ${EC2MAN_CMD} weight dshfile > dshmachines
-${EC2MAN_CMD} weight all put dshmachines run/dataport run/*.config run/wserverport
+${EC2MAN_CMD} weight all put gserverip dshmachines run/dataport run/*.config run/gserverport run/wserverport
+rm -f gserverip
 rm -f dshmachines

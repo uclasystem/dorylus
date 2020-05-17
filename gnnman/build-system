@@ -48,5 +48,5 @@ fi
 # For weight servers.
 if [ ${BUILD_WEIGHT} -eq 1 ]; then
     echo "Processing context 'weight'..."
-    ${EC2MAN_CMD} weight 0 ssh -t "cd gnn-lambda && ./gnnman/helpers/weightserver.bld && ./gnnman/helpers/send-folder build"
+    ${EC2MAN_CMD} weight 0 ssh -t "cd gnn-lambda && ./gnnman/helpers/weightserver.bld ${BACKEND_OPT} && ./gnnman/helpers/send-folder build"
 fi

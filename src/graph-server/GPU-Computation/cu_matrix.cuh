@@ -20,7 +20,7 @@ class CuMatrix : public Matrix {
     static std::set<FeatType *> MemoryPool;
     static void freeGPU();
 
-    CuMatrix() {};
+    CuMatrix() {setData(NULL);};
     CuMatrix(Matrix M, const cublasHandle_t &handle_);
     ~CuMatrix();
 

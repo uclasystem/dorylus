@@ -19,6 +19,12 @@ if(BACKEND STREQUAL gpu)
     add_definitions(-D_GPU_ENABLED_)
     add_subdirectory(GPU-Computation)
 endif()
+if(BACKEND STREQUAL cpu)
+    add_definitions(-D_CPU_ENABLED_)
+endif()
+if(BACKEND STREQUAL lambda)
+    add_definitions(-D_LAMBDA_ENABLED_)
+endif()
 add_subdirectory(commmanager)
 add_subdirectory(nodemanager)
 add_subdirectory(engine)
@@ -29,7 +35,7 @@ add_subdirectory(utils)
 aux_source_directory(. GRAPH_SRCS)
 add_executable(graphserver ${GRAPH_SRCS})
 
-target_link_libraries(graphserver PRIVATE commmanager resource_comm edge vertex graph engine nodemanager threadpool utils common
+target_link_libraries(graphserver PRIVATE commmanager edge vertex graph engine nodemanager threadpool utils common
                                   PUBLIC ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES}
                                         ${OBLIB} ${CBLIB})
 target_compile_options(graphserver PRIVATE "-Wall" "-Werror" "-Wno-reorder" "-MMD")

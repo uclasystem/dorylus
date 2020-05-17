@@ -31,6 +31,7 @@
 
 
 #include "resource_comm.hpp"
+#include "../engine/engine.hpp"
 #include "lambdaworker.hpp"
 #include "../utils/utils.hpp"
 #include "../parallel/lock.hpp"
@@ -38,14 +39,10 @@
 #include "../../common/utils.hpp"
 
 
-#define SLEEP_PERIOD 5000   // sleep SLEEP_PERIOD us and then check the condition.
-#define TIMEOUT_PERIOD 10000 // wait for up to TIMEOUT_PERIOD ms before relaunching
-#define MIN_TIMEOUT 500     // at least wait for MIN_TIMEOUT ms before relaunching
-#define EXP_BACKOFF_FACTOR 1.5 // base of exponential backoff
+static const bool relaunching = true;
 
-#define FORWARD_FUNC "yifan-forward"
-#define BACKWARD_FUNC "yifan-backward"
-
+#define LAMBDA_VTX_NN "yifan-gcn"
+#define ALLOCATION_TAG "LambdaComm"
 
 class LambdaWorker;
 
@@ -56,111 +53,89 @@ class LambdaWorker;
  */
 class LambdaComm : public ResourceComm {
 public:
-    LambdaComm(CommInfo &commInfo);
+    LambdaComm(Engine *engine);
     ~LambdaComm();
-    void connectToWeightServers();
 
-    // Invoke lambda function
-    void invokeLambda(Aws::String funcName, const char* dataserver,
-      unsigned dport, char* weightserver, unsigned wport, unsigned layer,
-      unsigned id, bool lastLayer);
-    void invokeLambda(Aws::String funcName, const char* dataserver,
-      unsigned dport, char* weightserver, unsigned wport, unsigned layer,
-      unsigned id, PROP_TYPE prop_dir, bool lastLayer);
-    static void callback(const Aws::Lambda::LambdaClient *client,
-      const Aws::Lambda::Model::InvokeRequest &invReq,
-      const Aws::Lambda::Model::InvokeOutcome &outcome,
-      const std::shared_ptr<const Aws::Client::AsyncCallerContext> &context);
+    void setAsync(bool _async);
+    void NNCompute(Chunk &chunk);
+    void NNSync();
+    bool NNRecv(Chunk &chunk);
 
-    // Reset LambdaComm state
-    void reset(unsigned layer);
-    void sendInfoMsg(unsigned layer);
-
-    void newContext(unsigned layer, Matrix &inputTensor_, Matrix &outputTensor_,
-                    std::vector<Matrix> *savedTensors_, bool pipeline = false);
-    void newContext(unsigned layer, Matrix &inputTensor_, Matrix &outputTensor_, Matrix &targetTensor_,
-                    std::vector<Matrix> *savedTensors_, bool pipeline = false);
-
-    // For forward-prop.
-    void requestForward(unsigned layer, bool lastLayer);
-
-    void applyVertexForward(unsigned layer, unsigned lambdaId, bool lastLayer);
-    void applyEdgeForward(unsigned layer, unsigned lambdaId, bool lastLayer);
-    void waitResForward(unsigned layer, bool lastLayer);
-
-    // For backward-prop.
-    void sendInfoMessage(zmq::socket_t& wsocket, unsigned numLambdas);
-    void requestBackward(unsigned layer, bool lastLayer);
-
-    void applyVertexBackward(unsigned layer, unsigned lambdaId, bool lastLayer);
-    void applyEdgeBackward(unsigned layer, unsigned lambdaId, bool lastLayer);
-    void waitResBackward(unsigned layer, bool lastLayer);
-
-    void relaunchLambda(bool forward, unsigned layer, unsigned lambdaId, bool lastLayer);
-    void relaunchLambda(unsigned layer, unsigned lambdaId, PROP_TYPE prop_dir,
-      bool lastLayer);
-
-    void requestInvoke(unsigned layer, unsigned lambdaId, PROP_TYPE prop_dir,
-      bool lastLayer);
-    void waitLambda(unsigned layer, PROP_TYPE prop_dir, bool lastLayer);
-
-    virtual unsigned getRelaunchCnt() { return relaunchCnt; };
-
-    // Send shutdown messages to the weight servers
-    void sendShutdownMessage();
-
-    // simple LambdaWorker initialization
-    friend LambdaWorker::LambdaWorker(LambdaComm *manager);
-
-    // data
-    Matrix inputTensor;
-    Matrix outputTensor;
-    Matrix targetTensor;
-    std::vector<Matrix> *savedTensors;    // Places to store the intermediate results from lambda.
-    std::map<std::string, Matrix>* savedVtxTensors;
-
-    PairQueue *queuePtr;
-
-// private:
-    // AWSSDK Members
-    Aws::SDKOptions options;
-
-    unsigned numLambdasForward;
-    unsigned numLambdasBackward;
-    unsigned numListeners;
-
-    bool pipeline;
-    bool forward;
-    unsigned currLayer;
-
-    std::string wServersFile;
-    std::vector<char*> weightservers;
-    unsigned weightserverPort;
+    unsigned getRelaunchCnt() { return relaunchCnt; };
 
     bool halt;
-    std::vector<bool> trainPartitions;
+    bool async;
+    std::vector<TensorMap>& savedNNTensors;
+    Lock &resLock;
+    ChunkQueue& resQueue;
+    Lock &aggLock;
+    ChunkQueue& aggQueue;
 
-    double timeoutPeriod;
-
-    // for relaunch timed-out lambdas
-    unsigned countForward;
-    bool *forwardLambdaTable;
-    double forwardTimer;
-    unsigned countBackward;
-    bool *backwardLambdaTable;
-    double backwardTimer;
-
+    std::thread *relaunchThd;
+    void asyncRelaunchLoop();
+    void relaunchLambda(const Chunk &chunk);
     unsigned relaunchCnt;
+    std::mutex timeoutMtx;
+    std::map<Chunk, unsigned> timeoutTable;
+    std::map<unsigned, unsigned> recordTable; // map layer -> (avg_time)
 
+
+    struct AccLoss {
+        float acc = 0.0;
+        float loss = 0.0;
+        unsigned vtcsCnt = 0;
+        unsigned chunkCnt = 0;
+    };
+    std::mutex accMtx;
+    std::map<unsigned, AccLoss> accLossTable; // epoch -> AccLoss
+
+    // Invoke lambda function
+    void invokeLambda(const Chunk &chunk);
+    static void callback(const Aws::Lambda::LambdaClient *client,
+                         const Aws::Lambda::Model::InvokeRequest &invReq,
+                         const Aws::Lambda::Model::InvokeOutcome &outcome,
+                         const std::shared_ptr<const Aws::Client::AsyncCallerContext> &context);
     zmq::context_t ctx;
     zmq::socket_t frontend;
     zmq::socket_t backend;
-    std::vector<zmq::socket_t> weightsockets;
+    Aws::SDKOptions options;
+    std::shared_ptr<Aws::Lambda::LambdaClient> m_client;
 
-    unsigned nodeId;
+    static unsigned nodeId;
     unsigned numNodes;
-    std::string nodeIp;
-    unsigned dataserverPort;
+    // Only for synchronous version //
+    unsigned numChunk;
+    // ---------------------------- //
+    string nodeIp;
+    unsigned dport;
+    std::vector<std::string> wservers;
+    unsigned wport;
+
+    unsigned numListeners;
+    std::vector<LambdaWorker *> workers;
+    std::vector<std::thread *> worker_threads;
+    friend LambdaWorker::LambdaWorker(LambdaComm *manager);
+
+    std::ofstream lambdaOut;
+
+    // Helper utilities
+    const char* selectWeightServer(unsigned chunkId);
+
+    Engine *engine;
+    void loadWServerIps(std::string wsFile);
+    void setupAwsClient();
+    void closeAwsClient();
+    void setupSockets();
+    void closeSockets();
+    void createWorkers();
+    void stopWorkers();
+    void startRelaunchThd();
+    void stopRelaunchThd();
 };
+
+
+unsigned getAbsLayer(const Chunk &chunk, unsigned numLayers);
+Chunk incLayer(const Chunk &chunk, unsigned numLayers);
+bool isLastLayer(const Chunk &chunk);
 
 #endif // LAMBDA_COMM_HPP

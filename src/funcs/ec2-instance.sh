@@ -2,7 +2,7 @@
 
 cd $( dirname $0 )
 
-id=i-0507390a688227993
+id=i-0aa46bc9c9691625c
 
 case $1 in
     "id")
@@ -14,7 +14,7 @@ case $1 in
             ssh -i /home/thorpedoes/.ssh/id_rsa jothor@${pubip} "rm -rf func-testing"
         fi
 
-        rsync -zz -auzh -e "ssh -i /home/thorpedoes/.ssh/id_rsa" ../funcs ../common jothor@${pubip}:func-testing/
+        rsync -zz -auzh -e "ssh -i /home/thorpedoes/.ssh/id_rsa" ../graph-server/utils ../funcs ../common jothor@${pubip}:func-testing/
         ;;
     "ssh")
         pubip=$( ./ec2-instance.sh pubip )
@@ -22,7 +22,13 @@ case $1 in
         ssh -i /home/thorpedoes/.ssh/id_rsa jothor@${pubip}
         ;;
     "pubip")
-        aws ec2 describe-instances --filter Name=instance-id,Values=${id} --query Reservations[*].Instances[*].PublicIpAddress --output text
+        ip=$( aws ec2 describe-instances --filter Name=instance-id,Values=${id} --query Reservations[*].Instances[*].PublicIpAddress --output text )
+
+        if [[ -z ${ip} ]]; then
+            echo "No IP address found. Check if instance is running"
+            exit
+        fi
+        echo ${ip}
         ;;
     "start")
         aws ec2 start-instances --instance-ids ${id}

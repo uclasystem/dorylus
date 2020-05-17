@@ -12,6 +12,7 @@
 
 #include "graph.hpp"
 #include "../commmanager/commmanager.hpp"
+#include "../commmanager/weight_comm.hpp"
 #include "../commmanager/resource_comm.hpp"
 #include "../nodemanager/nodemanager.hpp"
 #include "../parallel/threadpool.hpp"
@@ -25,7 +26,7 @@
 #define MAX_MSG_SIZE (5 * 1024 * 1024)
 #define NODE_ID_DIGITS 8 // Digits num of node id.
 #define NODE_ID_HEADER "%8X" // Header for node id. For communication.
-#define DATA_HEADER_SIZE (NODE_ID_DIGITS + sizeof(unsigned) + sizeof(unsigned))
+#define DATA_HEADER_SIZE (NODE_ID_DIGITS + sizeof(unsigned) * 5)
 
 
 
@@ -40,6 +41,9 @@ struct LabelsHeaderType {
 };
 
 
+enum GNN { GCN };
+
+
 /**
  *
  * Class of a GNN-LAMBDA engine executing on a node.
@@ -49,18 +53,24 @@ class Engine {
 public:
     // Public APIs for benchmarks.
     void init(int argc, char *argv[]);
+    void preallocate_tensors(GNN gnn_type);
+    void preallocateGCN();
+
     FeatType *runForward(unsigned epoch);
     void runBackward(FeatType *backwardInitData);
-    void runGCN();
+
+    void run();
+    void runPipeline();
 
     void output();
     void destroy();
     bool master();
 
+    // HIGH LEVEL SAGA FUNCITONS
     FeatType* aggregate(FeatType **eVFeatsTensor, unsigned edgsCnt,
                         unsigned featDim, AGGREGATOR aggregator);
     FeatType* applyVertex(FeatType *vtcsTensor, unsigned vtcsCnt,
-                        unsigned inFeatDim, unsigned outFeatDim);
+                        unsigned inFeatDim, unsigned outFeatDim, bool lastLayer);
     FeatType** scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
     FeatType** applyEdge(EdgeType *edgsTensor, unsigned edgsCnt, unsigned eFeatDim,
                         FeatType **eSrcVFeatsTensor, FeatType **eDstVFeatsTensor,
@@ -96,7 +106,7 @@ public:
     void setPipeline(bool _pipelie);
     void addEpochTime(double epochTime);
 
-private:
+// private:
     NodeManager nodeManager;
     CommManager commManager;
 
@@ -114,7 +124,13 @@ private:
 
     std::vector<Matrix> *vtxNNSavedTensors; // intermediate data for vertex NN backward computation.
     std::vector<Matrix> *edgNNSavedTensors; // intermediate data for edge NN backward computation.
-    std::map<std::string, Matrix> savedVtxTensors;
+
+    std::vector< TensorMap > savedNNTensors;
+    std::vector< ETensorMap > savedEdgeTensors;
+
+    // intermediate data for backward computation.
+    std::vector<Matrix> *savedTensors;
+    TensorMap savedVtxTensors;
 
     // Persistent pointers to original input data
     FeatType *forwardVerticesInitData;
@@ -142,13 +158,9 @@ private:
 
     unsigned currId = 0;
 
-    int fwdRecvCnt = 0;
-    Lock fwdRecvCntLock;
-    Cond fwdRecvCntCond;
-
-    int bkwdRecvCnt = 0;
-    Lock bkwdRecvCntLock;
-    Cond bkwdRecvCntCond;
+    int recvCnt = 0;
+    Lock recvCntLock;
+    Cond recvCntCond;
 
     std::string datasetDir;
     std::string outFile;
@@ -160,6 +172,7 @@ private:
     std::string myPubIpFile;
 
     std::time_t start_time;
+    std::time_t end_time;
 
     unsigned dataserverPort;
     unsigned weightserverPort;
@@ -171,20 +184,26 @@ private:
     unsigned valFreq = 0;
 
     float accuracy = 0.0;
+    // If check_model is true apply will run an eval phase
+    // but will not update weights.
+    bool check_model = false;
 
     //0: Lambda, 1: GPU, 2: CPU
     unsigned mode = 0;
 
-    ResourceComm *resComm = NULL;
-    CommInfo commInfo;
+    WeightComm *weightComm;
+    ResourceComm *resComm;
     unsigned nodeId;
     unsigned numNodes;
 
     bool commHalt = false;
+    bool aggHalt = false;
+    bool earlyStop = false;
 
     bool undirected = false;
 
-    unsigned iteration = 0;
+    unsigned layer = 0;
+    unsigned currEpoch = -1;
 
     // Timing stuff.
     double timeInit = 0.0;
@@ -202,6 +221,7 @@ private:
 
     Barrier barComp;
 
+
     void calcAcc(FeatType *predicts, FeatType *labels, unsigned vtcsCnt,
                  unsigned featDim);
 
@@ -209,17 +229,27 @@ private:
     void forwardWorker(unsigned tid, void *args);
     void backwardWorker(unsigned tid, void *args);
     void forwardGhostReceiver(unsigned tid);
-    void backwardGhostReceiver(unsigned tid, void* _featDim);
+    void backwardGhostReceiver(unsigned tid);
+
+    void aggregator(unsigned tid);
+    void scatterWorker(unsigned tid);
+    void verticesPushOut(unsigned receiver, unsigned totCnt, unsigned *lvids,
+      FeatType *inputTensor, unsigned featDim, Chunk& c);
+    void ghostReceiver(unsigned tid);
+    void sendEpochUpdate(unsigned currEpoch);
 
     void aggregateCompute(unsigned tid, void *args);
     void aggregateBPCompute(unsigned tid, void *args);
+
+    void aggregateChunk(Chunk& c);
+    void aggregateBPChunk(Chunk& c);
 
     void gatherApplyCompute(unsigned tid, void *args);
     void gatherApplyBPCompute(unsigned tid, void *args);
 
     // transform from vtxFeats/edgFeats to edgFeats/vtxFeats
-    FeatType** srcVFeats2eFeats(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
-    FeatType** dstVFeats2eFeats(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
+    FeatType** srcVFeats2eFeats(FeatType *vtcsTensor, FeatType* ghostTensor, unsigned vtcsCnt, unsigned featDim);
+    FeatType** dstVFeats2eFeats(FeatType *vtcsTensor, FeatType* ghostTensor, unsigned vtcsCnt, unsigned featDim);
     // FeatType* eFeats2dstVFeats(FeatType **edgsTensor, unsigned edgsCnt, unsigned featDim);
     // FeatType* eFeats2srcVFeats(FeatType **edgsTensor, unsigned edgsCnt, unsigned featDim);
 
@@ -236,8 +266,12 @@ private:
     void sendBackwardGhostGradients(FeatType *gradTensor, unsigned featDim);
 
     // All pipeline related functions/members
-    void pipelineForwardGhostUpdates(FeatType* inputTensor, unsigned featDim);
+    void loadChunks();
+
+    void pipelineForwardGhostUpdates(unsigned tid);
     void pipelineBackwardGhostGradients(FeatType* inputTensor, unsigned featDim);
+
+    void pipelineGhostReceiver(unsigned tid);
 
     // fusedGASBackward phases
     FeatType* applyScatterPhase(FeatType* gradTensor, unsigned vtcsCnt,
@@ -247,9 +281,22 @@ private:
     FeatType* aggregateApplyPhase(FeatType* gradTensor, unsigned vtcsCnt,
       unsigned inFeatDim, unsigned outFeatDim, bool scatter);
 
-    PairQueue rangesToScatter;
-    bool* partsScatteredTable;
-    Lock consumerQueueLock;
+    ChunkQueue aggregateQueue;
+    Lock aggQueueLock;
+    ChunkQueue scatterQueue;
+    Lock scatQueueLock;
+
+    unsigned staleness;
+    unsigned minEpoch;
+    // Tracking how many chunks have finished each epoch in the
+    // local partition
+    std::vector<unsigned> numFinishedEpoch;
+    Lock finishedChunkLock;
+    // Tracking how many graph servers have finished a certain epoch
+    // Works just like numFinishedEpoch but with nodes not chunks
+    std::vector<unsigned> nodesFinishedEpoch;
+    Lock finishedNodeLock;
+    unsigned finishedChunks;
 
     bool pipeline = false;
     // END Pipeline related functions/members
@@ -278,13 +325,14 @@ private:
     void saveTensor(const char* name, unsigned rows, unsigned cols, FeatType *dptr);
     void saveTensor(Matrix& mat);
 
+    void saveTensor(const char* name, unsigned layer, unsigned rows, unsigned cols, FeatType *dptr);
+    void saveTensor(const char* name, unsigned layer, Matrix& mat);
+
     // For initialization.
     void parseArgs(int argc, char* argv[]);
     void readLayerConfigFile(std::string& layerConfigFileName);
     void readFeaturesFile(std::string& featuresFileName);
     void readLabelsFile(std::string& labelsFileName);
-
-    void setupCommInfo();
 
     // Metric printing.
     void printGraphMetrics();

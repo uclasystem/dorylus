@@ -24,15 +24,21 @@ target_link_libraries(dataloader PRIVATE edge vertex utils
 target_compile_options(dataloader PRIVATE "-Wall" "-Werror" "-Wno-sign-compare" "-Wno-reorder" "-MMD")
 
 add_library(engine "engine.cpp")
-if(BUILD_GPU)
+
+if(BACKEND STREQUAL gpu)
     enable_language(CUDA)
     find_library(CUDNN NAME libcudnn.so HINTS /opt/cuda/targets/x86_64-linux/lib/ /usr/local/cuda-10.0/lib64/)
     FIND_PACKAGE(CUDA REQUIRED)
     include_directories(${CUDA_INCLUDE_DIRS})
-    target_link_libraries(engine PRIVATE ComputingUnit edge vertex graph dataloader commmanager resource_comm nodemanager threadpool utils
+    target_link_libraries(engine PRIVATE ComputingUnit edge vertex graph dataloader commmanager weight_comm gpu_comm nodemanager threadpool utils
                              PUBLIC  ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES})
-else()
-target_link_libraries(engine PRIVATE edge vertex graph dataloader commmanager resource_comm nodemanager threadpool utils
-                             PUBLIC  ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES} ${OpenMP_CXX_FLAGS})
+endif()
+if(BACKEND STREQUAL lambda)
+    target_link_libraries(engine PRIVATE edge vertex graph dataloader commmanager weight_comm lambda_comm nodemanager threadpool utils
+                                PUBLIC  ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES} ${OpenMP_CXX_FLAGS})
+endif()
+if(BACKEND STREQUAL cpu)
+    target_link_libraries(engine PRIVATE edge vertex graph dataloader commmanager weight_comm cpu_comm nodemanager threadpool utils
+                                PUBLIC  ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES} ${OpenMP_CXX_FLAGS})
 endif()
 target_compile_options(engine PRIVATE "-Wall" "-Werror" "-Wno-sign-compare" "-Wno-reorder" "-MMD" ${OpenMP_CXX_FLAGS})

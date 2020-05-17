@@ -2,7 +2,7 @@ CPP=g++
 CFLAGS=-std=c++11 -O3
 
 
-all: partitioner graphtobinary featurestobinary labelstobinary
+all: partitioner graphtobinary featurestobinary labelstobinary genfeats genlabs
 
 convert2csc: convert2csc.cpp
 	$(CPP) $< -o $@ ${CFLAGS}
@@ -17,6 +17,13 @@ featurestobinary: featuresToBinary.cpp
 
 labelstobinary: labelsToBinary.cpp
 	${CPP} $< -o $@ ${CFLAGS} -lboost_system
+
+genfeats: generateFeatues.cpp
+	${CPP} $< -o $@ ${CFLAGS}
+
+genlabs: generateLabels.cpp
+	${CPP} $< -o $@ ${CFLAGS}
+
 
 
 .PHONY: clean

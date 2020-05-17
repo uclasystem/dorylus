@@ -18,6 +18,7 @@
 #include <zmq.hpp>
 #include <boost/algorithm/string/trim.hpp>
 
+#include "weighttensor.hpp"
 #include "weightserver.hpp"
 #include "../common/matrix.hpp"
 #include "../common/utils.hpp"
@@ -33,44 +34,27 @@ class WeightServer;
  */
 class ServerWorker {
 public:
-    ServerWorker(zmq::context_t& ctx_, WeightServer& _ws,
-                 std::vector<Matrix>& weights_, std::vector<Matrix>& updates_,
-                 std::map<std::string, Matrix>& _weightsStore,
-                 unsigned& numLambdas_, unsigned& lambdaRecved_);
-
+    ServerWorker(zmq::context_t& ctx_, WeightServer& _ws, unsigned tid);
     ~ServerWorker();
 
     // Listens on lambda threads' request for weights.
     void work();
 
 private:
-    void sendWeights(zmq::message_t& client_id, unsigned layer, bool forward);
-    void recvUpdates(zmq::message_t& client_id);
-    void recvUpdate(zmq::message_t& client_id, unsigned layer);
-    void setBackpropNumLambdas(zmq::message_t& client_id, unsigned numLambdas_);
+    void sendTensor(Matrix& tensor, unsigned& more);
+    void sendTensors(zmq::message_t& client_id, Chunk &chunk);
+
+    void recvUpdateTensor(Chunk &chunk, WeightTensorMap& weights);
+    void recvTensors(zmq::message_t& client_id, Chunk &chunk);
+
+    void recvEvalData(zmq::message_t& client_id, Chunk &chunk);
+
+    void setNumLambdas(zmq::message_t& client_id, unsigned numLambdas_);
     void terminateServer(zmq::message_t& client_id);
 
-    // named-tensors
-    void sendTensor(FeatType* dptr, std::string tensorName, unsigned rows,
-      unsigned cols, unsigned& more);
-    void sendTensor(Matrix& tensor, unsigned& more);
-    //void getPartitionInfo(Matrix& tensor, unsigned partId, unsigned& more);
-    void sendTensors(zmq::message_t& client_id);
-
-    void recvUpdateTensor(unsigned layer);
-    void recvTensors(zmq::message_t& client_id, unsigned layer);
-    // end named-tensors
-
+    unsigned tid;
     zmq::context_t &ctx;
     zmq::socket_t workersocket;
-
-    std::map<std::string, Matrix>& weightsStore;
-
-    std::vector<Matrix>& weightMats;
-    std::vector<Matrix>& updateMats;
-
-    unsigned& numLambdas;
-    unsigned& lambdaRecved;
 
     // Reference back to weight server so we can tell it to average and apply
     // final weight gradients.

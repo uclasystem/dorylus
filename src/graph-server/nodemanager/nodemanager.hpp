@@ -8,20 +8,24 @@
 #include <zmq.hpp>
 
 
+class Engine;
+
 // Master node is by default the first machien on dshMashinesFile list.
 #define MASTER_NODEID 0
 
 
 /** Node message topic & contents. */
 #define NODE_MESSAGE_TOPIC 'N'
-enum NodeMessageType { NODENONE = -1, MASTERUP = -2, WORKERUP = -3, INITDONE = -4, BARRIER = -5 };
+enum NodeMessageType { NODENONE = -1, MASTERUP = -2, WORKERUP = -3, INITDONE = -4, BARRIER = -5, EPOCH = -6 };
 
 
 /** Structure of a node managing message. */
 typedef struct nodeMessage {
     char topic;
     NodeMessageType messageType;
-    nodeMessage(NodeMessageType mType = NODENONE) : topic(NODE_MESSAGE_TOPIC), messageType(mType) { }
+    unsigned info;
+    nodeMessage(NodeMessageType mType, unsigned _info = 0)
+      : topic(NODE_MESSAGE_TOPIC), messageType(mType), info(_info) { }
 } NodeMessage;
 
 
@@ -47,13 +51,16 @@ typedef struct node {
  * 
  */
 class NodeManager {
-
 public:
-
-    void init(std::string dshMachinesFile, std::string myPrIpFile, std::string myPubIpFile);
+    void init(std::string dshMachinesFile, std::string myPrIpFile, Engine* _engine);
     void destroy();
 
+    // Synchronous barrier
     void barrier();
+
+    // Bounded staleness methods
+    void sendEpochUpdate(unsigned currEpoch);
+    void readEpochUpdates();
     
     bool standAloneMode();
     Node& getNode(unsigned i);
@@ -64,13 +71,15 @@ public:
     void setNodePort(unsigned nPort) { nodePort = nPort; }
 
 private:
-
     Node me;
+    Engine* engine;
     unsigned masterId;
+    unsigned numNodes;
     bool standAlone;
 
     std::vector<Node> allNodes;
 
+    unsigned remaining;
     bool inBarrier = false;
 
     zmq::context_t nodeContext;

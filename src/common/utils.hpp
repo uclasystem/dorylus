@@ -1,13 +1,16 @@
 #ifndef __GLOBAL_UTILS_HPP__
 #define __GLOBAL_UTILS_HPP__
 
+#include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <iostream>
 #include <iomanip>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 #include <map>
 
@@ -16,19 +19,17 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <sys/time.h>
+#include <sys/stat.h>
 #include <limits.h>
 
 
 /** Feature type is float, so be consistent. */
 typedef float FeatType;
+typedef float EdgeType;
 
-#define TENSOR_NAME_SIZE 8
-
-// base timestamp for profiling
-#define BASE_TMSP (1580333752000ull)
-
-const size_t HEADER_SIZE = sizeof(unsigned) * 5 + sizeof(unsigned) * 2;
+#define HEADER_SIZE (sizeof(unsigned) + sizeof(Chunk)) // sizeof(OP) + sizeof(Chunk)
 // OP, TENSOR_NAME, FIELD0, FIELD1, ...
+static const size_t TENSOR_NAME_SIZE = 8;
 static const size_t TENSOR_HDR_SIZE = sizeof(unsigned) * 5 + TENSOR_NAME_SIZE;
 enum OP {
     REQ_VTX_FORWARD, PUSH_VTX_FORWARD, PULL_VTX_FORWARD,
@@ -37,14 +38,61 @@ enum OP {
     REQ_EDG_FORWARD, PUSH_EDG_FORWARD, PULL_EDG_FORWARD,
     REQ_EDG_BACKWARD, PUSH_EDG_BACKWARD, PULL_EDG_BACKWARD,
     PULL_EDG_EVAL, PUSH_EDG_EVAL,
-    PUSH, PULL,
+    PUSH, PULL, FIN, EVAL,
     RESP, INFO, TERM
 };
 enum TYPE { GRAD, AH, Z, ACT, LAB };
 enum PROP_TYPE { FORWARD, BACKWARD };
-enum AGGREGATOR { GCN, MEAN, ADD, MIN, MAX };
+enum AGGREGATOR { WSUM, MEAN, ADD, MIN, MAX };
 
 #define ERR_HEADER_FIELD UINT_MAX
+
+struct Chunk {
+    unsigned localId;
+    unsigned globalId;
+    unsigned lowBound;
+    unsigned upBound;
+    unsigned layer;
+    PROP_TYPE dir;
+
+    unsigned epoch;
+
+    bool vertex;
+
+    bool operator<(const Chunk &rhs) const {
+        // TODO: (YIFAN) Assign priority in the computation sequence
+        return
+            epoch > rhs.epoch || (epoch == rhs.epoch && (
+            dir > rhs.dir || (dir == rhs.dir && (
+            layer > rhs.layer || (layer == rhs.layer && (
+            (vertex && !rhs.vertex) || (vertex == rhs.vertex && (
+            localId > rhs.localId || (localId == rhs.localId && (
+            globalId > rhs.globalId || (globalId == rhs.globalId && (
+            lowBound > rhs.lowBound || (lowBound == rhs.lowBound && (
+            upBound > rhs.upBound))))))))))))));
+    }
+
+    std::string str() const {
+        char buf[128];
+        sprintf(buf, "%u:%s:%u:%u/%u", epoch, dir == PROP_TYPE::FORWARD ? "F" : "B",
+          layer, localId, globalId);
+
+        return std::string(buf);
+    }
+};
+
+Chunk createChunk(unsigned rows, unsigned nChunks, unsigned id, unsigned layer, PROP_TYPE dir, unsigned ep = 0, bool vertex = true);
+
+inline size_t argmax(FeatType* first, FeatType* last) { return std::distance(first, std::max_element(first, last)); }
+
+inline size_t getFileSize(const char* fname) {
+    struct stat st;
+    if (stat(fname, &st) != 0) {
+        return 0;
+    }
+
+    return st.st_size;
+}
 
 
 /**
@@ -69,6 +117,31 @@ parse(const char *buf, unsigned offset) {
 static inline std::string
 parseName(const char* buf) {
     return std::string(buf + sizeof(unsigned));
+}
+
+// For summing standard tensors
+static inline float
+sumTensor(unsigned rows, unsigned cols, FeatType* tensor) {
+    unsigned items = rows * cols;
+    float sum = 0;
+    for (unsigned u = 0; u < items; ++u) {
+        sum += tensor[u];
+    }
+
+    return sum;
+}
+
+// For summing edge tensors
+static inline float
+sumTensor(unsigned rows, unsigned cols, FeatType** tensor) {
+    float sum = 0;
+    for (unsigned ur = 0; ur < rows; ++ur) {
+        for (unsigned uc = 0; uc < cols; ++uc) {
+            sum += tensor[ur][uc];
+        }
+    }
+
+    return sum;
 }
 
 // ID represents either layer or data partition, depending on server responding.
@@ -107,21 +180,10 @@ static inline unsigned
 timestamp_ms() {
     using namespace std::chrono;
     auto now = high_resolution_clock::now();
-    return duration_cast<milliseconds>(now.time_since_epoch()).count() - BASE_TMSP;
+    return duration_cast<milliseconds>(now.time_since_epoch()).count() % (1 << 30);
 }
 
-static inline void
-log(const unsigned nodeId, const char* msg, ...) {
-    char* format = new char[strlen(msg) + 1];
-    va_list argptr;
-    va_start(argptr, msg);
-    vsprintf(format, msg, argptr);
-    va_end(argptr);
 
-    fprintf(stderr, "\033[1;33m[ Node %2u | %u ]\033[0m %s\n", nodeId, timestamp_ms(), format);
-
-    delete[] format;
-}
 
 static inline void
 log(std::ofstream& outfile, const char *msg, ...) {
@@ -221,9 +283,28 @@ extern GPUTimers gtimers;
 extern std::ofstream debugFile;
 extern std::mutex fileMutex;
 
+extern FILE* outputFile;
+
 extern std::ofstream matrixFile;
 extern std::mutex mFileMutex;
 
 void matrixToFile(FeatType* fptr, unsigned start, unsigned end, unsigned c);
+
+static inline void
+sleep_ms(unsigned t) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(t));
+}
+
+static inline void
+log(const unsigned nodeId, const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    vfprintf(outputFile, format, args);
+    va_end(args);
+
+    fputc('\n', outputFile);
+
+    fflush(outputFile);
+}
 
 #endif // GLOBAL_UTILS_HPP

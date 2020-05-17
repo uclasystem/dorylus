@@ -43,6 +43,7 @@ public:
     void setCols(unsigned _cols);
     void setDims(unsigned _rows, unsigned _cols);
     void setData(FeatType *_data);
+    void free();
 
     bool empty();
 
@@ -94,6 +95,9 @@ private:
     unsigned cols;
     FeatType *data;
 };
+
+typedef std::map<std::string, Matrix> TensorMap;
+typedef std::map<std::string, FeatType**> ETensorMap;
 
 
 #endif

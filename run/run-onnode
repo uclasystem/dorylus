@@ -34,22 +34,33 @@ case $1 in
         NUM_LAMBDAS_FORWARD=$( < ../numlambdasforward )
         NUM_LAMBDAS_BACKWARD=$( < ../numlambdasbackward )
 
+        # Minor options.
+        UNDIRECTED=0           # Currently are all directed graphs.
+        COMP_THREADS=$(nproc)  # Default values.
+        COMM_THREADS=1
+
         let MODE=0
         let PIPELINE=0
         let NUM_EPOCHS=10
+        let STALE_BOUND=4294967295
         for var in "$@"
         do
             if [ $var = "GPU" ] || [ $var = "gpu" ]; then
                 let MODE=1;
                 NUM_LAMBDAS_FORWARD=1
                 NUM_LAMBDAS_BACKWARD=1
+                COMP_THREADS=1
             elif [ $var = "CPU" ] || [ $var = "cpu" ]; then
                 let MODE=2;
                 NUM_LAMBDAS_FORWARD=1
                 NUM_LAMBDAS_BACKWARD=1
             fi
 
-            if [ $var = "pipe" ] || [ $var = "PIPE" ]; then
+            if [ $var = "--u" ] || [ $var = "--undirected" ]; then
+                UNDIRECTED=1
+            fi
+
+            if [ $var = "--p" ] || [ $var = "--pipeline" ]; then
                 PIPELINE=1
             fi
 
@@ -62,6 +73,10 @@ case $1 in
             if [[ $var = --e=* ]] || [[ $var = --epochs=* ]]; then
                 NUM_EPOCHS="${var#*=}"
             fi
+
+            if [[ $var = --s=* ]] || [[ $var = --staleness=* ]]; then
+                STALE_BOUND="${var#*=}"
+            fi
         done
 
         # After processing args, check to see if GPU enables
@@ -72,7 +87,6 @@ case $1 in
         fi
 
         MYPRIPFILE=${HOME}/myprip
-        MYPUBIPFILE=${HOME}/mypubip
         DSHMACHINESFILE=${HOME}/dshmachines
 
         # Kill running graphservers.
@@ -95,11 +109,6 @@ case $1 in
         DATASET=/filepool/$2
 
         LAYERFILE=${HOME}/$2.config
-
-        # Minor options.
-        UNDIRECTED=0    # Currently are all directed graphs.
-        COMP_THREADS=7  # Default values.
-        COMM_THREADS=1
 
         # Increment the running mark.
         if [[ ! -f run/run-mark ]]; then
@@ -125,7 +134,6 @@ case $1 in
             --labelsfile ${DATASET}/labels.bsnap \
             --dshmachinesfile ${DSHMACHINESFILE} \
             --layerfile ${LAYERFILE} \
-            --pubipfile ${MYPUBIPFILE} \
             --pripfile ${MYPRIPFILE} \
             --dataserverport ${GPORT} \
             --weightserverport ${WPORT} \
@@ -142,7 +150,8 @@ case $1 in
             --numEpoch ${NUM_EPOCHS} \
             --validationFrequency 1 \
             --MODE ${MODE} \
-            --pipeline ${PIPELINE}"
+            --pipeline ${PIPELINE} \
+            --staleness ${STALE_BOUND}"
         echo ${DSH_COMMAND}
         dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ${DSH_COMMAND}" 2>&1 | tee ${LOGFILE}
 
@@ -174,11 +183,25 @@ case $1 in
         fi
 
         WPORT=$( < ../wserverport )
+        GPORT=$( < ../gserverport )
         DATAPORT=$( < ../dataport )
 
         MYPRIPFILE=${HOME}/myprip
         DSHMACHINESFILE=${HOME}/dshmachines
+        GSERVERFILE=${HOME}/gserverip
         LAYERCONFIGFILE=${HOME}/$2.config
+
+        # Minor options.
+        SYNC=1
+        TARGET_ACC="0.9"
+        for var in "$@"
+        do
+            if [ $var = "--p" ] || [ $var = "--pipeline" ]; then
+                SYNC=0
+            elif [[ $var = --t=* ]] || [[ $var = --targetacc=* ]]; then
+                TARGET_ACC="${var#*=}"
+            fi
+        done
 
         # Kill running weightservers.
         echo -e "\e[33;1mKilling existing 'weightserver' processes...\e[0m"
@@ -206,10 +229,14 @@ case $1 in
         DSH_COMMAND="./build/weightserver \
             ${DSHMACHINESFILE} \
             ${MYPRIPFILE} \
+            ${GSERVERFILE} \
             ${DATAPORT} \
             ${WPORT} \
+            ${GPORT} \
             ${LAYERCONFIGFILE} \
-            ${TMPFILEDIR}"
+            ${TMPFILEDIR} \
+            ${SYNC} \
+            ${TARGET_ACC}"
         dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ${DSH_COMMAND}"
 
         # Gather the output files.
