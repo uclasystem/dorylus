@@ -266,7 +266,7 @@ void Engine::preallocateGCN() {
  *
  */
 void Engine::destroy() {
-    printLog(nodeId, "Destroying the engine...");
+    // printLog(nodeId, "Destroying the engine...");
 
     nodeManager.destroy();
     commManager.destroy();
@@ -337,7 +337,7 @@ FeatType *Engine::runForward(unsigned epoch) {
     currEpoch = epoch;
     // Make sure all nodes start running the forward-prop phase.
     if (nodeId == 0) {
-        printLog(nodeId, "Engine starts running FORWARD...");
+        printLog(nodeId, "Epoch %u FORWARD starts...", epoch);
     }
 
     timeForwardProcess -= getTimer();
@@ -365,9 +365,9 @@ FeatType *Engine::runForward(unsigned epoch) {
     }
 
     timeForwardProcess += getTimer();
-    if (nodeId == 0) {
-        printLog(nodeId, "Engine completes FORWARD at layer %u.", layer);
-    }
+    // if (nodeId == 0) {
+    //     printLog(nodeId, "Epoch %u FORWARD finishes at layer %u.", epoch, layer);
+    // }
     // calcAcc(inputTensor, localVerticesLabels, graph.localVtxCnt,
     // getFeatDim(numLayers));
 
@@ -382,9 +382,9 @@ FeatType *Engine::runForward(unsigned epoch) {
  *
  */
 void Engine::runBackward(FeatType *initGradTensor) {
-    if (nodeId == 0) {
-        printLog(nodeId, "Engine starts running BACKWARD...");
-    }
+    // if (nodeId == 0) {
+    //     printLog(nodeId, "Epoch %u BACKWARD starts...", currEpoch);
+    // }
 
     timeBackwardProcess -= getTimer();
 
@@ -408,9 +408,10 @@ void Engine::runBackward(FeatType *initGradTensor) {
     }
 
     timeBackwardProcess += getTimer();
-    if (nodeId == 0) {
-        printLog(nodeId, "Engine completes BACKWARD at %u.", layer);
-    }
+    // if (nodeId == 0) {
+    //     printLog(nodeId, "Epoch %u BACKWARD finishes at layer %u.", currEpoch, layer);
+    // }
+    numSyncEpochs++;
 }
 
 void Engine::run() {
@@ -423,8 +424,7 @@ void Engine::run() {
             double epochTime = getTimer() - epochStart;
             printLog(nodeId, "Time for epoch %u: %f ms", epoch, epochTime);
             addEpochTime(epochTime);
-            if (earlyStop) {
-                numEpochs = epoch + 1;
+            if (convergeState == CONVERGE_STATE::DONE) {
                 printLog(nodeId, "Early stop at epoch %u", epoch);
                 break;
             }
@@ -439,14 +439,38 @@ void Engine::run() {
             graph.localVtxCnt, getFeatDim(numLayers), localVerticesLabels);
 
         // Run one synchronous epoch
-        FeatType *tensor = runForward(0);
-        runBackward(tensor);
+        {
+            double epochStart = getTimer();
+            FeatType *tensor = runForward(0);
+            runBackward(tensor);
+            double epochTime = getTimer() - epochStart;
+            printLog(nodeId, "Time for epoch %u: %f ms", 0, epochTime);
+            addEpochTime(epochTime);
+        }
 
-        printLog(nodeId, "Finished SYNCHRONOUS epoch, starting PIPELINE");
+        if (nodeId == 0) {
+            printLog(nodeId, "Finished SYNCHRONOUS epoch, starting PIPELINE");
+        }
         loadChunks();
-        resComm->setAsync(true);
         // Start pipeline
         runPipeline();
+
+        if (convergeState != CONVERGE_STATE::DONE) {
+            for (unsigned epoch = currEpoch; epoch < numEpochs; ++epoch) {
+                double epochStart = getTimer();
+                FeatType *predictData = runForward(epoch);
+                runBackward(predictData);
+
+                double epochTime = getTimer() - epochStart;
+                printLog(nodeId, "Time for epoch %u: %f ms", epoch, epochTime);
+                addEpochTime(epochTime);
+                if (convergeState == CONVERGE_STATE::DONE) {
+                    printLog(nodeId, "Early stop at epoch %u", epoch);
+                    break;
+                }
+            }
+        }
+        printLog(nodeId, "Finished, shutting down...");
     }
 
     end_time = getCurrentTime();
@@ -458,16 +482,18 @@ void Engine::run() {
 void Engine::runPipeline() {
     double stt = getTimer();
 
+    resComm->setAsync(true, currEpoch);
+
     commHalt = false;
+    maxEpoch = 0; // for async/sync switching
+
     auto ghstRcvr =
         std::bind(&Engine::ghostReceiver, this, std::placeholders::_1);
-    std::thread t(ghstRcvr, 0);
-    t.detach();
+    std::thread grt(ghstRcvr, 0);
 
     auto scttrWrkr =
         std::bind(&Engine::scatterWorker, this, std::placeholders::_1);
-    std::thread t2(scttrWrkr, 1);
-    t2.detach();
+    std::thread swt(scttrWrkr, 1);
 
     auto aggWrkr =
         std::bind(&Engine::aggregator, this, std::placeholders::_1);
@@ -480,22 +506,31 @@ void Engine::runPipeline() {
     }
 
     double edt = getTimer();
-    printLog(nodeId, "Avg Epoch Time: %.3f", (edt - stt) / (numEpochs - 1));
+    asyncAvgEpochTime = (edt - stt) / numAsyncEpochs;
 
     // Wait for all nodes to finish
     nodeManager.barrier();
-    printLog(nodeId, "All nodes finished pipeline");
-    sleep(2); // YIFAN: ugly. For responding ongoing lambdas
     commHalt = true;
+    swt.join();
+    grt.join();
+    {
+        // clean up
+        unsigned sender, topic;
+        char *msgBuf = new char[MAX_MSG_SIZE];
+        if (commManager.dataPullIn(&sender, &topic, msgBuf,
+                                    MAX_MSG_SIZE)) {
+            printLog(nodeId, "CLEAN UP: Still msgs in buffer");
+        };
+        while (commManager.dataPullIn(&sender, &topic, msgBuf,
+                                    MAX_MSG_SIZE)) {};
+        delete[] msgBuf;
+    }
 
-//    if (false) {
-//        check_model = true;
-//        resComm->setAsync(false);
-//        runForward(currEpoch);
-//
-//        nodeManager.barrier();
-//    }
-    printLog(nodeId, "Finished, shutting down...");
+    if (nodeId == 0) {
+        printLog(nodeId, "All nodes finished pipeline");
+    }
+
+    resComm->setAsync(false, currEpoch - 1);
 }
 
 /**
@@ -547,8 +582,8 @@ void Engine::output() {
     sprintf(outBuf, "<EM>: Initialization takes %.3lf ms", timeInit);
     outStream << outBuf << std::endl;
 
-    float avgDenom = static_cast<float>(numEpochs);
-    if (pipeline) avgDenom = static_cast<float>(numEpochs * numLambdasForward);
+    float avgDenom = static_cast<float>(numSyncEpochs);
+    if (pipeline) avgDenom = static_cast<float>(numSyncEpochs * numLambdasForward);
 
     sprintf(outBuf, "<EM>: Forward:  Time per stage:");
     outStream << outBuf << std::endl;
@@ -1043,89 +1078,6 @@ inline void Engine::sendForwardGhostUpdates(FeatType *inputTensor,
     recvCntLock.unlock();
 }
 
-// inputTensor = activation output tensor
-inline void Engine::pipelineForwardGhostUpdates(unsigned tid) {
-    //    int failedTrials = 0;
-    //    const int INIT_PERIOD = 256;
-    //    const int MAX_PERIOD = 4096;
-    //    int SLEEP_PERIOD = INIT_PERIOD;
-    //    unsigned partsScattered = 0;
-    //
-    //    // Check queue to see if partition ready
-    //    while (partsScattered < numLambdasForward) {
-    //        consumerQueueLock.lock();
-    //        if (rangesToScatter.empty()) {
-    //            consumerQueueLock.unlock();
-    //            // sleep with backoff
-    //            usleep(SLEEP_PERIOD); // sleep a little and give up CPUs
-    //            failedTrials++;
-    //            if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
-    //                failedTrials = 0;
-    //                SLEEP_PERIOD *= 2;
-    //            }
-    //        } else {
-    //            std::pair<unsigned, unsigned> partitionInfo =
-    //            rangesToScatter.front(); rangesToScatter.pop();
-    //            // Has this partition already been processed
-    //            consumerQueueLock.unlock();
-    //
-    //            // Partition Info: (partId, rowsPerPartition)
-    //            unsigned startId = partitionInfo.first * partitionInfo.second;
-    //            unsigned endId = (partitionInfo.first + 1) *
-    //            partitionInfo.second; endId = endId > graph.localVtxCnt ?
-    //            graph.localVtxCnt : endId;
-    //
-    //            // Create a series of buckets for batching sendout messages to
-    //            nodes std::vector<unsigned>* batchedIds = new
-    //            std::vector<unsigned>[numNodes]; for (unsigned lvid = startId;
-    //            lvid < endId; ++lvid) {
-    //                for (unsigned nid : graph.forwardGhostMap[lvid]) {
-    //                    batchedIds[nid].push_back(lvid);
-    //                }
-    //            }
-    //
-    //            // batch sendouts similar to the sequential version
-    //            bool batchFlag = true;
-    //            unsigned BATCH_SIZE = std::max(((batchFlag ? MAX_MSG_SIZE :
-    //            4096) - DATA_HEADER_SIZE) /
-    //                                           (sizeof(unsigned) +
-    //                                           sizeof(FeatType) * featDim),
-    //                                           1ul); // at least send one
-    //                                           vertex
-    //            for (unsigned nid = 0; nid < numNodes; ++nid) {
-    //                if (nid == nodeId) {
-    //                    continue;
-    //                }
-    //
-    //                unsigned forwardGhostVCnt = batchedIds[nid].size();
-    //                for (unsigned ib = 0; ib < forwardGhostVCnt; ib +=
-    //                BATCH_SIZE) {
-    //                    unsigned sendBatchSize = (forwardGhostVCnt - ib) <
-    //                    BATCH_SIZE ? (forwardGhostVCnt - ib) : BATCH_SIZE;
-    //
-    //                    forwardVerticesPushOut(nid, sendBatchSize,
-    //                    batchedIds[nid].data() + ib, inputTensor, featDim);
-    //                    fwdRecvCntLock.lock();
-    //                    fwdRecvCnt++;
-    //                    fwdRecvCntLock.unlock();
-    //                }
-    //            }
-    //
-    //            delete[] batchedIds;
-    //            failedTrials = 0;
-    //            SLEEP_PERIOD = INIT_PERIOD;
-    //            partsScattered++;
-    //        }
-    //    }
-    //
-    //    // Once all partitions scattered, wait on all acks
-    //    fwdRecvCntLock.lock();
-    //    if (fwdRecvCnt > 0) {
-    //        fwdRecvCntCond.wait();
-    //    }
-    //    fwdRecvCntLock.unlock();
-}
-
 inline void Engine::forwardVerticesPushOut(unsigned receiver, unsigned totCnt,
                                            unsigned *lvids,
                                            FeatType *inputTensor,
@@ -1181,7 +1133,6 @@ void Engine::pipelineGhostReceiver(unsigned tid) {
                         nodeId,
                         "\033[1;31m[ ERROR ]\033[0m Still messages in buffer");
                 }
-
                 return;
             }
 
@@ -1242,126 +1193,119 @@ void Engine::pipelineGhostReceiver(unsigned tid) {
 }
 
 void Engine::aggregator(unsigned tid) {
-    unsigned trails = 0;
-    unsigned failedTrials = 0;
-    const int INIT_PERIOD = 256;
-    const int MAX_PERIOD = 4096;
-    int SLEEP_PERIOD = INIT_PERIOD;
+    BackoffSleeper bs;
 
     while (!aggHalt) {
         aggQueueLock.lock();
         if (aggregateQueue.empty()) {
             aggQueueLock.unlock();
-            usleep(SLEEP_PERIOD);
-            failedTrials++;
-            if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
-                failedTrials = 0;
-                SLEEP_PERIOD *= 2;
-            }
-        } else {
-            Chunk c = aggregateQueue.top();
+            bs.sleep();
+            continue;
+        }
 
-            if (earlyStop) {
-                while (!aggregateQueue.empty()) {
-                    aggregateQueue.pop();
-                    ++finishedChunks;
+        Chunk c = aggregateQueue.top();
+        // check before aggregation
+        if (c.isFirstLayer()) {
+            // Converge state changes
+            if (convergeState != CONVERGE_STATE::EARLY && maxEpoch == 0 && staleness != UINT_MAX) {
+                // record the current max epoch of all nodes.
+                nodeManager.readEpochUpdates();
+
+                // maxEpoch = minEpoch + staleness;
+                maxEpoch = minEpoch + 1;
+                unsigned maxe = minEpoch + staleness;
+                if (nodesFinishedEpoch[maxe % (staleness + 1)] > 0) {
+                    maxEpoch = maxe;
                 }
-                numEpochs = currEpoch + 1;
-                printLog(nodeId, "Early stop at epoch %u", currEpoch);
-                aggQueueLock.unlock();
-
-                aggHalt = true;
-                return;
-            } else if (c.epoch == numEpochs) {
+                maxe--;
+                while (maxe >= minEpoch) {
+                    if (nodesFinishedEpoch[maxe % (staleness + 1)] > 0) {
+                        maxEpoch = maxe + 1;
+                        break;
+                    }
+                    maxe--;
+                }
+                printLog(nodeId, "max epoch %u, curr epoch %u", maxEpoch, currEpoch);
+            }
+            if (c.epoch == numEpochs ||
+                (convergeState != CONVERGE_STATE::EARLY && c.epoch == maxEpoch + 1)) {
                 while (!aggregateQueue.empty()) {
                     aggregateQueue.pop();
                     ++finishedChunks;
                 }
                 aggQueueLock.unlock();
                 if (finishedChunks == numLambdasForward) {
+                    if (convergeState != CONVERGE_STATE::EARLY) {
+                        extern std::string CONVERGE_STATE_STR[CONVERGE_STATE::NUM_STATE];
+                        printLog(nodeId, "STATE changes to %s at epoch %u",
+                            CONVERGE_STATE_STR[convergeState].c_str(), currEpoch);
+                    }
+                    ++currEpoch;
                     aggHalt = true;
-                    return;
+                    break;
                 }
 
-                usleep(SLEEP_PERIOD);
-                failedTrials++;
-                if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
-                    failedTrials = 0;
-                    SLEEP_PERIOD *= 2;
-                }
-                // There is a chunk but it is beyond the staleness bound
-            } else if (staleness != UINT_MAX && c.layer == 0 &&
-                       c.dir == PROP_TYPE::FORWARD &&
-                       c.epoch > minEpoch + staleness) {
+                bs.sleep();
+                continue;
 
+            // There is a chunk but it is beyond the staleness bound
+            } else if (staleness != UINT_MAX && c.epoch > minEpoch + staleness) {
                 // Read incoming message buffer to see if there are
-                //  updates to the minEpoch
+                // updates to the minEpoch
                 nodeManager.readEpochUpdates();
                 aggQueueLock.unlock();
 
-                usleep(SLEEP_PERIOD);
-                failedTrials++;
-                if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
-                    failedTrials = 0;
-                    SLEEP_PERIOD *= 2;
-                    trails++;
-                }
-
+                bs.sleep();
                 // Messages to check how often a node is blocking
-                if ((trails + 1) % 1000 == 0) {
+                if ((bs.trails + 1) % 1000 == 0) {
                     printLog(nodeId, "Blocking. MinE %u, Finished %u",
                         minEpoch,
                         nodesFinishedEpoch[minEpoch % (staleness + 1)]);
                 }
-                // There is a chunk to process that is within the bound
-            } else {
-                // printLog(nodeId, "AGGREGATE: Got %s", c.str().c_str());
-                aggregateQueue.pop();
-                aggQueueLock.unlock();
-                if (c.layer == 0 && c.dir == PROP_TYPE::FORWARD &&
-                    c.epoch == currEpoch + 1) {
-                    ++currEpoch;
-                //    printLog(nodeId, "STARTING epoch %u [%u]", ++currEpoch,
-                //             c.epoch);
-                }
-
-                double startAgg = getTimer();
-                if (c.dir == PROP_TYPE::FORWARD) {
-                    aggregateChunk(c);
-                } else {
-                    aggregateBPChunk(c);
-                }
-                vecTimeAggregate[c.dir * numLayers + c.layer] +=
-                    getTimer() - startAgg;
-                resComm->NNCompute(c);
-
-                SLEEP_PERIOD = INIT_PERIOD;
-                failedTrials = 0;
-                trails = 0;
+                continue;
             }
         }
+
+        if (c.isFirstLayer() && c.epoch == currEpoch + 1) {
+            ++currEpoch;
+            ++numAsyncEpochs;
+            printLog(nodeId, "STARTING epoch %u [%u]", currEpoch,
+                        c.epoch);
+        }
+
+        // printLog(nodeId, "AGGREGATE: Got %s", c.str().c_str());
+        aggregateQueue.pop();
+        aggQueueLock.unlock();
+
+        double startAgg = getTimer();
+        if (c.dir == PROP_TYPE::FORWARD) {
+            aggregateChunk(c);
+        } else {
+            aggregateBPChunk(c);
+        }
+        vecTimeAggregate[c.dir * numLayers + c.layer] +=
+            getTimer() - startAgg;
+        resComm->NNCompute(c);
+
+        bs.reset();
     }
 }
 
 void Engine::scatterWorker(unsigned tid) {
-    printLog(nodeId, "SCATTER: Starting");
-    int failedTrials = 0;
-    const int INIT_PERIOD = 256;
-    const int MAX_PERIOD = 4096;
-    int SLEEP_PERIOD = INIT_PERIOD;
+    // printLog(nodeId, "SCATTER: Starting");
+    BackoffSleeper bs;
 
     // Check queue to see if partition ready
-    while (!commHalt) {
+    while (true) {
         scatQueueLock.lock();
         if (scatterQueue.empty()) {
             scatQueueLock.unlock();
-            // sleep with backoff
-            usleep(SLEEP_PERIOD);  // sleep a little and give up CPUs
-            failedTrials++;
-            if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
-                failedTrials = 0;
-                SLEEP_PERIOD *= 2;
+
+            if (commHalt) {
+                break;
             }
+            // sleep with backoff
+            bs.sleep();
         } else {
             Chunk c = scatterQueue.top();
             scatterQueue.pop();
@@ -1429,17 +1373,7 @@ void Engine::scatterWorker(unsigned tid) {
                     verticesPushOut(nid, sendBatchSize,
                                     batchedIds[nid].data() + ib, scatterTensor,
                                     featDim, c);
-                    recvCntLock.lock();
-                    recvCnt++;
-                    recvCntLock.unlock();
                 }
-
-                // Once all partitions scattered, wait on all acks
-                recvCntLock.lock();
-                if (recvCnt > 0) {
-                    recvCntCond.wait();
-                }
-                recvCntLock.unlock();
             }
             unsigned endScat = timestamp_ms();
             // Add chunk into appropriate aggregate queue
@@ -1450,10 +1384,19 @@ void Engine::scatterWorker(unsigned tid) {
             aggQueueLock.unlock();
 
             delete[] batchedIds;
-            failedTrials = 0;
-            SLEEP_PERIOD = INIT_PERIOD;
+            bs.reset();
         }
     }
+
+    // clean up remaining chunks
+    scatQueueLock.lock();
+    if (!scatterQueue.empty()) {
+        printLog(nodeId, "CLEAN UP: Scatter queue is not empty!");
+    }
+    while (!scatterQueue.empty()) {
+        scatterQueue.pop();
+    }
+    scatQueueLock.unlock();
 }
 
 void Engine::verticesPushOut(unsigned receiver, unsigned totCnt,
@@ -1479,7 +1422,7 @@ void Engine::verticesPushOut(unsigned receiver, unsigned totCnt,
 }
 
 void Engine::ghostReceiver(unsigned tid) {
-    printLog(nodeId, "RECEIVER: Starting");
+    // printLog(nodeId, "RECEIVER: Starting");
     // backoff sleep strategy to improve CPU utilization
     int failedTrials = 0;
     const int INIT_PERIOD = 256;
@@ -1490,37 +1433,22 @@ void Engine::ghostReceiver(unsigned tid) {
     FeatType *msgBuf = (FeatType *)new char[MAX_MSG_SIZE];
 
     // While loop, looping infinitely to get the next message.
-    while (!commHalt) {
+    while (true) {
         // No message in queue.
         if (!commManager.dataPullIn(&sender, &topic, msgBuf, MAX_MSG_SIZE)) {
-            // Computation workers done their work, so communicator goes to
-            // death as well.
-            if (commHalt) {
-                delete[] msgBuf;
-                if (commManager.dataPullIn(&sender, &topic, msgBuf,
-                                           MAX_MSG_SIZE)) {
-                    printLog(
-                        nodeId,
-                        "\033[1;31m[ ERROR ]\033[0m Still messages in buffer");
-                }
-
-                return;
-            }
-
             usleep(SLEEP_PERIOD);  // sleep a little and give up CPUs
             failedTrials++;
             if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
                 failedTrials = 0;
                 SLEEP_PERIOD *= 2;
             }
+            if (commHalt) {
+                break;
+            }
             // Pull in the next message, and process this message.
         } else {
             // A normal ghost value broadcast.
             if (topic < MAX_IDTYPE - 1) {
-                // Using MAX_IDTYPE - 1 as the receive signal.
-                commManager.dataPushOut(sender, nodeId, MAX_IDTYPE - 1, NULL,
-                                        0);
-
                 char *bufPtr = (char *)msgBuf;
                 unsigned recvGhostVCnt = topic;
                 unsigned featDim = *(unsigned *)bufPtr;
@@ -1564,16 +1492,7 @@ void Engine::ghostReceiver(unsigned tid) {
                 // vertices. I should update the corresponding recvWaiter's
                 // value. If waiters become empty, send a signal in case the
                 // workers are waiting on it to be empty at the layer barrier.
-            } else {  // (topic == MAX_IDTYPE - 1)
-                recvCntLock.lock();
-                recvCnt--;
-                recvCntLock.unlock();
-            }
-            recvCntLock.lock();
-            if (recvCnt == 0) {
-                recvCntCond.signal();
-            }
-            recvCntLock.unlock();
+            } else {}  // (topic == MAX_IDTYPE - 1)
 
             SLEEP_PERIOD = INIT_PERIOD;
             failedTrials = 0;
@@ -1581,9 +1500,11 @@ void Engine::ghostReceiver(unsigned tid) {
     }
 
     if (commManager.dataPullIn(&sender, &topic, msgBuf, MAX_MSG_SIZE)) {
-        printLog(nodeId, "\033[1;31m[ ERROR ]\033[0m Still messages in buffer");
+        printLog(nodeId, "CLEAN UP: Still messages in buffer");
+        // clean up
+        while (commManager.dataPullIn(&sender, &topic, msgBuf,
+                                        MAX_MSG_SIZE)) {};
     }
-
     delete[] msgBuf;
 }
 
@@ -2333,98 +2254,6 @@ void Engine::sendBackwardGhostGradients(FeatType *gradTensor,
     recvCntLock.unlock();
 }
 
-inline void Engine::pipelineBackwardGhostGradients(FeatType *inputTensor,
-                                                   unsigned featDim) {
-    //    int failedTrials = 0;
-    //    const int INIT_PERIOD = 256;
-    //    const int MAX_PERIOD = 4096;
-    //    int SLEEP_PERIOD = INIT_PERIOD;
-    //    unsigned partsScattered = 0;
-    //
-    //    partsScatteredTable = new bool[numLambdasBackward];
-    //    std::memset(partsScatteredTable, 0, sizeof(bool) *
-    //    numLambdasBackward);
-    //
-    //    // Check queue to see if partition ready
-    //    while (partsScattered < numLambdasBackward) {
-    //        consumerQueueLock.lock();
-    //        if (rangesToScatter.empty()) {
-    //            consumerQueueLock.unlock();
-    //            // sleep with backoff
-    //            usleep(SLEEP_PERIOD); // sleep a little and give up CPUs
-    //            failedTrials++;
-    //            if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
-    //                failedTrials = 0;
-    //                SLEEP_PERIOD *= 2;
-    //            }
-    //        } else {
-    //            std::pair<unsigned, unsigned> partitionInfo =
-    //            rangesToScatter.front(); rangesToScatter.pop();
-    //            // Has this partition already been processed
-    //            if (partsScatteredTable[partitionInfo.first]) {
-    //                consumerQueueLock.unlock();
-    //                continue;
-    //            }
-    //            partsScatteredTable[partitionInfo.first] = true;
-    //            consumerQueueLock.unlock();
-    //
-    //            // Partition Info: (partId, rowsPerPartition)
-    //            unsigned startId = partitionInfo.first * partitionInfo.second;
-    //            unsigned endId = (partitionInfo.first + 1) *
-    //            partitionInfo.second; endId = endId > graph.localVtxCnt ?
-    //            graph.localVtxCnt : endId;
-    //
-    //            // Create a series of buckets for batching sendout messages to
-    //            nodes std::vector<unsigned>* batchedIds = new
-    //            std::vector<unsigned>[numNodes]; for (unsigned lvid = startId;
-    //            lvid < endId; ++lvid) {
-    //                for (unsigned nid : graph.backwardGhostMap[lvid]) {
-    //                    batchedIds[nid].push_back(lvid);
-    //                }
-    //            }
-    //
-    //            // batch sendouts similar to the sequential version
-    //            bool batchFlag = true;
-    //            unsigned BATCH_SIZE = std::max(((batchFlag ? MAX_MSG_SIZE :
-    //            4096) - DATA_HEADER_SIZE) /
-    //                                           (sizeof(unsigned) +
-    //                                           sizeof(FeatType) * featDim),
-    //                                           1ul); // at least send one
-    //                                           vertex
-    //            for (unsigned nid = 0; nid < numNodes; ++nid) {
-    //                if (nid == nodeId) {
-    //                    continue;
-    //                }
-    //
-    //                unsigned backwardGhostVCnt = batchedIds[nid].size();
-    //                for (unsigned ib = 0; ib < backwardGhostVCnt; ib +=
-    //                BATCH_SIZE) {
-    //                    unsigned sendBatchSize = (backwardGhostVCnt - ib) <
-    //                    BATCH_SIZE ? (backwardGhostVCnt - ib) : BATCH_SIZE;
-    //
-    //                    backwardVerticesPushOut(nid, sendBatchSize,
-    //                    batchedIds[nid].data() + ib, inputTensor, featDim);
-    //                    recvCntLock.lock();
-    //                    recvCnt++;
-    //                    recvCntLock.unlock();
-    //                }
-    //            }
-    //
-    //            delete[] batchedIds;
-    //            failedTrials = 0;
-    //            SLEEP_PERIOD = INIT_PERIOD;
-    //            partsScattered++;
-    //        }
-    //    }
-    //
-    //    // Once all partitions scattered, wait on all acks
-    //    recvCntLock.lock();
-    //    if (recvCnt > 0) {
-    //        recvCntCond.wait();
-    //    }
-    //    recvCntLock.unlock();
-}
-
 inline void Engine::backwardVerticesPushOut(unsigned receiver, unsigned totCnt,
                                             unsigned *lvids,
                                             FeatType *gradTensor,
@@ -2596,17 +2425,20 @@ void Engine::saveTensor(const char *name, unsigned layer, Matrix &mat) {
  *
  */
 void Engine::printEngineMetrics() {
+    nodeManager.barrier();
     if (master()) {
         gtimers.report();
 
         printLog(nodeId, "<EM>: Run start time: %s", std::ctime(&start_time));
         printLog(nodeId, "<EM>: Run end time: %s", std::ctime(&end_time));
+        printLog(nodeId, "<EM>: %u sync epochs and %u async epochs",
+                numSyncEpochs, numAsyncEpochs);
         printLog(nodeId, "<EM>: Using %u forward lambdas and %u bacward lambdas",
                 numLambdasForward, numLambdasBackward);
         printLog(nodeId, "<EM>: Initialization takes %.3lf ms", timeInit);
 
-        float avgDenom = static_cast<float>(numEpochs);
-        if (pipeline) avgDenom = static_cast<float>(numEpochs * numLambdasForward);
+        float avgDenom = static_cast<float>(numSyncEpochs);
+        if (pipeline) avgDenom = static_cast<float>(numSyncEpochs * numLambdasForward);
         printLog(nodeId, "<EM>: Forward:  Time per stage:");
         for (unsigned i = 0; i < numLayers; ++i) {
             printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i,
@@ -2633,18 +2465,20 @@ void Engine::printEngineMetrics() {
                     vecTimeApplyEdg[i] / (float)avgDenom);
         }
         printLog(nodeId, "<EM>: Total backward-prop time %.3lf ms",
-                timeBackwardProcess / (float)numEpochs);
-    }
+                timeBackwardProcess / (float)avgDenom);
 
-    double sum = 0.0;
-    for (double &d : epochTimes) sum += d;
-    printLog(nodeId, "<EM>: Average epoch time %.3lf ms",
-             sum / (float)numEpochs);
-    if (master()) {
         printLog(nodeId, "<EM>: Final accuracy %.3lf", accuracy);
 
         printLog(nodeId, "Relaunched Lambda Cnt: %u", resComm->getRelaunchCnt());
     }
+
+    double sum = 0.0;
+    for (double &d : epochTimes) sum += d;
+    printLog(nodeId, "<EM>: Average  sync epoch time %.3lf ms",
+             sum / epochTimes.size());
+    nodeManager.barrier();
+    printLog(nodeId, "<EM>: Average async epoch time %.3lf ms",
+            asyncAvgEpochTime);
 }
 
 /**

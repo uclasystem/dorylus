@@ -129,7 +129,7 @@ NodeManager::barrier() {
     nodePublisher->send(outMsg);
 
     // Keeps receiving BARRIER messages until heard from all (including self).
-    remaining = allNodes.size();
+    remaining += allNodes.size();
     zmq::message_t inMsg;
     while (remaining > 0) {
         nodeSubscriber->recv(&inMsg);
@@ -204,7 +204,7 @@ void NodeManager::readEpochUpdates() {
 void
 NodeManager::destroy() {
     if(standAlone) return;
-    
+
     nodePublisher->close();
     nodeSubscriber->close();
 

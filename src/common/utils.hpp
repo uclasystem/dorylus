@@ -20,6 +20,7 @@
 #include <stdarg.h>
 #include <sys/time.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #include <limits.h>
 
 
@@ -44,6 +45,11 @@ enum OP {
 enum TYPE { GRAD, AH, Z, ACT, LAB };
 enum PROP_TYPE { FORWARD, BACKWARD };
 enum AGGREGATOR { WSUM, MEAN, ADD, MIN, MAX };
+
+enum CONVERGE_STATE { EARLY, CLOSE, DONE, FLUCT, NUM_STATE };
+static std::string CONVERGE_STATE_STR[CONVERGE_STATE::NUM_STATE] = {
+    "EARLY", "CLOSE", "DONE", "FLUCT"
+};
 
 #define ERR_HEADER_FIELD UINT_MAX
 
@@ -79,9 +85,40 @@ struct Chunk {
 
         return std::string(buf);
     }
+
+    bool isFirstLayer() {
+        return dir == PROP_TYPE::FORWARD && layer == 0;
+    }
+    bool isLastLayer() {
+        return dir == PROP_TYPE::BACKWARD && layer == 0;
+    }
 };
 
 Chunk createChunk(unsigned rows, unsigned nChunks, unsigned id, unsigned layer, PROP_TYPE dir, unsigned ep = 0, bool vertex = true);
+
+// backoff sleep strategy to improve CPU utilization
+struct BackoffSleeper {
+    unsigned trails = 0;
+    unsigned failedTrials = 0;
+    const int INIT_PERIOD = 256;
+    const int MAX_PERIOD = 4096;
+    int SLEEP_PERIOD = INIT_PERIOD;
+
+    void sleep() {
+        usleep(SLEEP_PERIOD);
+        failedTrials++;
+        if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
+            failedTrials = 0;
+            SLEEP_PERIOD *= 2;
+        }
+    }
+
+    void reset() {
+        SLEEP_PERIOD = INIT_PERIOD;
+        failedTrials = 0;
+        trails = 0;
+    }
+};
 
 inline size_t argmax(FeatType* first, FeatType* last) { return std::distance(first, std::max_element(first, last)); }
 

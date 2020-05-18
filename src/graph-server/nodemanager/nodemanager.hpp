@@ -48,7 +48,7 @@ typedef struct node {
 /**
  *
  * Class of the node manager. Reponsible for handling my machine's role in the cluster.
- * 
+ *
  */
 class NodeManager {
 public:
@@ -61,7 +61,7 @@ public:
     // Bounded staleness methods
     void sendEpochUpdate(unsigned currEpoch);
     void readEpochUpdates();
-    
+
     bool standAloneMode();
     Node& getNode(unsigned i);
     unsigned getNumNodes();
@@ -77,6 +77,7 @@ private:
     unsigned numNodes;
     bool standAlone;
 
+
     std::vector<Node> allNodes;
 
     unsigned remaining;
@@ -86,7 +87,7 @@ private:
     zmq::socket_t *nodePublisher = NULL;
     zmq::socket_t *nodeSubscriber = NULL;
     unsigned nodePort;
-    
+
     void parseNodeConfig(const std::string dshMachinesFile);
 };
 

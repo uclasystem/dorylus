@@ -9,16 +9,16 @@ unsigned LambdaComm::nodeId;
  *
  */
 LambdaComm::LambdaComm(Engine *_engine) :
-        halt(false),
+        halt(false), async(false), outdateEpoch(-1),
         nodeIp(_engine->nodeManager.getNode(_engine->nodeId).prip),
         numNodes(_engine->numNodes),
         numChunk(_engine->numLambdasForward),
-        relaunchCnt(0), async(false),
+        relaunchCnt(0),
         dport(_engine->dataserverPort), wport(_engine->weightserverPort),
         savedNNTensors(_engine->savedNNTensors),
         resLock(_engine->scatQueueLock), resQueue(_engine->scatterQueue),
         aggLock(_engine->aggQueueLock), aggQueue(_engine->aggregateQueue),
-        ctx(4), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
+        ctx(2), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
         numListeners(4), engine(_engine) { // TODO: Decide numListeners.
     nodeId = _engine->nodeId;
 
@@ -42,8 +42,9 @@ LambdaComm::~LambdaComm() {
     ctx.close();
 }
 
-void LambdaComm::setAsync(bool _async) {
+void LambdaComm::setAsync(bool _async, unsigned currEpoch) {
     async = _async;
+    outdateEpoch = (int)currEpoch;
 }
 
 void LambdaComm::NNCompute(Chunk &chunk) {
@@ -94,6 +95,11 @@ bool LambdaComm::NNRecv(Chunk &chunk) {
     }
     timeoutMtx.unlock();
 
+    // filter out outdate chunks after switching sync/async
+    if ((int)(chunk.epoch) <= outdateEpoch) {
+        return true;
+    }
+
     // If bounded-staleness enabled, increment the finished chunks for this epoch
     // If the min epoch has finished, allow chunks to move to the next epoch
     // TODO (JOHN): Consider using __sync_fetch ops here to make code cleaner and
@@ -105,7 +111,7 @@ bool LambdaComm::NNRecv(Chunk &chunk) {
             engine->finishedChunkLock.lock();
             if (++(engine->numFinishedEpoch[ind]) == numChunk) {
                 engine->finishedChunkLock.unlock();
-                printLog(nodeId, "FINISHED epoch %u. Total finished %u", chunk.epoch, engine->nodesFinishedEpoch[ind]+1);
+                // printLog(nodeId, "FINISHED epoch %u. Total finished %u", chunk.epoch, engine->nodesFinishedEpoch[ind]+1);
                 engine->numFinishedEpoch[ind] = 0;
 
                 engine->sendEpochUpdate(chunk.epoch);
@@ -147,8 +153,8 @@ void LambdaComm::asyncRelaunchLoop() {
                 continue; // No lambda finished.
             }
             if (currTS - kv.second > std::max(MIN_TIMEOUT, 5 * found->second)) {
-                printLog(nodeId, "curr %u, timed %u, chunk %s", currTS - kv.second, 5 * found->second,
-                    kv.first.str().c_str());
+                // printLog(nodeId, "curr %u, timed %u, chunk %s", currTS - kv.second, 5 * found->second,
+                //     kv.first.str().c_str());
                 relaunchLambda(kv.first);
             }
         }
@@ -190,8 +196,8 @@ void LambdaComm::invokeLambda(const Chunk &chunk) {
     jsonPayload.WithString("wserver", wserver);
     jsonPayload.WithInteger("dport", dport);
     jsonPayload.WithInteger("wport", wport);
-    jsonPayload.WithBool("eval", (chunk.epoch == 0) || ((chunk.epoch + 1) % 5 == 0));
-    jsonPayload.WithBool("check_model", engine->check_model);
+    // jsonPayload.WithBool("eval", (chunk.epoch == 0) || ((chunk.epoch + 1) % 5 == 0));
+    jsonPayload.WithBool("eval", true);
 
     jsonPayload.WithInteger("id", chunk.localId);
     jsonPayload.WithInteger("gid", chunk.globalId);

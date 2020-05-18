@@ -41,7 +41,7 @@
 
 static const bool relaunching = true;
 
-#define LAMBDA_VTX_NN "yifan-gcn"
+#define LAMBDA_VTX_NN "gcn"
 #define ALLOCATION_TAG "LambdaComm"
 
 class LambdaWorker;
@@ -56,7 +56,7 @@ public:
     LambdaComm(Engine *engine);
     ~LambdaComm();
 
-    void setAsync(bool _async);
+    void setAsync(bool _async, unsigned currEpoch);
     void NNCompute(Chunk &chunk);
     void NNSync();
     bool NNRecv(Chunk &chunk);
@@ -65,6 +65,7 @@ public:
 
     bool halt;
     bool async;
+    int outdateEpoch;
     std::vector<TensorMap>& savedNNTensors;
     Lock &resLock;
     ChunkQueue& resQueue;
