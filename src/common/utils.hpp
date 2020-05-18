@@ -20,6 +20,7 @@
 #include <stdarg.h>
 #include <sys/time.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #include <limits.h>
 
 
@@ -94,6 +95,30 @@ struct Chunk {
 };
 
 Chunk createChunk(unsigned rows, unsigned nChunks, unsigned id, unsigned layer, PROP_TYPE dir, unsigned ep = 0, bool vertex = true);
+
+// backoff sleep strategy to improve CPU utilization
+struct BackoffSleeper {
+    unsigned trails = 0;
+    unsigned failedTrials = 0;
+    const int INIT_PERIOD = 256;
+    const int MAX_PERIOD = 4096;
+    int SLEEP_PERIOD = INIT_PERIOD;
+
+    void sleep() {
+        usleep(SLEEP_PERIOD);
+        failedTrials++;
+        if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
+            failedTrials = 0;
+            SLEEP_PERIOD *= 2;
+        }
+    }
+
+    void reset() {
+        SLEEP_PERIOD = INIT_PERIOD;
+        failedTrials = 0;
+        trails = 0;
+    }
+};
 
 inline size_t argmax(FeatType* first, FeatType* last) { return std::distance(first, std::max_element(first, last)); }
 

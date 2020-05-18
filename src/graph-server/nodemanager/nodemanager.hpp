@@ -70,7 +70,6 @@ public:
 
     void setNodePort(unsigned nPort) { nodePort = nPort; }
 
-    unsigned maxEpoch = 0;
 private:
     Node me;
     Engine* engine;

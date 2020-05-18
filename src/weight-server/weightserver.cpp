@@ -252,9 +252,6 @@ void WeightServer::updateGlobalAccLoss(unsigned node, AccLoss &accloss) {
 
 // Only master will call this function
 void WeightServer::tryEarlyStop(AccLoss &accloss) {
-    // static std::string state2str[CONVERGE_STATE::NUM_STATE] = {
-    //     "EARLY", "CLOSE", "DONE", "FLUCTUATE"
-    // };
     extern std::string CONVERGE_STATE_STR[CONVERGE_STATE::NUM_STATE];
 
     CONVERGE_STATE currState =
@@ -262,7 +259,8 @@ void WeightServer::tryEarlyStop(AccLoss &accloss) {
         (accloss.acc >= targetAcc - 0.03) ? CONVERGE_STATE::CLOSE: // switch to sync
                                             CONVERGE_STATE::EARLY;
 
-    if (currState != CONVERGE_STATE::EARLY && convergeState != currState) {
+    // state transition can only be in order EARLY -> CLOSE -> DONE
+    if (currState > convergeState) {
         char msg[100];
         sprintf(msg, "STATE switch: %s -> %s at epoch %u",
             CONVERGE_STATE_STR[convergeState].c_str(),

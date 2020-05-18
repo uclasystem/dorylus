@@ -382,9 +382,9 @@ FeatType *Engine::runForward(unsigned epoch) {
  *
  */
 void Engine::runBackward(FeatType *initGradTensor) {
-    if (nodeId == 0) {
-        printLog(nodeId, "Epoch %u BACKWARD starts...", currEpoch);
-    }
+    // if (nodeId == 0) {
+    //     printLog(nodeId, "Epoch %u BACKWARD starts...", currEpoch);
+    // }
 
     timeBackwardProcess -= getTimer();
 
@@ -518,9 +518,11 @@ void Engine::runPipeline() {
         unsigned sender, topic;
         char *msgBuf = new char[MAX_MSG_SIZE];
         if (commManager.dataPullIn(&sender, &topic, msgBuf,
-                                MAX_MSG_SIZE)) {};
+                                    MAX_MSG_SIZE)) {
+            printLog(nodeId, "CLEAN UP: Still msgs in buffer");
+        };
         while (commManager.dataPullIn(&sender, &topic, msgBuf,
-                                MAX_MSG_SIZE)) {};
+                                    MAX_MSG_SIZE)) {};
         delete[] msgBuf;
     }
 
@@ -1191,167 +1193,119 @@ void Engine::pipelineGhostReceiver(unsigned tid) {
 }
 
 void Engine::aggregator(unsigned tid) {
-    unsigned trails = 0;
-    unsigned failedTrials = 0;
-    const int INIT_PERIOD = 256;
-    const int MAX_PERIOD = 4096;
-    int SLEEP_PERIOD = INIT_PERIOD;
+    BackoffSleeper bs;
 
     while (!aggHalt) {
         aggQueueLock.lock();
         if (aggregateQueue.empty()) {
             aggQueueLock.unlock();
-            usleep(SLEEP_PERIOD);
-            failedTrials++;
-            if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
-                failedTrials = 0;
-                SLEEP_PERIOD *= 2;
-            }
-        } else {
-            Chunk c = aggregateQueue.top();
+            bs.sleep();
+            continue;
+        }
 
-            if (convergeState != CONVERGE_STATE::EARLY) {
-                if (maxEpoch == 0) {
-                    nodeManager.readEpochUpdates();
-                    // maxEpoch = minEpoch + staleness;
-                    maxEpoch = nodeManager.maxEpoch;
-                    printLog(nodeId, "max epoch %u", maxEpoch);
+        Chunk c = aggregateQueue.top();
+        // check before aggregation
+        if (c.isFirstLayer()) {
+            // Converge state changes
+            if (convergeState != CONVERGE_STATE::EARLY && maxEpoch == 0 && staleness != UINT_MAX) {
+                // record the current max epoch of all nodes.
+                nodeManager.readEpochUpdates();
+
+                // maxEpoch = minEpoch + staleness;
+                maxEpoch = minEpoch + 1;
+                unsigned maxe = minEpoch + staleness;
+                if (nodesFinishedEpoch[maxe % (staleness + 1)] > 0) {
+                    maxEpoch = maxe;
                 }
+                maxe--;
+                while (maxe >= minEpoch) {
+                    if (nodesFinishedEpoch[maxe % (staleness + 1)] > 0) {
+                        maxEpoch = maxe + 1;
+                        break;
+                    }
+                    maxe--;
+                }
+                printLog(nodeId, "max epoch %u, curr epoch %u", maxEpoch, currEpoch);
             }
-
-            if (c.epoch == numEpochs) {
+            if (c.epoch == numEpochs ||
+                (convergeState != CONVERGE_STATE::EARLY && c.epoch == maxEpoch + 1)) {
                 while (!aggregateQueue.empty()) {
                     aggregateQueue.pop();
                     ++finishedChunks;
                 }
                 aggQueueLock.unlock();
                 if (finishedChunks == numLambdasForward) {
+                    if (convergeState != CONVERGE_STATE::EARLY) {
+                        extern std::string CONVERGE_STATE_STR[CONVERGE_STATE::NUM_STATE];
+                        printLog(nodeId, "STATE changes to %s at epoch %u",
+                            CONVERGE_STATE_STR[convergeState].c_str(), currEpoch);
+                    }
                     ++currEpoch;
                     aggHalt = true;
-                    return;
+                    break;
                 }
 
-                usleep(SLEEP_PERIOD);
-                failedTrials++;
-                if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
-                    failedTrials = 0;
-                    SLEEP_PERIOD *= 2;
-                }
-            } else if (c.isFirstLayer() && convergeState != CONVERGE_STATE::EARLY &&
-                       maxEpoch != 0 && c.epoch > maxEpoch) {
-                aggregateQueue.pop();
-                ++finishedChunks;
+                bs.sleep();
+                continue;
+
+            // There is a chunk but it is beyond the staleness bound
+            } else if (staleness != UINT_MAX && c.epoch > minEpoch + staleness) {
+                // Read incoming message buffer to see if there are
+                // updates to the minEpoch
+                nodeManager.readEpochUpdates();
                 aggQueueLock.unlock();
 
-                if (finishedChunks == numLambdasForward) {
-                    extern std::string CONVERGE_STATE_STR[CONVERGE_STATE::NUM_STATE];
-                    printLog(nodeId, "STATE changes to %s at epoch %u",
-                        CONVERGE_STATE_STR[convergeState].c_str(), currEpoch);
-
-                    ++currEpoch;
-                    ++numAsyncEpochs;
-                    aggHalt = true;
-
-                    break;
-                } else {
-                    continue;
-                }
-                // There is a chunk but it is beyond the staleness bound
-            } else if (staleness != UINT_MAX && c.layer == 0 &&
-                       c.dir == PROP_TYPE::FORWARD &&
-                       c.epoch > minEpoch + staleness) {
-
-                // Read incoming message buffer to see if there are
-                //  updates to the minEpoch
-                // if (convergeState == CONVERGE_STATE::EARLY) {
-                    nodeManager.readEpochUpdates();
-                    aggQueueLock.unlock();
-                // } else {
-                //     aggregateQueue.pop();
-                //     ++finishedChunks;
-                //     aggQueueLock.unlock();
-
-                //     if (finishedChunks == numLambdasForward) {
-                //         extern std::string CONVERGE_STATE_STR[CONVERGE_STATE::NUM_STATE];
-                //         printLog(nodeId, "STATE changes to %s at epoch %u",
-                //             CONVERGE_STATE_STR[convergeState].c_str(), currEpoch);
-
-                //         ++currEpoch;
-                //         ++numAsyncEpochs;
-                //         aggHalt = true;
-
-                //         break;
-                //     } else {
-                //         continue;
-                //     }
-                // }
-
-                usleep(SLEEP_PERIOD);
-                failedTrials++;
-                if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
-                    failedTrials = 0;
-                    SLEEP_PERIOD *= 2;
-                    trails++;
-                }
-
+                bs.sleep();
                 // Messages to check how often a node is blocking
-                if ((trails + 1) % 1000 == 0) {
+                if ((bs.trails + 1) % 1000 == 0) {
                     printLog(nodeId, "Blocking. MinE %u, Finished %u",
                         minEpoch,
                         nodesFinishedEpoch[minEpoch % (staleness + 1)]);
                 }
-                // There is a chunk to process that is within the bound
-            } else {
-                // printLog(nodeId, "AGGREGATE: Got %s", c.str().c_str());
-                aggregateQueue.pop();
-                if (c.layer == 0 && c.dir == PROP_TYPE::FORWARD &&
-                    c.epoch == currEpoch + 1) {
-                    ++currEpoch;
-                    ++numAsyncEpochs;
-                    printLog(nodeId, "STARTING epoch %u [%u]", currEpoch,
-                                c.epoch);
-                    aggQueueLock.unlock();
-                } else {
-                    aggQueueLock.unlock();
-                }
-
-                double startAgg = getTimer();
-                if (c.dir == PROP_TYPE::FORWARD) {
-                    aggregateChunk(c);
-                } else {
-                    aggregateBPChunk(c);
-                }
-                vecTimeAggregate[c.dir * numLayers + c.layer] +=
-                    getTimer() - startAgg;
-                resComm->NNCompute(c);
-
-                SLEEP_PERIOD = INIT_PERIOD;
-                failedTrials = 0;
-                trails = 0;
+                continue;
             }
         }
+
+        if (c.isFirstLayer() && c.epoch == currEpoch + 1) {
+            ++currEpoch;
+            ++numAsyncEpochs;
+            printLog(nodeId, "STARTING epoch %u [%u]", currEpoch,
+                        c.epoch);
+        }
+
+        // printLog(nodeId, "AGGREGATE: Got %s", c.str().c_str());
+        aggregateQueue.pop();
+        aggQueueLock.unlock();
+
+        double startAgg = getTimer();
+        if (c.dir == PROP_TYPE::FORWARD) {
+            aggregateChunk(c);
+        } else {
+            aggregateBPChunk(c);
+        }
+        vecTimeAggregate[c.dir * numLayers + c.layer] +=
+            getTimer() - startAgg;
+        resComm->NNCompute(c);
+
+        bs.reset();
     }
 }
 
 void Engine::scatterWorker(unsigned tid) {
     // printLog(nodeId, "SCATTER: Starting");
-    int failedTrials = 0;
-    const int INIT_PERIOD = 256;
-    const int MAX_PERIOD = 4096;
-    int SLEEP_PERIOD = INIT_PERIOD;
+    BackoffSleeper bs;
 
     // Check queue to see if partition ready
-    while (!commHalt) {
+    while (true) {
         scatQueueLock.lock();
         if (scatterQueue.empty()) {
             scatQueueLock.unlock();
-            // sleep with backoff
-            usleep(SLEEP_PERIOD);  // sleep a little and give up CPUs
-            failedTrials++;
-            if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
-                failedTrials = 0;
-                SLEEP_PERIOD *= 2;
+
+            if (commHalt) {
+                break;
             }
+            // sleep with backoff
+            bs.sleep();
         } else {
             Chunk c = scatterQueue.top();
             scatterQueue.pop();
@@ -1430,13 +1384,15 @@ void Engine::scatterWorker(unsigned tid) {
             aggQueueLock.unlock();
 
             delete[] batchedIds;
-            failedTrials = 0;
-            SLEEP_PERIOD = INIT_PERIOD;
+            bs.reset();
         }
     }
 
     // clean up remaining chunks
     scatQueueLock.lock();
+    if (!scatterQueue.empty()) {
+        printLog(nodeId, "CLEAN UP: Scatter queue is not empty!");
+    }
     while (!scatterQueue.empty()) {
         scatterQueue.pop();
     }
@@ -1477,7 +1433,7 @@ void Engine::ghostReceiver(unsigned tid) {
     FeatType *msgBuf = (FeatType *)new char[MAX_MSG_SIZE];
 
     // While loop, looping infinitely to get the next message.
-    while (!commHalt) {
+    while (true) {
         // No message in queue.
         if (!commManager.dataPullIn(&sender, &topic, msgBuf, MAX_MSG_SIZE)) {
             usleep(SLEEP_PERIOD);  // sleep a little and give up CPUs
@@ -1485,6 +1441,9 @@ void Engine::ghostReceiver(unsigned tid) {
             if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
                 failedTrials = 0;
                 SLEEP_PERIOD *= 2;
+            }
+            if (commHalt) {
+                break;
             }
             // Pull in the next message, and process this message.
         } else {
@@ -1541,12 +1500,11 @@ void Engine::ghostReceiver(unsigned tid) {
     }
 
     if (commManager.dataPullIn(&sender, &topic, msgBuf, MAX_MSG_SIZE)) {
-        printLog(nodeId, "\033[1;31m[ ERROR ]\033[0m Still messages in buffer");
+        printLog(nodeId, "CLEAN UP: Still messages in buffer");
+        // clean up
+        while (commManager.dataPullIn(&sender, &topic, msgBuf,
+                                        MAX_MSG_SIZE)) {};
     }
-    // clean up
-    while (commManager.dataPullIn(&sender, &topic, msgBuf,
-                                MAX_MSG_SIZE)) {};
-
     delete[] msgBuf;
 }
 
