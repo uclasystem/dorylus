@@ -30,12 +30,13 @@ add_subdirectory(nodemanager)
 add_subdirectory(engine)
 add_subdirectory(parallel)
 add_subdirectory(utils)
+add_subdirectory(graph)
 
 # Add the executable.
 aux_source_directory(. GRAPH_SRCS)
 add_executable(graphserver ${GRAPH_SRCS})
 
-target_link_libraries(graphserver PRIVATE commmanager edge vertex graph engine nodemanager threadpool utils common
+target_link_libraries(graphserver PRIVATE commmanager graph engine nodemanager threadpool utils common
                                   PUBLIC ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES}
                                         ${OBLIB} ${CBLIB})
 target_compile_options(graphserver PRIVATE "-Wall" "-Werror" "-Wno-reorder" "-MMD")
