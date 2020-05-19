@@ -197,7 +197,8 @@ case $1 in
         for var in "$@"
         do
             if [ $var = "--p" ] || [ $var = "--pipeline" ]; then
-                SYNC=0
+                # SYNC=0
+                SYNC=1
             elif [[ $var = --t=* ]] || [[ $var = --targetacc=* ]]; then
                 TARGET_ACC="${var#*=}"
             fi
