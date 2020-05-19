@@ -19,7 +19,7 @@
 #include <thread>
 #include <unordered_set>
 
-#include "dataloader.hpp"
+#include "../graph/dataloader.hpp"
 
 #ifdef _GPU_ENABLED_
 #include "../../common/utils.hpp"
