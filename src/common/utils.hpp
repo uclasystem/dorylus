@@ -52,6 +52,9 @@ static std::string CONVERGE_STATE_STR[CONVERGE_STATE::NUM_STATE] = {
 };
 
 #define ERR_HEADER_FIELD UINT_MAX
+#define NOT_FOUND_ERR_FIELD UINT_MAX
+#define DUPLICATE_REQ_ERR_FIELD UINT_MAX - 1
+#define CHUNK_DNE_ERR UINT_MAX - 2
 
 struct Chunk {
     unsigned localId;
@@ -141,6 +144,15 @@ template<class T>
 static inline void
 serialize(char *buf, unsigned offset, T val) {
     std::memcpy(buf + (offset * sizeof(T)), &val, sizeof(T));
+}
+
+template<class T>
+static inline T
+parse(const void* data, unsigned offset) {
+    char* buf = (char*)data;
+    T val;
+    std::memcpy(&val, buf + (offset * sizeof(T)), sizeof(T));
+    return val;
 }
 
 template<class T>

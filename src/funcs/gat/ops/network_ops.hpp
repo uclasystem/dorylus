@@ -17,10 +17,23 @@
 
 #define RESEND false
 
+struct EdgeTensor {
+    unsigned numLvids;
+    unsigned numRvids;
+    unsigned featDim;
+
+    unsigned* edgeMapping;
+    FeatType* chunkData;
+};
+
 int recvTensor(zmq::socket_t& socket, Matrix &mat);
+
 
 std::vector<Matrix> reqTensors(zmq::socket_t& socket, Chunk &chunk,
                             std::vector<std::string>& tensorRequests);
+
+EdgeTensor reqEdgeTensor(zmq::socket_t& socket, Chunk& chunk,
+                         std::string tensorName);
 
 int sendTensors(zmq::socket_t& socket, Chunk &chunk,
     std::vector<Matrix>& matrices, bool ack = false);

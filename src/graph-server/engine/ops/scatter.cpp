@@ -47,7 +47,7 @@ FeatType **Engine::scatter(FeatType *vtcsTensor, unsigned vtcsCnt,
 
     // FeatType **edgsTensor = srcVFeats2eFeats(vtcsTensor,
     // forwardGhostVerticesDataIn, vtcsCnt, featDim);
-    FeatType **edgsTensor = savedEdgeTensors[layer + 1]["fedge"];
+    FeatType **edgsTensor = savedEdgeTensors[layer]["fedge"];
     vtcsTensor = NULL;
 
     if (vecTimeScatter.size() < numLayers) {

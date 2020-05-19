@@ -10,7 +10,8 @@
 #include <mutex>
 #include <condition_variable>
 
-#include "graph.hpp"
+#include "../graph/graph.hpp"
+#include "../graph/dataloader.hpp"
 #include "../commmanager/commmanager.hpp"
 #include "../commmanager/weight_comm.hpp"
 #include "../commmanager/resource_comm.hpp"

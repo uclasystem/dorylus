@@ -19,8 +19,6 @@
 #include <thread>
 #include <unordered_set>
 
-#include "dataloader.hpp"
-
 #ifdef _GPU_ENABLED_
 #include "../../common/utils.hpp"
 #include "../GPU-Computation/comp_unit.cuh"
