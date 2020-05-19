@@ -53,6 +53,8 @@ public:
     void sendTensor(Matrix &tensor, Chunk &chunk, unsigned &more);
     int recvTensor(Chunk &chunk);
 
+    void sendTensor(std::string& name, FeatType** eTensor, Chunk& chunk, unsigned& more);
+
     void sendRefChunk(Matrix &srcMat, zmq::message_t& client_id, unsigned partId, bool forward);
 
     // timing info for profiling

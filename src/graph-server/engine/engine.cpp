@@ -218,8 +218,8 @@ void Engine::preallocateGAT() {
     // Store input tesnors
     savedNNTensors[0]["h"] =
         Matrix(vtxCnt, getFeatDim(0), forwardVerticesInitData);
-    savedNNTensors[0]["fg"] =
-        Matrix(graph.srcGhostCnt, getFeatDim(0), forwardGhostInitData);
+//    savedNNTensors[0]["fg"] =
+//        Matrix(graph.srcGhostCnt, getFeatDim(0), forwardGhostInitData);
     savedNNTensors[numLayers - 1]["lab"] =
         Matrix(vtxCnt, getFeatDim(numLayers), localVerticesLabels);
 
@@ -228,28 +228,26 @@ void Engine::preallocateGAT() {
         unsigned featDim = getFeatDim(layer);
         unsigned nextFeatDim = getFeatDim(layer + 1);
 
-        // GATHER TENSORS
+        FeatType *zTensor = new FeatType[vtxCnt * nextFeatDim];
+        savedNNTensors[layer]["z"] = Matrix(vtxCnt, nextFeatDim, zTensor);
+
+        FeatType *ghostTensor =
+            new FeatType[graph.srcGhostCnt * nextFeatDim];
+        savedNNTensors[layer]["fg"] =
+            Matrix(graph.srcGhostCnt, nextFeatDim, ghostTensor);
+
+        FeatType **eVFeatsTensor = srcVFeats2eFeats(
+            zTensor, ghostTensor, vtxCnt, nextFeatDim);
+        savedEdgeTensors[layer]["fedge"] = eVFeatsTensor;
+
         FeatType *ahTensor = new FeatType[vtxCnt * featDim];
-        savedNNTensors[layer]["ah"] = Matrix("ah", vtxCnt, featDim, ahTensor);
+        savedNNTensors[layer]["ah"] = Matrix("ah", vtxCnt, nextFeatDim, ahTensor);
 
-        // APPLY TENSORS
-        if (layer < numLayers - 1) {
-            FeatType *zTensor = new FeatType[vtxCnt * nextFeatDim];
-            FeatType *hTensor = new FeatType[vtxCnt * nextFeatDim];
-
-            savedNNTensors[layer]["z"] = Matrix(vtxCnt, nextFeatDim, zTensor);
-            savedNNTensors[layer]["h"] = Matrix(vtxCnt, nextFeatDim, hTensor);
-
-            // SCATTER TENSORS
-            FeatType *ghostTensor =
-                new FeatType[graph.srcGhostCnt * nextFeatDim];
-            savedNNTensors[layer + 1]["fg"] =
-                Matrix(graph.srcGhostCnt, nextFeatDim, ghostTensor);
-
-            FeatType **edgeTensor =
-                srcVFeats2eFeats(hTensor, ghostTensor, vtxCnt, nextFeatDim);
-            savedEdgeTensors[layer + 1]["fedge"] = edgeTensor;
-        }
+        FeatType *hTensor = new FeatType[vtxCnt * nextFeatDim];
+        savedNNTensors[layer]["h"] = Matrix(vtxCnt, nextFeatDim, hTensor);
+//            FeatType **edgeTensor =
+//                srcVFeats2eFeats(hTensor, ghostTensor, vtxCnt, nextFeatDim);
+//            savedEdgeTensors[layer + 1]["fedge"] = edgeTensor;
     }
 
     // backward tensor allocation
@@ -428,7 +426,7 @@ FeatType *Engine::runForward(unsigned epoch) {
 //    forwardGhostVerticesDataIn = forwardGhostInitData;
     // FeatType **eVFeatsTensor = srcVFeats2eFeats(inputTensor,
     // forwardGhostInitData, graph.localVtxCnt, getFeatDim(layer));
-    FeatType **eVFeatsTensor = savedEdgeTensors[0]["fedge"];
+    FeatType **eVFeatsTensor = NULL; //savedEdgeTensors[0]["fedge"];
     for (layer = 0; layer < numLayers; ++layer) {
         inputTensor =
             applyVertex(inputTensor, graph.localVtxCnt, getFeatDim(layer),
@@ -439,7 +437,6 @@ FeatType *Engine::runForward(unsigned epoch) {
                 applyEdge(NULL, graph.localInEdgeCnt, 0, eVFeatsTensor,
                           eVFeatsTensor + graph.localInEdgeCnt,
                           getFeatDim(layer + 1), getFeatDim(layer + 1));
-        }
         return inputTensor;
         inputTensor = aggregate(eVFeatsTensor, graph.localVtxCnt,
                                 getFeatDim(layer), AGGREGATOR::WSUM);

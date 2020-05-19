@@ -30,6 +30,42 @@ FeatType **Engine::applyEdge(EdgeType *edgsTensor, unsigned edgsCnt,
     FeatType **outputTensor = eSrcVtcsTensor;
     eSrcVtcsTensor = NULL;
 
+    if (mode == LAMBDA) {
+        double invTimer = getTimer();
+        const unsigned chunkSize =
+            (graph.localVtxCnt + numLambdasForward - 1) / numLambdasForward;
+        unsigned availLambdaId = 0;
+        while (availLambdaId < numLambdasForward) {
+            unsigned lowBound = availLambdaId * chunkSize;
+            unsigned upBound = std::min(lowBound + chunkSize, graph.localVtxCnt);
+            Chunk chunk{
+                availLambdaId,  nodeId * numLambdasForward + availLambdaId,
+                lowBound,       upBound,
+                layer,          PROP_TYPE::FORWARD,
+                currEpoch,      false};
+            resComm->NNCompute(chunk);
+
+            ++availLambdaId;
+        }
+
+        if (vecTimeLambdaInvoke.size() < numLayers) {
+            vecTimeLambdaInvoke.push_back(getTimer() - invTimer);
+        } else {
+            vecTimeLambdaInvoke[layer] += getTimer() - invTimer;
+        }
+        double waitTimer = getTimer();
+        resComm->NNSync();
+        if (vecTimeLambdaWait.size() < numLayers) {
+            vecTimeLambdaWait.push_back(getTimer() - waitTimer);
+        } else {
+            vecTimeLambdaWait[layer] += getTimer() - waitTimer;
+        }
+    }
+    // if GPU/CPU
+    else {
+
+    }
+
     if (vecTimeApplyEdg.size() < numLayers) {
         vecTimeApplyEdg.push_back(getTimer() - sttTimer);
     } else {
@@ -132,45 +168,3 @@ FeatType **Engine::dstVFeats2eFeats(FeatType *vtcsTensor, FeatType *ghostTensor,
 
     return eVtxFeatsBuf;
 }
-
-// FeatType *
-// Engine::eFeats2srcVFeats(FeatType **edgsTensor, unsigned edgsCnt, unsigned
-// featDim) {
-//     FeatType *vtcsTensor = new FeatType [graph.localVtxCnt];
-//     memset(vtcsTensor, 0, sizeof(FeatType) * graph.localVtxCnt);
-
-//     unsigned edgeItr = 0;
-//     for (unsigned lvid = 0; lvid < graph.localVtxCnt; ++lvid) {
-//         FeatType *vtxFeat = getVtxFeat(vtcsTensor, lvid, featDim);
-//         for (unsigned long long eid = graph.forwardAdj.columnPtrs[lvid]; eid
-//         < graph.forwardAdj.columnPtrs[lvid + 1]; ++eid) {
-//             for (unsigned j = 0; j < featDim; ++j) {
-//                 vtxFeat[j] += edgsTensor[edgeItr][j];
-//             }
-//             ++edgeItr;
-//         }
-//     }
-
-//     return vtcsTensor;
-// }
-
-// FeatType *
-// Engine::eFeats2dstVFeats(FeatType **edgsTensor, unsigned edgsCnt, unsigned
-// featDim) {
-//     FeatType *vtcsTensor = new FeatType [graph.localVtxCnt];
-//     memset(vtcsTensor, 0, sizeof(FeatType) * graph.localVtxCnt);
-
-//     unsigned edgeItr = 0;
-//     for (unsigned lvid = 0; lvid < graph.localVtxCnt; ++lvid) {
-//         FeatType *vtxFeat = getVtxFeat(vtcsTensor, lvid, featDim);
-//         for (unsigned long long eid = graph.backwardAdj.rowPtrs[lvid]; eid <
-//         graph.backwardAdj.rowPtrs[lvid + 1]; ++eid) {
-//             for (unsigned j = 0; j < featDim; ++j) {
-//                 vtxFeat[j] += edgsTensor[edgeItr][j];
-//             }
-//             ++edgeItr;
-//         }
-//     }
-
-//     return vtcsTensor;
-// }

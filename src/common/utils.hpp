@@ -152,6 +152,12 @@ parse(const char *buf, unsigned offset) {
 }
 
 static inline std::string
+parseName(const void* data) {
+    char* buf = (char*)data;
+    return std::string(buf + sizeof(unsigned));
+}
+
+static inline std::string
 parseName(const char* buf) {
     return std::string(buf + sizeof(unsigned));
 }

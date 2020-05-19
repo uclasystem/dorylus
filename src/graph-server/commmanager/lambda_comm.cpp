@@ -15,7 +15,7 @@ LambdaComm::LambdaComm(Engine *_engine) :
         numChunk(_engine->numLambdasForward),
         relaunchCnt(0),
         dport(_engine->dataserverPort), wport(_engine->weightserverPort),
-        savedNNTensors(_engine->savedNNTensors),
+        savedNNTensors(_engine->savedNNTensors), savedETensors(_engine->savedEdgeTensors),
         resLock(_engine->scatQueueLock), resQueue(_engine->scatterQueue),
         aggLock(_engine->aggQueueLock), aggQueue(_engine->aggregateQueue),
         ctx(2), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
@@ -181,11 +181,7 @@ void LambdaComm::relaunchLambda(const Chunk &chunk) {
 // LAMBDA INVOCATION AND RETURN FUNCTIONS
 void LambdaComm::invokeLambda(const Chunk &chunk) {
     Aws::Lambda::Model::InvokeRequest invReq;
-    if (chunk.vertex) { // vertex NN
-        invReq.SetFunctionName(LAMBDA_VTX_NN);
-    } else {
-        // TODO: set edge NN func name here
-    }
+    invReq.SetFunctionName(LAMBDA_VTX_NN);
     invReq.SetInvocationType(Aws::Lambda::Model::InvocationType::RequestResponse);
     invReq.SetLogType(Aws::Lambda::Model::LogType::Tail);
     std::shared_ptr<Aws::IOStream> payload = Aws::MakeShared<Aws::StringStream>("LambdaInvoke");

@@ -102,24 +102,50 @@ void LambdaWorker::sendTensors(zmq::message_t& client_id, Chunk &chunk) {
     if (exist) {
         workersocket.send(client_id, ZMQ_SNDMORE);
 
-        TensorMap& tensorMap = manager->savedNNTensors[chunk.layer];
-        unsigned more = 1;
-        while (more) {
-            zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
-            workersocket.recv(&tensorHeader);
+        if (chunk.vertex) {
+            TensorMap& tensorMap = manager->savedNNTensors[chunk.layer];
+            unsigned more = 1;
+            while (more) {
+                zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
+                workersocket.recv(&tensorHeader);
 
-            std::string name = parseName((char*)tensorHeader.data());
-            auto found = tensorMap.find(name);
-            if (found == tensorMap.end()) {
-                printLog(manager->nodeId, "Requested tensor '%s' not found", name.c_str());
-                zmq::message_t errorHeader(TENSOR_HDR_SIZE);
-                populateHeader(errorHeader.data(), ERR_HEADER_FIELD, name.c_str());
-                workersocket.send(client_id, ZMQ_SNDMORE);
-                workersocket.send(errorHeader);
-                return;
-            } else {
-                Matrix& reqMatrix = found->second;
-                sendTensor(reqMatrix, chunk, more);
+                std::string name = parseName((char*)tensorHeader.data());
+                auto found = tensorMap.find(name);
+                if (found == tensorMap.end()) {
+                    printLog(manager->nodeId, "Requested tensor '%s' not found", name.c_str());
+                    zmq::message_t errorHeader(TENSOR_HDR_SIZE);
+                    populateHeader(errorHeader.data(), ERR_HEADER_FIELD, name.c_str());
+                    workersocket.send(client_id, ZMQ_SNDMORE);
+                    workersocket.send(errorHeader);
+                    return;
+                } else {
+                    Matrix& reqMatrix = found->second;
+                    sendTensor(reqMatrix, chunk, more);
+                }
+            }
+        // JOHN: There is a lot of duplicate code here obviously. Would be nice to make
+        //  this generic for both edge and vertex tensors (but there are 9 days until deadline :( )
+        } else {
+            ETensorMap& eTensors = manager->savedETensors[chunk.layer];
+            unsigned more = 1;
+            while (more) {
+                zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
+                workersocket.recv(&tensorHeader);
+
+                std::string name = parseName(tensorHeader.data());
+                printLog(manager->nodeId, "Received request for %s:%u from chunk %u", name.c_str(), chunk.layer, chunk.localId);
+                auto found = eTensors.find(name);
+                if (found == eTensors.end()) {
+                    printLog(manager->nodeId, "Requested tensor '%s' not found", name.c_str());
+                    zmq::message_t errorHeader(TENSOR_HDR_SIZE);
+                    populateHeader(errorHeader.data(), ERR_HEADER_FIELD, name.c_str());
+                    workersocket.send(client_id, ZMQ_SNDMORE);
+                    workersocket.send(errorHeader);
+                    return;
+                } else {
+                    FeatType** reqEMat = found->second;
+                    sendTensor(name, reqEMat, chunk, more);
+                }
             }
         }
     } else {
@@ -266,6 +292,50 @@ void LambdaWorker::sendTensor(Matrix &tensor, Chunk &chunk, unsigned& more) {
         workersocket.send(tensorData);
     } else {
         workersocket.send(tensorData, ZMQ_SNDMORE);
+    }
+}
+
+// JOHN: A lot of information needed for this has to be accessed through engine
+//  which is ugly. TODO: Extend matrix class to EdgeMatrix so that all infomration
+//  can be encapsulated without accessing engine
+void LambdaWorker::sendTensor(std::string& name, FeatType** eTensor, Chunk& chunk, unsigned& more) {
+    if (chunk.dir == PROP_TYPE::FORWARD) {
+        std::set<unsigned> unique_ids;
+        unsigned remoteVidCnt = 0;
+        CSCMatrix<EdgeType>& csc = (manager->engine->graph).forwardAdj;
+
+        unsigned featDim = manager->engine->getFeatDim(chunk.layer + 1);
+        unsigned long long nChunkEdges = csc.columnPtrs[chunk.upBound] - csc.columnPtrs[chunk.lowBound];
+        //unsigned baseEid = csc.columnPtrs[chunk.lowBound];
+        printLog(manager->nodeId, "Chunk %u has %llu edges and featDim %u",
+                 chunk.localId, nChunkEdges, featDim);
+        //zmq::message_t edgeChunkMsg(nChunkEdges * featDim * 2 * 4);
+        //FeatType* edgeChunkData = (FeatType*) edgeChunkMsg.data();
+        printLog(manager->nodeId, "Edge feature chunk is %llu bytes", nChunkEdges * featDim * 8);
+        for (unsigned long long eid = csc.columnPtrs[chunk.lowBound];
+          eid < csc.columnPtrs[chunk.upBound]; ++eid) {
+            //unsigned offset = (eid - baseEid) * 2 * featDim;
+            unsigned srcVid = csc.rowIdxs[eid];
+            if (srcVid < chunk.lowBound || srcVid >= chunk.upBound) {
+                ++remoteVidCnt;
+                unique_ids.insert(srcVid);
+            }
+//            std::memcpy(edgeChunkData + offset, eTensor[eid], featDim * sizeof(FeatType));
+//            std::memcpy(edgeChunkData + offset + featDim, eTensor[eid + localInEdgeCnt], featDim * sizeof(FeatType));
+        }
+
+        printLog(manager->nodeId, "For chunk %u:\n\t\tLVIDs = %u, CHUNK EDGES %llu\n"
+                                  "\t\tTOTAL RVIDS %u, UNIQ RVIDS %u",
+                 chunk.localId, chunk.upBound - chunk.lowBound, nChunkEdges,
+                 remoteVidCnt, unique_ids.size());
+
+//        zmq::message_t responseHeader(TENSOR_HDR_SIZE);
+//        populateHeader(responseHeader.data(), OP::PULL, name.c_str(),
+//                       nChunkEdges, featDim * 2);
+//        workersocket.send(responseHeader, ZMQ_SNDMORE);
+//        workersocket.send(edgeChunkMsg);
+    } else {
+        // BACKPROP
     }
 }
 

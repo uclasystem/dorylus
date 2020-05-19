@@ -27,7 +27,7 @@ FeatType **Engine::scatter(FeatType *vtcsTensor, unsigned vtcsCnt,
     // Start data communicators.
     commHalt = false;
     recvCnt = 0;
-    forwardGhostVerticesDataOut = savedNNTensors[layer + 1]["fg"].getData();
+    forwardGhostVerticesDataOut = savedNNTensors[layer]["fg"].getData();
     if (forwardGhostVerticesDataOut == NULL) {
         printLog(nodeId, "Forward scatter buffer pointer is NULL");
     }

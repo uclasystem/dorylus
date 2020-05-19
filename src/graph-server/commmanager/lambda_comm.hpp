@@ -67,6 +67,7 @@ public:
     bool async;
     int outdateEpoch;
     std::vector<TensorMap>& savedNNTensors;
+    std::vector<ETensorMap>& savedETensors;
     Lock &resLock;
     ChunkQueue& resQueue;
     Lock &aggLock;
