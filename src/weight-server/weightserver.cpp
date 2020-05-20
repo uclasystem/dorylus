@@ -471,6 +471,11 @@ WeightServer::initWeights() {
             Matrix w = xavierInitializer(dims[u], dims[u + 1]);
             weightsStore[u]["w"] = WeightTensor(w, &wMtxs[u]["w"], &uMtxs[u]["w"], sync);
 
+            Matrix a_i = kaimingInitializer(dims[u + 1], 1);
+            weightsStore[u]["a_i"] = WeightTensor(a_i, &wMtxs[u]["a_i"], &uMtxs[u]["a_i"], sync);
+            Matrix a_j = kaimingInitializer(dims[u + 1], 1);
+            weightsStore[u]["a_j"] = WeightTensor(a_j, &wMtxs[u]["a_j"], &uMtxs[u]["a_j"], sync);
+
             // Initialize layer biases
             // TODO:
             //  Make this configurable based on whether or not a bias matrix is requested
@@ -482,8 +487,11 @@ WeightServer::initWeights() {
             }
         }
 
-        for (unsigned u = 0; u < weightsStore.size(); ++u)
+        for (unsigned u = 0; u < weightsStore.size(); ++u) {
             serverLog("Layer " + std::to_string(u) + " - Weights: " + weightsStore[u]["w"].currMat().shape());
+            serverLog("Layer " + std::to_string(u) + " - Alpha_i: " + weightsStore[u]["a_i"].currMat().shape());
+            serverLog("Layer " + std::to_string(u) + " - Alpha_j: " + weightsStore[u]["a_j"].currMat().shape());
+        }
     }
 
     distributeWeights();
@@ -592,15 +600,26 @@ WeightServer::distributeWeights() {
         publisher.send(header, ZMQ_SNDMORE);
 
         for (unsigned i = 0; i < weightsStore.size(); ++i) {
-            Matrix &weights = weightsStore[i]["w"].currMat();
+            Matrix& weights = weightsStore[i]["w"].currMat();
+            Matrix& alpha_i = weightsStore[i]["a_i"].currMat();
+            Matrix& alpha_j = weightsStore[i]["a_j"].currMat();
 
             zmq::message_t weightData(weights.getDataSize());
             std::memcpy((char *) weightData.data(), weights.getData(), weights.getDataSize());
+            zmq::message_t alphaiData(alpha_i.getDataSize());
+            std::memcpy((char*) alphaiData.data(), alpha_i.getData(), alpha_i.getDataSize());
+            zmq::message_t alphajData(alpha_j.getDataSize());
+            std::memcpy((char*) alphajData.data(), alpha_j.getData(), alpha_j.getDataSize());
 
-            if (i == weightsStore.size() - 1)
+            if (i == weightsStore.size() - 1) {
+                publisher.send(alphaiData, ZMQ_SNDMORE);
+                publisher.send(alphajData, ZMQ_SNDMORE);
                 publisher.send(weightData);
-            else
+            } else {
+                publisher.send(alphaiData, ZMQ_SNDMORE);
+                publisher.send(alphajData, ZMQ_SNDMORE);
                 publisher.send(weightData, ZMQ_SNDMORE);
+            }
         }
         pubMtx.unlock();
 
@@ -632,14 +651,27 @@ WeightServer::distributeWeights() {
         unsigned layer = 0;
         int more = 0;
         do {
+            zmq::message_t alphaiMsg;
+            zmq::message_t alphajMsg;
             zmq::message_t weightData;
+
+            subscriber.recv(&alphaiMsg);
+            subscriber.recv(&alphajMsg);
             subscriber.recv(&weightData);
 
-            char *matxData = new char[weightData.size()];
+            char* matxData = new char[weightData.size()];
+            char* alphaiData = new char[alphaiMsg.size()];
+            char* alphajData = new char[alphajMsg.size()];
             std::memcpy(matxData, weightData.data(), weightData.size());
+            std::memcpy(alphaiData, alphaiMsg.data(), alphaiMsg.size());
+            std::memcpy(alphajData, alphajMsg.data(), alphajMsg.size());
 
             Matrix w(dims[layer], dims[layer+1], (FeatType*)matxData);
+            Matrix a_i(alphaiMsg.size() / 4, 1, alphaiData);
+            Matrix a_j(alphajMsg.size() / 4, 1, alphajData);
             weightsStore[layer]["w"] = WeightTensor(w, &wMtxs[layer]["w"], &uMtxs[layer]["w"], sync);
+            weightsStore[layer]["a_i"] = WeightTensor(a_i, &wMtxs[layer]["a_i"], &uMtxs[layer]["a_i"], sync);
+            weightsStore[layer]["a_j"] = WeightTensor(a_j, &wMtxs[layer]["a_j"], &uMtxs[layer]["a_j"], sync);
             ++layer;
 
             size_t more_size = sizeof(more);
