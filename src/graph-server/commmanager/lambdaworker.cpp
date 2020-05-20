@@ -320,8 +320,7 @@ void LambdaWorker::sendEdgeTensor(zmq::message_t& client_id, Chunk& chunk) {
 void LambdaWorker::sendTensor(FeatType** eTensor, Chunk& chunk) {
     if (chunk.dir == PROP_TYPE::FORWARD) {
         unsigned startPrepEdgeData = timestamp_ms();
-        std::map<unsigned, unsigned> rvidMap;
-        std::set<unsigned> rvidSet;
+        std::unordered_map<unsigned, unsigned> rvidMap;
         CSCMatrix<EdgeType>& csc = (manager->engine->graph).forwardAdj;
         unsigned localInEdgeCnt = manager->engine->graph.localInEdgeCnt;
         unsigned numLvids = chunk.upBound - chunk.lowBound;
@@ -336,19 +335,19 @@ void LambdaWorker::sendTensor(FeatType** eTensor, Chunk& chunk) {
 
         unsigned* edgeMapping = new unsigned[numLvids + nChunkEdges];
         FeatType* edgeChunkData = new FeatType[maxFeatVecs * featDim];
+        rvidMap.reserve(nChunkEdges);
 
         // This pointer should point to the first row in the vtcs tensor for this chunk
         unsigned createMapStart = timestamp_ms();
         FeatType* lvidFeatPtr = eTensor[csc.columnPtrs[chunk.lowBound]];
         std::memcpy(edgeChunkData, lvidFeatPtr, numLvids * featDim * sizeof(FeatType));
         for (unsigned lvid = chunk.lowBound; lvid < chunk.upBound; ++lvid) {
-            edgeMapping[edgeMapIndex++] = lvid - baseEid;
+            edgeMapping[edgeMapIndex++] = csc.columnPtrs[lvid + 1] - csc.columnPtrs[lvid];
             for (unsigned long long eid = csc.columnPtrs[lvid];
               eid < csc.columnPtrs[lvid + 1]; ++eid) {
                 unsigned srcVid = csc.rowIdxs[eid];
                 // This vertex does not reside in this chunk
                 if (srcVid < chunk.lowBound || srcVid >= chunk.upBound) {
-                    rvidSet.insert(srcVid);
                     auto found = rvidMap.find(srcVid);
                     // The rvid has already been mapped
                     if (found == rvidMap.end()) {
@@ -356,7 +355,7 @@ void LambdaWorker::sendTensor(FeatType** eTensor, Chunk& chunk) {
                         edgeMapping[edgeMapIndex++] = nextRVid;
                         rvidMap[srcVid] = nextRVid++;
                     } else {
-                        edgeMapping[edgeMapIndex++] = rvidMap[srcVid];
+                        edgeMapping[edgeMapIndex++] = found->second;
                     }
                 // The vertex is inside this partition
                 } else {
@@ -367,12 +366,12 @@ void LambdaWorker::sendTensor(FeatType** eTensor, Chunk& chunk) {
         unsigned endPrepEdgeData = timestamp_ms();
 
         printLog(manager->nodeId, "Chunk %u:\n"
-                    "\t\tRVID SET SIZ: %u, Mapped RVids %u\n"
                     "\t\tedgeMapSize %u, edgeMapIndex %u\n"
+                    "\t\trvidMapSize %u, nextRvid %u\n"
                     "\t\tCREATING MAP TOOK %u ms\n"
-                    "\t\tPREPPING DATA TOOK %u ms",
-                    chunk.localId, rvidSet.size(), rvidMap.size(),
-                    edgeMapSize, edgeMapIndex,
+                    "\t\tPREPPING DATA TOOK %u ms\n",
+                    chunk.localId,
+                    edgeMapSize, edgeMapIndex, rvidMap.size(), nextRVid,
                     endPrepEdgeData - createMapStart, endPrepEdgeData - startPrepEdgeData);
 
         zmq::message_t responseHeader(TENSOR_HDR_SIZE);

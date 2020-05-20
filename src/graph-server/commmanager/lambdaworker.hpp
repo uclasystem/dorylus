@@ -18,6 +18,7 @@
 #include <vector>
 #include <zmq.hpp>
 #include <unistd.h>
+#include <unordered_map>
 
 #include "../utils/utils.hpp"
 #include "../parallel/lock.hpp"
