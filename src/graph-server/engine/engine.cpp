@@ -293,6 +293,7 @@ void Engine::run() {
                 printLog(nodeId, "Early stop at epoch %u", epoch);
                 break;
             }
+            nodeManager.barrier();
         }
     } else {
         // Run synchronous epoch to setup data
@@ -311,6 +312,7 @@ void Engine::run() {
             double epochTime = getTimer() - epochStart;
             printLog(nodeId, "Time for epoch %u: %f ms", 0, epochTime);
             addEpochTime(epochTime);
+            // YIFAN: going to run pipeline so no barrier here.
         }
 
         if (nodeId == 0) {
@@ -333,6 +335,7 @@ void Engine::run() {
                     printLog(nodeId, "Early stop at epoch %u", epoch);
                     break;
                 }
+                nodeManager.barrier();
             }
         }
         printLog(nodeId, "Finished, shutting down...");
