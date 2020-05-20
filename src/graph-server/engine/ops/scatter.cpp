@@ -290,7 +290,7 @@ void Engine::scatterWorker(unsigned tid) {
             scatterQueue.pop();
             scatQueueLock.unlock();
 
-            unsigned startScat = timestamp_ms();
+            // unsigned startScat = timestamp_ms();
 
             // printLog(nodeId, "SCATTER: Got %s", c.str().c_str());
 
@@ -354,12 +354,12 @@ void Engine::scatterWorker(unsigned tid) {
                                     featDim, c);
                 }
             }
-            unsigned endScat = timestamp_ms();
+            // unsigned endScat = timestamp_ms();
             // Add chunk into appropriate aggregate queue
             // printLog(nodeId, "SCATTER: Finished %s", c.str().c_str());
             aggQueueLock.lock();
             aggregateQueue.push(c);
-            vecTimeScatter[c.dir * numLayers + c.layer] += endScat - startScat;
+            // vecTimeScatter[c.dir * numLayers + c.layer] += endScat - startScat;
             aggQueueLock.unlock();
 
             delete[] batchedIds;

@@ -2,7 +2,6 @@ cmake_minimum_required(VERSION 3.5)
 
 aux_source_directory(ops OPS_SRC)
 add_library(engine "engine.cpp" "utils.cpp" ${OPS_SRC})
-    # "ops/aggregate.cpp" "ops/applyvertex.cpp" "ops/scatter.cpp" "ops/applyedge.cpp" "ops/fusedops.cpp")
 
 if(BACKEND STREQUAL gpu)
     enable_language(CUDA)

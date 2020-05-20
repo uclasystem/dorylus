@@ -46,7 +46,7 @@ FeatType *Engine::applyVertex(FeatType *vtcsTensor, unsigned vtcsCnt,
                 availLambdaId, nodeId * numLambdasForward + availLambdaId,
                 lowBound,      upBound,
                 layer,         PROP_TYPE::FORWARD,
-                currEpoch,     true};  // epoch is not useful in sync version
+                currEpoch,     true};
             resComm->NNCompute(chunk);
 
             availLambdaId++;
@@ -105,7 +105,7 @@ FeatType *Engine::applyVertexBackward(FeatType *gradTensor, unsigned vtcsCnt,
                 u,         nodeId * numLambdasForward + u,
                 lowBound,  upBound,
                 layer - 1, PROP_TYPE::BACKWARD,
-                currEpoch, true};  // epoch doesn't matter in sync version
+                currEpoch, true};
             resComm->NNCompute(chunk);
         }
         resComm->NNSync();

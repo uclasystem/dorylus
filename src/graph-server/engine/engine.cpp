@@ -364,11 +364,13 @@ FeatType *Engine::runForward(unsigned epoch) {
     // forwardGhostInitData, graph.localVtxCnt, getFeatDim(layer));
     FeatType **eVFeatsTensor = savedEdgeTensors[0]["fedge"];
     for (layer = 0; layer < numLayers; ++layer) {
-        inputTensor = aggregate(eVFeatsTensor, graph.localVtxCnt,
-                                getFeatDim(layer), AGGREGATOR::WSUM);
-        inputTensor =
-            applyVertex(inputTensor, graph.localVtxCnt, getFeatDim(layer),
-                        getFeatDim(layer + 1), layer == numLayers - 1);
+        // inputTensor = aggregate(eVFeatsTensor, graph.localInEdgeCnt,
+        //                         getFeatDim(layer), AGGREGATOR::WSUM);
+        // inputTensor =
+        //     applyVertex(inputTensor, graph.localVtxCnt, getFeatDim(layer),
+        //                 getFeatDim(layer + 1), layer == numLayers - 1);
+        inputTensor = fusedGatherApply(eVFeatsTensor, graph.localInEdgeCnt,
+                        getFeatDim(layer), getFeatDim(layer + 1), AGGREGATOR::WSUM);
         if (layer < numLayers - 1) {  // don't need scatter at the last layer.
             eVFeatsTensor =
                 scatter(inputTensor, graph.localVtxCnt, getFeatDim(layer + 1));
@@ -415,11 +417,13 @@ void Engine::runBackward(FeatType *initGradTensor) {
                                          eVGradTensor + graph.localOutEdgeCnt,
                                          eVGradTensor, getFeatDim(layer),
                                          getFeatDim(layer));
-        gradTensor = aggregateBackward(eVGradTensor, graph.localOutEdgeCnt,
-                                       getFeatDim(layer), AGGREGATOR::WSUM);
-        gradTensor =
-            applyVertexBackward(gradTensor, graph.localVtxCnt,
-                                getFeatDim(layer - 1), getFeatDim(layer));
+        // gradTensor = aggregateBackward(eVGradTensor, graph.localOutEdgeCnt,
+        //                                getFeatDim(layer), AGGREGATOR::WSUM);
+        // gradTensor =
+        //     applyVertexBackward(gradTensor, graph.localVtxCnt,
+        //                         getFeatDim(layer - 1), getFeatDim(layer));
+        gradTensor = fusedGatherApplyBackward(eVGradTensor, graph.localOutEdgeCnt,
+                        getFeatDim(layer - 1), getFeatDim(layer), AGGREGATOR::WSUM);
     }
 
     timeBackwardProcess += getTimer();

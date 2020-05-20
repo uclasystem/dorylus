@@ -76,8 +76,8 @@ public:
                         FeatType **eSrcVFeatsTensor, FeatType **eDstVFeatsTensor,
                         unsigned inFeatDim, unsigned outFeatDim);
 
-    FeatType* fusedGatherApply(FeatType *vtcsTensor, unsigned vtcsCnt,
-                            unsigned inFeatDim, unsigned outFeatDim);
+    FeatType* fusedGatherApply(FeatType **eVFeatsTensor, unsigned edgsCnt,
+                        unsigned inFeatDim, unsigned outFeatDim, AGGREGATOR aggregator);
     FeatType* fusedGAS(FeatType *vtcsTensor, unsigned vtcsCnt,
       unsigned inFeatDim, unsigned outFeatDim, bool scatter);
 
@@ -91,8 +91,8 @@ public:
                         FeatType **eSrcVGradTensor, FeatType **eDstVGradTensor,
                         unsigned inFeatDim, unsigned outFeatDim);
 
-    FeatType* fusedGatherApplyBackward(FeatType *gradTensor, unsigned vtcsCnt,
-                                       unsigned inFeatDim, unsigned outFeatDim);
+    FeatType* fusedGatherApplyBackward(FeatType **eVFeatsTensor, unsigned edgsCnt,
+                        unsigned inFeatDim, unsigned outFeatDim, AGGREGATOR aggregator);
     FeatType* fusedGASBackward(FeatType* gradTensor, unsigned vtcsCnt,
                         unsigned inFeatDim, unsigned outFeatDim,
                         bool aggregate, bool scatter);
