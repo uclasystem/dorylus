@@ -9,19 +9,26 @@
 // COMPUTATION
 /**
  *
- * Apply softmax to all rows of the input matrix (Currently overwrites the
- * input matrix data)
+ * Apply softmax to all rows of the input matrix
  *
  */
 Matrix softmax(Matrix& mat);
 
 /**
  *
- * Apply softmax to all rows of the input matrix (Currently overwrites the
- * input matrix data)
+ * Apply tanh to all rows of the input matrix
  *
  */
 Matrix tanh(Matrix& mat);
+
+
+/**
+ *
+ * Apply leaky ReLU to all rows of the input matrix
+ *
+ */
+Matrix leakyReLU(Matrix& mat);
+
 // END COMPUTATION
 
 // LOSS/ACCURACY

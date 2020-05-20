@@ -35,6 +35,17 @@ tanh(Matrix& mat) {
     return Matrix(mat.getRows(), mat.getCols(), activationData);
 }
 
+Matrix
+leakyReLU(Matrix& mat) {
+    float alpha = .01;
+    FeatType* result = new FeatType[mat.getNumElemts()];
+    FeatType* matxData = mat.getData();
+
+    for (unsigned i = 0; i < mat.getNumElemts(); ++i)
+        activationData[i] = (matxData[i] > 0) ? matxData[i] : alpha * matxData[i];
+
+    return Matrix(mat.getRows(), mat.getCols(), result);
+}
 
 unsigned
 getMaxIndex(FeatType* row, unsigned length) {

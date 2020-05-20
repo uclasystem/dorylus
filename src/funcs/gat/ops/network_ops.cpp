@@ -107,8 +107,6 @@ EdgeTensor reqEdgeTensor(zmq::socket_t& socket, Chunk& chunk, std::string tensor
 #define EXP_FACTOR 1.5
     unsigned sleepPeriod = INIT_PERIOD;
 
-    std::cerr << "Requesting edge tensor" << std::endl;
-
     zmq::message_t header(HEADER_SIZE);
     populateHeader(header.data(), OP::PULL, chunk);
     socket.send(header, ZMQ_SNDMORE);
@@ -116,21 +114,14 @@ EdgeTensor reqEdgeTensor(zmq::socket_t& socket, Chunk& chunk, std::string tensor
     zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
     populateHeader(tensorHeader.data(), chunk.localId, tensorName.c_str());
     socket.send(tensorHeader);
-    std::cerr << "Sent headers" << std::endl;
 
     zmq::message_t responseHeader(TENSOR_HDR_SIZE);
-    zmq::message_t edgeChunkInfoMsg;
-    zmq::message_t edgeChunkDataMsg;
 
-    std::cerr << "Waiting for data" << std::endl;
     EdgeTensor eTensor;
     socket.recv(&responseHeader);
     eTensor.numLvids = parse<unsigned>(responseHeader.data(), 0);
     eTensor.numRvids = parse<unsigned>(responseHeader.data(), 1);
     eTensor.featDim = parse<unsigned>(responseHeader.data(), 2);
-
-    std::cerr << "Parsed INFO: " << eTensor.numLvids << ", " << eTensor.numRvids
-              << ", " << eTensor.featDim << std::endl;
 
     if (eTensor.numLvids == NOT_FOUND_ERR_FIELD
       || eTensor.numLvids == DUPLICATE_REQ_ERR_FIELD
@@ -138,23 +129,22 @@ EdgeTensor reqEdgeTensor(zmq::socket_t& socket, Chunk& chunk, std::string tensor
         return eTensor;
     }
 
-    socket.recv(&edgeChunkInfoMsg);
-    socket.recv(&edgeChunkDataMsg);
-
-    std::cout << "RECVD DATA: " << edgeChunkInfoMsg.size()
-              << " " << edgeChunkDataMsg.size() << std::endl;
-
-//    std::cout << "Edge Mapping size: " << edgeChunkInfoMsg.size() << std::endl;
-//    std::cout << "Edge Data size: " << edgeChunkDataMsg.size() << std::endl;
-//
-//    if (edgeChunkInfoMsg.size() == 0 || edgeChunkDataMsg.size() == 0) {
-//        return EdgeTensor{0, 0, 0, NULL, NULL};
-//    }
-//
-//    eTensor.edgeMapping = new unsigned[edgeChunkInfoMsg.size() / 4];
-//    std::memcpy(eTensor.edgeMapping, edgeChunkInfoMsg.data(), edgeChunkInfoMsg.size());
-//    eTensor.chunkData = new FeatType[edgeChunkDataMsg.size() / 4];
-//    std::memcpy(eTensor.edgeMapping, edgeChunkDataMsg.data(), edgeChunkDataMsg.size());
+    // Scoping message reading because data can be quite large
+    // Force deallocate memory after it has been copied into eTensor
+    {
+        zmq::message_t edgeChunkInfoMsg;
+        socket.recv(&edgeChunkInfoMsg);
+        eTensor.edgeMapping = new unsigned[edgeChunkInfoMsg.size() / 4];
+        std::memcpy(eTensor.edgeMapping, edgeChunkInfoMsg.data(), edgeChunkInfoMsg.size());
+        std::cout << "EDGE CHUNK INFO SIZE " << edgeChunkInfoMsg.size() << std::endl;
+    }
+    {
+        zmq::message_t edgeChunkDataMsg;
+        socket.recv(&edgeChunkDataMsg);
+        eTensor.chunkData = new FeatType[edgeChunkDataMsg.size() / 4];
+        std::memcpy(eTensor.edgeMapping, edgeChunkDataMsg.data(), edgeChunkDataMsg.size());
+        std::cout << "EDGE CHUNK DATA SIZE " << edgeChunkDataMsg.size() << std::endl;
+    }
 
     return eTensor;
 #undef INIT_PERIOD
