@@ -80,8 +80,8 @@ apply_vertex(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &c
         }
     }
 
-    std::vector<std::string> weightRequests{"w"};
-    std::cerr << "Request w" << std::endl;
+    std::vector<std::string> weightRequests{"w", "a_i", "a_j"};
+    std::cerr << "Request w, a_i, a_j" << std::endl;
     std::vector<Matrix> weights = reqTensors(weights_socket, chunk, weightRequests);
     for (auto& W : weights) {
         if (W.empty()){
@@ -102,8 +102,21 @@ apply_vertex(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &c
     deleteMatrix(H);
     deleteMatrix(W);
 
+    Matrix& a_i = weights[1];
+    Matrix& a_j = weights[2];
+
+    Matrix az_i = Z.dot(a_i);
+    az_i.setName("az_i");
+    deleteMatrix(a_i);
+
+    Matrix az_j = Z.dot(a_j);
+    az_j.setName("az_j");
+    deleteMatrix(a_j);
+
     std::vector<Matrix> toSend;
     toSend.push_back(Z);
+    toSend.push_back(az_i);
+    toSend.push_back(az_j);
 
     std::cout << "Sending Z tensor" << std::endl;
     int ret = sendTensors(data_socket, chunk, toSend, true);

@@ -42,8 +42,6 @@ struct LabelsHeaderType {
 };
 
 
-enum GNN { GCN, GAT };
-
 
 /**
  *

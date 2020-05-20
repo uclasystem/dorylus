@@ -66,9 +66,6 @@ FeatType **Engine::scatterBackward(FeatType *gradTensor, unsigned vtcsCnt,
     // Start data communicators.
     commHalt = false;
     recvCnt = 0;
-    // YIFAN: Do we really need reset bkwdRecvCnt? Same question for all 3 reset
-    // JOHN: Yifan, no we don't. I implemented that when I suspected that
-    //  having a single counter for fwd and bkwd was the problem with pipelining
     backwardGhostVerticesDataOut = savedNNTensors[layer - 1]["bg"].getData();
     auto bgr_fp =
         std::bind(&Engine::backwardGhostReceiver, this, std::placeholders::_1);
@@ -112,7 +109,7 @@ void Engine::forwardGhostReceiver(unsigned tid) {
     int SLEEP_PERIOD = INIT_PERIOD;
     unsigned sender, topic;
     unsigned vtcsRecvd = 0;
-    unsigned featDim = getFeatDim(layer + 1);
+    unsigned featDim = 1;
     FeatType *msgBuf = (FeatType *)new char[MAX_MSG_SIZE];
 
     // While loop, looping infinitely to get the next message.

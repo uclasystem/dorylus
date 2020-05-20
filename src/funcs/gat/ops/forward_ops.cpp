@@ -42,7 +42,7 @@ leakyReLU(Matrix& mat) {
     FeatType* matxData = mat.getData();
 
     for (unsigned i = 0; i < mat.getNumElemts(); ++i)
-        activationData[i] = (matxData[i] > 0) ? matxData[i] : alpha * matxData[i];
+        result[i] = (matxData[i] > 0) ? matxData[i] : alpha * matxData[i];
 
     return Matrix(mat.getRows(), mat.getCols(), result);
 }

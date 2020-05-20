@@ -229,6 +229,12 @@ void Engine::preallocateGAT() {
         FeatType *zTensor = new FeatType[vtxCnt * nextFeatDim];
         savedNNTensors[layer]["z"] = Matrix(vtxCnt, nextFeatDim, zTensor);
 
+        // Technically not e_i because needs LeakyReLU
+        FeatType* az_iTensor = new FeatType[vtxCnt * 1];
+        FeatType* az_jTensor = new FeatType[vtxCnt * 1];
+        savedNNTensors[layer]["az_i"] = Matrix(vtxCnt, 1, az_iTensor);
+        savedNNTensors[layer]["az_j"] = Matrix(vtxCnt, 1, az_jTensor);
+
         FeatType *ghostTensor =
             new FeatType[graph.srcGhostCnt * nextFeatDim];
         savedNNTensors[layer]["fg"] =
@@ -345,8 +351,9 @@ void Engine::run() {
     if (!pipeline) {
         for (unsigned epoch = 0; epoch < numEpochs; ++epoch) {
             double epochStart = getTimer();
-            FeatType *predictData = runForward(epoch);
-            runBackward(predictData);
+            runForward(epoch);
+            //FeatType *predictData = runForward(epoch);
+            //runBackward(predictData);
 
             double epochTime = getTimer() - epochStart;
             printLog(nodeId, "Time for epoch %u: %f ms", epoch, epochTime);
@@ -430,7 +437,7 @@ FeatType *Engine::runForward(unsigned epoch) {
             applyVertex(inputTensor, graph.localVtxCnt, getFeatDim(layer),
                         getFeatDim(layer + 1), layer == numLayers - 1);
             eVFeatsTensor =
-                scatter(inputTensor, graph.localVtxCnt, getFeatDim(layer + 1));
+                scatter(inputTensor, graph.localVtxCnt, 1);
             eVFeatsTensor =
                 applyEdge(NULL, graph.localInEdgeCnt, 0, eVFeatsTensor,
                           eVFeatsTensor + graph.localInEdgeCnt,
