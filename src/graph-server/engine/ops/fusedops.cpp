@@ -20,6 +20,207 @@
 #include <unordered_set>
 
 
+FeatType *Engine::fusedGatherApply(FeatType **eVFeatsTensor, unsigned edgsCnt,
+                        unsigned inFeatDim, unsigned outFeatDim, AGGREGATOR aggregator) {
+    double sttTimer = getTimer();
+    if (mode != LAMBDA) {
+    // if (true) {
+        FeatType *outputTensor = NULL;
+        outputTensor = aggregate(eVFeatsTensor, edgsCnt, inFeatDim, aggregator);
+        outputTensor = applyVertex(outputTensor, graph.localVtxCnt, inFeatDim,
+                            outFeatDim, layer == numLayers - 1);
+        return outputTensor;
+    } else {
+        // AH
+        FeatType *outputTensor = savedNNTensors[layer]["ah"].getData();
+        FeatType *hTensor = NULL;
+        if (layer == 0) {
+            hTensor = savedNNTensors[layer]["x"].getData();
+        } else {
+            hTensor = savedNNTensors[layer - 1]["h"].getData();
+        }
+        currId = 0;
+
+        switch (aggregator) {
+            case (AGGREGATOR::WSUM): {
+                memcpy(outputTensor, hTensor,
+                    sizeof(FeatType) * graph.localVtxCnt * inFeatDim);
+
+                AggOPArgs args = {outputTensor, eVFeatsTensor, graph.localVtxCnt,
+                                edgsCnt, inFeatDim};
+                auto computeFn =
+                    std::bind(&Engine::gatherApplyCompute, this,
+                            std::placeholders::_1, std::placeholders::_2);
+
+                computePool->perform(computeFn, &args);
+                computePool->sync();
+                if (vecTimeAggregate.size() < numLayers) {
+                    vecTimeAggregate.push_back(getTimer() - sttTimer);
+                } else {
+                    vecTimeAggregate[layer] += getTimer() - sttTimer;
+                }
+                resComm->NNSync();
+                if (vecTimeApplyVtx.size() < numLayers) {
+                    vecTimeApplyVtx.push_back(getTimer() - sttTimer);
+                } else {
+                    vecTimeApplyVtx[layer] += getTimer() - sttTimer;
+                }
+
+                break;
+            }
+            default:
+                printLog(nodeId, "Invalid Aggregator %d.", aggregator);
+                break;
+        }
+
+        // return output of applyVertex
+        if (layer == numLayers - 1) {
+            outputTensor = savedNNTensors[layer]["grad"].getData();
+        } else {
+            outputTensor = savedNNTensors[layer]["h"].getData();
+        }
+        return outputTensor;
+    }
+    return NULL;
+}
+
+FeatType* Engine::fusedGatherApplyBackward(FeatType **eVGradTensor, unsigned edgsCnt,
+                        unsigned inFeatDim, unsigned outFeatDim, AGGREGATOR aggregator) {
+    double sttTimer = getTimer();
+    if (mode != LAMBDA) {
+    // if (true) {
+        FeatType *outputTensor = NULL;
+        outputTensor = aggregateBackward(eVGradTensor, edgsCnt, outFeatDim, aggregator);
+        outputTensor = applyVertexBackward(outputTensor, graph.localVtxCnt, inFeatDim,
+                            outFeatDim);
+        return outputTensor;
+    } else {
+        currId = 0;
+        FeatType *outputTensor = savedNNTensors[layer - 1]["aTg"].getData();
+        FeatType *gradTensor = savedNNTensors[layer]["grad"].getData();
+
+        switch (aggregator) {
+            case (AGGREGATOR::WSUM): {
+                memcpy(outputTensor, gradTensor,
+                    sizeof(FeatType) * graph.localVtxCnt * outFeatDim);
+
+                AggOPArgs args = {outputTensor, eVGradTensor, graph.localVtxCnt,
+                                edgsCnt, outFeatDim};
+                auto computeFn =
+                    std::bind(&Engine::gatherApplyBPCompute, this,
+                            std::placeholders::_1, std::placeholders::_2);
+                computePool->perform(computeFn, &args);
+                computePool->sync();
+                if (vecTimeAggregate.size() < 2 * numLayers) {
+                    for (unsigned i = vecTimeAggregate.size(); i < 2 * numLayers; i++) {
+                        vecTimeAggregate.push_back(0.0);
+                        vecTimeApplyVtx.push_back(0.0);
+                    }
+                }
+                vecTimeAggregate[numLayers + layer] += getTimer() - sttTimer;
+                resComm->NNSync();
+                vecTimeApplyVtx[numLayers + layer] += getTimer() - sttTimer;
+
+                break;
+            }
+            default:
+                printLog(nodeId, "Invalid aggregator %d", aggregator);
+                break;
+        }
+
+        // return output of applyVertex
+        outputTensor = savedNNTensors[layer - 1]["grad"].getData();
+        return outputTensor;
+    }
+    return NULL; // impossible to reach here
+}
+
+void Engine::gatherApplyCompute(unsigned tid, void *args) {
+    FeatType *outputTensor = ((AggOPArgs *)args)->outputTensor;
+    FeatType **eVFeatsTensor = ((AggOPArgs *)args)->inputTensor;
+    const unsigned vtcsCnt = ((AggOPArgs *)args)->vtcsCnt;
+    // const unsigned edgsCnt = ((AggOPArgs *) args)->edgsCnt;
+    const unsigned featDim = ((AggOPArgs *)args)->featDim;
+
+    const unsigned chunkSize = (vtcsCnt + numLambdasForward - 1) / numLambdasForward;
+    unsigned lvid = 0;
+
+    while (currId < vtcsCnt) {
+        lvid = __sync_fetch_and_add(&currId, chunkSize);
+        if (lvid < vtcsCnt) {
+            unsigned lend = std::min(lvid + chunkSize, vtcsCnt);
+            Chunk chunk = {lvid / chunkSize, nodeId * numLambdasForward + lvid / chunkSize,
+                lvid, lend, layer, PROP_TYPE::FORWARD, currEpoch, true};
+
+            // Read out data of the current layer of given vertex.
+            FeatType *currDataDst = getVtxFeat(outputTensor, lvid, featDim);
+            while(lvid < lend) {
+                // Apply normalization factor on the current data.
+                const EdgeType normFactor = graph.vtxDataVec[lvid];
+                for (unsigned j = 0; j < featDim; ++j) {
+                    currDataDst[j] *= normFactor;
+                }
+
+                // Aggregate from incoming neighbors.
+                for (unsigned long long eid = graph.forwardAdj.columnPtrs[lvid];
+                     eid < graph.forwardAdj.columnPtrs[lvid + 1]; ++eid) {
+                    EdgeType normFactor = graph.forwardAdj.values[eid];
+                    for (unsigned j = 0; j < featDim; ++j) {
+                        currDataDst[j] += eVFeatsTensor[eid][j] * normFactor;
+                    }
+                }
+
+                currDataDst += featDim;
+                lvid++;
+            }
+            resComm->NNCompute(chunk);
+        }
+    }
+}
+
+void Engine::gatherApplyBPCompute(unsigned tid, void *args) {
+    FeatType *nextGradTensor = ((AggOPArgs *)args)->outputTensor;
+    FeatType **eVGradTensor = ((AggOPArgs *)args)->inputTensor;
+    const unsigned vtcsCnt = ((AggOPArgs *)args)->vtcsCnt;
+    // const unsigned edgsCnt = ((AggOPArgs *) args)->edgsCnt;
+    const unsigned featDim = ((AggOPArgs *)args)->featDim;
+
+    const unsigned chunkSize = (vtcsCnt + numLambdasForward - 1) / numLambdasForward;
+    unsigned lvid = 0;
+
+    while (currId < vtcsCnt) {
+        lvid = __sync_fetch_and_add(&currId, chunkSize);
+        if (lvid < vtcsCnt) {
+            unsigned lend = std::min(lvid + chunkSize, graph.localVtxCnt);
+            Chunk chunk = {lvid / chunkSize, nodeId * numLambdasForward + lvid / chunkSize,
+                lvid, lend, layer - 1, PROP_TYPE::BACKWARD, currEpoch, true};
+
+            // Read out data of the current layer of given vertex.
+            FeatType *currDataDst = getVtxFeat(nextGradTensor, lvid, featDim);
+            while(lvid < lend) {
+                // Apply normalization factor on the current data.
+                const EdgeType normFactor = graph.vtxDataVec[lvid];
+                for (unsigned j = 0; j < featDim; ++j) {
+                    currDataDst[j] *= normFactor;
+                }
+
+                // Aggregate from outgoing neighbors.
+                for (unsigned long long eid = graph.backwardAdj.rowPtrs[lvid];
+                    eid < graph.backwardAdj.rowPtrs[lvid + 1]; ++eid) {
+                    EdgeType normFactor = graph.backwardAdj.values[eid];
+                    for (unsigned j = 0; j < featDim; ++j) {
+                        currDataDst[j] += eVGradTensor[eid][j] * normFactor;
+                    }
+                }
+
+                currDataDst += featDim;
+                lvid++;
+            }
+            resComm->NNCompute(chunk);
+        }
+    }
+}
+
 // FeatType *Engine::fusedGAS(FeatType *vtcsTensor, unsigned vtcsCnt,
 //                            unsigned inFeatDim, unsigned outFeatDim,
 //                            bool scatter) {

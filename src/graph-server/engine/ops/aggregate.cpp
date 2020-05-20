@@ -240,14 +240,14 @@ void Engine::aggregator(unsigned tid) {
         aggregateQueue.pop();
         aggQueueLock.unlock();
 
-        double startAgg = getTimer();
+        // double startAgg = getTimer();
         if (c.dir == PROP_TYPE::FORWARD) {
             aggregateChunk(c);
         } else {
             aggregateBPChunk(c);
         }
-        vecTimeAggregate[c.dir * numLayers + c.layer] +=
-            getTimer() - startAgg;
+        // vecTimeAggregate[c.dir * numLayers + c.layer] +=
+        //     getTimer() - startAgg;
         resComm->NNCompute(c);
 
         bs.reset();

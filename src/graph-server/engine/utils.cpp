@@ -274,7 +274,7 @@ void Engine::printEngineMetrics() {
         printLog(nodeId, "<EM>: Forward:  Time per stage:");
         for (unsigned i = 0; i < numLayers; ++i) {
             printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i,
-                    vecTimeAggregate[i] / (float)(numSyncEpochs * numLambdasForward));
+                    vecTimeAggregate[i] / (float)(avgDenom));
             printLog(nodeId, "<EM>    ApplyVertex   %2u  %.3lf ms", i,
                     vecTimeApplyVtx[i] / (float)avgDenom);
             printLog(nodeId, "<EM>    Scatter       %2u  %.3lf ms", i,
@@ -288,7 +288,7 @@ void Engine::printEngineMetrics() {
         printLog(nodeId, "<EM>: Backward: Time per stage:");
         for (unsigned i = numLayers; i < 2 * numLayers; i++) {
             printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i,
-                    vecTimeAggregate[i] / (float)(numSyncEpochs * numLambdasForward));
+                    vecTimeAggregate[i] / (float)(avgDenom));
             printLog(nodeId, "<EM>    ApplyVertex   %2u  %.3lf ms", i,
                     vecTimeApplyVtx[i] / (float)avgDenom);
             printLog(nodeId, "<EM>    Scatter       %2u  %.3lf ms", i,
