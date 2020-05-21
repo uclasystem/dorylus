@@ -131,6 +131,7 @@ void MessageService::sendWeightUpdate(Matrix &matrix, unsigned layer) {
             c.globalId=nodeId;
             c.localId=nodeId;
             sendTensors(*weightSocket, c, weightUpdates);
+            // delete[] matrix.getData();
         },
         matrix, layer);
 }
@@ -172,7 +173,7 @@ void MessageService::prefetchWeightsMatrix(unsigned totalLayers) {
 
         for (unsigned i = 0; i < weights.size(); ++i) {
             if (weights[i] != NULL) {
-                delete weights[i]->getData();
+                delete[] weights[i]->getData();
                 delete weights[i];
             }
         }

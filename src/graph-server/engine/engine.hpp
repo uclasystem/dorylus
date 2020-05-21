@@ -202,7 +202,7 @@ public:
     bool undirected = false;
 
     unsigned layer = 0;
-    unsigned currEpoch = -1;
+    unsigned currEpoch = -1u;
 
     // Timing stuff.
     double timeInit = 0.0;

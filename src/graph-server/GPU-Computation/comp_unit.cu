@@ -165,6 +165,9 @@ CuMatrix ComputingUnit::activateBackward(CuMatrix &x, CuMatrix &y,
                                          y.devPtr, yDesc, dy.devPtr, yDesc,
                                          x_.devPtr, &beta, yDesc, dx.devPtr);
     assert(CUDNN_STATUS_SUCCESS == error);
+    delete[] x_d;
+    delete[] dx_d;
+
     return dx;
 }
 

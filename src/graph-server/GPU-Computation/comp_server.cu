@@ -45,7 +45,6 @@ void ComputingServer::terminate() {
 }
 
 void ComputingServer::processForward(unsigned layer, bool lastLayer) {
-    if (layer == 0) CuMatrix::freeGPU();
 
     Matrix feats = (*gpuComm->tensorMap)["ah"];
     Matrix weight = msgService.getWeightMatrix(layer);
@@ -66,6 +65,7 @@ void ComputingServer::processForward(unsigned layer, bool lastLayer) {
         gradLoss(layer, cuPredictions);
     }
     delete[] z.getData();
+    CuMatrix::freeGPU();
 }
 
 void ComputingServer::processBackward(unsigned layer) {
@@ -94,6 +94,7 @@ void ComputingServer::gradLayer(unsigned layer) {
     }
 
     msgService.sendWeightUpdate(weightUpdates, layer);
+    CuMatrix::freeGPU();
 }
 
 void ComputingServer::gradLoss(unsigned layer, CuMatrix pred, bool report) {
