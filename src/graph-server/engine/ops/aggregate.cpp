@@ -19,6 +19,15 @@
 #include <thread>
 #include <unordered_set>
 
+#ifdef _GPU_ENABLED_
+// #include "../../../common/utils.hpp"
+#include "../../GPU-Computation/comp_unit.cuh"
+CuMatrix *NormAdjMatrixIn = NULL;
+CuMatrix *NormAdjMatrixOut = NULL;
+CuMatrix *Norms = NULL;
+ComputingUnit cu = ComputingUnit::getInstance();
+#endif
+
 
 FeatType *Engine::aggregate(FeatType **edgsTensor, unsigned edgsCnt,
                             unsigned featDim, AGGREGATOR aggregator) {

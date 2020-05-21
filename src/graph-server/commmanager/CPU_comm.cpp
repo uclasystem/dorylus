@@ -24,14 +24,14 @@ void CPUComm::NNCompute(Chunk &chunk) {
     tensorMap = &engine->savedNNTensors[chunk.layer];
 
     if (chunk.dir == PROP_TYPE::FORWARD) {
-        printLog(nodeId, "CPU FORWARD NN started");
+        // printLog(nodeId, "CPU FORWARD NN started");
         processForward(currLayer, currLayer == (totalLayers - 1));
     }
     if (chunk.dir == PROP_TYPE::BACKWARD) {
-        printLog(nodeId, "CPU BACKWARD NN started");
+        // printLog(nodeId, "CPU BACKWARD NN started");
         processBackward(currLayer);
     }
-    printLog(nodeId, "CPU NN Done");
+    // printLog(nodeId, "CPU NN Done");
 }
 
 void CPUComm::processForward(unsigned layer, bool lastLayer) {
@@ -50,7 +50,7 @@ void CPUComm::processForward(unsigned layer, bool lastLayer) {
 
         float acc, loss;
         getTrainStat(predictions, labels, acc, loss);
-        printLog(nodeId, "batch Acc: %f, Loss: %f\n", acc, loss);
+        printLog(nodeId, "batch Acc: %f, Loss: %f", acc, loss);
 
         Matrix d_output = hadamardSub(predictions, labels);
         Matrix weight = msgService.getWeightMatrix(layer);

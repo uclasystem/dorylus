@@ -15,14 +15,18 @@ void GPUComm::NNCompute(Chunk &chunk) {
     currLayer = chunk.layer;
     tensorMap = &engine->savedNNTensors[chunk.layer];
     if (chunk.dir == PROP_TYPE::FORWARD) {
-        printLog(nodeId, "GPU FORWARD NN started");
+        // printLog(nodeId, "GPU FORWARD NN started");
         comp_server->processForward(currLayer, currLayer == (totalLayers - 1));
     }
     if (chunk.dir == PROP_TYPE::BACKWARD) {
-        printLog(nodeId, "GPU BACKWARD NN started");
+        // printLog(nodeId, "GPU BACKWARD NN started");
         comp_server->processBackward(currLayer);
     }
-    printLog(nodeId, "GPU NN Done");
+    // printLog(nodeId, "GPU NN Done");
+}
+
+void GPUComm::prefetchWeights() {
+    comp_server->prefetchWeights();
 }
 
 void GPUComm::sendShutdownMessage() {

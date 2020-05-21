@@ -105,7 +105,7 @@ void ComputingServer::gradLoss(unsigned layer, CuMatrix pred, bool report) {
     if (report) {
         float acc, loss;
         cu.getTrainStat(pred, cuLabels, acc, loss);
-        printLog(nodeId, "batch Acc: %f, Loss: %f\n", acc, loss);
+        printLog(nodeId, "batch Acc: %f, Loss: %f", acc, loss);
     }
 
     Matrix weight = msgService.getWeightMatrix(layer);
