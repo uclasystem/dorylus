@@ -106,19 +106,20 @@ void WeightTensor::decRef(Chunk &chunk) {
     auto found = chunk2Ver.find(chunk);
     if (found != chunk2Ver.end()) {
         ver = chunk2Ver[chunk];
+        RefMat &rmat = ver2Mat[ver];
+        rmat.refCnt--;
+        if (ver < currVer && rmat.refCnt == 0) { // an old stashed weights is done. We can safely delete it.
+            rmat.mat.free();
+            ver2Mat.erase(ver);
+            // std::cerr << "weights " << ver << " done. deleted..." << std::endl;
+        }
+        chunk2Ver.erase(chunk);
+        // std::cerr << "PUT chunk " << chunk.layer << ":" << chunk.globalId << "-" << chunk.lowBound <<
+        //             " dir: " << chunk.dir << " -> ver: " << ver << std::endl;
     } else {
         std::cerr << "wrong chunk dec ref! " << chunk.str() << std::endl;
+        return;
     }
-    RefMat &rmat = ver2Mat[ver];
-    rmat.refCnt--;
-    if (ver < currVer && rmat.refCnt == 0) { // an old stashed weights is done. We can safely delete it.
-        rmat.mat.free();
-        ver2Mat.erase(ver);
-        // std::cerr << "weights " << ver << " done. deleted..." << std::endl;
-    }
-    chunk2Ver.erase(chunk);
-    // std::cerr << "PUT chunk " << chunk.layer << ":" << chunk.globalId << "-" << chunk.lowBound <<
-    //             " dir: " << chunk.dir << " -> ver: " << ver << std::endl;
 }
 
 void WeightTensor::stopUpdate() {
