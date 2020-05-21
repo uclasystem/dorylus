@@ -120,6 +120,7 @@ void LambdaWorker::sendTensors(zmq::message_t& client_id, Chunk &chunk) {
                 return;
             } else {
                 Matrix& reqMatrix = found->second;
+                printLog(manager->nodeId, "SUM %s:%u = %f", name.c_str(), chunk.layer, reqMatrix.sum());
                 sendTensor(reqMatrix, chunk, more);
             }
         }

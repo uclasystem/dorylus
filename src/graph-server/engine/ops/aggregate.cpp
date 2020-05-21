@@ -52,13 +52,12 @@ FeatType *Engine::aggregate(FeatType **edgsTensor, unsigned edgsCnt,
     currId = graph.localVtxCnt;
 #else
     // AH
-    FeatType *outputTensor = savedNNTensors[layer]["ah"].getData();
-    FeatType *hTensor = NULL;
-    if (layer == 0) {
-        hTensor = savedNNTensors[layer]["x"].getData();
-    } else {
-        hTensor = savedNNTensors[layer - 1]["h"].getData();
-    }
+    printLog(nodeId, "Getting tensor ah:%u\n\t\tSUM: %f", layer + 1, savedNNTensors[layer + 1]["ah"].sum());
+    FeatType *outputTensor = savedNNTensors[layer + 1]["ah"].getData();
+    FeatType* hTensor = savedNNTensors[layer]["z"].getData();
+    assert(hTensor != NULL);
+    assert(outputTensor != NULL);
+
     currId = 0;
 
     switch (aggregator) {
@@ -83,6 +82,7 @@ FeatType *Engine::aggregate(FeatType **edgsTensor, unsigned edgsCnt,
     }
 #endif  // _GPU_ENABLED_
 
+    printLog(nodeId, "Finished aggregation with ah:%u\n\t\tSUM: %f", layer + 1, savedNNTensors[layer + 1]["ah"].sum());
     if (vecTimeAggregate.size() < numLayers) {
         vecTimeAggregate.push_back(getTimer() - sttTimer);
     } else {

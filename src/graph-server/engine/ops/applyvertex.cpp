@@ -26,7 +26,7 @@ FeatType *Engine::applyVertex(FeatType *vtcsTensor, unsigned vtcsCnt,
     double sttTimer = getTimer();
     assert(vtcsCnt == graph.localVtxCnt);
 
-    FeatType* outputTensor = savedNNTensors[layer]["az_i"].getData();
+    FeatType* outputTensor = savedNNTensors[layer]["z"].getData();
 
     // Start a new lambda communication context.
     if (mode == LAMBDA) {

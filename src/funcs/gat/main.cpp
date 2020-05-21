@@ -71,13 +71,34 @@ invocation_response
 apply_vertex(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chunk) {
     std::cout << "FORWARD APPLY VERTEX LAYER " << chunk.layer << std::endl;
 
-    std::vector<std::string> dataRequests{"h"};
-    std::vector<Matrix> matrices = reqTensors(data_socket, chunk, dataRequests);
-    for (auto& M : matrices) {
-        if (M.empty()){
-            std::cout << M.name() << " is empty" << std::endl;
-            return constructResp(false, chunk.localId, M.name() + " is empty");
+    Matrix H;
+    std::vector<Matrix> matrices;
+    if (chunk.isFirstLayer()) {
+        // Request H directly
+        std::vector<std::string> dataRequests{"h"};
+        matrices = reqTensors(data_socket, chunk, dataRequests);
+        for (auto& M : matrices) {
+            if (M.empty()){
+                std::cout << M.name() << " is empty" << std::endl;
+                return constructResp(false, chunk.localId, M.name() + " is empty");
+            }
         }
+
+        H = matrices[0];
+    } else {
+        // Request AH and compute H as tanh(AH)
+        std::vector<std::string> dataRequests{"ah"};
+        matrices = reqTensors(data_socket, chunk, dataRequests);
+        for (auto& M : matrices) {
+            if (M.empty()){
+                std::cout << M.name() << " is empty" << std::endl;
+                return constructResp(false, chunk.localId, M.name() + " is empty");
+            }
+        }
+
+        Matrix& AH = matrices[0];
+        H = tanh(AH);
+        deleteMatrix(AH);
     }
 
     std::vector<std::string> weightRequests{"w", "a_i", "a_j"};
@@ -94,8 +115,9 @@ apply_vertex(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &c
         return constructResp(false, chunk.localId, "Got error message from server");
     }
 
-    Matrix& H = matrices[0];
     Matrix& W = weights[0];
+    std::cout << "SUM H: " << H.sum() << std::endl;
+    std::cout << "SUM W: " << W.sum() << std::endl;
 
     Matrix Z = H.dot(W);
     Z.setName("z");
@@ -105,6 +127,9 @@ apply_vertex(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &c
     Matrix& a_i = weights[1];
     Matrix& a_j = weights[2];
 
+    std::cout << "SUM a_i: " << a_i.sum() << std::endl;
+    std::cout << "SUM a_j: " << a_j.sum() << std::endl;
+
     Matrix az_i = Z.dot(a_i);
     az_i.setName("az_i");
     deleteMatrix(a_i);
@@ -112,6 +137,10 @@ apply_vertex(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &c
     Matrix az_j = Z.dot(a_j);
     az_j.setName("az_j");
     deleteMatrix(a_j);
+
+    std::cout << "SUM Z: " << Z.sum() << std::endl;
+    std::cout << "SUM az_i: " << az_i.sum() << std::endl;
+    std::cout << "SUM az_j: " << az_j.sum() << std::endl;
 
     std::vector<Matrix> toSend;
     toSend.push_back(Z);

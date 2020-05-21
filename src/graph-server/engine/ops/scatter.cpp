@@ -20,34 +20,33 @@
 #include <unordered_set>
 
 
-FeatType **Engine::scatter(FeatType *vtcsTensor, unsigned vtcsCnt,
+FeatType **Engine::scatter(FeatType *vtcsTensor, FeatType* ghostOutTensor, unsigned vtcsCnt,
                            unsigned featDim) {
     double sttTimer = getTimer();
 
     // Start data communicators.
     commHalt = false;
     recvCnt = 0;
-    forwardGhostVerticesDataOut = savedNNTensors[layer]["fg"].getData();
+    forwardGhostVerticesDataOut = ghostOutTensor;
     if (forwardGhostVerticesDataOut == NULL) {
         printLog(nodeId, "Forward scatter buffer pointer is NULL");
     }
     auto fgr_fp =
-        std::bind(&Engine::forwardGhostReceiver, this, std::placeholders::_1);
-    dataPool->perform(fgr_fp);
+        std::bind(&Engine::forwardGhostReceiver, this, std::placeholders::_1,
+            std::placeholders::_2);
+    dataPool->perform(fgr_fp, &featDim);
 
     sendForwardGhostUpdates(vtcsTensor, featDim);
 
-    // TODO: (YIFAN) we can optimize this to extend comm protocol. Mark the last
-    // packet sent so this node knows when to exit ghostCommunicator.
     nodeManager.barrier();
 
     commHalt = true;
     // Join all data communicators.
     dataPool->sync();
 
-    // FeatType **edgsTensor = srcVFeats2eFeats(vtcsTensor,
-    // forwardGhostVerticesDataIn, vtcsCnt, featDim);
-    FeatType **edgsTensor = savedEdgeTensors[layer]["fedge"];
+//    FeatType **edgsTensor = srcVFeats2eFeats(vtcsTensor,
+//        forwardGhostVerticesDataOut, vtcsCnt, featDim);
+    FeatType** edgsTensor = savedEdgeTensors[layer]["fedge"];
     vtcsTensor = NULL;
 
     if (vecTimeScatter.size() < numLayers) {
@@ -68,8 +67,9 @@ FeatType **Engine::scatterBackward(FeatType *gradTensor, unsigned vtcsCnt,
     recvCnt = 0;
     backwardGhostVerticesDataOut = savedNNTensors[layer - 1]["bg"].getData();
     auto bgr_fp =
-        std::bind(&Engine::backwardGhostReceiver, this, std::placeholders::_1);
-    dataPool->perform(bgr_fp);
+        std::bind(&Engine::backwardGhostReceiver, this, std::placeholders::_1,
+            std::placeholders::_2);
+    dataPool->perform(bgr_fp, &featDim);
 
     sendBackwardGhostGradients(gradTensor, featDim);
 
@@ -101,7 +101,7 @@ FeatType **Engine::scatterBackward(FeatType *gradTensor, unsigned vtcsCnt,
  * These threads loop asynchronously with computation workers.
  *
  */
-void Engine::forwardGhostReceiver(unsigned tid) {
+void Engine::forwardGhostReceiver(unsigned tid, void* _featDim) {
     // backoff sleep strategy to improve CPU utilization
     int failedTrials = 0;
     const int INIT_PERIOD = 256;
@@ -109,7 +109,8 @@ void Engine::forwardGhostReceiver(unsigned tid) {
     int SLEEP_PERIOD = INIT_PERIOD;
     unsigned sender, topic;
     unsigned vtcsRecvd = 0;
-    unsigned featDim = 1;
+    unsigned featDim = *(unsigned*) _featDim;
+    printLog(nodeId, "Ghost Receiver has feat dim %u", featDim);
     FeatType *msgBuf = (FeatType *)new char[MAX_MSG_SIZE];
 
     // While loop, looping infinitely to get the next message.
@@ -192,7 +193,7 @@ void Engine::forwardGhostReceiver(unsigned tid) {
  * These threads loop asynchronously with computation workers.
  *
  */
-void Engine::backwardGhostReceiver(unsigned tid) {
+void Engine::backwardGhostReceiver(unsigned tid, void* _featDim) {
     // backoff sleep strategy to improve CPU utilization
     int failedTrials = 0;
     const int INIT_PERIOD = 256;
@@ -200,7 +201,7 @@ void Engine::backwardGhostReceiver(unsigned tid) {
     int SLEEP_PERIOD = INIT_PERIOD;
     unsigned sender, topic;
     unsigned vtcsRecvd = 0;
-    unsigned featDim = getFeatDim(layer);
+    unsigned featDim = *(unsigned*)_featDim;
     FeatType *msgBuf = (FeatType *)new char[MAX_MSG_SIZE];
 
     // While loop, looping infinitely to get the next message.

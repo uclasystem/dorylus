@@ -59,6 +59,8 @@ public:
     FeatType *runForward(unsigned epoch);
     void runBackward(FeatType *backwardInitData);
 
+    FeatType* softmax(FeatType* inputTensor, unsigned rows, unsigned cols);
+
     void run();
     void runPipeline();
 
@@ -71,7 +73,7 @@ public:
                         unsigned featDim, AGGREGATOR aggregator);
     FeatType* applyVertex(FeatType *vtcsTensor, unsigned vtcsCnt,
                         unsigned inFeatDim, unsigned outFeatDim, bool lastLayer);
-    FeatType** scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
+    FeatType** scatter(FeatType *vtcsTensor, FeatType* ghostOutTensor, unsigned vtcsCnt, unsigned featDim);
     FeatType** applyEdge(EdgeType *edgsTensor, unsigned edgsCnt, unsigned eFeatDim,
                         FeatType **eSrcVFeatsTensor, FeatType **eDstVFeatsTensor,
                         unsigned inFeatDim, unsigned outFeatDim);
@@ -229,8 +231,8 @@ public:
     // Worker and communicator thread function.
     void forwardWorker(unsigned tid, void *args);
     void backwardWorker(unsigned tid, void *args);
-    void forwardGhostReceiver(unsigned tid);
-    void backwardGhostReceiver(unsigned tid);
+    void forwardGhostReceiver(unsigned tid, void* _featDim);
+    void backwardGhostReceiver(unsigned tid, void* _featDim);
 
     void aggregator(unsigned tid);
     void scatterWorker(unsigned tid);
