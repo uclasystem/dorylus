@@ -116,7 +116,7 @@ void Engine::forwardGhostReceiver(unsigned tid) {
     FeatType *msgBuf = (FeatType *)new char[MAX_MSG_SIZE];
 
     // While loop, looping infinitely to get the next message.
-    while (!commHalt) {
+    while (true) {
         // No message in queue.
         if (!commManager.dataPullIn(&sender, &topic, msgBuf, MAX_MSG_SIZE)) {
             // Computation workers done their work, so communicator goes to
@@ -207,7 +207,7 @@ void Engine::backwardGhostReceiver(unsigned tid) {
     FeatType *msgBuf = (FeatType *)new char[MAX_MSG_SIZE];
 
     // While loop, looping infinitely to get the next message.
-    while (!commHalt) {
+    while (true) {
         // No message in queue.
         if (!commManager.dataPullIn(&sender, &topic, msgBuf, MAX_MSG_SIZE)) {
             // Computation workers done their work, so communicator goes to
@@ -606,7 +606,6 @@ inline void Engine::backwardVerticesPushOut(unsigned receiver, unsigned totCnt,
     *(unsigned *)msgPtr = nodeId;
     msgPtr += sizeof(unsigned);
     *(unsigned *)msgPtr = totCnt;
-    ;
     msgPtr += sizeof(unsigned);
 
     for (unsigned i = 0; i < totCnt; ++i) {

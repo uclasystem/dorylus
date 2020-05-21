@@ -50,9 +50,6 @@ FeatType **Engine::applyEdgeBackward(EdgeType *edgsTensor, unsigned edgsCnt,
     FeatType **outputTensor = eDstVGradTensor;
     eDstVGradTensor = NULL;
 
-    for (auto &sTensor : edgNNSavedTensors[layer - 1]) {
-        delete[] sTensor.getData();
-    }
     if (vecTimeApplyEdg.size() < 2 * numLayers) {
         for (unsigned i = vecTimeApplyEdg.size(); i < 2 * numLayers; i++) {
             vecTimeApplyEdg.push_back(0.0);

@@ -18,7 +18,7 @@ LambdaComm::LambdaComm(Engine *_engine) :
         savedNNTensors(_engine->savedNNTensors),
         resLock(_engine->scatQueueLock), resQueue(_engine->scatterQueue),
         aggLock(_engine->aggQueueLock), aggQueue(_engine->aggregateQueue),
-        ctx(2), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
+        ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
         numListeners(4), engine(_engine) { // TODO: Decide numListeners.
     nodeId = _engine->nodeId;
 
@@ -265,7 +265,7 @@ void LambdaComm::setupAwsClient() {
     Aws::InitAPI(options);
     Aws::Client::ClientConfiguration clientConfig;
     clientConfig.requestTimeoutMs = 900000;
-    clientConfig.maxConnections = 1000;
+    clientConfig.maxConnections = 200;
     m_client = Aws::MakeShared<Aws::Lambda::LambdaClient>(ALLOCATION_TAG,
                                                           clientConfig);
 }

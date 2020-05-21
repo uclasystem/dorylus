@@ -60,7 +60,10 @@ public:
     void runBackward(FeatType *backwardInitData);
 
     void run();
-    void runPipeline();
+    void runAsyncPipeline();
+
+    void runForwardSyncPipeline(unsigned epoch);
+    void runBackwardSyncPipline();
 
     void output();
     void destroy();
@@ -78,8 +81,7 @@ public:
 
     FeatType* fusedGatherApply(FeatType **eVFeatsTensor, unsigned edgsCnt,
                         unsigned inFeatDim, unsigned outFeatDim, AGGREGATOR aggregator);
-    FeatType* fusedGAS(FeatType *vtcsTensor, unsigned vtcsCnt,
-      unsigned inFeatDim, unsigned outFeatDim, bool scatter);
+    void fusedGAS();
 
     FeatType* aggregateBackward(FeatType **eVFeatsTensor, unsigned edgsCnt,
                         unsigned featDim, AGGREGATOR aggregator);
@@ -103,7 +105,7 @@ public:
     unsigned getValFreq();
     unsigned getNodeId();
 
-    void setPipeline(bool _pipelie);
+    void setPipeline(bool _pipeline);
     void addEpochTime(double epochTime);
 
 // private:
@@ -121,9 +123,6 @@ public:
     // Config of number of features in each layer.
     std::vector<unsigned> layerConfig;
     unsigned numLayers = 0;
-
-    std::vector<Matrix> *vtxNNSavedTensors; // intermediate data for vertex NN backward computation.
-    std::vector<Matrix> *edgNNSavedTensors; // intermediate data for edge NN backward computation.
 
     std::vector< TensorMap > savedNNTensors;
     std::vector< ETensorMap > savedEdgeTensors;
@@ -161,6 +160,8 @@ public:
     int recvCnt = 0;
     Lock recvCntLock;
     Cond recvCntCond;
+    // YIFAN: for now this is for pipeline GAS only
+    int ghostVtcsRecvd;
 
     std::string datasetDir;
     std::string outFile;
@@ -225,16 +226,20 @@ public:
                  unsigned featDim);
 
     // Worker and communicator thread function.
-    void forwardWorker(unsigned tid, void *args);
-    void backwardWorker(unsigned tid, void *args);
     void forwardGhostReceiver(unsigned tid);
     void backwardGhostReceiver(unsigned tid);
 
     void aggregator(unsigned tid);
     void scatterWorker(unsigned tid);
+    void ghostReceiver(unsigned tid);
+
+    void gasAgger(unsigned tid);
+    void gasScter(unsigned tid);
+    void gasRcver(unsigned tid);
+
+
     void verticesPushOut(unsigned receiver, unsigned totCnt, unsigned *lvids,
       FeatType *inputTensor, unsigned featDim, Chunk& c);
-    void ghostReceiver(unsigned tid);
     void sendEpochUpdate(unsigned currEpoch);
 
     void aggregateCompute(unsigned tid, void *args);

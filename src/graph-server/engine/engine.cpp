@@ -76,12 +76,15 @@ void Engine::init(int argc, char *argv[]) {
         }
     }
     graph.init(graphFile);
-
     printGraphMetrics();
 
-    // save intermediate tensors during forward phase for backward computation.
-    vtxNNSavedTensors = new std::vector<Matrix>[numLayers];
-    edgNNSavedTensors = new std::vector<Matrix>[numLayers];
+    for (unsigned i = 0; i < 2 * numLayers; i++) {
+        vecTimeAggregate.push_back(0.0);
+        vecTimeApplyVtx.push_back(0.0);
+        vecTimeScatter.push_back(0.0);
+        vecTimeApplyEdg.push_back(0.0);
+        vecTimeLambdaWait.push_back(0.0);
+    }
 
     // Save intermediate tensors during forward phase for backward computation.
     savedTensors = new std::vector<Matrix>[numLayers];
@@ -280,11 +283,22 @@ void Engine::preallocateGCN() {
 
 
 void Engine::run() {
+    const bool syncPipelineFlag = true;
     if (!pipeline) {
         for (unsigned epoch = 0; epoch < numEpochs; ++epoch) {
             double epochStart = getTimer();
-            FeatType *predictData = runForward(epoch);
-            runBackward(predictData);
+            if (syncPipelineFlag) { // sync pipeline
+                runForwardSyncPipeline(epoch);
+                runBackwardSyncPipline();
+                // YIFAN: we set a barrier only for pipeline to make sure weight is
+                // updated. Seq-sync version usually won't go wrong since there are
+                // aggregation between two applyVertex, that time should be enough
+                // for weight update
+                nodeManager.barrier();
+            } else { // sync sequential
+                FeatType *predictData = runForward(epoch);
+                runBackward(predictData);
+            }
 
             double epochTime = getTimer() - epochStart;
             printLog(nodeId, "Time for epoch %u: %f ms", epoch, epochTime);
@@ -306,8 +320,15 @@ void Engine::run() {
         // Run one synchronous epoch
         {
             double epochStart = getTimer();
-            FeatType *tensor = runForward(0);
-            runBackward(tensor);
+            if (syncPipelineFlag) {
+                runForwardSyncPipeline(0);
+                runBackwardSyncPipline();
+                // YIFAN: going to run pipeline so no need for barrier here.
+                // nodeManager.barrier();
+            } else {
+                FeatType *tensor = runForward(0);
+                runBackward(tensor);
+            }
             double epochTime = getTimer() - epochStart;
             printLog(nodeId, "Time for epoch %u: %f ms", 0, epochTime);
             addEpochTime(epochTime);
@@ -318,13 +339,19 @@ void Engine::run() {
         }
         loadChunks();
         // Start pipeline
-        runPipeline();
+        runAsyncPipeline();
 
         if (convergeState != CONVERGE_STATE::DONE) {
             for (unsigned epoch = currEpoch; epoch < numEpochs; ++epoch) {
                 double epochStart = getTimer();
-                FeatType *predictData = runForward(epoch);
-                runBackward(predictData);
+                if (syncPipelineFlag) { // sync pipeline
+                    runForwardSyncPipeline(epoch);
+                    runBackwardSyncPipline();
+                    nodeManager.barrier();
+                } else { // sync sequential
+                    FeatType *predictData = runForward(epoch);
+                    runBackward(predictData);
+                }
 
                 double epochTime = getTimer() - epochStart;
                 printLog(nodeId, "Time for epoch %u: %f ms", epoch, epochTime);
@@ -436,7 +463,7 @@ void Engine::runBackward(FeatType *initGradTensor) {
 /**
  * Run the deep-pipeline version where all stages happen in parallel
  */
-void Engine::runPipeline() {
+void Engine::runAsyncPipeline() {
     double stt = getTimer();
 
     resComm->setAsync(true, currEpoch);
@@ -489,5 +516,46 @@ void Engine::runPipeline() {
 
     resComm->setAsync(false, currEpoch - 1);
 }
+
+void Engine::runForwardSyncPipeline(unsigned epoch) {
+    currEpoch = epoch;
+    // Make sure all nodes start running the forward-prop phase.
+    if (nodeId == 0) {
+        printLog(nodeId, "Epoch %u FORWARD starts...", epoch);
+    }
+
+    timeForwardProcess -= getTimer();
+
+    for (layer = 0; layer < numLayers; ++layer) {
+        fusedGAS();
+    }
+
+    timeForwardProcess += getTimer();
+    // if (nodeId == 0) {
+    //     printLog(nodeId, "Epoch %u FORWARD finishes at layer %u.", epoch, layer);
+    // }
+}
+
+void Engine::runBackwardSyncPipline() {
+    // if (nodeId == 0) {
+    //     printLog(nodeId, "Epoch %u BACKWARD starts...", currEpoch);
+    // }
+    timeBackwardProcess -= getTimer();
+
+    // Pure sequential, fused the first backward scatter with forward phase GAS
+    FeatType **eVGradTensor = NULL;
+    for (layer = numLayers - 1; layer > 0; --layer) {
+        eVGradTensor = savedEdgeTensors[layer - 1]["bedge"];
+        fusedGatherApplyBackward(eVGradTensor, graph.localOutEdgeCnt,
+            getFeatDim(layer - 1), getFeatDim(layer), AGGREGATOR::WSUM);
+    }
+
+    timeBackwardProcess += getTimer();
+    // if (nodeId == 0) {
+    //     printLog(nodeId, "Epoch %u BACKWARD finishes at layer %u.", currEpoch, layer);
+    // }
+    numSyncEpochs++;
+}
+
 
 Engine engine;

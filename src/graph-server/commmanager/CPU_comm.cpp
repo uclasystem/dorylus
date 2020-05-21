@@ -189,5 +189,5 @@ void CPUComm::getTrainStat(Matrix &preds, Matrix &labels, float &acc,
     }
     acc /= labels.getRows();
     loss /= labels.getRows();
-    printLog(nodeId, "batch loss %f, batch acc %f", loss, acc);
+    // printLog(nodeId, "batch loss %f, batch acc %f", loss, acc);
 }
