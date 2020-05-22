@@ -9,12 +9,12 @@
 WeightServer::WeightServer(std::string &wserverFile, std::string &myPrIpFile, std::string &gserverFile,
                            unsigned _listenerPort, unsigned _serverPort, unsigned _gport,
                            std::string &configFile, std::string &tmpFile,
-                           bool _sync, float _targetAcc)
+                           bool _sync, float _targetAcc, bool block)
     : ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), // gsocket(ctx, ZMQ_DEALER),
       listenerPort(_listenerPort), serverPort(_serverPort), gport(_gport),
       dataCtx(1), publisher(dataCtx, ZMQ_PUB), subscriber(dataCtx, ZMQ_SUB),
       numLambdas(0), term(false), adam(true), convergeState(CONVERGE_STATE::EARLY),
-      sync(_sync), targetAcc(_targetAcc) {
+      sync(_sync), targetAcc(_targetAcc), BLOCK(block) {
 
     std::vector<std::string> allNodeIps =
         parseNodeConfig(configFile, wserverFile, myPrIpFile, gserverFile);
@@ -107,6 +107,10 @@ void WeightServer::applyUpdate(unsigned layer, std::string& name) {
     pubMtx.unlock();
 
     std::string checkInfo = weightsStore[layer][name].tryApplyUpdate(adamOpt, layer);
+    if (checkInfo != "") {
+        __sync_fetch_and_add(&epoch, 1);
+        // lrDecay();
+    }
     if (nodeId == 0 && checkInfo != "") {
         serverLog(std::string("Local Layer ") + std::to_string(layer) + " " + checkInfo);
     }
@@ -139,7 +143,7 @@ void WeightServer::receiver() {
             parseTensorDescriber(describer, name, layer);
 
             FeatType *updateData = (FeatType *)updMsg.data();
-            std::string checkInfo;
+            std::string checkInfo("");
             if (sync) {
                 unsigned ghostUpdCnt = weightsStore[layer][name].ghostUpdate(updateData);
                 if (ghostUpdCnt == numNode - 1) {
@@ -147,6 +151,10 @@ void WeightServer::receiver() {
                 }
             } else {
                 checkInfo = weightsStore[layer][name].tryApplyUpdate(adamOpt, layer, updateData);
+            }
+            if (checkInfo != "") {
+                __sync_fetch_and_add(&epoch, 1);
+                // lrDecay();
             }
             if (nodeId == 0 && checkInfo != "") {
                 serverLog(std::string("Ghost Layer ") + std::to_string(layer) + " " + checkInfo);
@@ -257,7 +265,7 @@ void WeightServer::tryEarlyStop(AccLoss &accloss) {
 
     CONVERGE_STATE currState =
         (accloss.acc >= targetAcc)        ? CONVERGE_STATE::DONE : // early stop
-        (accloss.acc >= targetAcc - 0.03) ? CONVERGE_STATE::CLOSE: // switch to sync
+        // (accloss.acc >= targetAcc - 0.03) ? CONVERGE_STATE::CLOSE: // switch to sync
                                             CONVERGE_STATE::EARLY;
 
     // state transition can only be in order EARLY -> CLOSE -> DONE
@@ -274,6 +282,18 @@ void WeightServer::tryEarlyStop(AccLoss &accloss) {
             populateHeader(header.data(), OP::TERM, convergeState);
             gsockets[i].send(header);
         }
+    }
+}
+
+void WeightServer::lrDecay() {
+    if (epoch > (2 * 60) && epoch % ( 2 * LR_UPD_FREQ) == 0) {
+        LEARNING_RATE *= LR_DECAY;
+        if (adam) {
+            adamOpt->setLR(LEARNING_RATE);
+        }
+        char buf[50];
+        sprintf(buf, "Learning Rate decays to %.3f", LEARNING_RATE);
+        serverLog(buf);
     }
 }
 

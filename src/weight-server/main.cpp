@@ -8,7 +8,7 @@
 int
 main(int argc, char *argv[]) {
 // TODO: May need to start using an arg parser like boost.
-    assert(argc >= 11);
+    assert(argc >= 12);
     std::string wserverFile = argv[1];
     std::string myPrIpFile = argv[2];
     std::string gserverFile = argv[3];
@@ -20,11 +20,12 @@ main(int argc, char *argv[]) {
     std::string tmpFile = std::string(argv[8]) + "/output_";
     bool sync = (bool)(std::atoi(argv[9]));
     float targetAcc = std::atof(argv[10]);
+    bool block = (bool)(std::atoi(argv[11])); // for CPU/GPU
 
     WeightServer ws(wserverFile, myPrIpFile, gserverFile,
                     listenerPort, serverPort, gport,
                     configFile, tmpFile,
-                    sync, targetAcc);
+                    sync, targetAcc, block);
 
     // Run in a detached thread because so that we can wait
     // on a condition variable.

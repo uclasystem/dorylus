@@ -78,6 +78,11 @@ ServerWorker::work() {
 
 
 void ServerWorker::sendTensors(zmq::message_t& client_id, Chunk &chunk) {
+    if (ws.BLOCK && chunk.dir == PROP_TYPE::FORWARD && chunk.epoch * 2 > ws.epoch) {
+        while (chunk.epoch * 2 > ws.epoch) {
+            usleep(50 * 1000); // sleep 50ms
+        }
+    }
     unsigned more = 1;
     workersocket.send(client_id, ZMQ_SNDMORE);
     WeightTensorMap& weights = ws.weightsStore[chunk.layer];

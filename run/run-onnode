@@ -194,6 +194,7 @@ case $1 in
         # Minor options.
         SYNC=1
         TARGET_ACC="0.9"
+        BLOCK=0
         for var in "$@"
         do
             if [ $var = "--p" ] || [ $var = "--pipeline" ]; then
@@ -201,6 +202,10 @@ case $1 in
                 SYNC=1
             elif [[ $var = --t=* ]] || [[ $var = --targetacc=* ]]; then
                 TARGET_ACC="${var#*=}"
+            fi
+
+            if [ $var = "GPU" ] || [ $var = "gpu" ] || [ $var = "CPU" ] || [ $var = "cpu" ]; then
+                BLOCK=1
             fi
         done
 
@@ -237,7 +242,8 @@ case $1 in
             ${LAYERCONFIGFILE} \
             ${TMPFILEDIR} \
             ${SYNC} \
-            ${TARGET_ACC}"
+            ${TARGET_ACC} \
+            ${BLOCK}"
         dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ${DSH_COMMAND}"
 
         # Gather the output files.
