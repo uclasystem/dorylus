@@ -51,7 +51,7 @@ void CPUComm::processForward(unsigned layer, bool lastLayer) {
         float acc, loss;
         getTrainStat(predictions, labels, acc, loss);
         unsigned valsetSize = (unsigned)(predictions.getRows() * VAL_PORTION);
-        msgService.sendAccloss(acc, loss, valsetSize);
+        msgService.sendAccloss(acc, loss, predictions.getRows());
         printLog(nodeId, "batch Acc: %f, Loss: %f", acc / valsetSize, loss / valsetSize);
 
         maskout(predictions, labels);
