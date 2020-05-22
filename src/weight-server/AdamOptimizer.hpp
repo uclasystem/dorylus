@@ -16,7 +16,7 @@ class AdamOptimizer {
     AdamOptimizer(float lr, std::vector<unsigned> dims);
     void nextIteration();
     void update(unsigned layer, FeatType *weight, FeatType *gradient);
-
+    void setLR(float lr) { learning_rate = lr; };
 
   private:
     float learning_rate;

@@ -33,8 +33,10 @@
 #define IDENTITY_SIZE 4
 #define TENSOR_NAME_SIZE 8
 
+#define LR_UPD_FREQ 20
+#define LR_DECAY 0.7
+
 enum CTRL_MSG { MASTERUP, WORKERUP, INITDONE, DATA, ACK, ACCLOSS };
-const float LEARNING_RATE = 0.01;
 
 class ServerWorker;
 
@@ -49,10 +51,14 @@ public:
     WeightServer(std::string &wserverFile, std::string &myPrIpFile, std::string &gserverFile,
                  unsigned _listenerPort, unsigned _serverPort, unsigned _gport,
                  std::string &configFile, std::string &tmpFile,
-                 bool _sync, float _targetAcc);
+                 bool _sync, float _targetAcc, bool block);
     ~WeightServer();
 
     bool sync; // sync mode or async pipeline
+    bool BLOCK = false;
+    float LEARNING_RATE = 0.01;
+    unsigned epoch = 0;
+    void lrDecay();
 
     void applyUpdate(unsigned layer, std::string& name);
 
