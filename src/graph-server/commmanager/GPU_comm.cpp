@@ -29,10 +29,10 @@ void GPUComm::prefetchWeights() {
     comp_server->prefetchWeights();
 }
 
-void GPUComm::sendShutdownMessage() {
-    printLog(nodeId, "Send Shutdown Message\n");
-    // Send kill message.
-    comp_server->terminate();
-}
+// void GPUComm::sendShutdownMessage() {
+//     // printLog(nodeId, "Send Shutdown Message");
+//     // Send kill message.
+//     comp_server->terminate();
+// }
 
-GPUComm::~GPUComm() { sendShutdownMessage(); }
+GPUComm::~GPUComm() {}

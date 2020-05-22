@@ -50,7 +50,8 @@ void CPUComm::processForward(unsigned layer, bool lastLayer) {
 
         float acc, loss;
         getTrainStat(predictions, labels, acc, loss);
-        printLog(nodeId, "batch Acc: %f, Loss: %f", acc, loss);
+        msgService.sendAccloss(acc, loss, predictions.getRows());
+        // printLog(nodeId, "batch Acc: %f, Loss: %f", acc, loss);
 
         Matrix d_output = hadamardSub(predictions, labels);
         Matrix weight = msgService.getWeightMatrix(layer);
@@ -171,10 +172,10 @@ Matrix activateDerivative(Matrix &mat) {
     return Matrix(mat.getRows(), mat.getCols(), res);
 }
 
-void CPUComm::sendShutdownMessage() {
-    // Send kill message.
-    msgService.terminateWeightServers(weightServerAddrs);
-}
+// void CPUComm::sendShutdownMessage() {
+//     // Send kill message.
+//     msgService.terminateWeightServers(weightServerAddrs);
+// }
 
 void CPUComm::getTrainStat(Matrix &preds, Matrix &labels, float &acc,
                            float &loss) {

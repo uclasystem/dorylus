@@ -40,9 +40,9 @@ ComputingServer::ComputingServer(GPUComm *gpu_comm)
 }
 
 // Start listening to main thread
-void ComputingServer::terminate() {
-    msgService.terminateWeightServers(weightServerAddrs);
-}
+// void ComputingServer::terminate() {
+//     msgService.terminateWeightServers(weightServerAddrs);
+// }
 
 void ComputingServer::processForward(unsigned layer, bool lastLayer) {
 
@@ -106,6 +106,7 @@ void ComputingServer::gradLoss(unsigned layer, CuMatrix pred, bool report) {
     if (report) {
         float acc, loss;
         cu.getTrainStat(pred, cuLabels, acc, loss);
+        msgService.sendAccloss(acc, loss, pred.getRows());
         printLog(nodeId, "batch Acc: %f, Loss: %f", acc, loss);
     }
 

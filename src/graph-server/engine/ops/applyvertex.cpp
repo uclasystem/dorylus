@@ -25,7 +25,9 @@ FeatType *Engine::applyVertex(FeatType *vtcsTensor, unsigned vtcsCnt,
                               bool lastLayer) {
     // Weight fetch. Now we do prefetch for CPU/GPU in their own comm
     // For CPU/GPU only. For lambda this is a void function
-    // resComm->prefetchWeights();
+    // if (layer == 0) {
+    //     resComm->prefetchWeights();
+    // }
 
     double sttTimer = getTimer();
     assert(vtcsCnt == graph.localVtxCnt);

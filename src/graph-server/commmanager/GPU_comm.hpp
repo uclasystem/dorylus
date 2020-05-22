@@ -35,7 +35,7 @@ class GPUComm : public ResourceComm {
     void NNSync() {};
     void prefetchWeights();
 
-    void sendShutdownMessage();
+    // void sendShutdownMessage();
     friend class ComputingServer;
 
   private:

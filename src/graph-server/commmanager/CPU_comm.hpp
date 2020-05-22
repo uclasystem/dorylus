@@ -29,7 +29,7 @@ class CPUComm : public ResourceComm {
     void NNSync(){};
     void prefetchWeights() { msgService.prefetchWeightsMatrix(totalLayers); };
 
-    void sendShutdownMessage();
+    // void sendShutdownMessage();
 
     // compute related
     void processForward(unsigned layer, bool lastLayer);

@@ -33,7 +33,7 @@ FeatType *Engine::aggregate(FeatType **edgsTensor, unsigned edgsCnt,
                             unsigned featDim, AGGREGATOR aggregator) {
     double sttTimer = getTimer();
 #ifdef _GPU_ENABLED_
-    std::cout << "Start GPU aggregation forward\n";
+    // std::cout << "Start GPU aggregation forward\n";
 
     // Loading tensor in CPU
     FeatType *outputTensor = savedNNTensors[layer]["ah"].getData();
@@ -113,7 +113,7 @@ FeatType *Engine::aggregateBackward(FeatType **eVGradTensor, unsigned edgsCnt,
     FeatType *gradTensor = savedNNTensors[layer]["grad"].getData();
 
 #ifdef _GPU_ENABLED_
-    printf("Aggregate start back\n");
+    // printf("Aggregate start back\n");
     CuMatrix feat;
     feat.loadSpDense(gradTensor, savedNNTensors[layer - 1]["bg"].getData(),
                      graph.localVtxCnt, graph.dstGhostCnt, featDim);
@@ -122,7 +122,7 @@ FeatType *Engine::aggregateBackward(FeatType **eVGradTensor, unsigned edgsCnt,
             CuMatrix out = cu.aggregate(*NormAdjMatrixOut, feat, *Norms);
             out.setData(outputTensor);
             out.updateMatrixFromGPU();
-            std::cout << "Finish GPU aggregation\n";
+            // std::cout << "Finish GPU aggregation\n";
             break;
         }
         default:
