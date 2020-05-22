@@ -201,9 +201,7 @@ void MessageService::sendAccloss(float acc, float loss, unsigned vtcsCnt) {
         wSndThread.join();
     }
 
-    acc *= vtcsCnt;
-    loss *= vtcsCnt;
-    Chunk chunk = { nodeId, nodeId, 0, vtcsCnt - 1, 1, PROP_TYPE::FORWARD, epoch, true };
+    Chunk chunk = { nodeId, nodeId, 0, vtcsCnt, 1, PROP_TYPE::FORWARD, epoch, true };
 
     zmq::message_t header(HEADER_SIZE);
     populateHeader(header.data(), OP::EVAL, chunk);

@@ -198,19 +198,22 @@ void ComputingUnit::activate(CuMatrix &A) {
 unsigned ComputingUnit::checkAccuracy(CuMatrix &predictions, CuMatrix &labels) {
     unsigned rowSize = predictions.getCols();
 
-    thrust::device_vector<FeatType *> row_starts(predictions.getRows());
+    unsigned valStt = (unsigned)(predictions.getRows() * TRAIN_PORTION);
+    unsigned valSize = (unsigned)(predictions.getRows() * VAL_PORTION);
+
+    thrust::device_vector<FeatType *> row_starts(valSize);
     thrust::counting_iterator<int> idxfirst(0);
 
-    thrust::transform(idxfirst, idxfirst + predictions.getRows(),
+    thrust::transform(idxfirst, idxfirst + valSize,
                       row_starts.begin(),
-                      setRowStarts(predictions.devPtr, rowSize));
-    thrust::device_vector<unsigned> pred_results(predictions.getRows());
+                      setRowStarts(predictions.devPtr + valStt, rowSize));
+    thrust::device_vector<unsigned> pred_results(valSize);
     thrust::transform(row_starts.begin(), row_starts.end(),
                       pred_results.begin(), findRowMaximum(rowSize));
 
-    thrust::transform(idxfirst, idxfirst + predictions.getRows(),
-                      row_starts.begin(), setRowStarts(labels.devPtr, rowSize));
-    thrust::device_vector<unsigned> true_results(predictions.getRows());
+    thrust::transform(idxfirst, idxfirst + valSize,
+                      row_starts.begin(), setRowStarts(labels.devPtr + valStt, rowSize));
+    thrust::device_vector<unsigned> true_results(valSize);
     thrust::transform(pred_results.begin(), pred_results.end(),
                       row_starts.begin(), true_results.begin(),
                       isPredictCorrect(rowSize));
@@ -226,16 +229,21 @@ unsigned ComputingUnit::checkAccuracy(CuMatrix &predictions, CuMatrix &labels) {
 float ComputingUnit::checkLoss(CuMatrix &preds, CuMatrix &labels) {
     unsigned rowSize = preds.getCols();
 
+    // TODO: (YIFAN) cannot set valStt to non-zero value. Memorcy access error. Debug this
+    // unsigned valStt = (unsigned)(labels.getRows() * TRAIN_PORTION);
+    unsigned valStt = 0;
+    unsigned valSize = (unsigned)(labels.getRows() * VAL_PORTION);
+
     thrust::counting_iterator<int> idxfirst(0);
-    thrust::device_vector<FeatType *> row_starts(preds.getRows());
-    thrust::transform(idxfirst, idxfirst + preds.getRows(), row_starts.begin(),
-                      setRowStarts(labels.devPtr, rowSize));
-    thrust::device_vector<unsigned> true_labels(preds.getRows());
+    thrust::device_vector<FeatType *> row_starts(valSize);
+    thrust::transform(idxfirst, idxfirst + valSize, row_starts.begin(),
+                      setRowStarts(labels.devPtr + valStt, rowSize));
+    thrust::device_vector<unsigned> true_labels(valSize);
     thrust::transform(row_starts.begin(), row_starts.end(), true_labels.begin(),
                       findTrueLabel(rowSize));
-    thrust::transform(idxfirst, idxfirst + preds.getRows(), row_starts.begin(),
-                      setRowStarts(preds.devPtr, rowSize));
-    thrust::device_vector<FeatType> losses(preds.getRows());
+    thrust::transform(idxfirst, idxfirst + valSize, row_starts.begin(),
+                      setRowStarts(preds.devPtr + valStt, rowSize));
+    thrust::device_vector<FeatType> losses(valSize);
     thrust::transform(true_labels.begin(), true_labels.end(),
                       row_starts.begin(), losses.begin(), getLoss(rowSize));
     float totalLoss = thrust::reduce(losses.begin(), losses.end(), (float)0,
@@ -245,8 +253,9 @@ float ComputingUnit::checkLoss(CuMatrix &preds, CuMatrix &labels) {
 
 void ComputingUnit::getTrainStat(CuMatrix &preds, CuMatrix &labels, float &acc,
                                  float &loss) {
-    loss = checkLoss(preds, labels) / labels.getRows();
-    acc = checkAccuracy(preds, labels) / (float)labels.getRows();
+    // loss = checkLoss(preds, labels);
+    loss = 0.0;
+    acc = checkAccuracy(preds, labels);
     // float * l = new float [labels.getNumElemts()];
     // float * p = new float [preds.getNumElemts()];
     // preds.setData(p);
@@ -265,4 +274,14 @@ void ComputingUnit::getTrainStat(CuMatrix &preds, CuMatrix &labels, float &acc,
     // acc /= labels.getRows();
     // loss /= labels.getRows();
     // printLog(getNodeId(), "batch loss %f, batch acc %f", loss, acc);
+}
+
+void ComputingUnit::maskout(CuMatrix &preds, CuMatrix &labels) {
+    unsigned end = labels.getRows();
+    unsigned stt = (unsigned)(end * TRAIN_PORTION);
+
+    FeatType *predStt = preds.devPtr + stt;
+    FeatType *labelStt = labels.devPtr + stt;
+    cudaError_t ret = cudaMemcpy(predStt, labelStt, sizeof(FeatType) * (end - stt), cudaMemcpyDeviceToDevice);
+    cudaErrCheck(ret);
 }

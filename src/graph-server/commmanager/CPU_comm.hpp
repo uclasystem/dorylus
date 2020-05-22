@@ -36,6 +36,7 @@ class CPUComm : public ResourceComm {
     void processBackward(unsigned layer);
     void getTrainStat(Matrix &preds, Matrix &labels, float &acc,
                            float &loss);
+    void maskout(Matrix &preds, Matrix &labels);
    private:
     unsigned totalLayers;
     unsigned nodeId;

@@ -53,6 +53,10 @@ static std::string CONVERGE_STATE_STR[CONVERGE_STATE::NUM_STATE] = {
 
 #define ERR_HEADER_FIELD UINT_MAX
 
+#define TRAIN_PORTION 0.66
+#define VAL_PORTION 0.1
+#define TEST_PORTION 0.24
+
 struct Chunk {
     unsigned localId;
     unsigned globalId;

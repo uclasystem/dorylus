@@ -106,9 +106,12 @@ void ComputingServer::gradLoss(unsigned layer, CuMatrix pred, bool report) {
     if (report) {
         float acc, loss;
         cu.getTrainStat(pred, cuLabels, acc, loss);
-        msgService.sendAccloss(acc, loss, pred.getRows());
-        printLog(nodeId, "batch Acc: %f, Loss: %f", acc, loss);
+        unsigned valsetSize = (unsigned)(pred.getRows() * VAL_PORTION);
+        msgService.sendAccloss(acc, loss, valsetSize);
+        // printLog(nodeId, "valset size %u, total size %u", valsetSize, pred.getRows());
+        printLog(nodeId, "batch Acc: %f, Loss: %f", acc / valsetSize, loss / valsetSize);
     }
+    cu.maskout(pred, cuLabels);
 
     Matrix weight = msgService.getWeightMatrix(layer);
     CuMatrix cuWeights = cu.wrapMatrix(weight);

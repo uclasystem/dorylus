@@ -49,6 +49,7 @@ class ComputingUnit {
     float checkLoss(CuMatrix &preds, CuMatrix &labels);
     void getTrainStat(CuMatrix &preds, CuMatrix &labels, float &acc,
                       float &loss);
+    void maskout(CuMatrix &preds, CuMatrix &labels);
 
     cudnnHandle_t cudnnHandle;
     cusparseHandle_t spHandle;
