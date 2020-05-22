@@ -36,6 +36,7 @@ class ComputingServer {
     void gradLayer(unsigned layer);
     void gradLoss(unsigned layer, CuMatrix pred, bool report = true);
 
+    void prefetchWeights() { msgService.prefetchWeightsMatrix(totalLayers); };
     void terminate();
 
    private:

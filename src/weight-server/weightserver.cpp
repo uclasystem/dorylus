@@ -173,7 +173,8 @@ void WeightServer::receiver() {
 
 
 void WeightServer::updateLocalAccLoss(Chunk &chunk, float acc, float loss) {
-    AccLoss accloss(chunk.epoch, chunk.upBound - chunk.lowBound, acc, loss);
+    unsigned valSize = (unsigned)((chunk.upBound - chunk.lowBound) * VAL_PORTION);
+    AccLoss accloss(chunk.epoch, valSize, acc, loss);
     accMtx.lock();
     auto found = accLossTable.find(chunk.globalId);
     if (found != accLossTable.end()) {

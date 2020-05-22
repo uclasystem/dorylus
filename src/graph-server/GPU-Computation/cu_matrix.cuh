@@ -10,7 +10,7 @@
 #include <map>
 #include "../../common/matrix.hpp"
 #include "../../common/utils.hpp"
-#include "../engine/graph.hpp"
+#include "../graph/graph.hpp"
 #include "cusparse.h"
 
 

@@ -23,9 +23,14 @@
 FeatType *Engine::applyVertex(FeatType *vtcsTensor, unsigned vtcsCnt,
                               unsigned inFeatDim, unsigned outFeatDim,
                               bool lastLayer) {
+    // Weight fetch. Now we do prefetch for CPU/GPU in their own comm
+    // For CPU/GPU only. For lambda this is a void function
+    // if (layer == 0) {
+    //     resComm->prefetchWeights();
+    // }
+
     double sttTimer = getTimer();
     assert(vtcsCnt == graph.localVtxCnt);
-
     FeatType *outputTensor = NULL;
     if (lastLayer) {
         outputTensor = savedNNTensors[layer]["grad"].getData();

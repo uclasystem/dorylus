@@ -42,7 +42,7 @@ if(BACKEND STREQUAL gpu)
     enable_language(CUDA)
     FIND_PACKAGE(CUDA REQUIRED)
     include_directories(${CUDA_INCLUDE_DIRS})
-    add_library(gpu_comm SHARED "GPU_comm.cpp" )
+    add_library(gpu_comm SHARED "GPU_comm.cpp")
     set_property(TARGET gpu_comm PROPERTY POSITION_INDEPENDENT_CODE ON)
     target_link_libraries(gpu_comm PRIVATE utils MessageService ComputingServer
                                   PUBLIC  ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES})

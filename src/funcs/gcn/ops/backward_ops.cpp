@@ -11,3 +11,11 @@ tanhDerivative(Matrix& mat) {
     return Matrix(mat.getRows(), mat.getCols(), res);
 }
 
+void maskout(Matrix &preds, Matrix &labels) {
+    unsigned end = labels.getRows();
+    unsigned stt = (unsigned)(end * TRAIN_PORTION);
+
+    FeatType *predStt = preds.get(stt);
+    FeatType *labelStt = labels.get(stt);
+    memcpy(predStt, labelStt, sizeof(FeatType) * (end - stt));
+}

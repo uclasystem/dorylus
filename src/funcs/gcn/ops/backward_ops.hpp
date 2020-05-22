@@ -13,5 +13,6 @@
 Matrix tanhDerivative(Matrix& mat);
 // END COMPUTATION
 
+void maskout(Matrix &preds, Matrix &labels);
 
 #endif

@@ -33,8 +33,9 @@ class GPUComm : public ResourceComm {
     unsigned getRelaunchCnt() { return 0u; };
     void NNCompute(Chunk &chunk);
     void NNSync() {};
+    void prefetchWeights();
 
-    void sendShutdownMessage();
+    // void sendShutdownMessage();
     friend class ComputingServer;
 
   private:

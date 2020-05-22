@@ -21,8 +21,9 @@ class MessageService {
     void prefetchWeightsMatrix(unsigned totalLayers);
 
     void sendWeightUpdate(Matrix &matrix, unsigned layer);
-    void terminateWeightServers(std::vector<char *> &weightServerAddrs);
-    void sendShutdownMessage(zmq::socket_t &weightsocket);
+    void sendAccloss(float acc, float loss, unsigned vtcsCnt);
+    // void terminateWeightServers(std::vector<char *> &weightServerAddrs);
+    // void sendShutdownMessage(zmq::socket_t &weightsocket);
 
     Matrix getWeightMatrix(unsigned layer);
 

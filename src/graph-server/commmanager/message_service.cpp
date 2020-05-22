@@ -87,7 +87,7 @@ void sendTensors(zmq::socket_t &socket, Chunk &chunk,
     populateHeader(header.data(), OP::PUSH, chunk);
     socket.send(header, ZMQ_SNDMORE);
     for (uint32_t u = 0; u < matrices.size(); ++u) {
-        std::cout << "Sending tensor " << matrices[u].name() << std::endl;
+        // std::cout << "Sending tensor " << matrices[u].name() << std::endl;
         zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
         populateHeader(tensorHeader.data(), OP::PUSH,
                        matrices[u].name().c_str(), chunk.layer,
@@ -113,6 +113,11 @@ void sendTensors(zmq::socket_t &socket, Chunk &chunk,
 }
 
 //-----------------------Finish Copy------------------------
+MessageService::MessageService(unsigned wPort_, unsigned nodeId_)
+    : wctx(1), nodeId(nodeId_), wPort(wPort_), wsocktReady(0), confirm(5), epoch(-1) {
+    weightSocket = new zmq::socket_t(wctx, ZMQ_DEALER);
+}
+
 void MessageService::sendWeightUpdate(Matrix &matrix, unsigned layer) {
     if (wSndThread.joinable()) {
         wSndThread.join();
@@ -131,13 +136,9 @@ void MessageService::sendWeightUpdate(Matrix &matrix, unsigned layer) {
             c.globalId=nodeId;
             c.localId=nodeId;
             sendTensors(*weightSocket, c, weightUpdates);
+            // delete[] matrix.getData();
         },
         matrix, layer);
-}
-
-MessageService::MessageService(unsigned wPort_, unsigned nodeId_)
-    : wctx(1), nodeId(nodeId_), wPort(wPort_), wsocktReady(0), confirm(5), epoch(-1) {
-    weightSocket = new zmq::socket_t(wctx, ZMQ_DEALER);
 }
 
 void MessageService::setUpWeightSocket(char *addr) {
@@ -151,7 +152,7 @@ void MessageService::setUpWeightSocket(char *addr) {
     weightSocket->setsockopt(ZMQ_IDENTITY, identity, identity_len);
     char whost_port[50];
     sprintf(whost_port, "tcp://%s:%u", addr, wPort);
-    printf("connect to %s\n", whost_port);
+    // printf("connect to %s\n", whost_port);
     weightSocket->connect(whost_port);
 }
 
@@ -172,7 +173,7 @@ void MessageService::prefetchWeightsMatrix(unsigned totalLayers) {
 
         for (unsigned i = 0; i < weights.size(); ++i) {
             if (weights[i] != NULL) {
-                delete weights[i]->getData();
+                delete[] weights[i]->getData();
                 delete weights[i];
             }
         }
@@ -195,37 +196,56 @@ Matrix MessageService::getWeightMatrix(unsigned layer) {
     return *weights.at(layer);
 }
 
-
-void MessageService::terminateWeightServers(
-    std::vector<char *> &weightServerAddrs) {
-    if (nodeId != 0) return;
-
-    printLog(nodeId, "Node 0 is terminating all weightservers\n");
-
-    for (unsigned i = 0; i < weightServerAddrs.size(); ++i) {
-        zmq::socket_t ws = zmq::socket_t(wctx, ZMQ_DEALER);
-        char identity[] = "coordx";
-        ws.setsockopt(ZMQ_IDENTITY, identity, strlen(identity) + 1);
-        char whost_port[50];
-        sprintf(whost_port, "tcp://%s:%u", weightServerAddrs[i], wPort);
-        printLog(nodeId, "[GPU]Shutting Down Weightserver %s \n", whost_port);
-        ws.connect(whost_port);
-        sendShutdownMessage(ws);
-        ws.close();
+void MessageService::sendAccloss(float acc, float loss, unsigned vtcsCnt) {
+    if (wSndThread.joinable()) {
+        wSndThread.join();
     }
-}
 
-void MessageService::sendShutdownMessage(zmq::socket_t &weightsocket) {
+    Chunk chunk = { nodeId, nodeId, 0, vtcsCnt, 1, PROP_TYPE::FORWARD, epoch, true };
+
     zmq::message_t header(HEADER_SIZE);
-    populateHeader((char *)header.data(), OP::TERM);
-    weightSocket->send(header);
+    populateHeader(header.data(), OP::EVAL, chunk);
+    zmq::message_t payload(2 * sizeof(float));
+    char *bufPtr = (char *)payload.data();
+    memcpy(bufPtr, &acc, sizeof(float));
+    bufPtr += sizeof(float);
+    memcpy(bufPtr, &loss, sizeof(float));
 
-    // Set receive timeou 1s property on this weightsocket, in case that a
-    // weightserver is dying too quickly that it's confirm message it not sent
-    // from buffer yet. Using timeout here because shutdown is not a big deal.
-    weightSocket->setsockopt(ZMQ_RCVTIMEO, 1000);
-
-    // Wait for termination confirmed reply.
-    zmq::message_t confirm;
-    weightSocket->recv(&confirm);
+    weightSocket->send(header, ZMQ_SNDMORE);
+    weightSocket->send(payload);
 }
+
+
+// void MessageService::terminateWeightServers(
+//     std::vector<char *> &weightServerAddrs) {
+//     if (nodeId != 0) return;
+
+//     printLog(nodeId, "Node 0 is terminating all weightservers");
+
+//     for (unsigned i = 0; i < weightServerAddrs.size(); ++i) {
+//         zmq::socket_t ws = zmq::socket_t(wctx, ZMQ_DEALER);
+//         char identity[] = "coordx";
+//         ws.setsockopt(ZMQ_IDENTITY, identity, strlen(identity) + 1);
+//         char whost_port[50];
+//         sprintf(whost_port, "tcp://%s:%u", weightServerAddrs[i], wPort);
+//         printLog(nodeId, "[GPU]Shutting Down Weightserver %s", whost_port);
+//         ws.connect(whost_port);
+//         sendShutdownMessage(ws);
+//         ws.close();
+//     }
+// }
+
+// void MessageService::sendShutdownMessage(zmq::socket_t &weightsocket) {
+//     zmq::message_t header(HEADER_SIZE);
+//     populateHeader((char *)header.data(), OP::TERM);
+//     weightSocket->send(header);
+
+//     // Set receive timeou 1s property on this weightsocket, in case that a
+//     // weightserver is dying too quickly that it's confirm message it not sent
+//     // from buffer yet. Using timeout here because shutdown is not a big deal.
+//     weightSocket->setsockopt(ZMQ_RCVTIMEO, 1000);
+
+//     // Wait for termination confirmed reply.
+//     zmq::message_t confirm;
+//     weightSocket->recv(&confirm);
+// }

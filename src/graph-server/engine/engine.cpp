@@ -22,15 +22,12 @@
 #include "../graph/dataloader.hpp"
 
 #ifdef _GPU_ENABLED_
-#include "../../common/utils.hpp"
-#include "../GPU-Computation/comp_unit.cuh"
 #include "../commmanager/GPU_comm.hpp"
-static CuMatrix *NormAdjMatrixIn = NULL;
-static CuMatrix *NormAdjMatrixOut = NULL;
-static CuMatrix *Norms = NULL;
-static ComputingUnit cu = ComputingUnit::getInstance();
+extern CuMatrix *NormAdjMatrixIn;
+extern CuMatrix *NormAdjMatrixOut;
+extern CuMatrix *Norms;
+extern ComputingUnit cu;
 #endif
-
 #ifdef _CPU_ENABLED_
 #include "../commmanager/CPU_comm.hpp"
 #endif
@@ -290,15 +287,15 @@ void Engine::run() {
             if (syncPipelineFlag) { // sync pipeline
                 runForwardSyncPipeline(epoch);
                 runBackwardSyncPipline();
-                // YIFAN: we set a barrier only for pipeline to make sure weight is
-                // updated. Seq-sync version usually won't go wrong since there are
-                // aggregation between two applyVertex, that time should be enough
-                // for weight update
-                nodeManager.barrier();
             } else { // sync sequential
                 FeatType *predictData = runForward(epoch);
                 runBackward(predictData);
             }
+            // YIFAN: we set a barrier only for pipeline to make sure weight is
+            // updated. Seq-sync version usually won't go wrong since there are
+            // aggregation between two applyVertex, that time should be enough
+            // for weight update
+            nodeManager.barrier();
 
             double epochTime = getTimer() - epochStart;
             printLog(nodeId, "Time for epoch %u: %f ms", epoch, epochTime);
@@ -308,7 +305,7 @@ void Engine::run() {
                 break;
             }
         }
-    } else {
+    } else { // async pipeline. For lambda only
         // Run synchronous epoch to setup data
         savedNNTensors[0]["x"] =
             Matrix(graph.localVtxCnt, getFeatDim(0), forwardVerticesInitData);
@@ -323,12 +320,12 @@ void Engine::run() {
             if (syncPipelineFlag) {
                 runForwardSyncPipeline(0);
                 runBackwardSyncPipline();
-                // YIFAN: going to run pipeline so no need for barrier here.
-                // nodeManager.barrier();
             } else {
                 FeatType *tensor = runForward(0);
                 runBackward(tensor);
             }
+            // YIFAN: going to run pipeline so no need for barrier here.
+            // nodeManager.barrier();
             double epochTime = getTimer() - epochStart;
             printLog(nodeId, "Time for epoch %u: %f ms", 0, epochTime);
             addEpochTime(epochTime);

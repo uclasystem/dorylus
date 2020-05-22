@@ -24,14 +24,14 @@ void CPUComm::NNCompute(Chunk &chunk) {
     tensorMap = &engine->savedNNTensors[chunk.layer];
 
     if (chunk.dir == PROP_TYPE::FORWARD) {
-        printLog(nodeId, "CPU FORWARD NN started");
+        // printLog(nodeId, "CPU FORWARD NN started");
         processForward(currLayer, currLayer == (totalLayers - 1));
     }
     if (chunk.dir == PROP_TYPE::BACKWARD) {
-        printLog(nodeId, "CPU BACKWARD NN started");
+        // printLog(nodeId, "CPU BACKWARD NN started");
         processBackward(currLayer);
     }
-    printLog(nodeId, "CPU NN Done");
+    // printLog(nodeId, "CPU NN Done");
 }
 
 void CPUComm::processForward(unsigned layer, bool lastLayer) {
@@ -50,7 +50,11 @@ void CPUComm::processForward(unsigned layer, bool lastLayer) {
 
         float acc, loss;
         getTrainStat(predictions, labels, acc, loss);
-        printLog(nodeId, "batch Acc: %f, Loss: %f\n", acc, loss);
+        unsigned valsetSize = (unsigned)(predictions.getRows() * VAL_PORTION);
+        msgService.sendAccloss(acc, loss, valsetSize);
+        printLog(nodeId, "batch Acc: %f, Loss: %f", acc / valsetSize, loss / valsetSize);
+
+        maskout(predictions, labels);
 
         Matrix d_output = hadamardSub(predictions, labels);
         Matrix weight = msgService.getWeightMatrix(layer);
@@ -171,23 +175,32 @@ Matrix activateDerivative(Matrix &mat) {
     return Matrix(mat.getRows(), mat.getCols(), res);
 }
 
-void CPUComm::sendShutdownMessage() {
-    // Send kill message.
-    msgService.terminateWeightServers(weightServerAddrs);
-}
+// void CPUComm::sendShutdownMessage() {
+//     // Send kill message.
+//     msgService.terminateWeightServers(weightServerAddrs);
+// }
 
 void CPUComm::getTrainStat(Matrix &preds, Matrix &labels, float &acc,
                            float &loss) {
     acc = 0.0;
     loss = 0.0;
     unsigned featDim = labels.getCols();
-    for (unsigned i = 0; i < labels.getRows(); i++) {
+    unsigned valStt = (unsigned)(labels.getRows() * TRAIN_PORTION);
+    unsigned valEnd = valStt + (unsigned)(labels.getRows() * VAL_PORTION);
+    for (unsigned i = valStt; i < valEnd; i++) {
         FeatType *currLabel = labels.getData() + i * labels.getCols();
         FeatType *currPred = preds.getData() + i * labels.getCols();
         acc += currLabel[argmax(currPred, currPred + featDim)];
         loss -= std::log(currPred[argmax(currLabel, currLabel + featDim)]);
     }
-    acc /= labels.getRows();
-    loss /= labels.getRows();
     // printLog(nodeId, "batch loss %f, batch acc %f", loss, acc);
+}
+
+void CPUComm::maskout(Matrix &preds, Matrix &labels) {
+    unsigned end = labels.getRows();
+    unsigned stt = (unsigned)(end * TRAIN_PORTION);
+
+    FeatType *predStt = preds.get(stt);
+    FeatType *labelStt = labels.get(stt);
+    memcpy(predStt, labelStt, sizeof(FeatType) * (end - stt));
 }

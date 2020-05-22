@@ -40,12 +40,11 @@ ComputingServer::ComputingServer(GPUComm *gpu_comm)
 }
 
 // Start listening to main thread
-void ComputingServer::terminate() {
-    msgService.terminateWeightServers(weightServerAddrs);
-}
+// void ComputingServer::terminate() {
+//     msgService.terminateWeightServers(weightServerAddrs);
+// }
 
 void ComputingServer::processForward(unsigned layer, bool lastLayer) {
-    if (layer == 0) CuMatrix::freeGPU();
 
     Matrix feats = (*gpuComm->tensorMap)["ah"];
     Matrix weight = msgService.getWeightMatrix(layer);
@@ -66,6 +65,7 @@ void ComputingServer::processForward(unsigned layer, bool lastLayer) {
         gradLoss(layer, cuPredictions);
     }
     delete[] z.getData();
+    CuMatrix::freeGPU();
 }
 
 void ComputingServer::processBackward(unsigned layer) {
@@ -94,6 +94,7 @@ void ComputingServer::gradLayer(unsigned layer) {
     }
 
     msgService.sendWeightUpdate(weightUpdates, layer);
+    CuMatrix::freeGPU();
 }
 
 void ComputingServer::gradLoss(unsigned layer, CuMatrix pred, bool report) {
@@ -105,8 +106,12 @@ void ComputingServer::gradLoss(unsigned layer, CuMatrix pred, bool report) {
     if (report) {
         float acc, loss;
         cu.getTrainStat(pred, cuLabels, acc, loss);
-        printLog(nodeId, "batch Acc: %f, Loss: %f\n", acc, loss);
+        unsigned valsetSize = (unsigned)(pred.getRows() * VAL_PORTION);
+        msgService.sendAccloss(acc, loss, valsetSize);
+        // printLog(nodeId, "valset size %u, total size %u", valsetSize, pred.getRows());
+        printLog(nodeId, "batch Acc: %f, Loss: %f", acc / valsetSize, loss / valsetSize);
     }
+    cu.maskout(pred, cuLabels);
 
     Matrix weight = msgService.getWeightMatrix(layer);
     CuMatrix cuWeights = cu.wrapMatrix(weight);

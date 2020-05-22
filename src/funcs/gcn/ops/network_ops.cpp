@@ -142,11 +142,12 @@ int sendTensors(zmq::socket_t& socket, Chunk &chunk,
 void sendAccLoss(zmq::socket_t &dsocket, zmq::socket_t &wsocket, Matrix &predicts, Matrix &labels, Chunk &chunk) {
     float acc = 0.0;
     float loss = 0.0;
-    const unsigned vtcsCnt = chunk.upBound - chunk.lowBound;
     const unsigned featDim = labels.getCols();
+    const unsigned valStt = (unsigned)(predicts.getRows() * TRAIN_PORTION);
+    const unsigned valEnd = valStt + (unsigned)(predicts.getRows() * VAL_PORTION);
     FeatType *currLabel = labels.getData();
     FeatType *currPred = predicts.getData();
-    for (unsigned i = 0; i < vtcsCnt; i++) {
+    for (unsigned i = valStt; i < valEnd; i++) {
         acc += currLabel[argmax(currPred, currPred + featDim)];
         loss -= std::log(currPred[argmax(currLabel, currLabel + featDim)]);
 

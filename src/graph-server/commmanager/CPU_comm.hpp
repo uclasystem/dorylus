@@ -27,14 +27,16 @@ class CPUComm : public ResourceComm {
     unsigned getRelaunchCnt() { return 0u; };
     void NNCompute(Chunk &chunk);
     void NNSync(){};
+    void prefetchWeights() { msgService.prefetchWeightsMatrix(totalLayers); };
 
-    void sendShutdownMessage();
+    // void sendShutdownMessage();
 
     // compute related
     void processForward(unsigned layer, bool lastLayer);
     void processBackward(unsigned layer);
     void getTrainStat(Matrix &preds, Matrix &labels, float &acc,
                            float &loss);
+    void maskout(Matrix &preds, Matrix &labels);
    private:
     unsigned totalLayers;
     unsigned nodeId;
