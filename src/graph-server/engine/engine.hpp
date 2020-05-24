@@ -59,8 +59,6 @@ public:
     FeatType *runForward(unsigned epoch);
     void runBackward(FeatType *backwardInitData);
 
-    FeatType* softmax(FeatType* inputTensor, unsigned rows, unsigned cols);
-
     void run();
     void runPipeline();
 
@@ -87,7 +85,7 @@ public:
                         unsigned featDim, AGGREGATOR aggregator);
     FeatType* applyVertexBackward(FeatType *gradTensor, unsigned vtcsCnt,
                         unsigned inFeatDim, unsigned outFeatDim);
-    FeatType** scatterBackward(FeatType *gradTensor, unsigned vtcsCnt,
+    FeatType** scatterBackward(FeatType *gradTensor, FeatType* ghostOutTensor, unsigned vtcsCnt,
                                unsigned featDim);
     FeatType** applyEdgeBackward(EdgeType *edgsTensor, unsigned edgsCnt, unsigned eFeatDim,
                         FeatType **eSrcVGradTensor, FeatType **eDstVGradTensor,
@@ -98,6 +96,16 @@ public:
     FeatType* fusedGASBackward(FeatType* gradTensor, unsigned vtcsCnt,
                         unsigned inFeatDim, unsigned outFeatDim,
                         bool aggregate, bool scatter);
+
+    // TENSOR OPS
+    // NOTE: Implementing in engine for now but need to move
+    //  later
+    FeatType* softmax(FeatType* inputTensor, FeatType* result, unsigned rows, unsigned cols);
+    Matrix softmax_prime(FeatType* valuesTensor, FeatType* softmaxOutput, unsigned size);
+    Matrix sparse_dense_elemtwise_mult(CSCMatrix<EdgeType>& csc,
+      FeatType* sparseInputTensor, FeatType* denseInputTensor);
+    FeatType* leakyReLU(FeatType* matxData, unsigned vecSize);
+    FeatType leakyReLU(FeatType f);
 
     void makeBarrier();
 

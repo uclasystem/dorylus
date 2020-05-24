@@ -21,6 +21,7 @@ struct EdgeTensor {
     unsigned numLvids;
     unsigned numRvids;
     unsigned featDim;
+    unsigned numEdges;
 
     unsigned* edgeMapping;
     FeatType* chunkData;

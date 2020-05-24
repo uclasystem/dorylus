@@ -19,38 +19,6 @@
 #include <thread>
 #include <unordered_set>
 
-/**
- *
- * Compute leakyReLU for an array (overwrites data)
- *
- */
-FeatType* leakyReLU(FeatType* matxData, unsigned vecSize) {
-    float alpha = .01;
-    FeatType* result = new FeatType[vecSize];
-
-    for (unsigned i = 0; i < vecSize; ++i) {
-        result[i] = (matxData[i] > 0) ? matxData[i] : alpha * matxData[i];
-    }
-
-    return result;
-}
-
-/**
- *
- * Compute leakyReLU for a single value
- *
- */
-FeatType leakyReLU(FeatType f) {
-    float alpha = .01;
-    return (f > 0) ? f : alpha * f;
-}
-
-// NOTE TO SELF:
-// leakyReLU derivative:
-//          { if x > 0 : x
-// f'(x) =  {
-//          { else .01
-
 
 FeatType **Engine::applyEdge(EdgeType *edgsTensor, unsigned edgsCnt,
                              unsigned eFeatDim, FeatType **eSrcVtcsTensor,
@@ -65,16 +33,12 @@ FeatType **Engine::applyEdge(EdgeType *edgsTensor, unsigned edgsCnt,
     // NOTE: This should definitely be in resComm->NNComute() but since we are
     // doing everything locally and currently have no infrastructre for switching
     // b/w tensor on lambdas and CPUs I'm just going to do it here
-    Matrix& mataz_i = savedNNTensors[layer]["az_i"];
-    Matrix& mataz_j = savedNNTensors[layer]["az_j"];
-    Matrix& matfg_az = savedNNTensors[layer]["fg_az"];
-
-    printLog(nodeId, "SUMS %f, %f, %f",
-            mataz_i.sum(), mataz_j.sum(), matfg_az.sum());
-
     FeatType* az_i = savedNNTensors[layer]["az_i"].getData();
     FeatType* az_j = savedNNTensors[layer]["az_j"].getData();
     FeatType* fg_az = savedNNTensors[layer]["fg_az"].getData();
+
+    FeatType* lRlu = savedNNTensors[layer]["lRlu"].getData();
+    FeatType* eij = savedNNTensors[layer]["eij"].getData();
 
     // Compute unnormalized attention scores for all edges in this partition
     CSCMatrix<EdgeType>& csc = graph.forwardAdj;
@@ -86,22 +50,14 @@ FeatType **Engine::applyEdge(EdgeType *edgsTensor, unsigned edgsCnt,
             FeatType az_rvid = 0.0;
             if (rowId < graph.localVtxCnt) {
                 az_rvid = az_j[rowId];
-                if (az_rvid == 0.0) {
-                    printLog(nodeId, "Got 0.0 from LVID %u", rowId);
-                }
             } else {
                 az_rvid = fg_az[rowId - graph.localVtxCnt];
-                if (az_rvid == 0.0) {
-                    printLog(nodeId, "Got 0.0 from RVID %u", rowId);
-                }
             }
             // az_rvid should never be 0
-            if (az_rvid == 0.0) {
-                printLog(nodeId, "Got 0.0 from VID %u", rowId);
-            }
             assert(az_rvid != 0.0);
 
-            csc.values[eid] = leakyReLU(az_lvid + az_rvid);
+            lRlu[eid] = az_lvid + az_rvid;
+            eij[eid] = leakyReLU(lRlu[eid]);
         }
     }
 
@@ -112,51 +68,13 @@ FeatType **Engine::applyEdge(EdgeType *edgsTensor, unsigned edgsCnt,
         FeatType denom = 1e-20 + std::exp(reflexiveNorm);
         for (unsigned long long eid = csc.columnPtrs[lvid];
           eid < csc.columnPtrs[lvid + 1]; ++eid) {
-            denom += std::exp(csc.values[eid]);
+            denom += std::exp(eij[eid]);
         }
         for (unsigned long long eid = csc.columnPtrs[lvid];
           eid < csc.columnPtrs[lvid + 1]; ++eid) {
-            csc.values[eid] /= denom;
+            csc.values[eid] = eij[eid] / denom;
         }
-
-        graph.vtxDataVec[lvid] = reflexiveNorm / denom;
     }
-
-//    if (mode == LAMBDA) {
-//        double invTimer = getTimer();
-//        const unsigned chunkSize =
-//            (graph.localVtxCnt + numLambdasForward - 1) / numLambdasForward;
-//        unsigned availLambdaId = 0;
-//        while (availLambdaId < numLambdasForward) {
-//            unsigned lowBound = availLambdaId * chunkSize;
-//            unsigned upBound = std::min(lowBound + chunkSize, graph.localVtxCnt);
-//            Chunk chunk{
-//                availLambdaId,  nodeId * numLambdasForward + availLambdaId,
-//                lowBound,       upBound,
-//                layer,          PROP_TYPE::FORWARD,
-//                currEpoch,      false};
-//            resComm->NNCompute(chunk);
-//
-//            ++availLambdaId;
-//        }
-//
-//        if (vecTimeLambdaInvoke.size() < numLayers) {
-//            vecTimeLambdaInvoke.push_back(getTimer() - invTimer);
-//        } else {
-//            vecTimeLambdaInvoke[layer] += getTimer() - invTimer;
-//        }
-//        double waitTimer = getTimer();
-//        resComm->NNSync();
-//        if (vecTimeLambdaWait.size() < numLayers) {
-//            vecTimeLambdaWait.push_back(getTimer() - waitTimer);
-//        } else {
-//            vecTimeLambdaWait[layer] += getTimer() - waitTimer;
-//        }
-//    }
-    // if GPU/CPU
-//    else {
-//
-//    }
 
     if (vecTimeApplyEdg.size() < numLayers) {
         vecTimeApplyEdg.push_back(getTimer() - sttTimer);
@@ -168,7 +86,7 @@ FeatType **Engine::applyEdge(EdgeType *edgsTensor, unsigned edgsCnt,
 }
 
 
-FeatType **Engine::applyEdgeBackward(EdgeType *edgsTensor, unsigned edgsCnt,
+FeatType **Engine::applyEdgeBackward(FeatType* edgsTensor, unsigned edgsCnt,
                                      unsigned eFeatDim,
                                      FeatType **eSrcVGradTensor,
                                      FeatType **eDstVGradTensor,
@@ -178,9 +96,64 @@ FeatType **Engine::applyEdgeBackward(EdgeType *edgsTensor, unsigned edgsCnt,
     FeatType **outputTensor = eDstVGradTensor;
     eDstVGradTensor = NULL;
 
-    for (auto &sTensor : edgNNSavedTensors[layer - 1]) {
-        delete[] sTensor.getData();
+    if (mode == LAMBDA) {
+        double invTimer = getTimer();
+        const unsigned chunkSize =
+            (graph.localVtxCnt + numLambdasForward - 1) / numLambdasForward;
+        unsigned availLambdaId = 0;
+        while (availLambdaId < numLambdasForward) {
+            unsigned lowBound = availLambdaId * chunkSize;
+            unsigned upBound = std::min(lowBound + chunkSize, graph.localVtxCnt);
+            Chunk chunk{
+                availLambdaId,  nodeId * numLambdasForward + availLambdaId,
+                lowBound,       upBound,
+                layer,          PROP_TYPE::BACKWARD,
+                currEpoch,      false};
+            resComm->NNCompute(chunk);
+
+            ++availLambdaId;
+        }
+
+        if (vecTimeLambdaInvoke.size() < numLayers) {
+            vecTimeLambdaInvoke.push_back(getTimer() - invTimer);
+        } else {
+            vecTimeLambdaInvoke[layer] += getTimer() - invTimer;
+
+        }
+
+        double waitTimer = getTimer();
+        resComm->NNSync();
+        if (vecTimeLambdaWait.size() < numLayers) {
+            vecTimeLambdaWait.push_back(getTimer() - waitTimer);
+        } else {
+            vecTimeLambdaWait[layer] += getTimer() - waitTimer;
+        }
     }
+
+//    Matrix& derivMat = savedNNTensors[layer + 1]["grad"];
+//    Matrix& Z = savedNNTensors[layer]["z"];
+//    Matrix& eij = savedNNTensors[layer]["eij"];
+//    //Matrix& lRlu = savedNNTensors[layer]["lRlu"];
+//
+//    CSCMatrix<EdgeType>& csc = graph.forwardAdj;
+//
+//    // derivMat \dot Z^T
+//    printLog(nodeId, "%s    %s", derivMat.shape().c_str(),
+//             Z.shape().c_str());
+//    Matrix d_ae = derivMat.dot(Z, false, true);
+//
+//    Matrix d_sm = softmax_prime(eij.getData(), csc.values, csc.nnz);
+//
+//    printLog(nodeId, "SM_PRIME * DAE: %s    %s",
+//      d_ae.shape().c_str(), d_sm.shape().c_str());
+//
+//    Matrix d_2 = d_ae * d_sm;
+
+    // NOTE: Don't forget to clean up tensors after this phase
+
+//    for (auto &sTensor : edgNNSavedTensors[layer - 1]) {
+//        delete[] sTensor.getData();
+//    }
     if (vecTimeApplyEdg.size() < 2 * numLayers) {
         for (unsigned i = vecTimeApplyEdg.size(); i < 2 * numLayers; i++) {
             vecTimeApplyEdg.push_back(0.0);

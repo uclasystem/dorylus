@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cassert>
 #include <chrono>
 #include <ratio>
 #include <iostream>
@@ -18,7 +19,6 @@
 #include "utils.hpp"
 #include "../../common/matrix.hpp"
 #include "../../common/utils.hpp"
-
 #include "ops/forward_ops.hpp"
 #include "ops/backward_ops.hpp"
 #include "ops/network_ops.hpp"
@@ -45,11 +45,15 @@ apply_edge(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chu
     } else if (eTensor.numLvids == CHUNK_DNE_ERR) {
         std::cerr << "Chunk not found on graph server" << std::endl;
         return constructResp(false, chunk.localId, "Chunk not found");
+    } else if (eTensor.numLvids == ERR_HEADER_FIELD) {
+        std::cerr << "Prorably a null pointer? I dunno" << std::endl;
+        return constructResp(false, chunk.localId, "Got an error");
     }
 
     std::cout << "GOT EDGE HEADER " << eTensor.numLvids << ", " << eTensor.numRvids
               << ", " << eTensor.featDim << std::endl;
     std::cout << "TOOK " << endRequest - startRequest << " ms" << std::endl;
+
 
 //    std::vector<std::string weightRequests{"a"};
 //    std::vector<Matrix> weights = reqTensors(weights_socket, chunk, weightRequests);
@@ -64,7 +68,60 @@ apply_edge(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chu
 //        return constructResp(false, chunk.localId, "Got error message from server");
 //    }
 
-    return constructResp(false, chunk.localId, "Finished apply edge");
+    return constructResp(true, chunk.localId, "Finished apply edge");
+}
+
+invocation_response
+apply_edge_backward(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chunk) {
+    std::cout << "BACKWARD APPLY EDGE LAYER " << chunk.layer << std::endl;
+
+    unsigned startRequest = timestamp_ms();
+    EdgeTensor eTensor = reqEdgeTensor(data_socket, chunk, "fedge");
+    unsigned endRequest = timestamp_ms();
+    if (eTensor.numLvids == NOT_FOUND_ERR_FIELD) {
+        std::cerr << "Tensor 'fedge' was not found on graph server" << std::endl;
+        return constructResp(false, chunk.localId, "Tensor 'fedge' not found");
+    } else if (eTensor.numLvids == DUPLICATE_REQ_ERR_FIELD) {
+        std::cerr << "Chunk already running. Request rejected" << std::endl;
+        return constructResp(false, chunk.localId, "Duplicate chunk request");
+    } else if (eTensor.numLvids == CHUNK_DNE_ERR) {
+        std::cerr << "Chunk not found on graph server" << std::endl;
+        return constructResp(false, chunk.localId, "Chunk not found");
+    } else if (eTensor.numLvids == ERR_HEADER_FIELD) {
+        std::cerr << "Prorably a null pointer? I dunno" << std::endl;
+        return constructResp(false, chunk.localId, "Got an error");
+    }
+
+//    std::vector<Matrix> matrices;
+//    std::vector<std::string> dataRequests{"grad"};
+//    matrices = reqTensors(data_socket, chunk, dataRequests);
+//    for (auto& M : matrices) {
+//        if (M.empty()){
+//            std::cout << M.name() << " is empty" << std::endl;
+//            return constructResp(false, chunk.localId, M.name() + " is empty");
+//        }
+//    }
+
+    std::cout << "GOT EDGE HEADER " << eTensor.numLvids << ", " << eTensor.numRvids
+              << ", " << eTensor.featDim << ", " << eTensor.numEdges << std::endl;
+    std::cout << "TOOK " << endRequest - startRequest << " ms" << std::endl;
+
+    std::cout << "MDTE" << std::endl;
+
+//    std::vector<std::string weightRequests{"a"};
+//    std::vector<Matrix> weights = reqTensors(weights_socket, chunk, weightRequests);
+//    for (auto& W : weights) {
+//        if (W.empty()){
+//            std::cout << W.name() << " is empty" << std::endl;
+//            return constructResp(false, chunk.localId, W.name() + " is empty");
+//        }
+//    }
+//
+//    if (matrices.empty() || weights.empty()) {
+//        return constructResp(false, chunk.localId, "Got error message from server");
+//    }
+
+    return constructResp(true, chunk.localId, "Finished apply edge backward");
 }
 
 invocation_response
@@ -163,6 +220,101 @@ apply_vertex(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &c
     return constructResp(false, chunk.localId, "This chunk is already done.");
 }
 
+invocation_response
+apply_vertex_backward(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chunk) {
+    std::cout << "BACKWARD APPLY VERTEX LAYER " << chunk.layer << std::endl;
+
+    Matrix H;
+    std::vector<Matrix> matrices;
+    if (chunk.isFirstLayer()) {
+        // Request H directly
+        std::vector<std::string> dataRequests{"h"};
+        matrices = reqTensors(data_socket, chunk, dataRequests);
+        for (auto& M : matrices) {
+            if (M.empty()){
+                std::cout << M.name() << " is empty" << std::endl;
+                return constructResp(false, chunk.localId, M.name() + " is empty");
+            }
+        }
+
+        H = matrices[0];
+    } else {
+        // Request AH and compute H as tanh(AH)
+        std::vector<std::string> dataRequests{"ah"};
+        matrices = reqTensors(data_socket, chunk, dataRequests);
+        for (auto& M : matrices) {
+            if (M.empty()){
+                std::cout << M.name() << " is empty" << std::endl;
+                return constructResp(false, chunk.localId, M.name() + " is empty");
+            }
+        }
+
+        Matrix& AH = matrices[0];
+        H = tanh(AH);
+        deleteMatrix(AH);
+    }
+
+    std::vector<std::string> weightRequests{"w", "a_i", "a_j"};
+    std::cerr << "Request w, a_i, a_j" << std::endl;
+    std::vector<Matrix> weights = reqTensors(weights_socket, chunk, weightRequests);
+    for (auto& W : weights) {
+        if (W.empty()){
+            std::cout << W.name() << " is empty" << std::endl;
+            return constructResp(false, chunk.localId, W.name() + " is empty");
+        }
+    }
+
+    if (matrices.empty() || weights.empty()) {
+        return constructResp(false, chunk.localId, "Got error message from server");
+    }
+
+    Matrix& W = weights[0];
+    std::cout << "SUM H: " << H.sum() << std::endl;
+    std::cout << "SUM W: " << W.sum() << std::endl;
+
+    Matrix Z = H.dot(W);
+    Z.setName("z");
+    deleteMatrix(H);
+    deleteMatrix(W);
+
+    Matrix& a_i = weights[1];
+    Matrix& a_j = weights[2];
+
+    std::cout << "SUM a_i: " << a_i.sum() << std::endl;
+    std::cout << "SUM a_j: " << a_j.sum() << std::endl;
+
+    Matrix az_i = Z.dot(a_i);
+    az_i.setName("az_i");
+    deleteMatrix(a_i);
+
+    Matrix az_j = Z.dot(a_j);
+    az_j.setName("az_j");
+    deleteMatrix(a_j);
+
+    std::cout << "SUM Z: " << Z.sum() << std::endl;
+    std::cout << "SUM az_i: " << az_i.sum() << std::endl;
+    std::cout << "SUM az_j: " << az_j.sum() << std::endl;
+
+    std::vector<Matrix> toSend;
+    toSend.push_back(Z);
+    toSend.push_back(az_i);
+    toSend.push_back(az_j);
+
+    std::cout << "Sending Z tensor" << std::endl;
+    int ret = sendTensors(data_socket, chunk, toSend, true);
+    std::cout << "Fin send" << std::endl;
+
+    for (auto& M : toSend)
+        deleteMatrix(M);
+
+    std::cout << "Data cleaned up" << std::endl;
+    if (ret == -1) {
+        return constructResp(false, chunk.localId, "This chunk is already done.");
+    } else {
+        return constructResp(true, chunk.localId, "Finished forward layer");
+    }
+    return constructResp(false, chunk.localId, "This chunk is already done.");
+}
 /**
  *
  * Main logic:
@@ -212,10 +364,15 @@ apply_phase(std::string dataserver, std::string weightserver, unsigned dport, un
     }
     std::cout << "Finished comm setup" << std::endl;
 
-    if (chunk.vertex != 0) {
+    std::cout << chunk.str() << std::endl;
+    if (chunk.vertex != 0 && chunk.dir == PROP_TYPE::FORWARD) {
         return apply_vertex(data_socket, weights_socket, chunk);
-    } else {
+    } else if (chunk.vertex != 0 && chunk.dir == PROP_TYPE::BACKWARD) {
+        return apply_vertex_backward(data_socket, weights_socket, chunk);
+    } else if (chunk.vertex == 0 && chunk.dir == PROP_TYPE::FORWARD) {
         return apply_edge(data_socket, weights_socket, chunk);
+    } else {
+        return apply_edge_backward(data_socket, weights_socket, chunk);
     }
 
     std::cout << "Returning from function" << std::endl;

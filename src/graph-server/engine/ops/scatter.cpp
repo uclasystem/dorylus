@@ -38,9 +38,8 @@ FeatType **Engine::scatter(FeatType *vtcsTensor, FeatType* ghostOutTensor, unsig
 
     sendForwardGhostUpdates(vtcsTensor, featDim);
 
-    nodeManager.barrier();
-
     commHalt = true;
+    nodeManager.barrier();
     // Join all data communicators.
     dataPool->sync();
 
@@ -58,14 +57,14 @@ FeatType **Engine::scatter(FeatType *vtcsTensor, FeatType* ghostOutTensor, unsig
     return edgsTensor;
 }
 
-FeatType **Engine::scatterBackward(FeatType *gradTensor, unsigned vtcsCnt,
+FeatType **Engine::scatterBackward(FeatType *gradTensor, FeatType* ghostOutTensor, unsigned vtcsCnt,
                                    unsigned featDim) {
     double sttTimer = getTimer();
 
     // Start data communicators.
     commHalt = false;
     recvCnt = 0;
-    backwardGhostVerticesDataOut = savedNNTensors[layer - 1]["bg"].getData();
+    backwardGhostVerticesDataOut = ghostOutTensor;
     auto bgr_fp =
         std::bind(&Engine::backwardGhostReceiver, this, std::placeholders::_1,
             std::placeholders::_2);
@@ -74,16 +73,14 @@ FeatType **Engine::scatterBackward(FeatType *gradTensor, unsigned vtcsCnt,
     sendBackwardGhostGradients(gradTensor, featDim);
 
     //## Global Iteration barrier. ##/
-    // TODO: (YIFAN) we can optimize this to extend comm protocal. Mark the last
-    // packet sent so this node knows when to exit ghostCommunicator.
-    nodeManager.barrier();
     commHalt = true;
+    nodeManager.barrier();
     // Join all data communicators.
     dataPool->sync();
 
     // FeatType **eFeats = dstVFeats2eFeats(gradTensor,
     // backwardGhostVerticesDataIn, vtcsCnt, featDim);
-    FeatType **eFeats = savedEdgeTensors[layer - 1]["bedge"];
+    FeatType **eFeats = savedEdgeTensors[layer]["bedge"];
     gradTensor = NULL;
 
     if (vecTimeScatter.size() < 2 * numLayers) {

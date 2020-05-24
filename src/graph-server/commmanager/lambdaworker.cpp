@@ -319,76 +319,131 @@ void LambdaWorker::sendEdgeTensor(zmq::message_t& client_id, Chunk& chunk) {
 //  which is ugly. TODO: Extend matrix class to EdgeMatrix so that all infomration
 //  can be encapsulated without accessing engine
 void LambdaWorker::sendTensor(FeatType** eTensor, Chunk& chunk) {
-    if (chunk.dir == PROP_TYPE::FORWARD) {
-        unsigned startPrepEdgeData = timestamp_ms();
-        std::unordered_map<unsigned, unsigned> rvidMap;
-        CSCMatrix<EdgeType>& csc = (manager->engine->graph).forwardAdj;
-        unsigned localInEdgeCnt = manager->engine->graph.localInEdgeCnt;
-        unsigned numLvids = chunk.upBound - chunk.lowBound;
+    unsigned startPrepEdgeData = timestamp_ms();
+    std::unordered_map<unsigned, unsigned> rvidMap;
+    CSCMatrix<EdgeType>& csc = (manager->engine->graph).forwardAdj;
+    unsigned localInEdgeCnt = manager->engine->graph.localInEdgeCnt;
+    unsigned numLvids = chunk.upBound - chunk.lowBound;
 
-        unsigned featDim = manager->engine->getFeatDim(chunk.layer + 1);
-        unsigned long long nChunkEdges = csc.columnPtrs[chunk.upBound] - csc.columnPtrs[chunk.lowBound];
-        unsigned baseEid = csc.columnPtrs[chunk.lowBound];
-        unsigned nextRVid = numLvids;
-        unsigned maxFeatVecs = (numLvids) + nChunkEdges;
-        unsigned edgeMapIndex = 0;
-        unsigned edgeMapSize = numLvids + nChunkEdges;
+    unsigned featDim = manager->engine->getFeatDim(chunk.layer + 1);
+    unsigned long long nChunkEdges = csc.columnPtrs[chunk.upBound] - csc.columnPtrs[chunk.lowBound];
+    unsigned baseVid = chunk.lowBound;
+    unsigned nextRVid = numLvids;
+    unsigned maxFeatVecs = (numLvids) + nChunkEdges;
+    unsigned edgeMapIndex = 0;
+    unsigned edgeMapSize = numLvids + nChunkEdges;
 
-        unsigned* edgeMapping = new unsigned[numLvids + nChunkEdges];
-        FeatType* edgeChunkData = new FeatType[maxFeatVecs * featDim];
-        rvidMap.reserve(nChunkEdges);
+    printLog(manager->nodeId, "NUM LVIDS %u", numLvids);
+    printLog(manager->nodeId, "FEAT DIM %u", featDim);
+    printLog(manager->nodeId, "Local edge cnt %u", localInEdgeCnt);
+    printLog(manager->nodeId, "EDGE MAP SIZE %u", edgeMapSize);
 
-        // This pointer should point to the first row in the vtcs tensor for this chunk
-        unsigned createMapStart = timestamp_ms();
-        FeatType* lvidFeatPtr = eTensor[csc.columnPtrs[chunk.lowBound]];
-        std::memcpy(edgeChunkData, lvidFeatPtr, numLvids * featDim * sizeof(FeatType));
-        for (unsigned lvid = chunk.lowBound; lvid < chunk.upBound; ++lvid) {
-            edgeMapping[edgeMapIndex++] = csc.columnPtrs[lvid + 1] - csc.columnPtrs[lvid];
-            for (unsigned long long eid = csc.columnPtrs[lvid];
-              eid < csc.columnPtrs[lvid + 1]; ++eid) {
-                unsigned srcVid = csc.rowIdxs[eid];
-                // This vertex does not reside in this chunk
-                if (srcVid < chunk.lowBound || srcVid >= chunk.upBound) {
-                    auto found = rvidMap.find(srcVid);
-                    // The rvid has already been mapped
-                    if (found == rvidMap.end()) {
-                        std::memcpy(edgeChunkData + (nextRVid * featDim * sizeof(FeatType)), eTensor[eid + localInEdgeCnt], featDim * sizeof(FeatType));
-                        edgeMapping[edgeMapIndex++] = nextRVid;
-                        rvidMap[srcVid] = nextRVid++;
-                    } else {
-                        edgeMapping[edgeMapIndex++] = found->second;
-                    }
-                // The vertex is inside this partition
+    unsigned* edgeMapping = new unsigned[edgeMapSize];
+    FeatType* edgeChunkData = new FeatType[maxFeatVecs * featDim];
+    rvidMap.reserve(nChunkEdges);
+
+    std::string cscStr;
+    cscStr = "(" + std::to_string(chunk.lowBound) + "," + std::to_string(chunk.upBound) + ") OG CSC STR\n";
+    for (unsigned lvid = chunk.lowBound; lvid < chunk.lowBound + 5; ++lvid) {
+        cscStr += std::to_string(lvid) + "[" + std::to_string(csc.columnPtrs[lvid + 1] - csc.columnPtrs[lvid]) + "]: ";
+        for (unsigned long long eid = csc.columnPtrs[lvid]; eid < csc.columnPtrs[lvid + 1];
+             ++eid) {
+            unsigned rowId = csc.rowIdxs[eid];
+            cscStr += std::to_string(rowId) + " ";
+        }
+        cscStr += "\n";
+    }
+    cscStr += "|||\n";
+
+    // This pointer should point to the first row in the vtcs tensor for this chunk
+    unsigned createMapStart = timestamp_ms();
+    FeatType* lvidFeatPtr = eTensor[csc.columnPtrs[chunk.lowBound]];
+    std::memcpy(edgeChunkData, lvidFeatPtr, numLvids * featDim * sizeof(FeatType));
+    for (unsigned lvid = chunk.lowBound; lvid < chunk.upBound; ++lvid) {
+        edgeMapping[edgeMapIndex++] = csc.columnPtrs[lvid + 1] - csc.columnPtrs[lvid];
+        for (unsigned long long eid = csc.columnPtrs[lvid];
+             eid < csc.columnPtrs[lvid + 1]; ++eid) {
+            unsigned srcVid = csc.rowIdxs[eid];
+            // This vertex does not reside in this chunk
+            if (srcVid < chunk.lowBound || srcVid >= chunk.upBound) {
+                auto found = rvidMap.find(srcVid);
+                // The rvid has already been mapped
+                if (found == rvidMap.end()) {
+                    std::memcpy(edgeChunkData + (nextRVid * featDim), eTensor[eid + localInEdgeCnt], featDim * sizeof(FeatType));
+                    edgeMapping[edgeMapIndex++] = nextRVid;
+                    rvidMap[srcVid] = nextRVid++;
                 } else {
-                    edgeMapping[edgeMapIndex++] = eid - baseEid;
+                    edgeMapping[edgeMapIndex++] = found->second;
                 }
+                // The vertex is inside this partition
+            } else {
+                edgeMapping[edgeMapIndex++] = srcVid - baseVid;
             }
         }
-        unsigned endPrepEdgeData = timestamp_ms();
-
-        printLog(manager->nodeId, "Chunk %u:\n"
-                    "\t\tedgeMapSize %u, edgeMapIndex %u\n"
-                    "\t\trvidMapSize %u, nextRvid %u\n"
-                    "\t\tCREATING MAP TOOK %u ms\n"
-                    "\t\tPREPPING DATA TOOK %u ms\n",
-                    chunk.localId,
-                    edgeMapSize, edgeMapIndex, rvidMap.size(), nextRVid,
-                    endPrepEdgeData - createMapStart, endPrepEdgeData - startPrepEdgeData);
-
-        zmq::message_t responseHeader(TENSOR_HDR_SIZE);
-        populateHeader(responseHeader.data(), numLvids, rvidMap.size(), featDim);
-
-        zmq::message_t edgeChunkInfoMsg(edgeMapping, (numLvids + nChunkEdges) * sizeof(unsigned), nofree, NULL);
-        zmq::message_t edgeChunkDataMsg(edgeChunkData, (numLvids + rvidMap.size()) * featDim * sizeof(FeatType), nofree, NULL);
-        workersocket.send(responseHeader, ZMQ_SNDMORE);
-        workersocket.send(edgeChunkInfoMsg, ZMQ_SNDMORE);
-        workersocket.send(edgeChunkDataMsg);
-
-        //delete[] edgeMapping;
-        //delete[] edgeChunkData;
-    } else {
-        // BACKPROP
     }
+    unsigned endPrepEdgeData = timestamp_ms();
+
+    cscStr += "NEW CSC STR\n";
+    for (unsigned lvid = chunk.lowBound; lvid < chunk.lowBound + 5; ++lvid) {
+        cscStr += std::to_string(lvid) + "[" + std::to_string(csc.columnPtrs[lvid + 1] - csc.columnPtrs[lvid]) + "]: ";
+        for (unsigned long long eid = csc.columnPtrs[lvid]; eid < csc.columnPtrs[lvid + 1];
+             ++eid) {
+            unsigned rowId = csc.rowIdxs[eid];
+            if (rowId < chunk.lowBound || rowId >= chunk.upBound) {
+                cscStr += std::to_string(rvidMap[rowId]) + " ";
+            } else {
+                cscStr += std::to_string(rowId - baseVid) + " ";
+            }
+        }
+        cscStr += "\n";
+    }
+    cscStr += "|||\n";
+
+    cscStr += "EDGE MAPPING\n";
+    unsigned total = 5 + (csc.columnPtrs[chunk.lowBound + 6] - csc.columnPtrs[chunk.lowBound]);
+    printLog(manager->nodeId, "TOTAL TOTAL %u", total);
+    for (unsigned u = 0; u < total; ++u) {
+        cscStr += std::to_string(edgeMapping[u]) + " ";
+    }
+    cscStr += "|||\n";
+
+    printLog(manager->nodeId, "%s", cscStr.c_str());
+
+
+    printLog(manager->nodeId, "Chunk %u:\n"
+            "\t\tedgeMapSize %u, edgeMapIndex %u\n"
+            "\t\trvidMapSize %u, nextRvid %u\n"
+            "\t\tCREATING MAP TOOK %u ms\n"
+            "\t\tPREPPING DATA TOOK %u ms\n",
+            chunk.localId,
+            edgeMapSize, edgeMapIndex, rvidMap.size(), nextRVid,
+            endPrepEdgeData - createMapStart, endPrepEdgeData - startPrepEdgeData);
+
+//    unsigned index = 0;
+//    for (int i = 0; i < 3; ++i) {
+//        s += "Vertex " + std::to_string(i) + " has " + std::to_string(edgeMapping[index]) + " edges\n" + std::to_string(i) + ": ";
+//        unsigned nEdges = edgeMapping[index++];
+//        for (unsigned j = 0; j < nEdges; ++j) {
+//            s += std::to_string(edgeMapping[index++]) + " ";
+//        }
+//        s += "\n";
+//    }
+
+    zmq::message_t responseHeader(TENSOR_HDR_SIZE);
+    populateHeader(responseHeader.data(), numLvids, rvidMap.size(), featDim, nChunkEdges);
+
+    zmq::message_t edgeChunkInfoMsg(edgeMapSize * sizeof(unsigned));
+    std::memcpy(edgeChunkInfoMsg.data(), edgeMapping, edgeMapSize * sizeof(unsigned));
+    zmq::message_t edgeChunkDataMsg((numLvids + rvidMap.size()) * featDim * sizeof(FeatType));
+    std::memcpy(edgeChunkDataMsg.data(), edgeChunkData, (numLvids + rvidMap.size()) * featDim * sizeof(FeatType));
+//    zmq::message_t edgeChunkInfoMsg(edgeMapping, edgeMapSize * sizeof(unsigned), nofree, NULL);
+//    zmq::message_t edgeChunkDataMsg(edgeChunkData, (numLvids + rvidMap.size()) * featDim * sizeof(FeatType), nofree, NULL);
+    workersocket.send(responseHeader, ZMQ_SNDMORE);
+    workersocket.send(edgeChunkInfoMsg, ZMQ_SNDMORE);
+    workersocket.send(edgeChunkDataMsg);
+
+    //delete[] edgeMapping;
+    //delete[] edgeChunkData;
 }
 
 int LambdaWorker::recvTensor(Chunk &chunk) {

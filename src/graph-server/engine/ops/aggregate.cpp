@@ -52,9 +52,8 @@ FeatType *Engine::aggregate(FeatType **edgsTensor, unsigned edgsCnt,
     currId = graph.localVtxCnt;
 #else
     // AH
-    printLog(nodeId, "Getting tensor ah:%u\n\t\tSUM: %f", layer + 1, savedNNTensors[layer + 1]["ah"].sum());
-    FeatType *outputTensor = savedNNTensors[layer + 1]["ah"].getData();
     FeatType* hTensor = savedNNTensors[layer]["z"].getData();
+    FeatType *outputTensor = savedNNTensors[layer + 1]["ah"].getData();
     assert(hTensor != NULL);
     assert(outputTensor != NULL);
 
@@ -82,7 +81,6 @@ FeatType *Engine::aggregate(FeatType **edgsTensor, unsigned edgsCnt,
     }
 #endif  // _GPU_ENABLED_
 
-    printLog(nodeId, "Finished aggregation with ah:%u\n\t\tSUM: %f", layer + 1, savedNNTensors[layer + 1]["ah"].sum());
     if (vecTimeAggregate.size() < numLayers) {
         vecTimeAggregate.push_back(getTimer() - sttTimer);
     } else {
@@ -100,13 +98,16 @@ FeatType *Engine::aggregateBackward(FeatType **eVGradTensor, unsigned edgsCnt,
                                     unsigned featDim, AGGREGATOR aggregator) {
     double sttTimer = getTimer();
     currId = 0;
-    FeatType *outputTensor = savedNNTensors[layer - 1]["aTg"].getData();
+    FeatType *outputTensor = savedNNTensors[layer]["aTg"].getData();
     FeatType *gradTensor = savedNNTensors[layer]["grad"].getData();
+
+    assert(outputTensor != NULL);
+    assert(gradTensor != NULL);
 
 #ifdef _GPU_ENABLED_
     printf("Aggregate start back\n");
     CuMatrix feat;
-    feat.loadSpDense(gradTensor, savedNNTensors[layer - 1]["bg"].getData(),
+    feat.loadSpDense(gradTensor, savedNNTensors[layer]["bg_d"].getData(),
                      graph.localVtxCnt, graph.dstGhostCnt, featDim);
     switch (aggregator) {
         case (AGGREGATOR::WSUM): {
@@ -122,7 +123,6 @@ FeatType *Engine::aggregateBackward(FeatType **eVGradTensor, unsigned edgsCnt,
     }
     currId = graph.localVtxCnt;
 #else
-
     switch (aggregator) {
         case (AGGREGATOR::WSUM): {
             memcpy(outputTensor, gradTensor,
@@ -342,6 +342,7 @@ void Engine::aggregateBPCompute(unsigned tid, void *args) {
     const unsigned vtcsCnt = ((AggOPArgs *)args)->vtcsCnt;
     // const unsigned edgsCnt = ((AggOPArgs *) args)->edgsCnt;
     const unsigned featDim = ((AggOPArgs *)args)->featDim;
+    printLog(nodeId, "featDim of back agg %u", featDim);
 
     unsigned lvid = 0;
     while (currId < vtcsCnt) {
@@ -359,7 +360,7 @@ void Engine::aggregateBPChunk(Chunk &c) {
     unsigned featDim = getFeatDim(c.layer + 1);
 
     FeatType *featTensor = getVtxFeat(
-        savedNNTensors[c.layer + 1]["grad"].getData(), lvid, featDim);
+        savedNNTensors[c.layer]["grad"].getData(), lvid, featDim);
     FeatType *aggTensor = savedNNTensors[c.layer]["aTg"].getData();
     FeatType **eFeatsTensor = savedEdgeTensors[c.layer]["bedge"];
 
@@ -395,9 +396,9 @@ void Engine::backwardAggregateFromNeighbors(unsigned lvid,
     }
 
     // Aggregate from neighbors.
-    for (unsigned long long eid = graph.backwardAdj.rowPtrs[lvid];
-         eid < graph.backwardAdj.rowPtrs[lvid + 1]; ++eid) {
-        EdgeType normFactor = graph.backwardAdj.values[eid];
+    for (unsigned long long eid = graph.forwardAdj.columnPtrs[lvid];
+         eid < graph.forwardAdj.columnPtrs[lvid + 1]; ++eid) {
+        EdgeType normFactor = graph.forwardAdj.values[eid];
         for (unsigned j = 0; j < featDim; ++j) {
             currDataDst[j] += gradTensor[eid][j] * normFactor;
         }

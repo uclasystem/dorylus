@@ -251,6 +251,22 @@ void Engine::preallocateGAT() {
         savedNNTensors[layer]["fg_az"] =
             Matrix(graph.srcGhostCnt, 1, ghostAZTensor);
 
+        // Just storing these as matrices for easy access
+        // Actually they are just edge values to be used with CSC/CSR
+        FeatType* leakyTensor =
+            new FeatType[graph.forwardAdj.nnz * 1];
+        std::memset(leakyTensor, 0, sizeof(FeatType) * graph.forwardAdj.nnz * 1);
+        savedNNTensors[layer]["lRlu"] =
+            Matrix(graph.forwardAdj.nnz, 1, leakyTensor);
+
+        FeatType* eijTensor =
+            new FeatType[graph.forwardAdj.nnz * 1];
+        std::memset(eijTensor, 0, sizeof(FeatType) * graph.forwardAdj.nnz * 1);
+        savedNNTensors[layer]["eij"] =
+            Matrix(graph.forwardAdj.nnz, 1, eijTensor);
+
+        // Attention scores stored in CSCMatrix<>::values
+
         FeatType **eVFeatsTensor = srcVFeats2eFeats(
             zTensor, ghostZTensor, vtxCnt, nextFeatDim);
         savedEdgeTensors[layer]["fedge"] = eVFeatsTensor;
@@ -270,7 +286,7 @@ void Engine::preallocateGAT() {
     }
 
     // backward tensor allocation
-    for (layer = numLayers - 1; layer > 0; --layer) {
+    for (layer = numLayers; layer > 0; --layer) {
         unsigned featDim = getFeatDim(layer);
 
         // APPLY TENSORS
@@ -278,18 +294,18 @@ void Engine::preallocateGAT() {
         savedNNTensors[layer]["grad"] =
             Matrix("grad", vtxCnt, featDim, gradTensor);
 
+        // GATHER TENSORS
+        FeatType *aTgTensor = new FeatType[vtxCnt * featDim];
+        savedNNTensors[layer]["aTg"] = Matrix(vtxCnt, featDim, aTgTensor);
+
         // SCATTER TENSORS
         FeatType *ghostTensor = new FeatType[graph.dstGhostCnt * featDim];
-        savedNNTensors[layer - 1]["bg"] =
+        savedNNTensors[layer]["bg_d"] =
             Matrix(graph.dstGhostCnt, featDim, ghostTensor);
 
         FeatType **eFeats =
             dstVFeats2eFeats(gradTensor, ghostTensor, vtxCnt, featDim);
-        savedEdgeTensors[layer - 1]["bedge"] = eFeats;
-
-        // GATHER TENSORS
-        FeatType *aTgTensor = new FeatType[vtxCnt * featDim];
-        savedNNTensors[layer - 1]["aTg"] = Matrix(vtxCnt, featDim, aTgTensor);
+        savedEdgeTensors[layer]["bedge"] = eFeats;
     }
 }
 
@@ -461,6 +477,7 @@ FeatType *Engine::runForward(unsigned epoch) {
         eVFeatsTensor =
             scatter(inputTensor, outputTensor, graph.localVtxCnt, getFeatDim(layer + 1));
 
+        nodeManager.barrier();
         printLog(nodeId, "SCATTERING az");
         inputTensor = savedNNTensors[layer]["az_i"].getData();
         outputTensor = savedNNTensors[layer]["fg_az"].getData();
@@ -479,7 +496,9 @@ FeatType *Engine::runForward(unsigned epoch) {
                                 getFeatDim(layer + 1), AGGREGATOR::WSUM);
     }
 
-    FeatType* predictions = softmax(inputTensor, graph.localVtxCnt, getFeatDim(numLayers));
+    printLog(nodeId, "Getting grad mat from layer %u", layer);
+    FeatType* predictions = savedNNTensors[layer]["grad"].getData();
+    predictions = softmax(inputTensor, predictions, graph.localVtxCnt, getFeatDim(numLayers));
 
     timeForwardProcess += getTimer();
     // if (nodeId == 0) {
@@ -507,27 +526,28 @@ void Engine::runBackward(FeatType *initGradTensor) {
 
     // Calculate output loss
     Matrix& labels = savedNNTensors[numLayers - 1]["lab"];
-    Matrix predictions = Matrix(labels.getRows(), labels.getCols(), initGradTensor);
-    Matrix lossGrad = predictions - labels;
+    Matrix& outputDeriv = savedNNTensors[layer]["grad"];
+    outputDeriv -= labels;
 
     // Create buffer for first-layer aggregation.
-    FeatType *gradTensor = lossGrad.getData();
-
-    return;
+    FeatType *gradTensor = outputDeriv.getData();
 
     // Pure sequential
-    //FeatType **eVGradTensor = dstVFeats2eFeats(gradTensor, 
     FeatType **eVGradTensor = NULL;
     for (layer = numLayers - 1; layer > 0; --layer) {
-        gradTensor = aggregateBackward(eVGradTensor, graph.localOutEdgeCnt,
-                                       getFeatDim(layer), AGGREGATOR::WSUM);
-
+        printLog(nodeId, "SCATTER BACK");
+        FeatType* ghostTensor = savedNNTensors[layer]["bg_d"].getData();
         eVGradTensor =
-            scatterBackward(gradTensor, graph.localVtxCnt, getFeatDim(layer));
+            scatterBackward(gradTensor, ghostTensor, graph.localVtxCnt, getFeatDim(layer + 1));
+        printLog(nodeId, "AGG BACK");
+        gradTensor = aggregateBackward(eVGradTensor, graph.localOutEdgeCnt,
+                                       getFeatDim(layer + 1), AGGREGATOR::WSUM);
+        printLog(nodeId, "APP EDGE BACK");
         eVGradTensor = applyEdgeBackward(NULL, graph.localOutEdgeCnt, 0,
                                          eVGradTensor + graph.localOutEdgeCnt,
-                                         eVGradTensor, getFeatDim(layer),
-                                         getFeatDim(layer));
+                                         eVGradTensor, getFeatDim(layer + 1),
+                                         getFeatDim(layer + 1));
+        return;
         gradTensor =
             applyVertexBackward(gradTensor, graph.localVtxCnt,
                                 getFeatDim(layer - 1), getFeatDim(layer));
