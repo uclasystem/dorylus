@@ -263,6 +263,16 @@ void Engine::printEngineMetrics() {
 
         fprintf(stderr, "[ Node %3u ]  <EM>: Run start time: %s", nodeId, std::ctime(&start_time));
         fprintf(stderr, "[ Node %3u ]  <EM>: Run end time: %s", nodeId, std::ctime(&end_time));
+        printLog(nodeId, "<EM>: Backend %s", mode == LAMBDA ? "LAMBDA" : (mode == CPU ? "CPU" : "GPU"));
+        {
+            std::string dataset = std::string("<EM>: Dataset: ") + datasetDir + " (";
+            for (int i = 0; i < numLayers; i++) {
+                dataset += std::to_string(layerConfig[i]) + ", ";
+            }
+            dataset += std::to_string(layerConfig[numLayers]) +")";
+            printLog(nodeId, dataset.c_str());
+        }
+        printLog(nodeId, "<EM>: staleness: %u", staleness);
         printLog(nodeId, "<EM>: %u sync epochs and %u async epochs",
                 numSyncEpochs, numAsyncEpochs);
         printLog(nodeId, "<EM>: Using %u forward lambdas and %u bacward lambdas",
@@ -304,6 +314,7 @@ void Engine::printEngineMetrics() {
         printLog(nodeId, "Relaunched Lambda Cnt: %u", resComm->getRelaunchCnt());
     }
 
+    nodeManager.barrier();
     double sum = 0.0;
     for (double &d : epochTimes) sum += d;
     printLog(nodeId, "<EM>: Average  sync epoch time %.3lf ms",

@@ -265,7 +265,7 @@ void WeightServer::tryEarlyStop(AccLoss &accloss) {
 
     CONVERGE_STATE currState =
         (accloss.acc >= targetAcc)        ? CONVERGE_STATE::DONE : // early stop
-        // (accloss.acc >= targetAcc - 0.03) ? CONVERGE_STATE::CLOSE: // switch to sync
+        // (accloss.acc >= targetAcc - 0.04) ? CONVERGE_STATE::CLOSE: // switch to sync
                                             CONVERGE_STATE::EARLY;
 
     // state transition can only be in order EARLY -> CLOSE -> DONE
@@ -287,12 +287,11 @@ void WeightServer::tryEarlyStop(AccLoss &accloss) {
 
 void WeightServer::lrDecay() {
     if (epoch > (2 * 60) && epoch % ( 2 * LR_UPD_FREQ) == 0) {
-        LEARNING_RATE *= LR_DECAY;
         if (adam) {
-            adamOpt->setLR(LEARNING_RATE);
+            adamOpt->decayAlpha(LR_DECAY);
         }
         char buf[50];
-        sprintf(buf, "Learning Rate decays to %.3f", LEARNING_RATE);
+        sprintf(buf, "Learning Rate decays to %.3f", adamOpt->BETA1);
         serverLog(buf);
     }
 }

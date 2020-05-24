@@ -27,7 +27,7 @@
 #include "../common/utils.hpp"
 
 
-#define NUM_LISTENERS 4
+#define NUM_LISTENERS 6
 
 #define UPD_HEADER_SIZE (4 + sizeof(unsigned) * 2)
 #define IDENTITY_SIZE 4

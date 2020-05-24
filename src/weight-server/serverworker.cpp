@@ -28,7 +28,7 @@ ServerWorker::~ServerWorker() {
  */
 void
 ServerWorker::work() {
-    std::cout << "[ Weight ] Starts listening for lambdas' requests..." << std::endl;
+    // std::cout << "[ Weight ] Starts listening for lambdas' requests..." << std::endl;
     try {
         while (true) {
             zmq::message_t identity;
@@ -161,7 +161,7 @@ void ServerWorker::recvUpdateTensor(Chunk &chunk, WeightTensorMap& weights) {
         FeatType* newUpdate = (FeatType*) tensorData.data();
         unsigned localUpdCnt = ws.weightsStore[chunk.layer][name].localUpdate(newUpdate);
 
-        if (ws.numLambdas == localUpdCnt) {
+        if (ws.weightsStore[chunk.layer][name].localUpdTot == localUpdCnt) {
             ws.applyUpdate(chunk.layer, name);
         }
     }
