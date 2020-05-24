@@ -141,7 +141,7 @@ EdgeTensor reqEdgeTensor(zmq::socket_t& socket, Chunk& chunk, std::string tensor
     zmq::message_t edgeChunkDataMsg;
     socket.recv(&edgeChunkDataMsg);
     eTensor.chunkData = new FeatType[edgeChunkDataMsg.size() / 4];
-    std::memcpy(eTensor.edgeMapping, edgeChunkDataMsg.data(), edgeChunkDataMsg.size());
+    std::memcpy(eTensor.chunkData, edgeChunkDataMsg.data(), edgeChunkDataMsg.size());
     std::cout << "EDGE CHUNK DATA SIZE " << edgeChunkDataMsg.size() << std::endl;
 
 
@@ -154,12 +154,12 @@ EdgeTensor reqEdgeTensor(zmq::socket_t& socket, Chunk& chunk, std::string tensor
         return eTensor;
     }
 
-    std::cout << "edgeMapping info (first 22)" << std::endl;
-    unsigned* eMapData = (unsigned*) edgeChunkInfoMsg.data();
-    for (unsigned index = 0; index < 22; ++index) {
-        std::cout << eMapData[index] << " ";
-    }
-    std::cout << std::endl;
+//    std::cout << "edgeMapping info (first 22)" << std::endl;
+//    unsigned* eMapData = (unsigned*) edgeChunkInfoMsg.data();
+//    for (unsigned index = 0; index < 22; ++index) {
+//        std::cout << eMapData[index] << " ";
+//    }
+//    std::cout << std::endl;
 //    unsigned index = 0;
 //    for (int i = 0; i < 3; ++i) {
 //        std::cout << "Vertex 0 has " << eTensor.edgeMapping[index] << " edges" << std::endl;

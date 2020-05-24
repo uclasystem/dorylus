@@ -107,6 +107,11 @@ apply_edge_backward(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, C
     std::cout << "TOOK " << endRequest - startRequest << " ms" << std::endl;
 
     std::cout << "MDTE" << std::endl;
+    std::cout << "edgeMapping info (first 22)" << std::endl;
+    for (unsigned index = 0; index < 22; ++index) {
+        std::cout << eTensor.edgeMapping[index] << " ";
+    }
+    std::cout << std::endl;
 
 //    std::vector<std::string weightRequests{"a"};
 //    std::vector<Matrix> weights = reqTensors(weights_socket, chunk, weightRequests);
