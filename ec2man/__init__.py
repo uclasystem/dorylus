@@ -45,6 +45,7 @@ if not os.path.isfile(EC2_DIR + "profile"):
 
 profile_name = ''
 user_name = ''
+region = 'us-east-2'
 with open(EC2_DIR + "profile", 'r') as fprofile:
     profile_name = fprofile.readline().strip().split()[0]
     if profile_name.lower() == 'default':   # If given as default, then set to None so that boto3 session uses the default profile.
@@ -52,25 +53,26 @@ with open(EC2_DIR + "profile", 'r') as fprofile:
 
     user_name = fprofile.readline().strip().split()[0]
     ssh_key = fprofile.readline().strip().split()[0]
+    region = fprofile.readline().strip()
 
 
 # Initialize the EC2 client.
 boto3.setup_default_session(profile_name=profile_name)
-ec2_cli = boto3.client('ec2')
+ec2_cli = boto3.client('ec2', region_name=region)
 
 
-def process_setup():
+def process_setup(machine_list = 'machines'):
     """
     Process the arguments for setting up the machines.
     """
     from ec2man.classes import Context
 
-    if not os.path.isfile(EC2_DIR + "machines"):
+    if not os.path.isfile(EC2_DIR + machine_list):
         show_error("Config file '" + EC2_DIR + "machines' not found.")
 
     # Read through the config file, add all instances into corresponding context's id_list.
     contexts = dict()
-    with open(EC2_DIR + "machines", 'r') as fconfig:
+    with open(EC2_DIR + machine_list, 'r') as fconfig:
         for line in fconfig.readlines():
             line = line.strip()
             if len(line) > 0:
@@ -199,17 +201,18 @@ def main(args):
     from ec2man.classes import Context
 
     # Not providing a context, then must be querying help message or doing setup.
-    if len(args) < 3:
-        if len(args) == 2 and args[1] == "help":
-            print(help_str)
-            return
-        elif len(args) == 2 and args[1] == "setup":
-            if not os.path.isdir(CTX_DIR):
-                os.mkdir(CTX_DIR)
-            process_setup()
-            return
-        else:
-            show_error("Unrecognized command / Not enough arguments.")
+    if len(args) == 2 and args[1] == "help":
+        print(help_str)
+        return
+    elif len(args) >= 2 and args[1] == "setup":
+        if not os.path.isdir(CTX_DIR):
+            os.mkdir(CTX_DIR)
+        machine_list = "machines"
+        if len(args) >= 3:
+            machine_list = args[2]
+        process_setup(machine_list)
+        return
+
     ctx_name, target = args[1], args[2]
     ctx_filename = CTX_DIR + ctx_name + ".context"
 
