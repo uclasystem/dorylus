@@ -41,7 +41,7 @@ done
 # For graph servers.
 if [ ${BUILD_GRAPH} -eq 1 ]; then
     echo "Processing context 'graph'..."
-    ${EC2MAN_CMD} graph 0 ssh -t "cd gnn-lambda && ./gnnman/helpers/graphserver.bld ${BACKEND_OPT} && ./gnnman/helpers/send-folder build"
+    ${EC2MAN_CMD} graph 0 ssh -t "source ~/.profile; cd gnn-lambda && ./gnnman/helpers/graphserver.bld ${BACKEND_OPT} && ./gnnman/helpers/send-folder build"
 fi
 
 
