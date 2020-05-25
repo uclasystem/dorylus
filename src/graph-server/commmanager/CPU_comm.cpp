@@ -25,11 +25,11 @@ void CPUComm::NNCompute(Chunk &chunk) {
 
     if (chunk.dir == PROP_TYPE::FORWARD) {
         printLog(nodeId, "CPU FORWARD NN started");
-        processForward(currLayer, currLayer == (totalLayers - 1));
+        // processForward(currLayer, currLayer == (totalLayers - 1));
     }
     if (chunk.dir == PROP_TYPE::BACKWARD) {
         printLog(nodeId, "CPU BACKWARD NN started");
-        processBackward(currLayer);
+        // processBackward(currLayer);
     }
     printLog(nodeId, "CPU NN Done");
 }

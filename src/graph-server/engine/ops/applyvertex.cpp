@@ -46,18 +46,10 @@ FeatType *Engine::applyVertex(FeatType *vtcsTensor, unsigned vtcsCnt,
 
             availLambdaId++;
         }
-        if (vecTimeLambdaInvoke.size() < numLayers) {
-            vecTimeLambdaInvoke.push_back(getTimer() - invTimer);
-        } else {
-            vecTimeLambdaInvoke[layer] += getTimer() - invTimer;
-        }
+        vecTimeLambdaInvoke[layer] += getTimer() - invTimer;
         double waitTimer = getTimer();
         resComm->NNSync();
-        if (vecTimeLambdaWait.size() < numLayers) {
-            vecTimeLambdaWait.push_back(getTimer() - waitTimer);
-        } else {
-            vecTimeLambdaWait[layer] += getTimer() - waitTimer;
-        }
+        vecTimeLambdaWait[layer] += getTimer() - waitTimer;
     }
     // if in GPU mode we launch gpu computation here and wait the results
     else {
@@ -67,12 +59,7 @@ FeatType *Engine::applyVertex(FeatType *vtcsTensor, unsigned vtcsCnt,
         resComm->NNCompute(batch);
     }
 
-    if (vecTimeApplyVtx.size() < numLayers) {
-        vecTimeApplyVtx.push_back(getTimer() - sttTimer);
-    } else {
-        vecTimeApplyVtx[layer] += getTimer() - sttTimer;
-    }
-
+    vecTimeApplyVtx[layer] += getTimer() - sttTimer;
     return outputTensor;
 }
 

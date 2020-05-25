@@ -81,11 +81,7 @@ FeatType *Engine::aggregate(FeatType **edgsTensor, unsigned edgsCnt,
     }
 #endif  // _GPU_ENABLED_
 
-    if (vecTimeAggregate.size() < numLayers) {
-        vecTimeAggregate.push_back(getTimer() - sttTimer);
-    } else {
-        vecTimeAggregate[layer] += getTimer() - sttTimer;
-    }
+    vecTimeAggregate[layer] += getTimer() - sttTimer;
     return outputTensor;
 }
 
@@ -100,6 +96,7 @@ FeatType *Engine::aggregateBackward(FeatType **eVGradTensor, unsigned edgsCnt,
     currId = 0;
     FeatType *outputTensor = savedNNTensors[layer]["aTg"].getData();
     FeatType *gradTensor = savedNNTensors[layer]["grad"].getData();
+    // FeatType *dAZ = savedNNTensors[layer]["dAZ"].getData(); // get from AE lambda
 
     assert(outputTensor != NULL);
     assert(gradTensor != NULL);
@@ -144,12 +141,7 @@ FeatType *Engine::aggregateBackward(FeatType **eVGradTensor, unsigned edgsCnt,
     }
 #endif
 
-    if (vecTimeAggregate.size() < 2 * numLayers) {
-        for (unsigned i = vecTimeAggregate.size(); i < 2 * numLayers; i++) {
-            vecTimeAggregate.push_back(0.0);
-        }
-    }
-    vecTimeAggregate[numLayers + layer] += getTimer() - sttTimer;
+    vecTimeAggregate[2 * numLayers - layer - 1] += getTimer() - sttTimer;
 
     return outputTensor;
 }
@@ -314,20 +306,12 @@ inline void Engine::forwardAggregateFromNeighbors(unsigned lvid,
     // Read out data of the current layer of given vertex.
     FeatType *currDataDst = getVtxFeat(outputTensor, lvid, featDim);
 
-    // Apply normalization factor on the current data.
-    {
-        const EdgeType normFactor = graph.vtxDataVec[lvid];
-        for (unsigned i = 0; i < featDim; ++i) {
-            currDataDst[i] *= normFactor;
-        }
-    }
-
     // Aggregate from incoming neighbors.
     for (unsigned long long eid = graph.forwardAdj.columnPtrs[lvid];
          eid < graph.forwardAdj.columnPtrs[lvid + 1]; ++eid) {
-        EdgeType normFactor = graph.forwardAdj.values[eid];
+        EdgeType edgeWeight = graph.forwardAdj.values[eid];
         for (unsigned j = 0; j < featDim; ++j) {
-            currDataDst[j] += inputTensor[eid][j] * normFactor;
+            currDataDst[j] += inputTensor[eid][j] * edgeWeight;
         }
     }
 }
@@ -337,8 +321,12 @@ inline void Engine::forwardAggregateFromNeighbors(unsigned lvid,
 // Below are private backward functions for the engine. //
 //////////////////////////////////////////////////////////
 void Engine::aggregateBPCompute(unsigned tid, void *args) {
-    FeatType *nextGradTensor = ((AggOPArgs *)args)->outputTensor;
-    FeatType **gradTensor = ((AggOPArgs *)args)->inputTensor;
+    FeatType *outputTensor = savedNNTensors[layer]["aTg"].getData();
+
+    FeatType **eFeatTensor = savedEdgeTensors[layer]["fedge"];
+    FeatType **eGradTensor = savedEdgeTensors[layer]["bedge"];
+    FeatType *dA = savedNNTensors[layer]["dA"].getData();
+
     const unsigned vtcsCnt = ((AggOPArgs *)args)->vtcsCnt;
     // const unsigned edgsCnt = ((AggOPArgs *) args)->edgsCnt;
     const unsigned featDim = ((AggOPArgs *)args)->featDim;
@@ -348,8 +336,27 @@ void Engine::aggregateBPCompute(unsigned tid, void *args) {
     while (currId < vtcsCnt) {
         lvid = __sync_fetch_and_add(&currId, 1);
         if (lvid < vtcsCnt) {
-            backwardAggregateFromNeighbors(lvid, nextGradTensor, gradTensor,
-                                           featDim);
+            // Read out data of the current layer of given vertex.
+            FeatType *currDataDst = getVtxFeat(outputTensor, lvid, featDim);
+
+            // Aggregate from outgoing neighbors.
+            // TODO: (YIFAN) Here should be backwardAdj and rowPtrs. Now this works only for undirected graph
+            for (unsigned long long eid = graph.forwardAdj.columnPtrs[lvid];
+                eid < graph.forwardAdj.columnPtrs[lvid + 1]; ++eid) {
+                EdgeType normFactor = graph.forwardAdj.values[eid];
+                for (unsigned j = 0; j < featDim; ++j) {
+                    currDataDst[j] += eGradTensor[eid][j] * normFactor;
+                }
+            }
+
+            // Aggregate from incoming neighbors.
+            for (unsigned long long eid = graph.forwardAdj.columnPtrs[lvid];
+                eid < graph.forwardAdj.columnPtrs[lvid + 1]; ++eid) {
+                EdgeType edgeGrad = dA[eid];
+                for (unsigned j = 0; j < featDim; ++j) {
+                    currDataDst[j] += eFeatTensor[eid][j] * edgeGrad;
+                }
+            }
         }
     }
 }

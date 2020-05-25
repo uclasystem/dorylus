@@ -76,6 +76,15 @@ void Engine::init(int argc, char *argv[]) {
 
     printGraphMetrics();
 
+    for (unsigned i = 0; i < numLayers * 2; i++) {
+        vecTimeAggregate.push_back(0.0);
+        vecTimeApplyVtx.push_back(0.0);
+        vecTimeApplyEdg.push_back(0.0);
+        vecTimeScatter.push_back(0.0);
+        vecTimeLambdaInvoke.push_back(0.0);
+        vecTimeLambdaWait.push_back(0.0);
+    }
+
     // save intermediate tensors during forward phase for backward computation.
     vtxNNSavedTensors = new std::vector<Matrix>[numLayers];
     edgNNSavedTensors = new std::vector<Matrix>[numLayers];
@@ -232,12 +241,9 @@ void Engine::preallocateGAT() {
         savedNNTensors[layer]["z"] = Matrix(vtxCnt, nextFeatDim, zTensor);
 
         // Technically not e_i because needs LeakyReLU
-        FeatType* az_iTensor = new FeatType[vtxCnt * 1];
-        FeatType* az_jTensor = new FeatType[vtxCnt * 1];
-        std::memset(az_iTensor, 0, sizeof(FeatType) * vtxCnt * 1);
-        std::memset(az_jTensor, 0, sizeof(FeatType) * vtxCnt * 1);
-        savedNNTensors[layer]["az_i"] = Matrix(vtxCnt, 1, az_iTensor);
-        savedNNTensors[layer]["az_j"] = Matrix(vtxCnt, 1, az_jTensor);
+        FeatType* azTensor = new FeatType[vtxCnt * 1];
+        std::memset(azTensor, 0, sizeof(FeatType) * vtxCnt * 1);
+        savedNNTensors[layer]["az"] = Matrix(vtxCnt, 1, azTensor);
 
         FeatType *ghostZTensor =
             new FeatType[graph.srcGhostCnt * nextFeatDim];
@@ -245,25 +251,12 @@ void Engine::preallocateGAT() {
         savedNNTensors[layer]["fg_z"] =
             Matrix(graph.srcGhostCnt, nextFeatDim, ghostZTensor);
 
-        FeatType* ghostAZTensor =
-            new FeatType[graph.srcGhostCnt * 1];
-        std::memset(ghostAZTensor, 0, sizeof(FeatType) * graph.srcGhostCnt * 1);
-        savedNNTensors[layer]["fg_az"] =
-            Matrix(graph.srcGhostCnt, 1, ghostAZTensor);
-
         // Just storing these as matrices for easy access
         // Actually they are just edge values to be used with CSC/CSR
-        FeatType* leakyTensor =
-            new FeatType[graph.forwardAdj.nnz * 1];
-        std::memset(leakyTensor, 0, sizeof(FeatType) * graph.forwardAdj.nnz * 1);
-        savedNNTensors[layer]["lRlu"] =
-            Matrix(graph.forwardAdj.nnz, 1, leakyTensor);
-
-        FeatType* eijTensor =
-            new FeatType[graph.forwardAdj.nnz * 1];
-        std::memset(eijTensor, 0, sizeof(FeatType) * graph.forwardAdj.nnz * 1);
-        savedNNTensors[layer]["eij"] =
-            Matrix(graph.forwardAdj.nnz, 1, eijTensor);
+        FeatType* ATensor = graph.forwardAdj.values;
+        std::memset(ATensor, 0, sizeof(FeatType) * graph.forwardAdj.nnz * 1);
+        savedNNTensors[layer]["A"] =
+            Matrix(graph.forwardAdj.nnz, 1, ATensor);
 
         // Attention scores stored in CSCMatrix<>::values
 
@@ -289,10 +282,17 @@ void Engine::preallocateGAT() {
     for (layer = numLayers; layer > 0; --layer) {
         unsigned featDim = getFeatDim(layer);
 
-        // APPLY TENSORS
+        // LOSS GRAD TENSORS
         FeatType *gradTensor = new FeatType[vtxCnt * featDim];
         savedNNTensors[layer]["grad"] =
             Matrix("grad", vtxCnt, featDim, gradTensor);
+
+        // APPLY EDGE TENSORS
+        FeatType* gradATensor =
+            new FeatType[graph.forwardAdj.nnz * 1];
+        std::memset(gradATensor, 0, sizeof(FeatType) * graph.forwardAdj.nnz * 1);
+        savedNNTensors[layer]["dA"] =
+            Matrix(graph.forwardAdj.nnz, 1, gradATensor);
 
         // GATHER TENSORS
         FeatType *aTgTensor = new FeatType[vtxCnt * featDim];
@@ -458,9 +458,6 @@ FeatType *Engine::runForward(unsigned epoch) {
 
     // Create buffer for first-layer aggregation.
     FeatType *inputTensor = forwardVerticesInitData;
-//    forwardGhostVerticesDataIn = forwardGhostInitData;
-    // FeatType **eVFeatsTensor = srcVFeats2eFeats(inputTensor,
-    // forwardGhostInitData, graph.localVtxCnt, getFeatDim(layer));
     FeatType **eVFeatsTensor = NULL; //savedEdgeTensors[0]["fedge"];
     for (layer = 0; layer < numLayers; ++layer) {
         printLog(nodeId, "Starting layer %u", layer);
@@ -477,16 +474,9 @@ FeatType *Engine::runForward(unsigned epoch) {
         eVFeatsTensor =
             scatter(inputTensor, outputTensor, graph.localVtxCnt, getFeatDim(layer + 1));
 
-        nodeManager.barrier();
-        printLog(nodeId, "SCATTERING az");
-        inputTensor = savedNNTensors[layer]["az_i"].getData();
-        outputTensor = savedNNTensors[layer]["fg_az"].getData();
-        eVFeatsTensor = scatter(inputTensor, outputTensor, graph.localVtxCnt, 1);
-        // END SCATTER
-
         printLog(nodeId, "Starting apply edge... /_\\");
         eVFeatsTensor =
-            applyEdge(NULL, graph.localInEdgeCnt, 0, eVFeatsTensor,
+            applyEdge(savedNNTensors[layer]["A"].getData(), graph.localInEdgeCnt, 0, eVFeatsTensor,
                       eVFeatsTensor + graph.localInEdgeCnt,
                       getFeatDim(layer + 1), getFeatDim(layer + 1));
 
@@ -539,15 +529,14 @@ void Engine::runBackward(FeatType *initGradTensor) {
         FeatType* ghostTensor = savedNNTensors[layer]["bg_d"].getData();
         eVGradTensor =
             scatterBackward(gradTensor, ghostTensor, graph.localVtxCnt, getFeatDim(layer + 1));
-        printLog(nodeId, "AGG BACK");
-        gradTensor = aggregateBackward(eVGradTensor, graph.localOutEdgeCnt,
-                                       getFeatDim(layer + 1), AGGREGATOR::WSUM);
         printLog(nodeId, "APP EDGE BACK");
         eVGradTensor = applyEdgeBackward(NULL, graph.localOutEdgeCnt, 0,
                                          eVGradTensor + graph.localOutEdgeCnt,
                                          eVGradTensor, getFeatDim(layer + 1),
                                          getFeatDim(layer + 1));
-        return;
+        printLog(nodeId, "AGG BACK");
+        gradTensor = aggregateBackward(eVGradTensor, graph.localOutEdgeCnt,
+                                       getFeatDim(layer + 1), AGGREGATOR::WSUM);
         gradTensor =
             applyVertexBackward(gradTensor, graph.localVtxCnt,
                                 getFeatDim(layer - 1), getFeatDim(layer));

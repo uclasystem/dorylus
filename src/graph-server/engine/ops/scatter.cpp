@@ -24,6 +24,8 @@ FeatType **Engine::scatter(FeatType *vtcsTensor, FeatType* ghostOutTensor, unsig
                            unsigned featDim) {
     double sttTimer = getTimer();
 
+    nodeManager.barrier();
+
     // Start data communicators.
     commHalt = false;
     recvCnt = 0;
@@ -60,6 +62,8 @@ FeatType **Engine::scatter(FeatType *vtcsTensor, FeatType* ghostOutTensor, unsig
 FeatType **Engine::scatterBackward(FeatType *gradTensor, FeatType* ghostOutTensor, unsigned vtcsCnt,
                                    unsigned featDim) {
     double sttTimer = getTimer();
+
+    nodeManager.barrier();
 
     // Start data communicators.
     commHalt = false;
@@ -111,19 +115,19 @@ void Engine::forwardGhostReceiver(unsigned tid, void* _featDim) {
     FeatType *msgBuf = (FeatType *)new char[MAX_MSG_SIZE];
 
     // While loop, looping infinitely to get the next message.
-    while (!commHalt) {
+    while (true) {
         // No message in queue.
         if (!commManager.dataPullIn(&sender, &topic, msgBuf, MAX_MSG_SIZE)) {
             // Computation workers done their work, so communicator goes to
             // death as well.
             if (commHalt) {
-                delete[] msgBuf;
                 if (commManager.dataPullIn(&sender, &topic, msgBuf,
                                            MAX_MSG_SIZE)) {
                     printLog(
                         nodeId,
                         "\033[1;31m[ ERROR ]\033[0m Still messages in buffer");
                 }
+                delete[] msgBuf;
 
                 return;
             }
@@ -202,7 +206,7 @@ void Engine::backwardGhostReceiver(unsigned tid, void* _featDim) {
     FeatType *msgBuf = (FeatType *)new char[MAX_MSG_SIZE];
 
     // While loop, looping infinitely to get the next message.
-    while (!commHalt) {
+    while (true) {
         // No message in queue.
         if (!commManager.dataPullIn(&sender, &topic, msgBuf, MAX_MSG_SIZE)) {
             // Computation workers done their work, so communicator goes to

@@ -30,58 +30,68 @@ FeatType **Engine::applyEdge(EdgeType *edgsTensor, unsigned edgsCnt,
     FeatType **outputTensor = eSrcVtcsTensor;
     eSrcVtcsTensor = NULL;
 
-    // NOTE: This should definitely be in resComm->NNComute() but since we are
-    // doing everything locally and currently have no infrastructre for switching
-    // b/w tensor on lambdas and CPUs I'm just going to do it here
-    FeatType* az_i = savedNNTensors[layer]["az_i"].getData();
-    FeatType* az_j = savedNNTensors[layer]["az_j"].getData();
-    FeatType* fg_az = savedNNTensors[layer]["fg_az"].getData();
+    unsigned vtcsCnt = graph.localVtxCnt;
+    if (mode == LAMBDA) {
+        double invTimer = getTimer();
+        const unsigned chunkSize =
+            (vtcsCnt + numLambdasForward - 1) / numLambdasForward;
+        unsigned availLambdaId = 0;
+        while (availLambdaId < numLambdasForward) {
+            unsigned lowBound = availLambdaId * chunkSize;
+            unsigned upBound = std::min(lowBound + chunkSize, vtcsCnt);
+            Chunk chunk{
+                availLambdaId, nodeId * numLambdasForward + availLambdaId,
+                lowBound,      upBound,
+                layer,         PROP_TYPE::FORWARD,
+                currEpoch,     true};  // epoch is not useful in sync version
+            resComm->NNCompute(chunk);
 
-    FeatType* lRlu = savedNNTensors[layer]["lRlu"].getData();
-    FeatType* eij = savedNNTensors[layer]["eij"].getData();
-
-    // Compute unnormalized attention scores for all edges in this partition
-    CSCMatrix<EdgeType>& csc = graph.forwardAdj;
-    for (unsigned lvid = 0; lvid < csc.columnCnt; ++lvid) {
-        FeatType az_lvid = az_i[lvid];
-        for (unsigned long long eid = csc.columnPtrs[lvid];
-          eid < csc.columnPtrs[lvid + 1]; ++eid) {
-            unsigned rowId = graph.forwardAdj.rowIdxs[eid];
-            FeatType az_rvid = 0.0;
-            if (rowId < graph.localVtxCnt) {
-                az_rvid = az_j[rowId];
-            } else {
-                az_rvid = fg_az[rowId - graph.localVtxCnt];
-            }
-            // az_rvid should never be 0
-            assert(az_rvid != 0.0);
-
-            lRlu[eid] = az_lvid + az_rvid;
-            eij[eid] = leakyReLU(lRlu[eid]);
+            availLambdaId++;
         }
-    }
+        vecTimeLambdaInvoke[layer] += getTimer() - invTimer;
 
-    // Normalize attention scores for edges using softmax
-    // TODO: Make stable softmax
-    for (unsigned lvid = 0; lvid < csc.columnCnt; ++lvid) {
-        float reflexiveNorm = leakyReLU(az_i[lvid] + az_j[lvid]);
-        FeatType denom = 1e-20 + std::exp(reflexiveNorm);
-        for (unsigned long long eid = csc.columnPtrs[lvid];
-          eid < csc.columnPtrs[lvid + 1]; ++eid) {
-            denom += std::exp(eij[eid]);
-        }
-        for (unsigned long long eid = csc.columnPtrs[lvid];
-          eid < csc.columnPtrs[lvid + 1]; ++eid) {
-            csc.values[eid] = eij[eid] / denom;
-        }
-    }
+        double waitTimer = getTimer();
+        resComm->NNSync();
+        vecTimeLambdaWait[layer] += getTimer() - waitTimer;
 
-    if (vecTimeApplyEdg.size() < numLayers) {
-        vecTimeApplyEdg.push_back(getTimer() - sttTimer);
+        // // NOTE: This should definitely be in resComm->NNComute() but since we are
+        // // doing everything locally and currently have no infrastructre for switching
+        // // b/w tensor on lambdas and CPUs I'm just going to do it here
+        // FeatType* az_i = savedNNTensors[layer]["az_i"].getData();
+        // FeatType* az_j = savedNNTensors[layer]["az_j"].getData();
+        // FeatType* fg_az = savedNNTensors[layer]["fg_az"].getData();
+
+        // FeatType* lRlu = savedNNTensors[layer]["lRlu"].getData();
+        // FeatType* eij = savedNNTensors[layer]["eij"].getData();
+
+        // // Compute unnormalized attention scores for all edges in this partition
+        // CSCMatrix<EdgeType>& csc = graph.forwardAdj;
+        // for (unsigned lvid = 0; lvid < csc.columnCnt; ++lvid) {
+        //     FeatType az_lvid = az_i[lvid];
+        //     for (unsigned long long eid = csc.columnPtrs[lvid];
+        //     eid < csc.columnPtrs[lvid + 1]; ++eid) {
+        //         unsigned rowId = graph.forwardAdj.rowIdxs[eid];
+        //         FeatType az_rvid = 0.0;
+        //         if (rowId < graph.localVtxCnt) {
+        //             az_rvid = az_j[rowId];
+        //         } else {
+        //             az_rvid = fg_az[rowId - graph.localVtxCnt];
+        //         }
+        //         // az_rvid should never be 0
+        //         assert(az_rvid != 0.0);
+
+        //         lRlu[eid] = az_lvid + az_rvid;
+        //         eij[eid] = leakyReLU(lRlu[eid]);
+        //     }
+        // }
     } else {
-        vecTimeApplyEdg[layer] += getTimer() - sttTimer;
+        Chunk batch{
+            nodeId,    nodeId, 0, vtcsCnt, layer, PROP_TYPE::FORWARD,
+            currEpoch, true};  // for now it loads the entire feature matrix
+        resComm->NNCompute(batch);
     }
 
+    vecTimeApplyEdg[layer] += getTimer() - sttTimer;
     return outputTensor;
 }
 
@@ -113,21 +123,11 @@ FeatType **Engine::applyEdgeBackward(FeatType* edgsTensor, unsigned edgsCnt,
 
             ++availLambdaId;
         }
-
-        if (vecTimeLambdaInvoke.size() < numLayers) {
-            vecTimeLambdaInvoke.push_back(getTimer() - invTimer);
-        } else {
-            vecTimeLambdaInvoke[layer] += getTimer() - invTimer;
-
-        }
+        vecTimeLambdaInvoke[2 * numLayers - layer - 1] += getTimer() - invTimer;
 
         double waitTimer = getTimer();
         resComm->NNSync();
-        if (vecTimeLambdaWait.size() < numLayers) {
-            vecTimeLambdaWait.push_back(getTimer() - waitTimer);
-        } else {
-            vecTimeLambdaWait[layer] += getTimer() - waitTimer;
-        }
+        vecTimeLambdaWait[2 * numLayers - layer - 1] += getTimer() - waitTimer;
     }
 
 //    Matrix& derivMat = savedNNTensors[layer + 1]["grad"];
@@ -154,12 +154,7 @@ FeatType **Engine::applyEdgeBackward(FeatType* edgsTensor, unsigned edgsCnt,
 //    for (auto &sTensor : edgNNSavedTensors[layer - 1]) {
 //        delete[] sTensor.getData();
 //    }
-    if (vecTimeApplyEdg.size() < 2 * numLayers) {
-        for (unsigned i = vecTimeApplyEdg.size(); i < 2 * numLayers; i++) {
-            vecTimeApplyEdg.push_back(0.0);
-        }
-    }
-    vecTimeApplyEdg[numLayers + layer - 1] += getTimer() - sttTimer;
+    vecTimeApplyEdg[2 * numLayers - layer - 1] += getTimer() - sttTimer;
     return outputTensor;
 }
 
