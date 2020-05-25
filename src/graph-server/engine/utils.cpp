@@ -258,7 +258,9 @@ void Engine::output() {
  */
 void Engine::printEngineMetrics() {
     nodeManager.barrier();
-    if (master()) {
+    // if (master()) {
+for (unsigned i = 0; i < numNodes; i++) {
+    if (nodeId == i) {
         gtimers.report();
 
         fprintf(stderr, "[ Node %3u ]  <EM>: Run start time: %s", nodeId, std::ctime(&start_time));
@@ -313,6 +315,8 @@ void Engine::printEngineMetrics() {
 
         printLog(nodeId, "Relaunched Lambda Cnt: %u", resComm->getRelaunchCnt());
     }
+    nodeManager.barrier();
+}
 
     nodeManager.barrier();
     double sum = 0.0;
