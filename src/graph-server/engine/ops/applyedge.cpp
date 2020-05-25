@@ -43,7 +43,7 @@ FeatType **Engine::applyEdge(EdgeType *edgsTensor, unsigned edgsCnt,
                 availLambdaId, nodeId * numLambdasForward + availLambdaId,
                 lowBound,      upBound,
                 layer,         PROP_TYPE::FORWARD,
-                currEpoch,     true};  // epoch is not useful in sync version
+                currEpoch,     false};  // epoch is not useful in sync version
             resComm->NNCompute(chunk);
 
             availLambdaId++;
@@ -87,7 +87,7 @@ FeatType **Engine::applyEdge(EdgeType *edgsTensor, unsigned edgsCnt,
     } else {
         Chunk batch{
             nodeId,    nodeId, 0, vtcsCnt, layer, PROP_TYPE::FORWARD,
-            currEpoch, true};  // for now it loads the entire feature matrix
+            currEpoch, false};  // for now it loads the entire feature matrix
         resComm->NNCompute(batch);
     }
 
