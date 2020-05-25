@@ -111,7 +111,7 @@ void Engine::forwardGhostReceiver(unsigned tid, void* _featDim) {
     unsigned sender, topic;
     unsigned vtcsRecvd = 0;
     unsigned featDim = *(unsigned*) _featDim;
-    printLog(nodeId, "Ghost Receiver has feat dim %u", featDim);
+    // printLog(nodeId, "Ghost Receiver has feat dim %u", featDim);
     FeatType *msgBuf = (FeatType *)new char[MAX_MSG_SIZE];
 
     // While loop, looping infinitely to get the next message.

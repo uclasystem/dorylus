@@ -330,7 +330,7 @@ void Engine::aggregateBPCompute(unsigned tid, void *args) {
     const unsigned vtcsCnt = ((AggOPArgs *)args)->vtcsCnt;
     // const unsigned edgsCnt = ((AggOPArgs *) args)->edgsCnt;
     const unsigned featDim = ((AggOPArgs *)args)->featDim;
-    printLog(nodeId, "featDim of back agg %u", featDim);
+    // printLog(nodeId, "featDim of back agg %u", featDim);
 
     unsigned lvid = 0;
     while (currId < vtcsCnt) {
@@ -341,9 +341,9 @@ void Engine::aggregateBPCompute(unsigned tid, void *args) {
 
             // Aggregate from outgoing neighbors.
             // TODO: (YIFAN) Here should be backwardAdj and rowPtrs. Now this works only for undirected graph
-            for (unsigned long long eid = graph.forwardAdj.columnPtrs[lvid];
-                eid < graph.forwardAdj.columnPtrs[lvid + 1]; ++eid) {
-                EdgeType normFactor = graph.forwardAdj.values[eid];
+            for (unsigned long long eid = graph.backwardAdj.rowPtrs[lvid];
+                eid < graph.backwardAdj.rowPtrs[lvid + 1]; ++eid) {
+                EdgeType normFactor = graph.backwardAdj.values[eid];
                 for (unsigned j = 0; j < featDim; ++j) {
                     currDataDst[j] += eGradTensor[eid][j] * normFactor;
                 }

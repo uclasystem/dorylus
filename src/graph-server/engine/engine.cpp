@@ -289,10 +289,10 @@ void Engine::preallocateGAT() {
 
         // APPLY EDGE TENSORS
         FeatType* gradATensor =
-            new FeatType[graph.forwardAdj.nnz * 1];
-        std::memset(gradATensor, 0, sizeof(FeatType) * graph.forwardAdj.nnz * 1);
+            new FeatType[graph.backwardAdj.nnz * 1];
+        std::memset(gradATensor, 0, sizeof(FeatType) * graph.backwardAdj.nnz * 1);
         savedNNTensors[layer]["dA"] =
-            Matrix(graph.forwardAdj.nnz, 1, gradATensor);
+            Matrix(graph.backwardAdj.nnz, 1, gradATensor);
 
         // GATHER TENSORS
         FeatType *aTgTensor = new FeatType[vtxCnt * featDim];
