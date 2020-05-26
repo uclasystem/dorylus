@@ -104,3 +104,38 @@ checkLoss(Matrix& preds, Matrix& labels) {
 
     return totalLoss;
 }
+
+Matrix
+edgeMatMul(EdgeInfo& eInfo, Matrix& A, Matrix& B) {
+    FeatType* result = new FeatType[eInfo.nChunkEdges * 1];
+
+    FeatType* weightValues = B.getData();
+
+//    for (unsigned u = 0; u < A.getCols(); ++u) {
+//        std::cout << weightValues[u] << " ";
+//    }
+//    std::cout << std::endl;
+//
+//    for (unsigned vid = 0; vid < eInfo.numLvids; ++vid) {
+//        FeatType* vidFeats = A.get(vid);
+//        for (unsigned vInd = 0; vInd < A.getCols(); ++vInd) {
+//            std::cout << vidFeats[vInd] << " ";
+//        }
+//        std::cout << std::endl;
+//    }
+
+    unsigned eIndex = 0;
+    for (unsigned vid = 0; vid < eInfo.numLvids; ++vid) {
+        FeatType* vidFeats = A.get(vid);
+        for (unsigned eid = 0; eid < eInfo.edgePtrs[vid + 1] - eInfo.edgePtrs[vid];
+             ++eid) {
+            FeatType eValue = 0.0;
+            for (unsigned v = 0; v < A.getCols(); ++v) {
+                eValue += vidFeats[v] * weightValues[v];
+            }
+            result[eIndex++] = eValue;
+        }
+    }
+
+    return Matrix(eInfo.nChunkEdges, 1, result);
+}

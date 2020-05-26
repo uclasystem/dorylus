@@ -254,9 +254,9 @@ void Engine::preallocateGAT() {
         savedNNTensors[layer]["z"] = Matrix(vtxCnt, nextFeatDim, zTensor);
 
         // Technically not e_i because needs LeakyReLU
-        FeatType* azTensor = new FeatType[vtxCnt * 1];
-        std::memset(azTensor, 0, sizeof(FeatType) * vtxCnt * 1);
-        savedNNTensors[layer]["az"] = Matrix(vtxCnt, 1, azTensor);
+        FeatType* azTensor = new FeatType[graph.forwardAdj.nnz * 1];
+        std::memset(azTensor, 0, sizeof(FeatType) * graph.forwardAdj.nnz * 1);
+        savedNNTensors[layer]["az"] = Matrix(graph.forwardAdj.nnz, 1, azTensor);
 
         FeatType *ghostZTensor =
             new FeatType[graph.srcGhostCnt * nextFeatDim];
