@@ -53,7 +53,7 @@ FeatType *Engine::aggregate(FeatType **edgsTensor, unsigned edgsCnt,
 #else
     // AH
     FeatType* hTensor = savedNNTensors[layer]["z"].getData();
-    FeatType *outputTensor = savedNNTensors[layer + 1]["ah"].getData();
+    FeatType *outputTensor = savedNNTensors[layer]["ah"].getData();
     assert(hTensor != NULL);
     assert(outputTensor != NULL);
 

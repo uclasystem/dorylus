@@ -40,7 +40,7 @@ FeatType *Engine::applyVertex(FeatType *vtcsTensor, unsigned vtcsCnt,
             Chunk chunk{
                 availLambdaId, nodeId * numLambdasForward + availLambdaId,
                 lowBound,      upBound,
-                layer,         PROP_TYPE::FORWARD,
+                (unsigned)layer,         PROP_TYPE::FORWARD,
                 currEpoch,     true};  // epoch is not useful in sync version
             resComm->NNCompute(chunk);
 
@@ -54,7 +54,7 @@ FeatType *Engine::applyVertex(FeatType *vtcsTensor, unsigned vtcsCnt,
     // if in GPU mode we launch gpu computation here and wait the results
     else {
         Chunk batch{
-            nodeId,    nodeId, 0, vtcsCnt, layer, PROP_TYPE::FORWARD,
+            nodeId,    nodeId, 0, vtcsCnt, (unsigned)layer, PROP_TYPE::FORWARD,
             currEpoch, true};  // for now it loads the entire feature matrix
         resComm->NNCompute(batch);
     }
@@ -68,7 +68,12 @@ FeatType *Engine::applyVertexBackward(FeatType *gradTensor, unsigned vtcsCnt,
     double sttTimer = getTimer();
 
     assert(vtcsCnt == graph.localVtxCnt);
-    FeatType *outputTensor = savedNNTensors[layer - 1]["grad"].getData();
+    FeatType *outputTensor;
+    if (layer > 0) {
+        outputTensor = savedNNTensors[layer - 1]["grad"].getData();
+    } else {
+        outputTensor = NULL;
+    }
 
     if (vecTimeLambdaInvoke.size() < 2 * numLayers) {
         for (unsigned i = vecTimeLambdaInvoke.size(); i < 2 * numLayers; ++i) {
@@ -86,14 +91,14 @@ FeatType *Engine::applyVertexBackward(FeatType *gradTensor, unsigned vtcsCnt,
             Chunk chunk{
                 u,         nodeId * numLambdasForward + u,
                 lowBound,  upBound,
-                layer - 1, PROP_TYPE::BACKWARD,
+                (unsigned)layer, PROP_TYPE::BACKWARD,
                 currEpoch, true};  // epoch doesn't matter in sync version
             resComm->NNCompute(chunk);
         }
         resComm->NNSync();
     } else {
         Chunk chunk{nodeId,    nodeId,    0,
-                    vtcsCnt,   layer - 1, PROP_TYPE::BACKWARD,
+                    vtcsCnt,   (unsigned)layer, PROP_TYPE::BACKWARD,
                     currEpoch, true};
         resComm->NNCompute(chunk);
     }

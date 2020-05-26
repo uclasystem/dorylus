@@ -13,31 +13,30 @@
 // This class is used for CPU/GPU <-> weight server communication
 class MessageService {
    public:
-    MessageService(){};
     MessageService(unsigned wPort_, unsigned nodeId_);
 
     // weight server related
     void setUpWeightSocket(char *addr);
-    void prefetchWeightsMatrix(unsigned totalLayers);
-
-    void sendWeightUpdate(Matrix &matrix, unsigned layer);
-    void terminateWeightServers(std::vector<char *> &weightServerAddrs);
-    void sendShutdownMessage(zmq::socket_t &weightsocket);
 
     Matrix getWeightMatrix(unsigned layer);
+    Matrix getaMatrix(unsigned layer);
+    void sendWeightUpdate(Matrix &matrix, unsigned layer);
+    void sendaUpdate(Matrix &a, unsigned layer);
+
+    void prefetchWeightsMatrix(unsigned totalLayers);
 
    private:
     static char weightAddr[50];
     zmq::context_t wctx;
-    zmq::socket_t *dataSocket;
-    zmq::socket_t *weightSocket;
+    zmq::socket_t wsocket;
     zmq::message_t confirm;
     unsigned nodeId;
     unsigned wPort;
     bool wsocktReady;
 
     unsigned epoch;
-    std::vector<Matrix *> weights;
+    std::vector<Matrix> weights;
+    std::vector<Matrix> as; // a vector for edge attention computation
     std::thread wReqThread;
     std::thread wSndThread;
 };

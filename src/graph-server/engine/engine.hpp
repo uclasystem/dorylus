@@ -212,7 +212,7 @@ public:
 
     bool undirected = false;
 
-    unsigned layer = 0;
+    int layer = 0;
     unsigned currEpoch = -1;
 
     // Timing stuff.

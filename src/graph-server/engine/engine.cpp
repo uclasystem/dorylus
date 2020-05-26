@@ -203,6 +203,17 @@ void Engine::destroy() {
     delete[] forwardGhostInitData;
 
     delete[] localVerticesLabels;
+
+    for (auto &kkv : savedNNTensors) {
+        for (auto &kv : kkv) {
+            kv.second.free();
+        }
+    }
+    for (auto &kkv : savedEdgeTensors) {
+        for (auto &kv : kkv) {
+            delete[] kv.second;
+        }
+    }
 }
 
 
@@ -266,7 +277,7 @@ void Engine::preallocateGAT() {
 
         FeatType *ahTensor = new FeatType[vtxCnt * nextFeatDim];
         std::memset(ahTensor, 0, sizeof(FeatType) * vtxCnt * nextFeatDim);
-        savedNNTensors[layer + 1]["ah"] = Matrix("ah", vtxCnt, nextFeatDim, ahTensor);
+        savedNNTensors[layer]["ah"] = Matrix("ah", vtxCnt, nextFeatDim, ahTensor);
 
         if (layer < numLayers - 1) {
             FeatType *hTensor = new FeatType[vtxCnt * nextFeatDim];
@@ -279,8 +290,8 @@ void Engine::preallocateGAT() {
     }
 
     // backward tensor allocation
-    for (layer = numLayers; layer > 0; --layer) {
-        unsigned featDim = getFeatDim(layer);
+    for (layer = numLayers - 1; layer >= 0; --layer) {
+        unsigned featDim = getFeatDim(layer + 1);
 
         // LOSS GRAD TENSORS
         FeatType *gradTensor = new FeatType[vtxCnt * featDim];
@@ -303,9 +314,9 @@ void Engine::preallocateGAT() {
         savedNNTensors[layer]["bg_d"] =
             Matrix(graph.dstGhostCnt, featDim, ghostTensor);
 
-        FeatType **eFeats =
+        FeatType **eGrad =
             dstVFeats2eFeats(gradTensor, ghostTensor, vtxCnt, featDim);
-        savedEdgeTensors[layer]["bedge"] = eFeats;
+        savedEdgeTensors[layer]["bedge"] = eGrad;
     }
 }
 
@@ -486,6 +497,7 @@ FeatType *Engine::runForward(unsigned epoch) {
                                 getFeatDim(layer + 1), AGGREGATOR::WSUM);
     }
 
+    layer = numLayers - 1;
     printLog(nodeId, "Getting grad mat from layer %u", layer);
     FeatType* predictions = savedNNTensors[layer]["grad"].getData();
     predictions = softmax(inputTensor, predictions, graph.localVtxCnt, getFeatDim(numLayers));
@@ -516,7 +528,7 @@ void Engine::runBackward(FeatType *initGradTensor) {
 
     // Calculate output loss
     Matrix& labels = savedNNTensors[numLayers - 1]["lab"];
-    Matrix& outputDeriv = savedNNTensors[layer]["grad"];
+    Matrix& outputDeriv = savedNNTensors[numLayers - 1]["grad"];
     outputDeriv -= labels;
 
     // Create buffer for first-layer aggregation.
@@ -524,7 +536,7 @@ void Engine::runBackward(FeatType *initGradTensor) {
 
     // Pure sequential
     FeatType **eVGradTensor = NULL;
-    for (layer = numLayers - 1; layer > 0; --layer) {
+    for (layer = numLayers - 1; layer >= 0; --layer) {
         printLog(nodeId, "SCATTER BACK");
         FeatType* ghostTensor = savedNNTensors[layer]["bg_d"].getData();
         eVGradTensor =
@@ -539,7 +551,7 @@ void Engine::runBackward(FeatType *initGradTensor) {
                                        getFeatDim(layer + 1), AGGREGATOR::WSUM);
         gradTensor =
             applyVertexBackward(gradTensor, graph.localVtxCnt,
-                                getFeatDim(layer - 1), getFeatDim(layer));
+                                getFeatDim(layer), getFeatDim(layer + 1));
     }
 
     timeBackwardProcess += getTimer();

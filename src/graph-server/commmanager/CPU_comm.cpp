@@ -2,94 +2,104 @@
 
 #include <omp.h>
 using namespace std;
-CPUComm::CPUComm(Engine *engine_) : ResourceComm() {
-    engine = engine_;
-    nodeId = engine->nodeId;
-    totalLayers = engine->numLayers;
-    wServersFile = engine->weightserverIPFile;
-    wPort = engine->weightserverPort;
-    numNodes = engine->numNodes;
-    currLayer = 0;
 
-    msgService = MessageService(wPort, nodeId);
+CPUComm::CPUComm(Engine *engine_)
+    : engine(engine_), nodeId(engine_->nodeId), totalLayers(engine_->numLayers),
+    wServersFile(engine_->weightserverIPFile), wPort(engine_->weightserverPort),
+    numNodes(engine_->numNodes), currLayer(0), savedNNTensors(engine_->savedNNTensors),
+    msgService(wPort, nodeId)
+{
     loadWeightServers(weightServerAddrs, wServersFile);
     msgService.setUpWeightSocket(
         weightServerAddrs.at(nodeId % weightServerAddrs.size()));
-
-    msgService.prefetchWeightsMatrix(totalLayers);
 }
+
 void CPUComm::NNCompute(Chunk &chunk) {
     c=chunk;
     currLayer = chunk.layer;
-    tensorMap = &engine->savedNNTensors[chunk.layer];
 
     if (chunk.dir == PROP_TYPE::FORWARD) {
-        printLog(nodeId, "CPU FORWARD NN started");
-        // processForward(currLayer, currLayer == (totalLayers - 1));
+        if (chunk.vertex) {
+            printLog(nodeId, "CPU FORWARD vtx NN started");
+            vtxNNForward(currLayer, currLayer == (totalLayers - 1));
+        } else {
+            printLog(nodeId, "CPU FORWARD edg NN started");
+            edgNNForward(currLayer, currLayer == (totalLayers - 1));
+        }
     }
     if (chunk.dir == PROP_TYPE::BACKWARD) {
-        printLog(nodeId, "CPU BACKWARD NN started");
-        // processBackward(currLayer);
+        if (chunk.vertex) {
+            printLog(nodeId, "CPU BACKWARD vtx NN started");
+            vtxNNBackward(currLayer);
+        } else {
+            printLog(nodeId, "CPU BACKWARD edg NN started");
+            edgNNBackward(currLayer);
+        }
     }
     printLog(nodeId, "CPU NN Done");
 }
 
-void CPUComm::processForward(unsigned layer, bool lastLayer) {
-    Matrix feats = (*tensorMap)["ah"];
-    Matrix weight = msgService.getWeightMatrix(currLayer);
+void CPUComm::vtxNNForward(unsigned layer, bool lastLayer) {
+    Matrix feats = savedNNTensors[layer]["h"];
+    Matrix weight = msgService.getWeightMatrix(layer);
+
     Matrix z = feats.dot(weight);
-    if (!lastLayer) {
-        memcpy((*tensorMap)["z"].getData(), z.getData(), z.getDataSize());
-        Matrix act_z = activate(z);  // z data get activated ...
-        memcpy((*tensorMap)["h"].getData(), act_z.getData(),
-               act_z.getDataSize());
-        delete[] act_z.getData();
-    } else {
-        Matrix predictions = softmax(z);
-        Matrix labels = (*tensorMap)["lab"];
 
-        float acc, loss;
-        getTrainStat(predictions, labels, acc, loss);
-        printLog(nodeId, "batch Acc: %f, Loss: %f\n", acc, loss);
+    printLog(nodeId, "layer %u, feats %s, weight %s, z %s, output %s", layer,
+        feats.shape().c_str(), weight.shape().c_str(), z.shape().c_str(), savedNNTensors[layer]["z"].shape().c_str());
 
-        Matrix d_output = hadamardSub(predictions, labels);
-        Matrix weight = msgService.getWeightMatrix(layer);
-        Matrix interGrad = d_output.dot(weight, false, true);
-        memcpy((*tensorMap)["grad"].getData(), interGrad.getData(),
-               interGrad.getDataSize());
-
-        Matrix ah = (*tensorMap)["ah"];
-        Matrix weightUpdates = ah.dot(d_output, true, false);
-        msgService.sendWeightUpdate(weightUpdates, layer);
-        delete[] interGrad.getData();
-        delete[] d_output.getData();
-        delete[] predictions.getData();
-    }
-    delete[] z.getData();
+    memcpy(savedNNTensors[layer]["z"].getData(), z.getData(), z.getDataSize());
+    deleteMatrix(z);
 }
 
-void CPUComm::processBackward(unsigned layer) {
+void CPUComm::vtxNNBackward(unsigned layer) {
     Matrix weight = msgService.getWeightMatrix(layer);
-    Matrix grad = (*tensorMap)["aTg"];
-    Matrix z = (*tensorMap)["z"];
+    Matrix grad = savedNNTensors[layer]["aTg"];
+    Matrix h = savedNNTensors[layer]["h"];
 
-    Matrix actDeriv = activateDerivative(z);
-    Matrix interGrad = grad * actDeriv;
+    printLog(nodeId, "layer %u, weight %s, grad %s, h %s", layer,
+        weight.shape().c_str(), grad.shape().c_str(), h.shape().c_str());
 
-    Matrix ah = (*tensorMap)["ah"];
-    Matrix weightUpdates = ah.dot(interGrad, true, false);
+    Matrix weightUpdates = h.dot(grad, true, false);
     msgService.sendWeightUpdate(weightUpdates, layer);
+    printLog(nodeId, "layer %u, weight %s, grad %s, h %s, wu %s", layer,
+        weight.shape().c_str(), grad.shape().c_str(), h.shape().c_str(), weightUpdates.shape().c_str());
+
+    deleteMatrix(weightUpdates);
+
     if (layer != 0) {
-        Matrix resultGrad = interGrad.dot(weight, false, true);
-        memcpy((*tensorMap)["grad"].getData(), resultGrad.getData(),
+        Matrix resultGrad = grad.dot(weight, false, true);
+        memcpy(savedNNTensors[layer - 1]["grad"].getData(), resultGrad.getData(),
                resultGrad.getDataSize());
-        delete[] resultGrad.getData();
+        printLog(nodeId, "layer %u, resultG %s, output %s", layer, resultGrad.shape().c_str(), savedNNTensors[layer - 1]["grad"].shape().c_str());
+        deleteMatrix(resultGrad);
     }
+}
 
-    delete[] actDeriv.getData();
-    delete[] interGrad.getData();
+void CPUComm::edgNNForward(unsigned layer, bool lastLayer) {
+    // Matrix feats = (*tensorMap)["h"];
+    // Matrix weight = msgService.getWeightMatrix(layer);
 
-    if (layer == 0) msgService.prefetchWeightsMatrix(totalLayers);
+    // Matrix z = feats.dot(weight);
+    // memcpy((*tensorMap)["z"].getData(), z.getData(), z.getDataSize());
+    // deleteMatrix(z);
+}
+
+void CPUComm::edgNNBackward(unsigned layer) {
+    // Matrix weight = msgService.getWeightMatrix(layer);
+    // Matrix grad = (*tensorMap)["aTg"];
+    // Matrix h = (*tensorMap)["h"];
+
+    // Matrix weightUpdates = h.dot(grad, true, false);
+    // msgService.sendWeightUpdate(weightUpdates, layer);
+    // deleteMatrix(weightUpdates);
+
+    // if (layer != 0) {
+    //     Matrix resultGrad = grad.dot(weight, false, true);
+    //     memcpy((*tensorMap)["grad"].getData(), resultGrad.getData(),
+    //            resultGrad.getDataSize());
+    //     deleteMatrix(resultGrad);
+    // }
 }
 
 void loadWeightServers(std::vector<char *> &addresses,
@@ -171,11 +181,6 @@ Matrix activateDerivative(Matrix &mat) {
     return Matrix(mat.getRows(), mat.getCols(), res);
 }
 
-void CPUComm::sendShutdownMessage() {
-    // Send kill message.
-    msgService.terminateWeightServers(weightServerAddrs);
-}
-
 void CPUComm::getTrainStat(Matrix &preds, Matrix &labels, float &acc,
                            float &loss) {
     acc = 0.0;
@@ -190,4 +195,11 @@ void CPUComm::getTrainStat(Matrix &preds, Matrix &labels, float &acc,
     acc /= labels.getRows();
     loss /= labels.getRows();
     printLog(nodeId, "batch loss %f, batch acc %f", loss, acc);
+}
+
+void deleteMatrix(Matrix &mat) {
+    if (!mat.empty()) {
+        delete[] mat.getData();
+        mat = Matrix();
+    }
 }

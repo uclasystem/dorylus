@@ -28,11 +28,13 @@ class CPUComm : public ResourceComm {
     void NNCompute(Chunk &chunk);
     void NNSync(){};
 
-    void sendShutdownMessage();
-
     // compute related
-    void processForward(unsigned layer, bool lastLayer);
-    void processBackward(unsigned layer);
+    void vtxNNForward(unsigned layer, bool lastLayer);
+    void vtxNNBackward(unsigned layer);
+
+    void edgNNForward(unsigned layer, bool lastLayer);
+    void edgNNBackward(unsigned layer);
+
     void getTrainStat(Matrix &preds, Matrix &labels, float &acc,
                            float &loss);
    private:
@@ -49,7 +51,7 @@ class CPUComm : public ResourceComm {
     unsigned dPort;
     unsigned wPort;
 
-    TensorMap *tensorMap;
+    std::vector<TensorMap> &savedNNTensors;
 
     Engine *engine;
 
@@ -65,4 +67,6 @@ Matrix softmax(Matrix &mat);
 Matrix activate(Matrix &mat);
 void loadWeightServers(std::vector<char *> &addresses,
                        const std::string &wServersFile);
+
+void deleteMatrix(Matrix &mat);
 #endif  // CPU_COMM_HPP
