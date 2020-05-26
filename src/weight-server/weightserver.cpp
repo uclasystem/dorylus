@@ -85,6 +85,9 @@ void WeightServer::stopWorkers() {
  *
  */
 void WeightServer::applyUpdate(unsigned layer, std::string& name) {
+    if (name == "a_i") {
+        return; // we cannot update a with adam
+    }
     Timer updateTimer;
     updateTimer.start();
 

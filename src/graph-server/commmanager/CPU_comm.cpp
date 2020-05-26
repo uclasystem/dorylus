@@ -115,19 +115,16 @@ void CPUComm::edgNNBackward(unsigned layer) {
     // reduce dAct(|E|, featDim) to (1, featDim)
     // Do this first to optmize computation and save memory
     Matrix dAct_reduce = reduce(dAct);
-    printLog(nodeId, "dAct-r %s", dAct_reduce.shape().c_str());
     dAct.free();
     // // Expand Z_src and Z_dst (both have shape (|V|, featDim)) to (|E|, featDim)
     // // And then do Z_dst^T \dot Z_src -> zz (featDim, featDim)
     // Matrix zz = expandMulZZ(fedge, edgCnt, featDim);
     Matrix zz = localZTensor.dot(localZTensor, true, false);
-    printLog(nodeId, "zz %s", zz.shape().c_str());
     // (1, featDim) \dot (featDim, featDim) -> (1, featDim), which is da's shape
     Matrix da = zz.dot(dAct_reduce, false, true);
     dAct_reduce.free();
     zz.free();
-    printLog(nodeId, "da %s", da.shape().c_str());
-    // msgService.sendaUpdate(da, layer);
+    msgService.sendaUpdate(da, layer);
     da.free();
 }
 
