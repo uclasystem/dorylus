@@ -303,43 +303,26 @@ void LambdaWorker::sendEdgeTensor(zmq::message_t& client_id, Chunk& chunk) {
 //  which is ugly. TODO: Extend matrix class to EdgeMatrix so that all infomration
 //  can be encapsulated without accessing engine
 void LambdaWorker::sendTensor(Chunk& chunk) {
-    if (chunk.dir == PROP_TYPE::FORWARD) {
-        CSCMatrix<EdgeType>& csc = (manager->engine->graph).forwardAdj;
-        unsigned numLvids = chunk.upBound - chunk.lowBound;
-        unsigned numChunkEdges = csc.columnPtrs[chunk.upBound] - csc.columnPtrs[chunk.lowBound];
+    CSCMatrix<EdgeType>& csc = (manager->engine->graph).forwardAdj;
+    unsigned numLvids = chunk.upBound - chunk.lowBound;
+    unsigned numChunkEdges = csc.columnPtrs[chunk.upBound] - csc.columnPtrs[chunk.lowBound];
 
-        zmq::message_t responseHeader(TENSOR_HDR_SIZE);
-        populateHeader(responseHeader.data(), numLvids, numChunkEdges);
+    zmq::message_t responseHeader(TENSOR_HDR_SIZE);
+    populateHeader(responseHeader.data(), numLvids, numChunkEdges);
 
-        zmq::message_t edgeChunkInfoMsg((numLvids + 1) * sizeof(unsigned long long));
-        std::memcpy(edgeChunkInfoMsg.data(), csc.columnPtrs + chunk.lowBound, (numLvids + 1) * sizeof(unsigned long long));
-        std::string colPtrsStr = "Actual colPtrs: ";
-        for (unsigned lvid = chunk.lowBound; lvid <= chunk.upBound; ++lvid) {
-            colPtrsStr += std::to_string(csc.columnPtrs[lvid]) + " ";
-        }
-        unsigned long long* colPtrMsgData = (unsigned long long*) edgeChunkInfoMsg.data();
-        colPtrsStr += "\ncolPtrData colPtrs: ";
-        for (unsigned lvid = 0; lvid <= numLvids; ++lvid) {
-            colPtrsStr += std::to_string(colPtrMsgData[lvid]) + " ";
-        }
-        workersocket.send(responseHeader, ZMQ_SNDMORE);
-        workersocket.send(edgeChunkInfoMsg);
-
-
-        //printLog(manager->nodeId, "%s", colPtrsStr.c_str());
-    } else {
-        CSRMatrix<EdgeType>& csr = (manager->engine->graph).backwardAdj;
-        unsigned numLvids = chunk.upBound - chunk.lowBound;
-        unsigned numChunkEdges = csr.rowPtrs[chunk.upBound] - csr.rowPtrs[chunk.lowBound];
-
-        zmq::message_t responseHeader(TENSOR_HDR_SIZE);
-        populateHeader(responseHeader.data(), numLvids, numChunkEdges);
-
-        zmq::message_t edgeChunkInfoMsg(numLvids * sizeof(unsigned));
-        std::memcpy(edgeChunkInfoMsg.data(), csr.rowPtrs + chunk.lowBound, numLvids * sizeof(unsigned));
-        workersocket.send(responseHeader, ZMQ_SNDMORE);
-        workersocket.send(edgeChunkInfoMsg);
+    zmq::message_t edgeChunkInfoMsg((numLvids + 1) * sizeof(unsigned long long));
+    std::memcpy(edgeChunkInfoMsg.data(), csc.columnPtrs + chunk.lowBound, (numLvids + 1) * sizeof(unsigned long long));
+    std::string colPtrsStr = "Actual colPtrs: ";
+    for (unsigned lvid = chunk.lowBound; lvid <= chunk.upBound; ++lvid) {
+        colPtrsStr += std::to_string(csc.columnPtrs[lvid]) + " ";
     }
+    unsigned long long* colPtrMsgData = (unsigned long long*) edgeChunkInfoMsg.data();
+    colPtrsStr += "\ncolPtrData colPtrs: ";
+    for (unsigned lvid = 0; lvid <= numLvids; ++lvid) {
+        colPtrsStr += std::to_string(colPtrMsgData[lvid]) + " ";
+    }
+    workersocket.send(responseHeader, ZMQ_SNDMORE);
+    workersocket.send(edgeChunkInfoMsg);
 }
 
 int LambdaWorker::recvTensor(Chunk &chunk) {

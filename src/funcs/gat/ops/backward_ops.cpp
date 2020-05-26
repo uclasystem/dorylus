@@ -14,11 +14,11 @@ tanhDerivative(Matrix& mat) {
 
 Matrix
 leakyReLUDerivative(Matrix& mat) {
-    FeatType result = new FeatType[mat.getNumElemts()];
-    FeatType inputData = mat.getData();
+    FeatType* result = new FeatType[mat.getNumElemts()];
+    FeatType* inputData = mat.getData();
 
     for (unsigned ind = 0; ind < mat.getNumElemts(); ++ind) {
-        result[ind] = inputData[i] > 0 ? 1.0 ? .01;
+        result[ind] = inputData[ind] > 0 ? 1.0 : .01;
     }
 
     return Matrix(mat.getRows(), mat.getCols(), result);

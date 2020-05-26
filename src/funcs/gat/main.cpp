@@ -122,6 +122,8 @@ apply_edge_backward(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, C
         return constructResp(false, chunk.localId, "Got an error");
     }
 
+    std::vector<std::string> dataRequests{"z"};
+
     return constructResp(true, chunk.localId, "Finished apply edge backward");
 }
 
