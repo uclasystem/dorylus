@@ -166,6 +166,39 @@ EdgeInfo reqEdgeInfo(zmq::socket_t& socket, Chunk& chunk) {
     return eTensor;
 }
 
+int sendEdgeTensors(zmq::socket_t& socket, Chunk &chunk,
+            std::vector<Matrix>& matrices, bool ack) {
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader(header.data(), OP::PUSHE, chunk);
+    socket.send(header, ZMQ_SNDMORE);
+    for (uint32_t u = 0; u < matrices.size(); ++u) {
+        std::cout << "Sending tensor " << matrices[u].name() << std::endl;
+        zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
+        populateHeader(tensorHeader.data(), OP::PUSH, matrices[u].name().c_str(), chunk.layer,
+          matrices[u].getRows(), matrices[u].getCols());
+        zmq::message_t tensorData(matrices[u].getDataSize());
+        std::memcpy(tensorData.data(), matrices[u].getData(), matrices[u].getDataSize());
+
+        socket.send(tensorHeader, ZMQ_SNDMORE);
+        if (u < matrices.size() - 1) {
+            socket.send(tensorData, ZMQ_SNDMORE);
+        } else {
+            socket.send(tensorData);
+        }
+    }
+
+    int ret = 0;
+    if (ack) {
+        std::cout << "Waiting on ACK" << std::endl;
+        zmq::message_t ack;
+        socket.recv(&ack);
+        if (ack.size() == sizeof(int) * 3) {
+            ret = *(int *)ack.data();
+        }
+        std::cout << "Received ACK" << std::endl;
+    }
+    return ret;
+}
 int sendTensors(zmq::socket_t& socket, Chunk &chunk,
             std::vector<Matrix>& matrices, bool ack) {
     zmq::message_t header(HEADER_SIZE);

@@ -205,11 +205,13 @@ void LambdaWorker::recvETensors(zmq::message_t& client_id, Chunk& chunk) {
     manager->timeoutMtx.lock();
     bool exist = manager->timeoutTable.find(chunk) != manager->timeoutTable.end();
     manager->timeoutMtx.unlock();
+    printLog(manager->nodeId, "CHecking exist");
     if (exist) {
         int ret = 0;
         unsigned more = 1;
         size_t usize = sizeof(unsigned);
         while (more && ret == 0) {
+            printLog(manager->nodeId, "recv");
             ret = recvETensor(chunk);
             workersocket.getsockopt(ZMQ_RCVMORE, &more, &usize);
         }
@@ -448,6 +450,7 @@ int LambdaWorker::recvETensor(Chunk& chunk) {
         return 1;
     }
 
+    printLog(manager->nodeId, "Copying edge values");
     CSCMatrix<EdgeType>& csc = (manager->engine->graph).forwardAdj;
     FeatType* eDptr = found->second.get(csc.columnPtrs[chunk.lowBound]);
     std::memcpy(eDptr, tensorData.data(), tensorData.size());

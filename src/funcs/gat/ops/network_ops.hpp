@@ -30,6 +30,9 @@ EdgeInfo reqEdgeInfo(zmq::socket_t& socket, Chunk& chunk);
 int sendTensors(zmq::socket_t& socket, Chunk &chunk,
     std::vector<Matrix>& matrices, bool ack = false);
 
+int sendEdgeTensors(zmq::socket_t& socket, Chunk& chunk,
+        std::vector<Matrix>& matrices, bool ack = false);
+
 void sendAccLoss(zmq::socket_t &dsocket, zmq::socket_t &wsocket, Matrix &predicts, Matrix &labels, Chunk &chunk);
 
 int sendFinMsg(zmq::socket_t& socket, Chunk &chunk);

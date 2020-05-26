@@ -94,7 +94,7 @@ apply_edge(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chu
     std::vector<Matrix> toSend;
     toSend.push_back(edgeVals);
 
-    int ret = sendTensors(data_socket, chunk, toSend, true);
+    int ret = sendEdgeTensors(data_socket, chunk, toSend, true);
 
     for (auto& M : toSend)
         deleteMatrix(M);
