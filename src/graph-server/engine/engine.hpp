@@ -121,6 +121,10 @@ public:
     CommManager commManager;
 
     Graph graph;
+    //gpucomm need these for applyedge 
+    void* adjIn;
+    void* adjOut;
+
 
     unsigned dThreads;
     ThreadPool *dataPool = NULL;

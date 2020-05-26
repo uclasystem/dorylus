@@ -32,10 +32,15 @@ class ComputingUnit {
    public:
     static ComputingUnit &getInstance();
 
+    CuMatrix leakyRelu(CuMatrix &m, float coef);
+    CuMatrix leakyReluPrime(CuMatrix &m, float coef);
+    CuMatrix reduceColumns(CuMatrix m);
+    CuMatrix gatherRows(CuMatrix m, std::vector<int> indices);
+
     CuMatrix wrapMatrix(Matrix m);
 
-    void scaleRowsByVector(CuMatrix &CuM, CuMatrix& cuV);
-    CuMatrix aggregate(CuMatrix &sparse, CuMatrix &dense, CuMatrix &norms);
+    void scaleRowsByVector(CuMatrix &CuM, CuMatrix &cuV);
+    CuMatrix aggregate(CuMatrix &sparse, CuMatrix &dense);
 
     CuMatrix dot(Matrix &A, Matrix &B);
     void activate(CuMatrix &A);
@@ -43,7 +48,7 @@ class ComputingUnit {
     void hadamardAdd(CuMatrix &matLeft, CuMatrix &matRight);
     CuMatrix hadamardSub(CuMatrix &matLeft, CuMatrix &matRight);
     CuMatrix hadamardMul(CuMatrix &matLeft, CuMatrix &matRight);
-    CuMatrix activateBackward(CuMatrix &x ,CuMatrix &y, CuMatrix &dy);
+    CuMatrix activateBackward(CuMatrix &x, CuMatrix &y, CuMatrix &dy);
 
     unsigned checkAccuracy(CuMatrix &predictions, CuMatrix &labels);
     float checkLoss(CuMatrix &preds, CuMatrix &labels);
@@ -54,6 +59,7 @@ class ComputingUnit {
     cusparseHandle_t spHandle;
     cublasHandle_t handle;
     cublasStatus_t stat;
+    cudaStream_t stream;
 
    private:
     ComputingUnit();

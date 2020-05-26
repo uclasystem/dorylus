@@ -10,7 +10,7 @@
 #include <map>
 #include "../../common/matrix.hpp"
 #include "../../common/utils.hpp"
-#include "../engine/graph.hpp"
+#include "../graph/graph.hpp"
 #include "cusparse.h"
 
 
@@ -53,8 +53,9 @@ class CuMatrix : public Matrix {
     //the memory will live throughout the lifespan of the program (I don't release them)
     unsigned long long nnz;
     EdgeType *csrVal;
-    unsigned *csrColInd;
-    unsigned *csrRowPtr;
+    int *csrColInd;
+    int *csrRowInd;
+    int *csrRowPtr;
 };
 
 #endif

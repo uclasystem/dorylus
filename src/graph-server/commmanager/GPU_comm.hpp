@@ -34,6 +34,8 @@ class GPUComm : public ResourceComm {
     void NNCompute(Chunk &chunk);
     void NNSync() {};
 
+    void prefetchWeights();
+
     void sendShutdownMessage();
     friend class ComputingServer;
 

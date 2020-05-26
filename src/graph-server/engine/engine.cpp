@@ -19,22 +19,22 @@
 #include <thread>
 #include <unordered_set>
 
-#ifdef _GPU_ENABLED_
-#include "../../common/utils.hpp"
-#include "../GPU-Computation/comp_unit.cuh"
-#include "../commmanager/GPU_comm.hpp"
-static CuMatrix *NormAdjMatrixIn = NULL;
-static CuMatrix *NormAdjMatrixOut = NULL;
-static CuMatrix *Norms = NULL;
-static ComputingUnit cu = ComputingUnit::getInstance();
-#endif
+// #include "../graph/dataloader.hpp"
 
+#ifdef _GPU_ENABLED_
+#include "../commmanager/GPU_comm.hpp"
+extern CuMatrix *NormAdjMatrixIn;
+extern CuMatrix *NormAdjMatrixOut;
+extern CuMatrix *Norms;
+extern ComputingUnit cu;
+#endif
 #ifdef _CPU_ENABLED_
 #include "../commmanager/CPU_comm.hpp"
 #endif
 #ifdef _LAMBDA_ENABLED_
 #include "../commmanager/lambda_comm.hpp"
 #endif
+
 
 /**
  *
@@ -115,11 +115,14 @@ void Engine::init(int argc, char *argv[]) {
     printLog(nodeId, "Loading SparseMatrices for GPU");
     NormAdjMatrixIn = new CuMatrix();
     NormAdjMatrixOut = new CuMatrix();
-    Matrix norms(graph.localVtxCnt, 1, graph.vtxDataVec.data());
-    Norms = new CuMatrix(norms, cu.handle);
-    CuMatrix::MemoryPool.erase(Norms->devPtr);
+    //no need for gat
+    // Matrix norms(graph.localVtxCnt, 1, graph.vtxDataVec.data());
+    // Norms = new CuMatrix(norms, cu.handle);
+    // CuMatrix::MemoryPool.erase(Norms->devPtr);
     NormAdjMatrixIn->loadSpCSC(cu.spHandle, graph);
     NormAdjMatrixOut->loadSpCSR(cu.spHandle, graph);
+    adjIn=(void*)NormAdjMatrixIn;
+    adjOut=(void*)NormAdjMatrixOut;
 #endif
 
     // Initialize synchronization utilities.
@@ -249,9 +252,9 @@ void Engine::preallocateGAT() {
         savedNNTensors[layer]["z"] = Matrix(vtxCnt, nextFeatDim, zTensor);
 
         // Technically not e_i because needs LeakyReLU
-        FeatType* azTensor = new FeatType[vtxCnt * 1];
-        std::memset(azTensor, 0, sizeof(FeatType) * vtxCnt * 1);
-        savedNNTensors[layer]["az"] = Matrix(vtxCnt, 1, azTensor);
+        FeatType* azTensor = new FeatType[graph.forwardAdj.nnz * 1];
+        std::memset(azTensor, 0, sizeof(FeatType) * graph.forwardAdj.nnz * 1);
+        savedNNTensors[layer]["az"] = Matrix(graph.forwardAdj.nnz, 1, azTensor);
 
         FeatType *ghostZTensor =
             new FeatType[graph.srcGhostCnt * nextFeatDim];
@@ -297,10 +300,10 @@ void Engine::preallocateGAT() {
 
         // APPLY EDGE TENSORS
         FeatType* gradATensor =
-            new FeatType[graph.backwardAdj.nnz * 1];
-        std::memset(gradATensor, 0, sizeof(FeatType) * graph.backwardAdj.nnz * 1);
+            new FeatType[graph.forwardAdj.nnz * 1];
+        std::memset(gradATensor, 0, sizeof(FeatType) * graph.forwardAdj.nnz * 1);
         savedNNTensors[layer]["dA"] =
-            Matrix(graph.backwardAdj.nnz, 1, gradATensor);
+            Matrix(graph.forwardAdj.nnz, 1, gradATensor);
 
         // GATHER TENSORS
         FeatType *aTgTensor = new FeatType[vtxCnt * featDim];

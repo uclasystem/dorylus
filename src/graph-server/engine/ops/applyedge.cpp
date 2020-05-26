@@ -1,5 +1,3 @@
-#include "../engine.hpp"
-
 #include <omp.h>
 
 #include <algorithm>
@@ -19,6 +17,7 @@
 #include <thread>
 #include <unordered_set>
 
+#include "../engine.hpp"
 
 FeatType **Engine::applyEdge(EdgeType *edgsTensor, unsigned edgsCnt,
                              unsigned eFeatDim, FeatType **eSrcVtcsTensor,
@@ -40,10 +39,10 @@ FeatType **Engine::applyEdge(EdgeType *edgsTensor, unsigned edgsCnt,
             unsigned lowBound = availLambdaId * chunkSize;
             unsigned upBound = std::min(lowBound + chunkSize, vtcsCnt);
             Chunk chunk{
-                availLambdaId, nodeId * numLambdasForward + availLambdaId,
-                lowBound,      upBound,
-                (unsigned)layer,         PROP_TYPE::FORWARD,
-                currEpoch,     false};  // epoch is not useful in sync version
+                availLambdaId,   nodeId * numLambdasForward + availLambdaId,
+                lowBound,        upBound,
+                (unsigned)layer, PROP_TYPE::FORWARD,
+                currEpoch,       false};  // epoch is not useful in sync version
             resComm->NNCompute(chunk);
 
             availLambdaId++;
@@ -54,8 +53,10 @@ FeatType **Engine::applyEdge(EdgeType *edgsTensor, unsigned edgsCnt,
         resComm->NNSync();
         vecTimeLambdaWait[layer] += getTimer() - waitTimer;
 
-        // // NOTE: This should definitely be in resComm->NNComute() but since we are
-        // // doing everything locally and currently have no infrastructre for switching
+        // // NOTE: This should definitely be in resComm->NNComute() but since
+        // we are
+        // // doing everything locally and currently have no infrastructre for
+        // switching
         // // b/w tensor on lambdas and CPUs I'm just going to do it here
         // FeatType* az_i = savedNNTensors[layer]["az_i"].getData();
         // FeatType* az_j = savedNNTensors[layer]["az_j"].getData();
@@ -64,9 +65,9 @@ FeatType **Engine::applyEdge(EdgeType *edgsTensor, unsigned edgsCnt,
         // FeatType* lRlu = savedNNTensors[layer]["lRlu"].getData();
         // FeatType* eij = savedNNTensors[layer]["eij"].getData();
 
-        // // Compute unnormalized attention scores for all edges in this partition
-        // CSCMatrix<EdgeType>& csc = graph.forwardAdj;
-        // for (unsigned lvid = 0; lvid < csc.columnCnt; ++lvid) {
+        // // Compute unnormalized attention scores for all edges in this
+        // partition CSCMatrix<EdgeType>& csc = graph.forwardAdj; for (unsigned
+        // lvid = 0; lvid < csc.columnCnt; ++lvid) {
         //     FeatType az_lvid = az_i[lvid];
         //     for (unsigned long long eid = csc.columnPtrs[lvid];
         //     eid < csc.columnPtrs[lvid + 1]; ++eid) {
@@ -95,8 +96,7 @@ FeatType **Engine::applyEdge(EdgeType *edgsTensor, unsigned edgsCnt,
     return outputTensor;
 }
 
-
-FeatType **Engine::applyEdgeBackward(FeatType* edgsTensor, unsigned edgsCnt,
+FeatType **Engine::applyEdgeBackward(FeatType *edgsTensor, unsigned edgsCnt,
                                      unsigned eFeatDim,
                                      FeatType **eSrcVGradTensor,
                                      FeatType **eDstVGradTensor,
@@ -113,12 +113,13 @@ FeatType **Engine::applyEdgeBackward(FeatType* edgsTensor, unsigned edgsCnt,
         unsigned availLambdaId = 0;
         while (availLambdaId < numLambdasForward) {
             unsigned lowBound = availLambdaId * chunkSize;
-            unsigned upBound = std::min(lowBound + chunkSize, graph.localVtxCnt);
+            unsigned upBound =
+                std::min(lowBound + chunkSize, graph.localVtxCnt);
             Chunk chunk{
-                availLambdaId,  nodeId * numLambdasForward + availLambdaId,
-                lowBound,       upBound,
-                (unsigned)layer,          PROP_TYPE::BACKWARD,
-                currEpoch,      false};
+                availLambdaId,   nodeId * numLambdasForward + availLambdaId,
+                lowBound,        upBound,
+                (unsigned)layer, PROP_TYPE::BACKWARD,
+                currEpoch,       false};
             resComm->NNCompute(chunk);
 
             ++availLambdaId;
@@ -128,47 +129,48 @@ FeatType **Engine::applyEdgeBackward(FeatType* edgsTensor, unsigned edgsCnt,
         double waitTimer = getTimer();
         resComm->NNSync();
         vecTimeLambdaWait[2 * numLayers - layer - 1] += getTimer() - waitTimer;
+    } else {
+        Chunk batch{
+            nodeId,    nodeId, 0, edgsCnt, (unsigned)layer, PROP_TYPE::BACKWARD,
+            currEpoch, false};  // for now it loads the entire feature matrix
+        resComm->NNCompute(batch);
     }
 
-//    Matrix& derivMat = savedNNTensors[layer + 1]["grad"];
-//    Matrix& Z = savedNNTensors[layer]["z"];
-//    Matrix& eij = savedNNTensors[layer]["eij"];
-//    //Matrix& lRlu = savedNNTensors[layer]["lRlu"];
-//
-//    CSCMatrix<EdgeType>& csc = graph.forwardAdj;
-//
-//    // derivMat \dot Z^T
-//    printLog(nodeId, "%s    %s", derivMat.shape().c_str(),
-//             Z.shape().c_str());
-//    Matrix d_ae = derivMat.dot(Z, false, true);
-//
-//    Matrix d_sm = softmax_prime(eij.getData(), csc.values, csc.nnz);
-//
-//    printLog(nodeId, "SM_PRIME * DAE: %s    %s",
-//      d_ae.shape().c_str(), d_sm.shape().c_str());
-//
-//    Matrix d_2 = d_ae * d_sm;
+    //    Matrix& derivMat = savedNNTensors[layer + 1]["grad"];
+    //    Matrix& Z = savedNNTensors[layer]["z"];
+    //    Matrix& eij = savedNNTensors[layer]["eij"];
+    //    //Matrix& lRlu = savedNNTensors[layer]["lRlu"];
+    //
+    //    CSCMatrix<EdgeType>& csc = graph.forwardAdj;
+    //
+    //    // derivMat \dot Z^T
+    //    printLog(nodeId, "%s    %s", derivMat.shape().c_str(),
+    //             Z.shape().c_str());
+    //    Matrix d_ae = derivMat.dot(Z, false, true);
+    //
+    //    Matrix d_sm = softmax_prime(eij.getData(), csc.values, csc.nnz);
+    //
+    //    printLog(nodeId, "SM_PRIME * DAE: %s    %s",
+    //      d_ae.shape().c_str(), d_sm.shape().c_str());
+    //
+    //    Matrix d_2 = d_ae * d_sm;
 
     // NOTE: Don't forget to clean up tensors after this phase
 
-//    for (auto &sTensor : edgNNSavedTensors[layer - 1]) {
-//        delete[] sTensor.getData();
-//    }
+    //    for (auto &sTensor : edgNNSavedTensors[layer - 1]) {
+    //        delete[] sTensor.getData();
+    //    }
     vecTimeApplyEdg[2 * numLayers - layer - 1] += getTimer() - sttTimer;
     return outputTensor;
 }
-
-
 
 /////////////////////////////////////////////////////////
 // Below are private forward functions for the engine. //
 /////////////////////////////////////////////////////////
 
-
 //////////////////////////////////////////////////////////
 // Below are private backward functions for the engine. //
 //////////////////////////////////////////////////////////
-
 
 // reshape vtcs tensor to edgs tensor. Each element in edgsTensor is a reference
 // to a vertex feature. Both src vtx features and dst vtx features included in

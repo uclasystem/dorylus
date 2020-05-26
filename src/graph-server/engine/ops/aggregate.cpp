@@ -1,5 +1,3 @@
-#include "../engine.hpp"
-
 #include <omp.h>
 
 #include <algorithm>
@@ -19,6 +17,16 @@
 #include <thread>
 #include <unordered_set>
 
+#include "../engine.hpp"
+
+#ifdef _GPU_ENABLED_
+// #include "../../../common/utils.hpp"
+#include "../../GPU-Computation/comp_unit.cuh"
+CuMatrix *NormAdjMatrixIn = NULL;
+CuMatrix *NormAdjMatrixOut = NULL;
+CuMatrix *Norms = NULL;
+ComputingUnit cu = ComputingUnit::getInstance();
+#endif
 
 FeatType *Engine::aggregate(FeatType **edgsTensor, unsigned edgsCnt,
                             unsigned featDim, AGGREGATOR aggregator) {
@@ -38,11 +46,15 @@ FeatType *Engine::aggregate(FeatType **edgsTensor, unsigned edgsCnt,
                      featDim);
     switch (aggregator) {
         case (AGGREGATOR::WSUM): {
-            CuMatrix out = cu.aggregate(*NormAdjMatrixIn, feat, *Norms);
+            CuMatrix dummy_e = cu.wrapMatrix(
+                savedNNTensors[layer]["A"]);  // for getting A into VRAM
+            CuMatrix e = *NormAdjMatrixIn;
+            e.csrVal = dummy_e.devPtr;
+            CuMatrix out = cu.aggregate(e, feat);
             out.setData(outputTensor);
             out.updateMatrixFromGPU();
             cudaDeviceSynchronize();
-
+            CuMatrix::freeGPU();
             break;
         }
         default:
@@ -52,7 +64,7 @@ FeatType *Engine::aggregate(FeatType **edgsTensor, unsigned edgsCnt,
     currId = graph.localVtxCnt;
 #else
     // AH
-    FeatType* hTensor = savedNNTensors[layer]["z"].getData();
+    FeatType *hTensor = savedNNTensors[layer]["z"].getData();
     FeatType *outputTensor = savedNNTensors[layer]["ah"].getData();
     assert(hTensor != NULL);
     assert(outputTensor != NULL);
@@ -96,7 +108,8 @@ FeatType *Engine::aggregateBackward(FeatType **eVGradTensor, unsigned edgsCnt,
     currId = 0;
     FeatType *outputTensor = savedNNTensors[layer]["aTg"].getData();
     FeatType *gradTensor = savedNNTensors[layer]["grad"].getData();
-    // FeatType *dAZ = savedNNTensors[layer]["dAZ"].getData(); // get from AE lambda
+    // FeatType *dAZ = savedNNTensors[layer]["dAZ"].getData(); // get from AE
+    // lambda
 
     assert(outputTensor != NULL);
     assert(gradTensor != NULL);
@@ -108,7 +121,7 @@ FeatType *Engine::aggregateBackward(FeatType **eVGradTensor, unsigned edgsCnt,
                      graph.localVtxCnt, graph.dstGhostCnt, featDim);
     switch (aggregator) {
         case (AGGREGATOR::WSUM): {
-            CuMatrix out = cu.aggregate(*NormAdjMatrixOut, feat, *Norms);
+            CuMatrix out = cu.aggregate(*NormAdjMatrixOut, feat);
             out.setData(outputTensor);
             out.updateMatrixFromGPU();
             std::cout << "Finish GPU aggregation\n";
@@ -162,7 +175,8 @@ void Engine::aggregator(unsigned tid) {
         // check before aggregation
         if (c.isFirstLayer()) {
             // Converge state changes
-            if (convergeState != CONVERGE_STATE::EARLY && maxEpoch == 0 && staleness != UINT_MAX) {
+            if (convergeState != CONVERGE_STATE::EARLY && maxEpoch == 0 &&
+                staleness != UINT_MAX) {
                 // record the current max epoch of all nodes.
                 nodeManager.readEpochUpdates();
 
@@ -180,10 +194,12 @@ void Engine::aggregator(unsigned tid) {
                     }
                     maxe--;
                 }
-                printLog(nodeId, "max epoch %u, curr epoch %u", maxEpoch, currEpoch);
+                printLog(nodeId, "max epoch %u, curr epoch %u", maxEpoch,
+                         currEpoch);
             }
             if (c.epoch == numEpochs ||
-                (convergeState != CONVERGE_STATE::EARLY && c.epoch == maxEpoch + 1)) {
+                (convergeState != CONVERGE_STATE::EARLY &&
+                 c.epoch == maxEpoch + 1)) {
                 while (!aggregateQueue.empty()) {
                     aggregateQueue.pop();
                     ++finishedChunks;
@@ -191,9 +207,11 @@ void Engine::aggregator(unsigned tid) {
                 aggQueueLock.unlock();
                 if (finishedChunks == numLambdasForward) {
                     if (convergeState != CONVERGE_STATE::EARLY) {
-                        extern std::string CONVERGE_STATE_STR[CONVERGE_STATE::NUM_STATE];
+                        extern std::string
+                            CONVERGE_STATE_STR[CONVERGE_STATE::NUM_STATE];
                         printLog(nodeId, "STATE changes to %s at epoch %u",
-                            CONVERGE_STATE_STR[convergeState].c_str(), currEpoch);
+                                 CONVERGE_STATE_STR[convergeState].c_str(),
+                                 currEpoch);
                     }
                     ++currEpoch;
                     aggHalt = true;
@@ -203,8 +221,9 @@ void Engine::aggregator(unsigned tid) {
                 bs.sleep();
                 continue;
 
-            // There is a chunk but it is beyond the staleness bound
-            } else if (staleness != UINT_MAX && c.epoch > minEpoch + staleness) {
+                // There is a chunk but it is beyond the staleness bound
+            } else if (staleness != UINT_MAX &&
+                       c.epoch > minEpoch + staleness) {
                 // Read incoming message buffer to see if there are
                 // updates to the minEpoch
                 nodeManager.readEpochUpdates();
@@ -213,9 +232,8 @@ void Engine::aggregator(unsigned tid) {
                 bs.sleep();
                 // Messages to check how often a node is blocking
                 if ((bs.trails + 1) % 1000 == 0) {
-                    printLog(nodeId, "Blocking. MinE %u, Finished %u",
-                        minEpoch,
-                        nodesFinishedEpoch[minEpoch % (staleness + 1)]);
+                    printLog(nodeId, "Blocking. MinE %u, Finished %u", minEpoch,
+                             nodesFinishedEpoch[minEpoch % (staleness + 1)]);
                 }
                 continue;
             }
@@ -224,8 +242,7 @@ void Engine::aggregator(unsigned tid) {
         if (c.isFirstLayer() && c.epoch == currEpoch + 1) {
             ++currEpoch;
             ++numAsyncEpochs;
-            printLog(nodeId, "STARTING epoch %u [%u]", currEpoch,
-                        c.epoch);
+            printLog(nodeId, "STARTING epoch %u [%u]", currEpoch, c.epoch);
         }
 
         // printLog(nodeId, "AGGREGATE: Got %s", c.str().c_str());
@@ -238,14 +255,12 @@ void Engine::aggregator(unsigned tid) {
         } else {
             aggregateBPChunk(c);
         }
-        vecTimeAggregate[c.dir * numLayers + c.layer] +=
-            getTimer() - startAgg;
+        vecTimeAggregate[c.dir * numLayers + c.layer] += getTimer() - startAgg;
         resComm->NNCompute(c);
 
         bs.reset();
     }
 }
-
 
 /////////////////////////////////////////////////////////
 // Below are private forward functions for the engine. //
@@ -316,7 +331,6 @@ inline void Engine::forwardAggregateFromNeighbors(unsigned lvid,
     }
 }
 
-
 //////////////////////////////////////////////////////////
 // Below are private backward functions for the engine. //
 //////////////////////////////////////////////////////////
@@ -340,9 +354,10 @@ void Engine::aggregateBPCompute(unsigned tid, void *args) {
             FeatType *currDataDst = getVtxFeat(outputTensor, lvid, featDim);
 
             // Aggregate from outgoing neighbors.
-            // TODO: (YIFAN) Here should be backwardAdj and rowPtrs. Now this works only for undirected graph
+            // TODO: (YIFAN) Here should be backwardAdj and rowPtrs. Now this
+            // works only for undirected graph
             for (unsigned long long eid = graph.backwardAdj.rowPtrs[lvid];
-                eid < graph.backwardAdj.rowPtrs[lvid + 1]; ++eid) {
+                 eid < graph.backwardAdj.rowPtrs[lvid + 1]; ++eid) {
                 EdgeType normFactor = graph.backwardAdj.values[eid];
                 for (unsigned j = 0; j < featDim; ++j) {
                     currDataDst[j] += eGradTensor[eid][j] * normFactor;
@@ -351,7 +366,7 @@ void Engine::aggregateBPCompute(unsigned tid, void *args) {
 
             // Aggregate from incoming neighbors.
             for (unsigned long long eid = graph.forwardAdj.columnPtrs[lvid];
-                eid < graph.forwardAdj.columnPtrs[lvid + 1]; ++eid) {
+                 eid < graph.forwardAdj.columnPtrs[lvid + 1]; ++eid) {
                 EdgeType edgeGrad = dA[eid];
                 for (unsigned j = 0; j < featDim; ++j) {
                     currDataDst[j] += eFeatTensor[eid][j] * edgeGrad;
@@ -366,8 +381,8 @@ void Engine::aggregateBPChunk(Chunk &c) {
     unsigned limit = c.upBound;
     unsigned featDim = getFeatDim(c.layer + 1);
 
-    FeatType *featTensor = getVtxFeat(
-        savedNNTensors[c.layer]["grad"].getData(), lvid, featDim);
+    FeatType *featTensor =
+        getVtxFeat(savedNNTensors[c.layer]["grad"].getData(), lvid, featDim);
     FeatType *aggTensor = savedNNTensors[c.layer]["aTg"].getData();
     FeatType **eFeatsTensor = savedEdgeTensors[c.layer]["bedge"];
 

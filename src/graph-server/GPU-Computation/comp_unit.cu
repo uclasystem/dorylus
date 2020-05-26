@@ -19,6 +19,7 @@ ComputingUnit &ComputingUnit::getInstance() {
 }
 
 ComputingUnit::ComputingUnit() {
+    cudaStreamCreate(&stream);
     stat = cublasCreate(&handle);
     if (stat != CUBLAS_STATUS_SUCCESS) {
         printf("CUBLAS initialization failed\n");
@@ -37,8 +38,7 @@ ComputingUnit::ComputingUnit() {
 
 CuMatrix ComputingUnit::wrapMatrix(Matrix m) { return CuMatrix(m, handle); }
 
-CuMatrix ComputingUnit::aggregate(CuMatrix &sparse, CuMatrix &dense,
-                                  CuMatrix &norms) {
+CuMatrix ComputingUnit::aggregate(CuMatrix &sparse, CuMatrix &dense) {
     CuMatrix C(Matrix(dense.getCols(), sparse.getRows(), (FeatType *)NULL),
                handle);
 
@@ -75,12 +75,56 @@ CuMatrix ComputingUnit::aggregate(CuMatrix &sparse, CuMatrix &dense,
                                 CUSPARSE_MM_ALG_DEFAULT, buffer);
     assert(CUSPARSE_STATUS_SUCCESS == cusparseStat);
     C = C.transpose();
-    scaleRowsByVector(dense, norms);
+    // scaleRowsByVector(dense, norms); //
 
-    hadamardAdd(C, dense);
-    cudaDeviceSynchronize();
+    // hadamardAdd(C, dense);
+    // cudaDeviceSynchronize();
     return C;
 }
+CuMatrix ComputingUnit::gatherRows(CuMatrix m, std::vector<int> indices) {
+    CuMatrix out =
+        wrapMatrix(Matrix(indices.size(), m.getCols(), (char *)NULL));
+    int row_size = m.getCols() * sizeof(float);
+    int row_cnt = m.getCols();
+
+    for (size_t i = 0; i < indices.size(); ++i) {
+        cudaMemcpyAsync(out.devPtr + i * row_cnt,
+                        m.devPtr + indices[i] * row_cnt, row_size,
+                        cudaMemcpyDeviceToDevice, stream);
+    }
+    return out;
+}
+
+CuMatrix ComputingUnit::leakyRelu(CuMatrix &m, float coef) {
+    Matrix out(m.getRows(), m.getCols(), (FeatType *)NULL);
+    CuMatrix cu_out = wrapMatrix(out);
+    thrust::device_ptr<FeatType> dptr_m(m.devPtr);
+    thrust::device_ptr<FeatType> dptr_out(cu_out.devPtr);
+    thrust::transform(dptr_m, dptr_m + m.getNumElemts(), dptr_out,
+                      leakyRelu_functor(coef));
+    return cu_out;
+}
+
+CuMatrix ComputingUnit::leakyReluPrime(CuMatrix &m, float coef) {
+    Matrix out(m.getRows(), m.getCols(), (FeatType *)NULL);
+    CuMatrix cu_out = wrapMatrix(out);
+    thrust::device_ptr<FeatType> dptr_m(m.devPtr);
+    thrust::device_ptr<FeatType> dptr_out(cu_out.devPtr);
+    thrust::transform(dptr_m, dptr_m + m.getNumElemts(), dptr_out,
+                      leakyReluPrime_functor(coef));
+    return cu_out;
+}
+
+CuMatrix ComputingUnit::reduceColumns(CuMatrix m) {
+    CuMatrix out(Matrix(1, m.getCols(), (char *)NULL), handle);
+    CuMatrix ones(Matrix(m.getRows(), 1, (char *)NULL), handle);
+    thrust::device_ptr<float> one_ptr(ones.devPtr);
+    thrust::fill(one_ptr, one_ptr + ones.getNumElemts(), 1);
+    cublasSgemv(handle, CUBLAS_OP_N, m.getCols(), m.getRows(), &alpha, m.devPtr,
+                m.getCols(), ones.devPtr, 1, &beta, out.devPtr, 1);
+    return out;
+}
+
 // This function will scale first nth rows of M based on the length of cuV
 void ComputingUnit::scaleRowsByVector(CuMatrix &cuM, CuMatrix &cuV) {
     stat = cublasSdgmm(handle, CUBLAS_SIDE_RIGHT, cuM.getCols(), cuV.getRows(),

@@ -30,6 +30,7 @@ FeatType *Engine::applyVertex(FeatType *vtcsTensor, unsigned vtcsCnt,
 
     // Start a new lambda communication context.
     if (mode == LAMBDA) {
+        printf("MODE == LAMBDA!!!!!!!!!!!");
         double invTimer = getTimer();
         const unsigned chunkSize =
             (vtcsCnt + numLambdasForward - 1) / numLambdasForward;

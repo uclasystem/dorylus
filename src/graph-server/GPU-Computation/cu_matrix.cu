@@ -8,6 +8,7 @@ CuMatrix::CuMatrix(Matrix M, const cublasHandle_t &handle_)
     nnz = 0;
     csrVal = NULL;
     csrColInd = NULL;
+    csrRowInd = NULL;
     isSparse = 0;
     deviceMalloc();
     if (getData() != NULL) deviceSetMatrix();
@@ -31,6 +32,8 @@ void CuMatrix::loadSpCSR(cusparseHandle_t &handle, Graph &graph) {
     assert(cudaStat == cudaSuccess);
     cudaStat = cudaMalloc((void **)&csrColInd, nnz * sizeof(unsigned));
     assert(cudaStat == cudaSuccess);
+    cudaStat = cudaMalloc((void **)&csrRowInd, nnz * sizeof(unsigned));
+    assert(cudaStat == cudaSuccess);
     cudaStat = cudaMalloc((void **)&csrRowPtr,
                           (graph.localVtxCnt + 1) * sizeof(unsigned));
     assert(cudaStat == cudaSuccess);
@@ -51,6 +54,9 @@ void CuMatrix::loadSpCSR(cusparseHandle_t &handle, Graph &graph) {
 
     setRows(graph.localVtxCnt);
     setCols(total);
+
+    cusparseXcsr2coo(handle, csrRowPtr, nnz, getCols(), csrRowInd,
+                     CUSPARSE_INDEX_BASE_ZERO);
 }
 
 void CuMatrix::loadSpCSC(cusparseHandle_t &handle, Graph &graph) {
@@ -61,6 +67,8 @@ void CuMatrix::loadSpCSC(cusparseHandle_t &handle, Graph &graph) {
     cudaStat = cudaMalloc((void **)&csrVal, nnz * sizeof(EdgeType));
     assert(cudaStat == cudaSuccess);
     cudaStat = cudaMalloc((void **)&csrColInd, nnz * sizeof(unsigned));
+    assert(cudaStat == cudaSuccess);
+    cudaStat = cudaMalloc((void **)&csrRowInd, nnz * sizeof(unsigned));
     assert(cudaStat == cudaSuccess);
     cudaStat = cudaMalloc((void **)&csrRowPtr,
                           (graph.localVtxCnt + 1) * sizeof(unsigned));
@@ -82,8 +90,11 @@ void CuMatrix::loadSpCSC(cusparseHandle_t &handle, Graph &graph) {
 
     setRows(graph.localVtxCnt);
     setCols(total);
-}
 
+    cusparseXcsr2coo(handle, csrRowPtr, nnz, getRows(), csrRowInd,
+                     CUSPARSE_INDEX_BASE_ZERO);
+}
+//You could probably make this function load two matrices instead of pointers and numbers
 void CuMatrix::loadSpDense(FeatType *vtcsTensor, FeatType *ghostTensor,
                            unsigned numLocalVertices, unsigned numGhostVertices,
                            unsigned numFeat) {
@@ -182,6 +193,7 @@ void CuMatrix::scale(const float &alpha) {
     cublasSscal(handle, getNumElemts(), &alpha, devPtr, 1);
 }
 
+// definitely should have gemm and gemv handled differently
 CuMatrix CuMatrix::dot(CuMatrix &B, bool A_trans, bool B_trans, float alpha,
                        float beta) {
     if (handle != B.handle) {

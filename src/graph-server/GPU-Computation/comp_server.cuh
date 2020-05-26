@@ -25,6 +25,12 @@ class ComputingServer {
     ComputingServer();
     ComputingServer(GPUComm *gpu_comm);
 
+    // GAT only
+    void vtxNNForward(unsigned layer, bool lastLayer);
+    void edgNNForward(unsigned layer, bool lastLayer);
+    void edgNNBackward(unsigned layer);
+    void vtxNNBackward(unsigned layer);
+
     // For forward
     void processForward(unsigned layer, bool lastLayer);
 
@@ -36,6 +42,7 @@ class ComputingServer {
     void gradLayer(unsigned layer);
     void gradLoss(unsigned layer, CuMatrix pred, bool report = true);
 
+    void prefetchWeights() { msgService.prefetchWeightsMatrix(totalLayers); };
     void terminate();
 
    private:

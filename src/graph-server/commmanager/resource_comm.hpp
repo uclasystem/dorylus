@@ -18,6 +18,7 @@ public:
 
     virtual void NNCompute(Chunk &chunk) = 0;
     virtual void NNSync() = 0;
+    virtual void prefetchWeights() {};
 
     virtual unsigned getRelaunchCnt() { return 0u; };
 };
