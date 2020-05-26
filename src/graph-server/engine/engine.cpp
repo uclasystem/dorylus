@@ -204,7 +204,6 @@ void Engine::destroy() {
     for (int i = 0; i < numLayers; i++) {
         auto &kkv = savedNNTensors[i];
         for (auto &kv : kkv) {
-            printLog(nodeId, "free %s", kv.first.c_str());
             if (kv.first == "A") {
                 continue;
             }

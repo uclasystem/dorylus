@@ -108,7 +108,7 @@ void WeightServer::applyUpdate(unsigned layer, std::string& name) {
 
     std::string checkInfo = weightsStore[layer][name].tryApplyUpdate(adamOpt, layer);
     if (nodeId == 0 && checkInfo != "") {
-        serverLog(std::string("Local Layer ") + std::to_string(layer) + " " + checkInfo);
+        serverLog(name + std::string(", Local, Layer ") + std::to_string(layer) + " " + checkInfo);
     }
 
     std::unique_lock<std::mutex> ul(ackCntMtx);
@@ -149,7 +149,7 @@ void WeightServer::receiver() {
                 checkInfo = weightsStore[layer][name].tryApplyUpdate(adamOpt, layer, updateData);
             }
             if (nodeId == 0 && checkInfo != "") {
-                serverLog(std::string("Ghost Layer ") + std::to_string(layer) + " " + checkInfo);
+                serverLog(name + std::string(", Ghost, Layer ") + std::to_string(layer) + " " + checkInfo);
             }
         } else if (topic == CTRL_MSG::ACK) {
             subMtx.unlock();

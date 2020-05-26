@@ -51,9 +51,6 @@ void CPUComm::vtxNNForward(unsigned layer, bool lastLayer) {
 
     Matrix z = feats.dot(weight);
 
-    printLog(nodeId, "layer %u, feats %s, weight %s, z %s, output %s", layer,
-        feats.shape().c_str(), weight.shape().c_str(), z.shape().c_str(), savedNNTensors[layer]["z"].shape().c_str());
-
     memcpy(savedNNTensors[layer]["z"].getData(), z.getData(), z.getDataSize());
     deleteMatrix(z);
 }
@@ -65,8 +62,6 @@ void CPUComm::vtxNNBackward(unsigned layer) {
 
     Matrix weightUpdates = h.dot(grad, true, false);
     msgService.sendWeightUpdate(weightUpdates, layer);
-    printLog(nodeId, "layer %u, weight %s, grad %s, h %s, wu %s", layer,
-        weight.shape().c_str(), grad.shape().c_str(), h.shape().c_str(), weightUpdates.shape().c_str());
 
     weightUpdates.free();
 
@@ -74,7 +69,6 @@ void CPUComm::vtxNNBackward(unsigned layer) {
         Matrix resultGrad = grad.dot(weight, false, true);
         memcpy(savedNNTensors[layer - 1]["grad"].getData(), resultGrad.getData(),
                resultGrad.getDataSize());
-        printLog(nodeId, "layer %u, resultG %s, output %s", layer, resultGrad.shape().c_str(), savedNNTensors[layer - 1]["grad"].shape().c_str());
         resultGrad.free();
     }
 }
@@ -98,11 +92,11 @@ void CPUComm::edgNNBackward(unsigned layer) {
 
     Matrix gradTensor = savedNNTensors[layer]["grad"];
     Matrix zaTensor = savedNNTensors[layer]["az"];
-    // Matrix localZTensor = savedNNTensors[layer]["z"]; // serve as Z_dst, and part of Z_src
+    Matrix localZTensor = savedNNTensors[layer]["z"]; // serve as Z_dst, and part of Z_src
     // Matrix ghostZTensor = savedNNTensors[layer]["fg_z"]; // serve as part of Z_src
-    FeatType **fedge = engine->savedEdgeTensors[layer]["fedge"]; // This serves the purpose of Z_src and Z_dst
-    unsigned edgCnt = engine->graph.forwardAdj.nnz;
-    unsigned featDim = gradTensor.getCols();
+    // FeatType **fedge = engine->savedEdgeTensors[layer]["fedge"]; // This serves the purpose of Z_src and Z_dst
+    // unsigned edgCnt = engine->graph.forwardAdj.nnz;
+    // unsigned featDim = gradTensor.getCols();
 
     // gradient of LeakyRelu
     Matrix dLRelu = leakyReluBackward(zaTensor);
@@ -125,15 +119,15 @@ void CPUComm::edgNNBackward(unsigned layer) {
     dAct.free();
     // // Expand Z_src and Z_dst (both have shape (|V|, featDim)) to (|E|, featDim)
     // // And then do Z_dst^T \dot Z_src -> zz (featDim, featDim)
-    Matrix zz = expandMulZZ(fedge, edgCnt, featDim);
-    // Matrix zz = localZTensor.dot(localZTensor, true, false);
+    // Matrix zz = expandMulZZ(fedge, edgCnt, featDim);
+    Matrix zz = localZTensor.dot(localZTensor, true, false);
     printLog(nodeId, "zz %s", zz.shape().c_str());
     // (1, featDim) \dot (featDim, featDim) -> (1, featDim), which is da's shape
     Matrix da = zz.dot(dAct_reduce, false, true);
     dAct_reduce.free();
     zz.free();
     printLog(nodeId, "da %s", da.shape().c_str());
-    msgService.sendaUpdate(da, layer);
+    // msgService.sendaUpdate(da, layer);
     da.free();
 }
 
