@@ -74,7 +74,7 @@ apply_edge(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chu
     if (matrices.empty() || weights.empty()) {
         return constructResp(false, chunk.localId, "Got error message from server");
     }
- 
+
     Matrix& Z = matrices[0];
     Matrix& a = weights[0];
 
@@ -121,7 +121,6 @@ apply_edge_backward(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, C
         std::cerr << "Prorably a null pointer? I dunno" << std::endl;
         return constructResp(false, chunk.localId, "Got an error");
     }
-
 
     return constructResp(true, chunk.localId, "Finished apply edge backward");
 }
