@@ -86,7 +86,7 @@ FeatType **Engine::applyEdge(EdgeType *edgsTensor, unsigned edgsCnt,
         // }
     } else {
         Chunk batch{
-            nodeId,    nodeId, 0, vtcsCnt, (unsigned)layer, PROP_TYPE::FORWARD,
+            0,    nodeId, 0, vtcsCnt, (unsigned)layer, PROP_TYPE::FORWARD,
             currEpoch, false};  // for now it loads the entire feature matrix
         resComm->NNCompute(batch);
     }
@@ -128,6 +128,12 @@ FeatType **Engine::applyEdgeBackward(FeatType* edgsTensor, unsigned edgsCnt,
         double waitTimer = getTimer();
         resComm->NNSync();
         vecTimeLambdaWait[2 * numLayers - layer - 1] += getTimer() - waitTimer;
+    } else {
+        unsigned vtcsCnt = graph.localVtxCnt;
+        Chunk batch{
+            0,    nodeId, 0, vtcsCnt, (unsigned)layer, PROP_TYPE::BACKWARD,
+            currEpoch, false};  // for now it loads the entire feature matrix
+        resComm->NNCompute(batch);
     }
 
 //    Matrix& derivMat = savedNNTensors[layer + 1]["grad"];

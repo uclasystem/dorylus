@@ -205,7 +205,7 @@ void Engine::destroy() {
         auto &kkv = savedNNTensors[i];
         for (auto &kv : kkv) {
             printLog(nodeId, "free %s", kv.first.c_str());
-            if (i == 0 && kv.first == "A") {
+            if (kv.first == "A") {
                 continue;
             }
             kv.second.free();
@@ -302,10 +302,10 @@ void Engine::preallocateGAT() {
 
         // APPLY EDGE TENSORS
         FeatType* gradATensor =
-            new FeatType[graph.backwardAdj.nnz * 1];
-        std::memset(gradATensor, 0, sizeof(FeatType) * graph.backwardAdj.nnz * 1);
+            new FeatType[graph.forwardAdj.nnz * 1];
+        std::memset(gradATensor, 0, sizeof(FeatType) * graph.forwardAdj.nnz * 1);
         savedNNTensors[layer]["dA"] =
-            Matrix(graph.backwardAdj.nnz, 1, gradATensor);
+            Matrix(graph.forwardAdj.nnz, 1, gradATensor);
 
         // GATHER TENSORS
         FeatType *aTgTensor = new FeatType[vtxCnt * featDim];

@@ -176,7 +176,7 @@ Matrix MessageService::getaMatrix(unsigned layer) {
     Chunk c = { 0, nodeId, 0 ,0, layer,
                 PROP_TYPE::FORWARD, epoch, false };
 
-    std::vector<std::string> weightRequests{ "a" };
+    std::vector<std::string> weightRequests{ "a_i" };
     std::vector<Matrix> mats = reqTensors(wsocket, c, weightRequests);
     if (mats.empty() || mats[0].empty()) {
         printLog(nodeId, "Got empty a vector from weight server");
@@ -188,7 +188,7 @@ Matrix MessageService::getaMatrix(unsigned layer) {
 }
 
 void MessageService::sendaUpdate(Matrix &matrix, unsigned layer) {
-    matrix.setName("a");
+    matrix.setName("a_i");
     std::vector<Matrix> weightUpdates{matrix};
     Chunk c = { 0, nodeId, 0 ,0, layer,
                 PROP_TYPE::BACKWARD, epoch, false };
@@ -222,7 +222,7 @@ void MessageService::prefetchWeightsMatrix(unsigned totalLayers) {
             c.epoch = epoch;
             c.globalId=nodeId;
             c.localId=nodeId;
-            std::vector<std::string> weightRequests{"w", "a"};
+            std::vector<std::string> weightRequests{"w", "a_i"};
             std::vector<Matrix> wa = reqTensors(wsocket, c, weightRequests);
             weights[j] = wa[0];
             as[j] = wa[1];
