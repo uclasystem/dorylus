@@ -36,6 +36,7 @@ class ComputingUnit {
     CuMatrix leakyReluPrime(CuMatrix &m, float coef);
     CuMatrix reduceColumns(CuMatrix m);
     CuMatrix gatherRows(CuMatrix m, std::vector<int> indices);
+    CuMatrix gatherRowsGthr(CuMatrix m, int *indices,int len);
 
     CuMatrix wrapMatrix(Matrix m);
 

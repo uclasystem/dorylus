@@ -14,6 +14,11 @@ CuMatrix::CuMatrix(Matrix M, const cublasHandle_t &handle_)
     if (getData() != NULL) deviceSetMatrix();
 }
 
+void CuMatrix::explicitFree(){
+    CuMatrix::MemoryPool.erase(devPtr);
+    cudaFree(devPtr);
+}
+
 Matrix CuMatrix::getMatrix() {
     updateMatrixFromGPU();
     return Matrix(getRows(), getCols(), getData());

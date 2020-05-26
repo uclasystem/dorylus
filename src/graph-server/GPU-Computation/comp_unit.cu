@@ -94,7 +94,18 @@ CuMatrix ComputingUnit::gatherRows(CuMatrix m, std::vector<int> indices) {
     }
     return out;
 }
-
+CuMatrix ComputingUnit::gatherRowsGthr(CuMatrix m, int *indices, int len) {
+    auto m_trans = m.transpose();
+    CuMatrix out = wrapMatrix(Matrix(m.getCols(), len, (char *)NULL));
+    for (int i = 0; i < m.getCols(); ++i) {
+        cusparseSgthr(spHandle, len, m_trans.devPtr + i * m.getRows(),
+                      out.devPtr + i * len, indices, CUSPARSE_INDEX_BASE_ZERO);
+    }
+    CuMatrix outT=out.transpose();
+    out.explicitFree();
+    m_trans.explicitFree();
+    return outT;
+}
 CuMatrix ComputingUnit::leakyRelu(CuMatrix &m, float coef) {
     Matrix out(m.getRows(), m.getCols(), (FeatType *)NULL);
     CuMatrix cu_out = wrapMatrix(out);

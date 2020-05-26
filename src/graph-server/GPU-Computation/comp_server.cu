@@ -91,9 +91,12 @@ void ComputingServer::edgNNBackward(unsigned layer) {
     CuMatrix e = *adj;
     unsigned edgCnt = e.nnz;
 
+    cout<<"leakyReluPrime\n";
     CuMatrix d_lrelu = cu.leakyReluPrime(zaTensor, 0.01);  // n x 1
+    zaTensor.explicitFree();
     CuMatrix d_lrelu_edge =
         cu.wrapMatrix(Matrix(e.nnz, 1, (char *)NULL));  // BCAST |V| to |E|
+    cout<<"cusparseSgthr\n";
     auto cusparseStat = cusparseSgthr(
         cu.spHandle, e.nnz, d_lrelu.devPtr, d_lrelu_edge.devPtr,
         e.csrRowInd,  // Not sure need to see the actually adjmatrix***
@@ -107,32 +110,42 @@ void ComputingServer::edgNNBackward(unsigned layer) {
     cudaMemcpy(dst_indices.data(), e.csrColInd, sizeof(int) * e.nnz,
                cudaMemcpyDeviceToHost);
 
-    auto d_P_edge = cu.gatherRows(gradTensor, src_indices);
+    cout<<"gatherRows d_P_edge \n";
+    // auto d_P_edge = cu.gatherRows(gradTensor, src_indices);
+    auto d_P_edge = cu.gatherRowsGthr(gradTensor, e.csrRowInd,e.nnz);
+    cudaDeviceSynchronize();
+    cout<<"scaleRowsByVector\n";
     cu.scaleRowsByVector(d_P_edge, d_lrelu_edge);  //(|E|, featDim)
     auto d_Act = d_P_edge;
-
-    CuMatrix::MemoryPool.erase(d_lrelu.devPtr);
-    cudaFree(d_lrelu.devPtr);
-
+    d_lrelu.explicitFree();
+    cout<<d_Act.shape()<<endl;
 
     if (layer != 0) {
         // Shape of dA: (|E|, 1), serve as gradient of each edge for backward
         // agg
+        cout<<"d_Act.dot(a)\n";
         auto dA = d_Act.dot(a);
         dA.setData((*gpuComm->tensorMap)["dA"].getData());
         dA.updateMatrixFromGPU();
+        dA.explicitFree();
     }
+    cout<<"d_Act_reduce\n";
     auto d_Act_reduce = cu.reduceColumns(d_Act);
     CuMatrix::MemoryPool.erase(d_Act.devPtr);
     cudaFree(d_Act.devPtr);
 
+    cout<<"gatherRows gatherRows\n";
     auto z = cu.wrapMatrix((*gpuComm->tensorMap)["z"]);
-    auto z_src=cu.gatherRows(z, src_indices);
-    auto z_dst=cu.gatherRows(z, dst_indices);
+    // auto z_src=cu.gatherRows(z, src_indices);
+    // auto z_dst=cu.gatherRows(z, dst_indices);
+    auto z_src=cu.gatherRowsGthr(z, e.csrRowInd,e.nnz);
+    auto z_dst=cu.gatherRowsGthr(z, e.csrColInd,e.nnz);
     CuMatrix::MemoryPool.erase(z.devPtr);
     cudaDeviceSynchronize();
     cudaFree(z.devPtr);
+    cout<<"zz=z_src.dot(z_dst\n";
     auto zz=z_src.dot(z_dst,true,false);
+    cout<<"da\n";
     CuMatrix da = zz.dot(d_Act_reduce, false, true);
     da.updateMatrixFromGPU();
     msgService.sendaUpdate(da, layer);

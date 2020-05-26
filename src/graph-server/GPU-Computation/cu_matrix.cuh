@@ -18,8 +18,8 @@ class CuMatrix : public Matrix {
   public:
     //for simple memory management
     static std::set<FeatType *> MemoryPool;
-    static void freeGPU();
-
+    static void freeGPU(); //should rename it to collect()
+    void explicitFree(); //should rename it to gpuFree
     CuMatrix() {setData(NULL);};
     CuMatrix(Matrix M, const cublasHandle_t &handle_);
     ~CuMatrix();
