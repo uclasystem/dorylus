@@ -201,8 +201,13 @@ void Engine::destroy() {
 
     delete[] forwardGhostInitData;
 
-    for (auto &kkv : savedNNTensors) {
+    for (int i = 0; i < numLayers; i++) {
+        auto &kkv = savedNNTensors[i];
         for (auto &kv : kkv) {
+            printLog(nodeId, "free %s", kv.first.c_str());
+            if (i == 0 && kv.first == "A") {
+                continue;
+            }
             kv.second.free();
         }
     }
