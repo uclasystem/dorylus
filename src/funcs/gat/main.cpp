@@ -34,7 +34,7 @@ apply_edge(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chu
     std::cout << "FORWARD APPLY EDGE LAYER " << chunk.layer << std::endl;
 
     unsigned startRequest = timestamp_ms();
-    EdgeInfo eInfo = reqEdgeTensor(data_socket, chunk);
+    EdgeInfo eInfo = reqEdgeInfo(data_socket, chunk);
     unsigned endRequest = timestamp_ms();
     if (eInfo.numLvids == NOT_FOUND_ERR_FIELD) {
         std::cerr << "Tensor 'fedge' was not found on graph server" << std::endl;
@@ -50,6 +50,7 @@ apply_edge(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chu
         return constructResp(false, chunk.localId, "Got an error");
     }
     std::cout << "GOT E TENSOR" << std::endl;
+    std::cout << "EDGE INFO: " << eInfo.numLvids << ", " << eInfo.nChunkEdges << std::endl;
 
     std::vector<std::string> dataRequests{"z"};
     std::vector<Matrix> matrices = reqTensors(data_socket, chunk, dataRequests);
@@ -106,23 +107,39 @@ apply_edge_backward(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, C
     std::cout << "BACKWARD APPLY EDGE LAYER " << chunk.layer << std::endl;
 
     unsigned startRequest = timestamp_ms();
-    EdgeInfo eTensor = reqEdgeTensor(data_socket, chunk);
+    EdgeInfo eInfo = reqEdgeInfo(data_socket, chunk);
     unsigned endRequest = timestamp_ms();
-    if (eTensor.numLvids == NOT_FOUND_ERR_FIELD) {
+    if (eInfo.numLvids == NOT_FOUND_ERR_FIELD) {
         std::cerr << "Tensor 'fedge' was not found on graph server" << std::endl;
         return constructResp(false, chunk.localId, "Tensor 'fedge' not found");
-    } else if (eTensor.numLvids == DUPLICATE_REQ_ERR_FIELD) {
+    } else if (eInfo.numLvids == DUPLICATE_REQ_ERR_FIELD) {
         std::cerr << "Chunk already running. Request rejected" << std::endl;
         return constructResp(false, chunk.localId, "Duplicate chunk request");
-    } else if (eTensor.numLvids == CHUNK_DNE_ERR) {
+    } else if (eInfo.numLvids == CHUNK_DNE_ERR) {
         std::cerr << "Chunk not found on graph server" << std::endl;
         return constructResp(false, chunk.localId, "Chunk not found");
-    } else if (eTensor.numLvids == ERR_HEADER_FIELD) {
+    } else if (eInfo.numLvids == ERR_HEADER_FIELD) {
         std::cerr << "Prorably a null pointer? I dunno" << std::endl;
         return constructResp(false, chunk.localId, "Got an error");
     }
 
-    std::vector<std::string> dataRequests{"z"};
+    std::cout << "EDGE INFO: " << eInfo.numLvids << ", " << eInfo.nChunkEdges << std::endl;
+
+    Matrix aZ = reqEdgeTensor(data_socket, chunk, "az");
+
+    std::vector<std::string> dataRequests{"z", "grad"};
+    std::vector<Matrix> matrices = reqTensors(data_socket, chunk, dataRequests);
+    Matrix& Z = matrices[0];
+    Matrix& dP = matrices[1];
+
+    std::cout << "Z: " << Z.shape() << std::endl;
+    std::cout << "dP: " << dP.shape() << std::endl;
+    std::cout << "aZ: " << aZ.shape() << std::endl;
+
+    std::vector<std::string> weightRequests{"a_i"};
+    std::vector<Matrix> weights = reqTensors(weights_socket, chunk, weightRequests);
+    Matrix& a = weights[0];
+    std::cout << "a: " << a.shape() << std::endl;
 
     return constructResp(true, chunk.localId, "Finished apply edge backward");
 }

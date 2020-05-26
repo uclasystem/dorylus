@@ -23,7 +23,9 @@ int recvTensor(zmq::socket_t& socket, Matrix &mat);
 std::vector<Matrix> reqTensors(zmq::socket_t& socket, Chunk &chunk,
                             std::vector<std::string>& tensorRequests);
 
-EdgeInfo reqEdgeTensor(zmq::socket_t& socket, Chunk& chunk);
+Matrix reqEdgeTensor(zmq::socket_t& socket, Chunk& chunk, std::string name);
+
+EdgeInfo reqEdgeInfo(zmq::socket_t& socket, Chunk& chunk);
 
 int sendTensors(zmq::socket_t& socket, Chunk &chunk,
     std::vector<Matrix>& matrices, bool ack = false);

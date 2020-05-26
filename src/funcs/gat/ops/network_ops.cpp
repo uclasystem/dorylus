@@ -101,11 +101,38 @@ std::vector<Matrix> reqTensors(zmq::socket_t& socket, Chunk &chunk,
 #undef EXP_FACTOR
 }
 
-EdgeInfo reqEdgeTensor(zmq::socket_t& socket, Chunk& chunk) {
+Matrix reqEdgeTensor(zmq::socket_t& socket, Chunk& chunk, std::string name) {
     zmq::message_t header(HEADER_SIZE);
+    zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
     populateHeader(header.data(), OP::PULLE, chunk);
+    populateHeader(tensorHeader.data(), chunk.localId, name.c_str());
+    socket.send(header, ZMQ_SNDMORE);
+    socket.send(tensorHeader);
+
+    std::cout << "TENSR REQ HEADERS SENT" << std::endl;
+
+    zmq::message_t respHeader(TENSOR_HDR_SIZE);
+    zmq::message_t matxMsg;
+
+    socket.recv(&respHeader);
+    unsigned rows = parse<unsigned>((char*)respHeader.data(), 0);
+    unsigned cols = parse<unsigned>((char*)respHeader.data(), 1);
+    std::cout << "RECVD TENSOR RESP HEADER" << std::endl;
+    std::cout << "ROWS " << rows << " COLS " << cols << std::endl;
+
+    socket.recv(&matxMsg);
+    std::cout << "RECVD MATX MSG" << std::endl;
+    FeatType* data = new FeatType[rows * cols];
+    std::memcpy(data, matxMsg.data(), matxMsg.size());
+
+    return Matrix(rows, cols, data);
+}
+
+EdgeInfo reqEdgeInfo(zmq::socket_t& socket, Chunk& chunk) {
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader(header.data(), OP::PULLEINFO, chunk);
     socket.send(header);
-    std::cout << "HEADER SENT" << std::endl;
+    std::cout << "INFO REQ HEADER SENT" << std::endl;
 
     zmq::message_t responseHeader(TENSOR_HDR_SIZE);
 
@@ -113,16 +140,16 @@ EdgeInfo reqEdgeTensor(zmq::socket_t& socket, Chunk& chunk) {
     socket.recv(&responseHeader);
     eTensor.numLvids = parse<unsigned>(responseHeader.data(), 0);
     eTensor.nChunkEdges = parse<unsigned>(responseHeader.data(), 1);
-    std::cout << "RECVD RESP HEADER" << std::endl;
+    std::cout << "RECVD INFO RESP HEADER" << std::endl;
 
     if (eTensor.numLvids == NOT_FOUND_ERR_FIELD
       || eTensor.numLvids == DUPLICATE_REQ_ERR_FIELD
       || eTensor.numLvids == CHUNK_DNE_ERR) {
+        std::cerr << "GOT ERROR" << std::endl;
         return eTensor;
     }
 
-    // Scoping message reading because data can be quite large
-    // Force deallocate memory after it has been copied into eTensor
+    std::cout << "WAITING FOR MSG" << std::endl;
     zmq::message_t edgeChunkInfoMsg;
     socket.recv(&edgeChunkInfoMsg);
     eTensor.edgePtrs = new unsigned long long[edgeChunkInfoMsg.size() / sizeof(unsigned long long)];
