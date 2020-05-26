@@ -199,10 +199,7 @@ void Engine::destroy() {
 
     delete resComm;
 
-    delete[] forwardVerticesInitData;
     delete[] forwardGhostInitData;
-
-    delete[] localVerticesLabels;
 
     for (auto &kkv : savedNNTensors) {
         for (auto &kv : kkv) {
