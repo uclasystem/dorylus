@@ -135,11 +135,24 @@ bool LambdaComm::NNRecv(Chunk &chunk) {
 
             NNCompute(chunk);
         } else {
-            if (chunk.vertex) {
+            if (chunk.vertex && chunk.dir == PROP_TYPE::FORWARD) {
+                chunk.vertex = !chunk.vertex;
                 resLock.lock();
                 resQueue.push(chunk);
                 resLock.unlock();
-            } else {
+            } else if (chunk.vertex && chunk.dir == PROP_TYPE::BACKWARD) {
+                chunk.vertex = !chunk.vertex;
+                chunk.layer -= 1;
+                resLock.lock();
+                resQueue.push(chunk);
+                resLock.unlock();
+            } else if (!chunk.vertex && chunk.dir == PROP_TYPE::FORWARD) {
+                chunk.vertex = !chunk.vertex;
+                aggLock.lock();
+                aggQueue.push(chunk);
+                aggLock.unlock();
+            } else if (!chunk.vertex && chunk.dir == PROP_TYPE::BACKWARD) {
+                chunk.vertex = !chunk.vertex;
                 aggLock.lock();
                 aggQueue.push(chunk);
                 aggLock.unlock();
@@ -284,7 +297,7 @@ void LambdaComm::setupAwsClient() {
     Aws::Client::ClientConfiguration clientConfig;
     clientConfig.requestTimeoutMs = 900000;
     clientConfig.maxConnections = 1000;
-    clientConfig.region = "us-east-2";
+    clientConfig.region = "us-east-1";
     m_client = Aws::MakeShared<Aws::Lambda::LambdaClient>(ALLOCATION_TAG,
                                                           clientConfig);
 }
@@ -366,34 +379,4 @@ void LambdaComm::startRelaunchThd() {
 void LambdaComm::stopRelaunchThd() {
     relaunchThd->join();
     delete relaunchThd;
-}
-
-
-unsigned getAbsLayer(const Chunk &chunk, unsigned numLayers) {
-    // YIFAN: I set the "numLayers" to 10 here to avoid any conflicts
-    return chunk.dir == PROP_TYPE::FORWARD ? (chunk.layer) : (2 * numLayers - 1 - chunk.layer);
-}
-
-Chunk incLayer(const Chunk &chunk, unsigned numLayers) {
-    Chunk nextChunk = chunk;
-    if (chunk.dir == PROP_TYPE::FORWARD && chunk.layer < numLayers - 1) {
-        // Keep dir as FORWARD and inc layer
-        nextChunk.layer++;
-    } else if (chunk.dir == PROP_TYPE::FORWARD && chunk.layer == numLayers - 1) {
-        // Change dir to BACKWARD and dec layer (the final layer backawrd lambda is merged into the forward lambda)
-        nextChunk.dir = PROP_TYPE::BACKWARD;
-        nextChunk.layer--;
-    } else if (chunk.dir == PROP_TYPE::BACKWARD && chunk.layer > 0) {
-        // Keep dir as BACKWARD and dec layer
-        nextChunk.layer--;
-    } else if (chunk.dir == PROP_TYPE::BACKWARD && chunk.layer == 0) {
-        // Change dir to FORWARD and inc epoch
-        nextChunk.dir = PROP_TYPE::FORWARD;
-        nextChunk.epoch++;
-    }
-    return nextChunk;
-}
-
-bool isLastLayer(const Chunk &chunk) {
-    return chunk.dir == PROP_TYPE::BACKWARD && chunk.layer == 0;
 }

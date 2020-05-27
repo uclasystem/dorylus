@@ -415,14 +415,14 @@ void Engine::run() {
             graph.localVtxCnt, getFeatDim(numLayers), localVerticesLabels);
 
         // Run one synchronous epoch
-        {
-            double epochStart = getTimer();
-            FeatType *tensor = runForward(0);
-            runBackward(tensor);
-            double epochTime = getTimer() - epochStart;
-            printLog(nodeId, "Time for epoch %u: %f ms", 0, epochTime);
-            addEpochTime(epochTime);
-        }
+//        {
+//            double epochStart = getTimer();
+//            FeatType *tensor = runForward(0);
+//            runBackward(tensor);
+//            double epochTime = getTimer() - epochStart;
+//            printLog(nodeId, "Time for epoch %u: %f ms", 0, epochTime);
+//            addEpochTime(epochTime);
+//        }
 
         if (nodeId == 0) {
             printLog(nodeId, "Finished SYNCHRONOUS epoch, starting PIPELINE");
@@ -605,8 +605,9 @@ void Engine::runPipeline() {
         Chunk chunk{
             availLambdaId, nodeId * numLambdasForward + availLambdaId,
             lowBound,      upBound,
-            (unsigned)layer,         PROP_TYPE::FORWARD,
-            currEpoch,     true};  // epoch is not useful in sync version
+            0,         PROP_TYPE::FORWARD,
+            1,     true};  // epoch is not useful in sync version
+
         resComm->NNCompute(chunk);
 
         availLambdaId++;

@@ -176,6 +176,7 @@ case $1 in
           echo -e "\e[92;1mThis round of execution seems successful, congrats ;)\e[0m"
         else
           echo -e "\e[91;1mExecution fails (at least on this node), check the log file!\e[0m"
+          ~/kill-all
         fi
         ;;
 

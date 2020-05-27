@@ -100,6 +100,10 @@ struct Chunk {
 
 Chunk createChunk(unsigned rows, unsigned nChunks, unsigned id, unsigned layer, PROP_TYPE dir, unsigned ep = 0, bool vertex = true);
 
+unsigned getAbsLayer(const Chunk &chunk, unsigned numLayers);
+Chunk incLayer(const Chunk &chunk, unsigned numLayers);
+bool isLastLayer(const Chunk &chunk);
+
 // backoff sleep strategy to improve CPU utilization
 struct BackoffSleeper {
     unsigned trails = 0;

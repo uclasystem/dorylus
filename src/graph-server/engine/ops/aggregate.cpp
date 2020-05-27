@@ -155,94 +155,56 @@ void Engine::aggregator(unsigned tid) {
         if (aggregateQueue.empty()) {
             aggQueueLock.unlock();
             bs.sleep();
-            continue;
-        }
-
-        Chunk c = aggregateQueue.top();
-        // check before aggregation
-        if (c.isFirstLayer()) {
-            // Converge state changes
-            if (convergeState != CONVERGE_STATE::EARLY && maxEpoch == 0 && staleness != UINT_MAX) {
-                // record the current max epoch of all nodes.
-                nodeManager.readEpochUpdates();
-
-                // maxEpoch = minEpoch + staleness;
-                maxEpoch = minEpoch + 1;
-                unsigned maxe = minEpoch + staleness;
-                if (nodesFinishedEpoch[maxe % (staleness + 1)] > 0) {
-                    maxEpoch = maxe;
-                }
-                maxe--;
-                while (maxe >= minEpoch) {
-                    if (nodesFinishedEpoch[maxe % (staleness + 1)] > 0) {
-                        maxEpoch = maxe + 1;
-                        break;
-                    }
-                    maxe--;
-                }
-                printLog(nodeId, "max epoch %u, curr epoch %u", maxEpoch, currEpoch);
-            }
-            if (c.epoch == numEpochs ||
-                (convergeState != CONVERGE_STATE::EARLY && c.epoch == maxEpoch + 1)) {
-                while (!aggregateQueue.empty()) {
-                    aggregateQueue.pop();
-                    ++finishedChunks;
-                }
-                aggQueueLock.unlock();
-                if (finishedChunks == numLambdasForward) {
-                    if (convergeState != CONVERGE_STATE::EARLY) {
-                        extern std::string CONVERGE_STATE_STR[CONVERGE_STATE::NUM_STATE];
-                        printLog(nodeId, "STATE changes to %s at epoch %u",
-                            CONVERGE_STATE_STR[convergeState].c_str(), currEpoch);
-                    }
-                    ++currEpoch;
-                    aggHalt = true;
-                    break;
-                }
-
-                bs.sleep();
-                continue;
-
-            // There is a chunk but it is beyond the staleness bound
-            } else if (staleness != UINT_MAX && c.epoch > minEpoch + staleness) {
-                // Read incoming message buffer to see if there are
-                // updates to the minEpoch
-                nodeManager.readEpochUpdates();
-                aggQueueLock.unlock();
-
-                bs.sleep();
-                // Messages to check how often a node is blocking
-                if ((bs.trails + 1) % 1000 == 0) {
-                    printLog(nodeId, "Blocking. MinE %u, Finished %u",
-                        minEpoch,
-                        nodesFinishedEpoch[minEpoch % (staleness + 1)]);
-                }
-                continue;
-            }
-        }
-
-        if (c.isFirstLayer() && c.epoch == currEpoch + 1) {
-            ++currEpoch;
-            ++numAsyncEpochs;
-            printLog(nodeId, "STARTING epoch %u [%u]", currEpoch,
-                        c.epoch);
-        }
-
-        // printLog(nodeId, "AGGREGATE: Got %s", c.str().c_str());
-        aggregateQueue.pop();
-        aggQueueLock.unlock();
-
-        double startAgg = getTimer();
-        if (c.dir == PROP_TYPE::FORWARD) {
-            aggregateChunk(c);
         } else {
-            aggregateBPChunk(c);
-        }
-        vecTimeAggregate[c.dir * numLayers + c.layer] +=
-            getTimer() - startAgg;
-        resComm->NNCompute(c);
+            Chunk c = aggregateQueue.top();
+            aggregateQueue.pop();
+            printLog(nodeId, "Aggregating %s", c.str().c_str());
+            sleep_ms(1000);
+            aggQueueLock.unlock();
 
-        bs.reset();
+            double startAgg = getTimer();
+            if (c.dir == PROP_TYPE::FORWARD) {
+                aggregateChunk(c);
+            } else {
+                aggregateBPChunk(c);
+            }
+
+            vecTimeAggregate[c.dir * numLayers + c.layer] +=
+                getTimer() - startAgg;
+
+            if (c.dir == PROP_TYPE::FORWARD && c.layer < numLayers - 1) {
+                c.layer += 1;
+                c.vertex = true;
+                resComm->NNCompute(c);
+                printLog(nodeId, "Launching AV for Layer %u", c.layer);
+            } else if (c.dir == PROP_TYPE::FORWARD) {
+                c.vertex = false;
+                c.dir = PROP_TYPE::BACKWARD;
+
+                Matrix& labels = savedNNTensors[numLayers - 1]["lab"];
+                FeatType* labelPtr = labels.get(c.lowBound);
+                FeatType* outputDeriv = savedNNTensors[numLayers - 1]["grad"].get(c.lowBound);
+                FeatType* agg = savedNNTensors[numLayers - 1]["az"].get(c.lowBound);
+
+
+                unsigned rows = c.upBound - c.lowBound;
+                unsigned cols = labels.getCols();
+                softmax(agg, outputDeriv, rows, cols);
+
+                for (unsigned i = 0; i < rows * cols; ++i) {
+                    outputDeriv[i] -= labelPtr[i];
+                }
+
+                printLog(nodeId, "Calculated predictions and launched AEB");
+                scatQueueLock.lock();
+                scatterQueue.push(c);
+                scatQueueLock.lock();
+            } else {
+                resComm->NNCompute(c);
+            }
+
+            bs.reset();
+        }
     }
 }
 
@@ -270,17 +232,12 @@ void Engine::aggregateCompute(unsigned tid, void *args) {
 void Engine::aggregateChunk(Chunk &c) {
     unsigned lvid = c.lowBound;
     unsigned limit = c.upBound;
-    unsigned featDim = getFeatDim(c.layer);
+    unsigned featDim = getFeatDim(c.layer + 1);
 
-    FeatType *featTensor = NULL;
-    if (c.layer == 0)
-        featTensor =
-            getVtxFeat(savedNNTensors[c.layer]["x"].getData(), lvid, featDim);
-    else
-        featTensor = getVtxFeat(savedNNTensors[c.layer - 1]["h"].getData(),
-                                lvid, featDim);
+    if (nodeId == 0) printLog(nodeId, "FEAT DIM %u", featDim);
 
-    FeatType *aggTensor = savedNNTensors[c.layer]["ah"].getData();
+    FeatType *featTensor = savedNNTensors[c.layer]["z"].getData();
+    FeatType *aggTensor = savedNNTensors[c.layer]["az"].getData();
     FeatType **eFeatsTensor = savedEdgeTensors[c.layer]["fedge"];
 
     FeatType *chunkPtr = getVtxFeat(aggTensor, lvid, featDim);
@@ -288,7 +245,7 @@ void Engine::aggregateChunk(Chunk &c) {
                 sizeof(FeatType) * (limit - lvid) * featDim);
     while (lvid < limit) {
         forwardAggregateFromNeighbors(lvid++, aggTensor, eFeatsTensor,
-                                      getFeatDim(c.layer));
+                                      getFeatDim(c.layer + 1));
     }
 }
 

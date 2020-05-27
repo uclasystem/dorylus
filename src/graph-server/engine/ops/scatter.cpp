@@ -287,6 +287,8 @@ void Engine::scatterWorker(unsigned tid) {
         } else {
             Chunk c = scatterQueue.top();
             scatterQueue.pop();
+            printLog(nodeId, "Scattering %s", c.str().c_str());
+            sleep_ms(1000);
             scatQueueLock.unlock();
 
             unsigned startScat = timestamp_ms();
@@ -303,6 +305,7 @@ void Engine::scatterWorker(unsigned tid) {
             std::string tensorName;
             if (c.dir == PROP_TYPE::FORWARD) {
                 tensorName = "z";
+                featLayer += 1;
             } else {
                 outputLayer += 1;
                 featLayer += 1;
@@ -355,7 +358,6 @@ void Engine::scatterWorker(unsigned tid) {
             unsigned endScat = timestamp_ms();
             // Add chunk into appropriate aggregate queue
             // printLog(nodeId, "SCATTER: Finished %s", c.str().c_str());
-            c.vertex = false;
             resComm->NNCompute(c);
             vecTimeScatter[c.dir * numLayers + c.layer] += endScat - startScat;
 
@@ -434,6 +436,8 @@ void Engine::ghostReceiver(unsigned tid) {
                 // Update ghost vertices
                 for (unsigned i = 0; i < recvGhostVCnt; ++i) {
                     unsigned gvid = *(unsigned *)bufPtr;
+                    unsigned lgvid = globalToGhostVtcs[gvid] - graph.localVtxCnt;
+                    if (lgvid > globalToGhostVtcs.size()) printLog(nodeId, "GHOST ID: %u", lgvid);
                     bufPtr += sizeof(unsigned);
                     FeatType *dataPtr = getVtxFeat(
                         ghostData, globalToGhostVtcs[gvid] - graph.localVtxCnt,

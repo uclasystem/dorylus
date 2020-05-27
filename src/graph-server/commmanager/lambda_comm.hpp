@@ -39,7 +39,7 @@
 #include "../../common/utils.hpp"
 
 
-static const bool relaunching = true;
+static const bool relaunching = false;
 
 #define LAMBDA_VTX_NN "gat"
 #define ALLOCATION_TAG "LambdaComm"

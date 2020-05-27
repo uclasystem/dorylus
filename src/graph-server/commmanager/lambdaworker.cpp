@@ -123,7 +123,7 @@ void LambdaWorker::sendTensors(zmq::message_t& client_id, Chunk &chunk) {
             std::string name = parseName((char*)tensorHeader.data());
             auto found = tensorMap.find(name);
             if (found == tensorMap.end()) {
-                printLog(manager->nodeId, "Requested tensor '%s' not found", name.c_str());
+                printLog(manager->nodeId, "Requested tensor '%s' not found for layer %u", name.c_str(), chunk.layer);
                 zmq::message_t errorHeader(TENSOR_HDR_SIZE);
                 populateHeader(errorHeader.data(), ERR_HEADER_FIELD, name.c_str());
                 workersocket.send(client_id, ZMQ_SNDMORE);
@@ -345,8 +345,8 @@ void LambdaWorker::sendEdgeTensor(zmq::message_t& client_id, Chunk& chunk) {
         auto found = tMap.find(name);
         if (found == tMap.end()) {
             workersocket.send(client_id, ZMQ_SNDMORE);
-            printLog(manager->nodeId, "Requested tensor '%s' not found",
-                     name.c_str());
+            printLog(manager->nodeId, "Requested tensor '%s' not found for layer %u",
+                     name.c_str(), chunk.layer);
             zmq::message_t errorHeader(TENSOR_HDR_SIZE);
             populateHeader(errorHeader.data(), ERR_HEADER_FIELD, name.c_str());
             workersocket.send(client_id, ZMQ_SNDMORE);
