@@ -586,12 +586,13 @@ void Engine::loadChunks() {
         unsigned lowBound = cid * chunkSize;
         unsigned upBound = std::min(lowBound + chunkSize, vtcsCnt);
 
-        aggregateQueue.push(Chunk{cid, nodeId * numLambdasForward + cid,
-                                  lowBound, upBound, 0, PROP_TYPE::FORWARD, 1,
-                                  true});
+        driverQueue.push(Chunk{cid, nodeId * numLambdasForward + cid,
+                            lowBound, upBound, 0, PROP_TYPE::FORWARD, 0,
+                            true});
     }
 
-    currEpoch = 0;
+    // YIFAN: this is weird but we don't have the sync epoch at the beginning
+    currEpoch = -1u;
 
     // Set the initial bound chunk as epoch 1 layer 0
     minEpoch = 1;

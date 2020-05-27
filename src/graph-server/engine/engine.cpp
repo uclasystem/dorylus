@@ -427,7 +427,6 @@ void Engine::run() {
         if (nodeId == 0) {
             printLog(nodeId, "Finished SYNCHRONOUS epoch, starting PIPELINE");
         }
-        //loadChunks();
         // Start pipeline
         runPipeline();
 
@@ -592,36 +591,27 @@ void Engine::runPipeline() {
         std::bind(&Engine::aggregator, this, std::placeholders::_1);
     std::vector<std::thread> aggWrkrThds;
     for (unsigned tid = 0; tid < cThreads; ++tid) {
-        aggWrkrThds.push_back(std::thread(aggWrkr, 2 + tid));
+        aggWrkrThds.push_back(std::thread(aggWrkr, 3 + tid));
     }
 
-    // Launch AV phase to kick off pipeline
-    const unsigned chunkSize =
-        (graph.localVtxCnt + numLambdasForward - 1) / numLambdasForward;
-    unsigned availLambdaId = 0;
-    while (availLambdaId < numLambdasForward) {
-        unsigned lowBound = availLambdaId * chunkSize;
-        unsigned upBound = std::min(lowBound + chunkSize, graph.localVtxCnt);
-        Chunk chunk{
-            availLambdaId, nodeId * numLambdasForward + availLambdaId,
-            lowBound,      upBound,
-            0,         PROP_TYPE::FORWARD,
-            1,     true};  // epoch is not useful in sync version
+    // Push chunks to driver queue to kick off pipeline
+    loadChunks();
 
-        resComm->NNCompute(chunk);
+    // Start async driver
+    auto driverWrkr =
+        std::bind(&Engine::asyncDriver, this, std::placeholders::_1);
+    std::thread driver(driverWrkr, 2);
 
-        availLambdaId++;
-    }
-
-    for (unsigned tid = 0; tid < cThreads; ++tid) {
-        aggWrkrThds[tid].join();
-    }
-
+    // TODO: (YIFAN) driver is running forever!
+    driver.join();
     double edt = getTimer();
     asyncAvgEpochTime = (edt - stt) / numAsyncEpochs;
 
     // Wait for all nodes to finish
     nodeManager.barrier();
+    for (unsigned tid = 0; tid < cThreads; ++tid) {
+        aggWrkrThds[tid].join();
+    }
     commHalt = true;
     swt.join();
     grt.join();
@@ -643,6 +633,36 @@ void Engine::runPipeline() {
     }
 
     resComm->setAsync(false, currEpoch - 1);
+}
+
+void Engine::asyncDriver(unsigned tid) {
+    BackoffSleeper bs;
+
+    while (true) {
+        drvQueueLock.lock();
+        if (driverQueue.empty()) {
+            drvQueueLock.unlock();
+            bs.sleep();
+            continue;
+        }
+
+        Chunk c = driverQueue.top();
+        ////////////
+        // Some logic here for staleness bound and exit
+        ////////////
+        if (c.isFirstLayer() && c.epoch == currEpoch + 1) {
+            ++currEpoch;
+            ++numAsyncEpochs;
+            printLog(nodeId, "STARTING epoch %u [%u]", currEpoch,
+                        c.epoch);
+        }
+        driverQueue.pop();
+        drvQueueLock.unlock();
+
+        resComm->NNCompute(c);
+
+        bs.reset();
+    }
 }
 
 Engine engine;
