@@ -99,9 +99,9 @@ bool LambdaComm::NNRecv(Chunk &chunk) {
     timeoutMtx.unlock();
 
     // filter out outdate chunks after switching sync/async
-    if ((int)(chunk.epoch) <= outdateEpoch) {
-        return true;
-    }
+//    if ((int)(chunk.epoch) <= outdateEpoch) {
+//        return true;
+//    }
 
     // If bounded-staleness enabled, increment the finished chunks for this epoch
     // If the min epoch has finished, allow chunks to move to the next epoch
