@@ -579,6 +579,9 @@ void Engine::readLabelsFile(std::string &labelsFileName) {
 }
 
 void Engine::loadChunks() {
+    // YIFAN: this is weird but we don't have the sync epoch at the beginning
+    currEpoch = -1u;
+
     unsigned vtcsCnt = graph.localVtxCnt;
     for (unsigned cid = 0; cid < numLambdasForward; ++cid) {
         unsigned chunkSize =
@@ -587,15 +590,12 @@ void Engine::loadChunks() {
         unsigned upBound = std::min(lowBound + chunkSize, vtcsCnt);
 
         driverQueue.push(Chunk{cid, nodeId * numLambdasForward + cid,
-                            lowBound, upBound, 0, PROP_TYPE::FORWARD, 0,
+                            lowBound, upBound, 0, PROP_TYPE::FORWARD, currEpoch + 1,
                             true});
     }
 
-    // YIFAN: this is weird but we don't have the sync epoch at the beginning
-    currEpoch = -1u;
-
     // Set the initial bound chunk as epoch 1 layer 0
-    minEpoch = 1;
+    minEpoch = currEpoch + 1;
     memset(numFinishedEpoch.data(), 0,
            sizeof(unsigned) * numFinishedEpoch.size());
     memset(numFinishedEpoch.data(), 0,

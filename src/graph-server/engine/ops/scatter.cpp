@@ -391,14 +391,14 @@ void Engine::ghostReceiver(unsigned tid) {
     while (true) {
         // No message in queue.
         if (!commManager.dataPullIn(&sender, &topic, msgBuf, MAX_MSG_SIZE)) {
+            if (commHalt) {
+                break;
+            }
             usleep(SLEEP_PERIOD);  // sleep a little and give up CPUs
             failedTrials++;
             if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
                 failedTrials = 0;
                 SLEEP_PERIOD *= 2;
-            }
-            if (commHalt) {
-                break;
             }
             // Pull in the next message, and process this message.
         } else {

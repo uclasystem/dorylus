@@ -150,15 +150,19 @@ FeatType *Engine::aggregateBackward(FeatType **eVGradTensor, unsigned edgsCnt,
 void Engine::aggregator(unsigned tid) {
     BackoffSleeper bs;
 
-    while (!aggHalt) {
+    while (true) {
         aggQueueLock.lock();
         if (aggregateQueue.empty()) {
             aggQueueLock.unlock();
+
+            if (aggHalt) {
+                break;
+            }
             bs.sleep();
         } else {
             Chunk c = aggregateQueue.top();
             aggregateQueue.pop();
-            // printLog(nodeId, "Aggregating %s", c.str().c_str());
+            // printLog(nodeId, "Aggregating %s %u", c.str().c_str(), aggregateQueue.size());
             aggQueueLock.unlock();
 
             double startAgg = getTimer();
