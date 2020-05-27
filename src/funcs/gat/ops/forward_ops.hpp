@@ -29,6 +29,8 @@ Matrix tanh(Matrix& mat);
  */
 Matrix leakyReLU(Matrix& mat);
 
+Matrix edgeMatMul(EdgeInfo& eInfo, Matrix& A, Matrix& B);
+
 // END COMPUTATION
 
 // LOSS/ACCURACY

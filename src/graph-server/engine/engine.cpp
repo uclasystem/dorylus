@@ -204,8 +204,12 @@ void Engine::destroy() {
 
     delete[] forwardGhostInitData;
 
-    for (auto &kkv : savedNNTensors) {
+    for (int i = 0; i < numLayers; i++) {
+        auto &kkv = savedNNTensors[i];
         for (auto &kv : kkv) {
+            if (kv.first == "A") {
+                continue;
+            }
             kv.second.free();
         }
     }
@@ -471,7 +475,7 @@ FeatType *Engine::runForward(unsigned epoch) {
     FeatType *inputTensor = forwardVerticesInitData;
     FeatType **eVFeatsTensor = NULL; //savedEdgeTensors[0]["fedge"];
     for (layer = 0; layer < numLayers; ++layer) {
-        printLog(nodeId, "Starting layer %u", layer);
+        // printLog(nodeId, "Starting layer %u", layer);
         inputTensor =
             applyVertex(inputTensor, graph.localVtxCnt, getFeatDim(layer),
                         getFeatDim(layer + 1), layer == numLayers - 1);
@@ -479,26 +483,26 @@ FeatType *Engine::runForward(unsigned epoch) {
         //  One for z values, one for az values
         //  Need to fix later. This incurs extra synchornization overhead
         // SCATTER
-        printLog(nodeId, "SCATTERING Z");
+        // printLog(nodeId, "SCATTERING Z");
         inputTensor = savedNNTensors[layer]["z"].getData();
         FeatType* outputTensor = savedNNTensors[layer]["fg_z"].getData();
         eVFeatsTensor =
             scatter(inputTensor, outputTensor, graph.localVtxCnt, getFeatDim(layer + 1));
 
-        printLog(nodeId, "Starting apply edge... /_\\");
+        // printLog(nodeId, "Starting apply edge... /_\\");
         eVFeatsTensor =
             applyEdge(savedNNTensors[layer]["A"].getData(), graph.localInEdgeCnt, 0, eVFeatsTensor,
                       eVFeatsTensor + graph.localInEdgeCnt,
                       getFeatDim(layer + 1), getFeatDim(layer + 1));
 
-        printLog(nodeId, "STARTING AGG");
+        // printLog(nodeId, "STARTING AGG");
         eVFeatsTensor = savedEdgeTensors[layer]["fedge"];
         inputTensor = aggregate(eVFeatsTensor, graph.localVtxCnt,
                                 getFeatDim(layer + 1), AGGREGATOR::WSUM);
     }
 
     layer = numLayers - 1;
-    printLog(nodeId, "Getting grad mat from layer %u", layer);
+    // printLog(nodeId, "Getting grad mat from layer %u", layer);
     FeatType* predictions = savedNNTensors[layer]["grad"].getData();
     predictions = softmax(inputTensor, predictions, graph.localVtxCnt, getFeatDim(numLayers));
 
@@ -537,18 +541,19 @@ void Engine::runBackward(FeatType *initGradTensor) {
     // Pure sequential
     FeatType **eVGradTensor = NULL;
     for (layer = numLayers - 1; layer >= 0; --layer) {
-        printLog(nodeId, "SCATTER BACK");
+        // printLog(nodeId, "SCATTER BACK");
         FeatType* ghostTensor = savedNNTensors[layer]["bg_d"].getData();
         eVGradTensor =
             scatterBackward(gradTensor, ghostTensor, graph.localVtxCnt, getFeatDim(layer + 1));
-        printLog(nodeId, "APP EDGE BACK");
+        // printLog(nodeId, "APP EDGE BACK");
         eVGradTensor = applyEdgeBackward(NULL, graph.localOutEdgeCnt, 0,
                                          eVGradTensor + graph.localOutEdgeCnt,
                                          eVGradTensor, getFeatDim(layer + 1),
                                          getFeatDim(layer + 1));
-        printLog(nodeId, "AGG BACK");
+        // printLog(nodeId, "AGG BACK");
         gradTensor = aggregateBackward(eVGradTensor, graph.localOutEdgeCnt,
                                        getFeatDim(layer + 1), AGGREGATOR::WSUM);
+        // printLog(nodeId, "AV BACK");
         gradTensor =
             applyVertexBackward(gradTensor, graph.localVtxCnt,
                                 getFeatDim(layer), getFeatDim(layer + 1));

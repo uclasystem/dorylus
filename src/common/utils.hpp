@@ -39,7 +39,7 @@ enum OP {
     REQ_EDG_FORWARD, PUSH_EDG_FORWARD, PULL_EDG_FORWARD,
     REQ_EDG_BACKWARD, PUSH_EDG_BACKWARD, PULL_EDG_BACKWARD,
     PULL_EDG_EVAL, PUSH_EDG_EVAL,
-    PUSH, PULL, FIN, EVAL,
+    PUSH, PULL, PULLE, PUSHE, PULLEINFO, FIN, EVAL,
     RESP, INFO, TERM
 };
 enum TYPE { GRAD, AH, Z, ACT, LAB };
@@ -84,8 +84,8 @@ struct Chunk {
 
     std::string str() const {
         char buf[128];
-        sprintf(buf, "%u:%s:%u:%u/%u", epoch, dir == PROP_TYPE::FORWARD ? "F" : "B",
-          layer, localId, globalId);
+        sprintf(buf, "%u:%s:%u:%u/%u: vtx %u", epoch, dir == PROP_TYPE::FORWARD ? "F" : "B",
+          layer, localId, globalId, vertex);
 
         return std::string(buf);
     }

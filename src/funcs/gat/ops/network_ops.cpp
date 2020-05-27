@@ -101,84 +101,104 @@ std::vector<Matrix> reqTensors(zmq::socket_t& socket, Chunk &chunk,
 #undef EXP_FACTOR
 }
 
-EdgeTensor reqEdgeTensor(zmq::socket_t& socket, Chunk& chunk, std::string tensorName) {
-#define INIT_PERIOD (5 * 1000u) // 5ms
-#define MAX_PERIOD (500 * 1000u)
-#define EXP_FACTOR 1.5
-    unsigned sleepPeriod = INIT_PERIOD;
-
+Matrix reqEdgeTensor(zmq::socket_t& socket, Chunk& chunk, std::string name) {
     zmq::message_t header(HEADER_SIZE);
-    populateHeader(header.data(), OP::PULL, chunk);
-    socket.send(header, ZMQ_SNDMORE);
-
     zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
-    populateHeader(tensorHeader.data(), chunk.localId, tensorName.c_str());
+    populateHeader(header.data(), OP::PULLE, chunk);
+    populateHeader(tensorHeader.data(), chunk.localId, name.c_str());
+    socket.send(header, ZMQ_SNDMORE);
     socket.send(tensorHeader);
+
+    // std::cout << "TENSR REQ HEADERS SENT" << std::endl;
+
+    zmq::message_t respHeader(TENSOR_HDR_SIZE);
+    zmq::message_t matxMsg;
+
+    socket.recv(&respHeader);
+    unsigned rows = parse<unsigned>((char*)respHeader.data(), 0);
+    unsigned cols = parse<unsigned>((char*)respHeader.data(), 1);
+    // std::cout << "RECVD TENSOR RESP HEADER" << std::endl;
+    // std::cout << "ROWS " << rows << " COLS " << cols << std::endl;
+
+    socket.recv(&matxMsg);
+    // std::cout << "RECVD MATX MSG" << std::endl;
+    FeatType* data = new FeatType[rows * cols];
+    std::memcpy(data, matxMsg.data(), matxMsg.size());
+
+    return Matrix(rows, cols, data);
+}
+
+EdgeInfo reqEdgeInfo(zmq::socket_t& socket, Chunk& chunk) {
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader(header.data(), OP::PULLEINFO, chunk);
+    socket.send(header);
+    // std::cout << "INFO REQ HEADER SENT" << std::endl;
 
     zmq::message_t responseHeader(TENSOR_HDR_SIZE);
 
-    EdgeTensor eTensor;
+    EdgeInfo eTensor;
     socket.recv(&responseHeader);
     eTensor.numLvids = parse<unsigned>(responseHeader.data(), 0);
-    eTensor.numRvids = parse<unsigned>(responseHeader.data(), 1);
-    eTensor.featDim = parse<unsigned>(responseHeader.data(), 2);
-    eTensor.numEdges = parse<unsigned>(responseHeader.data(), 3);
+    eTensor.nChunkEdges = parse<unsigned>(responseHeader.data(), 1);
+    // std::cout << "RECVD INFO RESP HEADER" << std::endl;
 
     if (eTensor.numLvids == NOT_FOUND_ERR_FIELD
       || eTensor.numLvids == DUPLICATE_REQ_ERR_FIELD
       || eTensor.numLvids == CHUNK_DNE_ERR) {
+        std::cerr << "GOT ERROR" << std::endl;
         return eTensor;
     }
 
-    // Scoping message reading because data can be quite large
-    // Force deallocate memory after it has been copied into eTensor
+    // std::cout << "WAITING FOR MSG" << std::endl;
     zmq::message_t edgeChunkInfoMsg;
     socket.recv(&edgeChunkInfoMsg);
-    eTensor.edgeMapping = new unsigned[edgeChunkInfoMsg.size() / 4];
-    std::memcpy(eTensor.edgeMapping, edgeChunkInfoMsg.data(), edgeChunkInfoMsg.size());
-    std::cout << "EDGE CHUNK INFO SIZE " << edgeChunkInfoMsg.size() << std::endl;
+    eTensor.edgePtrs = new unsigned long long[edgeChunkInfoMsg.size() / sizeof(unsigned long long)];
+    std::memcpy(eTensor.edgePtrs, edgeChunkInfoMsg.data(), edgeChunkInfoMsg.size());
+    // std::cout << "EDGE CHUNK INFO SIZE " << edgeChunkInfoMsg.size() << std::endl;
 
-    zmq::message_t edgeChunkDataMsg;
-    socket.recv(&edgeChunkDataMsg);
-    eTensor.chunkData = new FeatType[edgeChunkDataMsg.size() / 4];
-    std::memcpy(eTensor.chunkData, edgeChunkDataMsg.data(), edgeChunkDataMsg.size());
-    std::cout << "EDGE CHUNK DATA SIZE " << edgeChunkDataMsg.size() << std::endl;
-
-
-    if (eTensor.edgeMapping == NULL || eTensor.chunkData == NULL) {
+    if (eTensor.edgePtrs == NULL) {
         std::cout << "NULL NULL NULL NULLETY NULL" << std::endl;
         eTensor.numLvids = ERR_HEADER_FIELD;
-        eTensor.numRvids = ERR_HEADER_FIELD;
-        eTensor.featDim = ERR_HEADER_FIELD;
-        eTensor.numEdges = ERR_HEADER_FIELD;
+        eTensor.nChunkEdges = ERR_HEADER_FIELD;
         return eTensor;
     }
 
-//    std::cout << "edgeMapping info (first 22)" << std::endl;
-//    unsigned* eMapData = (unsigned*) edgeChunkInfoMsg.data();
-//    for (unsigned index = 0; index < 22; ++index) {
-//        std::cout << eMapData[index] << " ";
-//    }
-//    std::cout << std::endl;
-//    unsigned index = 0;
-//    for (int i = 0; i < 3; ++i) {
-//        std::cout << "Vertex 0 has " << eTensor.edgeMapping[index] << " edges" << std::endl;
-//        std::cout << i << ": ";
-//        ++index;
-//        unsigned nEdges = eTensor.edgeMapping[index];
-//        for (unsigned j = 0; j < nEdges; ++j) {
-//            std::cout << eTensor.edgeMapping[index] << " ";
-//            ++index;
-//        }
-//        std::cout << std::endl;
-//    }
-
     return eTensor;
-#undef INIT_PERIOD
-#undef MAX_PERIOD
-#undef EXP_FACTOR
 }
 
+int sendEdgeTensors(zmq::socket_t& socket, Chunk &chunk,
+            std::vector<Matrix>& matrices, bool ack) {
+    zmq::message_t header(HEADER_SIZE);
+    populateHeader(header.data(), OP::PUSHE, chunk);
+    socket.send(header, ZMQ_SNDMORE);
+    for (uint32_t u = 0; u < matrices.size(); ++u) {
+        std::cout << "Sending tensor " << matrices[u].name() << std::endl;
+        zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
+        populateHeader(tensorHeader.data(), OP::PUSH, matrices[u].name().c_str(), chunk.layer,
+          matrices[u].getRows(), matrices[u].getCols());
+        zmq::message_t tensorData(matrices[u].getDataSize());
+        std::memcpy(tensorData.data(), matrices[u].getData(), matrices[u].getDataSize());
+
+        socket.send(tensorHeader, ZMQ_SNDMORE);
+        if (u < matrices.size() - 1) {
+            socket.send(tensorData, ZMQ_SNDMORE);
+        } else {
+            socket.send(tensorData);
+        }
+    }
+
+    int ret = 0;
+    if (ack) {
+        std::cout << "Waiting on ACK" << std::endl;
+        zmq::message_t ack;
+        socket.recv(&ack);
+        if (ack.size() == sizeof(int) * 3) {
+            ret = *(int *)ack.data();
+        }
+        std::cout << "Received ACK" << std::endl;
+    }
+    return ret;
+}
 int sendTensors(zmq::socket_t& socket, Chunk &chunk,
             std::vector<Matrix>& matrices, bool ack) {
     zmq::message_t header(HEADER_SIZE);

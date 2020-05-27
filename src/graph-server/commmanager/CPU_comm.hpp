@@ -22,6 +22,7 @@
 class CPUComm : public ResourceComm {
    public:
     CPUComm(Engine *engine_);
+    ~CPUComm();
 
     void setAsync(bool _async, unsigned currEpoch){};  // GPU always run synchronously
     unsigned getRelaunchCnt() { return 0u; };
@@ -61,10 +62,16 @@ class CPUComm : public ResourceComm {
     Chunk c;
 };
 
-Matrix activateDerivative(Matrix &mat);
+Matrix expandDot(Matrix &m, Matrix &v, CSCMatrix<EdgeType> &forwardAdj);
+Matrix expandHadamardMul(Matrix &m, Matrix &v, CSCMatrix<EdgeType> &forwardAdj);
+Matrix expandMulZZ(FeatType **edgFeats, unsigned edgCnt, unsigned featDim);
+Matrix reduce(Matrix &mat);
+
+Matrix leakyRelu(Matrix &mat);
+Matrix leakyReluBackward(Matrix &mat);
+
+Matrix hadamardMul(Matrix &A, Matrix &B);
 Matrix hadamardSub(Matrix &A, Matrix &B);
-Matrix softmax(Matrix &mat);
-Matrix activate(Matrix &mat);
 void loadWeightServers(std::vector<char *> &addresses,
                        const std::string &wServersFile);
 

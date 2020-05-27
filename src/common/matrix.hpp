@@ -8,6 +8,23 @@
 #include "cblas.h"
 #include "utils.hpp"
 
+struct EdgeTensor {
+    unsigned numLvids;
+    unsigned numRvids;
+    unsigned featDim;
+    unsigned numEdges;
+
+    unsigned* edgeMapping;
+    FeatType* chunkData;
+};
+
+struct EdgeInfo {
+    unsigned numLvids;
+    unsigned nChunkEdges;
+
+    unsigned long long* edgePtrs;
+};
+
 /**
  *
  * Struct for a matrix.
