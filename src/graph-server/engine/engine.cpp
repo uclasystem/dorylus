@@ -427,7 +427,7 @@ void Engine::run() {
         if (nodeId == 0) {
             printLog(nodeId, "Finished SYNCHRONOUS epoch, starting PIPELINE");
         }
-        loadChunks();
+        //loadChunks();
         // Start pipeline
         runPipeline();
 
@@ -473,6 +473,7 @@ FeatType *Engine::runForward(unsigned epoch) {
     FeatType **eVFeatsTensor = NULL; //savedEdgeTensors[0]["fedge"];
     for (layer = 0; layer < numLayers; ++layer) {
         // printLog(nodeId, "Starting layer %u", layer);
+        printLog(nodeId, "AV");
         inputTensor =
             applyVertex(inputTensor, graph.localVtxCnt, getFeatDim(layer),
                         getFeatDim(layer + 1), layer == numLayers - 1);
@@ -483,10 +484,12 @@ FeatType *Engine::runForward(unsigned epoch) {
         // printLog(nodeId, "SCATTERING Z");
         inputTensor = savedNNTensors[layer]["z"].getData();
         FeatType* outputTensor = savedNNTensors[layer]["fg_z"].getData();
+        printLog(nodeId, "SCAT");
         eVFeatsTensor =
             scatter(inputTensor, outputTensor, graph.localVtxCnt, getFeatDim(layer + 1));
 
         // printLog(nodeId, "Starting apply edge... /_\\");
+        printLog(nodeId, "AE");
         eVFeatsTensor =
             applyEdge(savedNNTensors[layer]["A"].getData(), graph.localInEdgeCnt, 0, eVFeatsTensor,
                       eVFeatsTensor + graph.localInEdgeCnt,
@@ -494,6 +497,7 @@ FeatType *Engine::runForward(unsigned epoch) {
 
         // printLog(nodeId, "STARTING AGG");
         eVFeatsTensor = savedEdgeTensors[layer]["fedge"];
+        printLog(nodeId, "AGG");
         inputTensor = aggregate(eVFeatsTensor, graph.localVtxCnt,
                                 getFeatDim(layer + 1), AGGREGATOR::WSUM);
     }
@@ -540,17 +544,18 @@ void Engine::runBackward(FeatType *initGradTensor) {
     for (layer = numLayers - 1; layer >= 0; --layer) {
         // printLog(nodeId, "SCATTER BACK");
         FeatType* ghostTensor = savedNNTensors[layer]["bg_d"].getData();
+        printLog(nodeId, "SCAT B%u", layer);
         eVGradTensor =
             scatterBackward(gradTensor, ghostTensor, graph.localVtxCnt, getFeatDim(layer + 1));
-        // printLog(nodeId, "APP EDGE BACK");
+        printLog(nodeId, "APP EDGE BACK%u", layer);
         eVGradTensor = applyEdgeBackward(NULL, graph.localOutEdgeCnt, 0,
                                          eVGradTensor + graph.localOutEdgeCnt,
                                          eVGradTensor, getFeatDim(layer + 1),
                                          getFeatDim(layer + 1));
-        // printLog(nodeId, "AGG BACK");
+        printLog(nodeId, "AGG BACK%u", layer);
         gradTensor = aggregateBackward(eVGradTensor, graph.localOutEdgeCnt,
                                        getFeatDim(layer + 1), AGGREGATOR::WSUM);
-        // printLog(nodeId, "AV BACK");
+        printLog(nodeId, "AV BACK%u", layer);
         gradTensor =
             applyVertexBackward(gradTensor, graph.localVtxCnt,
                                 getFeatDim(layer), getFeatDim(layer + 1));
@@ -589,6 +594,24 @@ void Engine::runPipeline() {
     for (unsigned tid = 0; tid < cThreads; ++tid) {
         aggWrkrThds.push_back(std::thread(aggWrkr, 2 + tid));
     }
+
+    // Launch AV phase to kick off pipeline
+    const unsigned chunkSize =
+        (graph.localVtxCnt + numLambdasForward - 1) / numLambdasForward;
+    unsigned availLambdaId = 0;
+    while (availLambdaId < numLambdasForward) {
+        unsigned lowBound = availLambdaId * chunkSize;
+        unsigned upBound = std::min(lowBound + chunkSize, graph.localVtxCnt);
+        Chunk chunk{
+            availLambdaId, nodeId * numLambdasForward + availLambdaId,
+            lowBound,      upBound,
+            (unsigned)layer,         PROP_TYPE::FORWARD,
+            currEpoch,     true};  // epoch is not useful in sync version
+        resComm->NNCompute(chunk);
+
+        availLambdaId++;
+    }
+
     for (unsigned tid = 0; tid < cThreads; ++tid) {
         aggWrkrThds[tid].join();
     }

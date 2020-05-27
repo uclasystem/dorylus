@@ -45,18 +45,20 @@ if not os.path.isfile(EC2_DIR + "profile"):
 
 profile_name = ''
 user_name = ''
+region = ''
 with open(EC2_DIR + "profile", 'r') as fprofile:
     profile_name = fprofile.readline().strip().split()[0]
     if profile_name.lower() == 'default':   # If given as default, then set to None so that boto3 session uses the default profile.
         profile_name = None
 
+    region = fprofile.readline().strip().split()[0]
     user_name = fprofile.readline().strip().split()[0]
     ssh_key = fprofile.readline().strip().split()[0]
 
 
 # Initialize the EC2 client.
 boto3.setup_default_session(profile_name=profile_name)
-ec2_cli = boto3.client('ec2')
+ec2_cli = boto3.client('ec2', region_name=region)
 
 
 def process_setup():

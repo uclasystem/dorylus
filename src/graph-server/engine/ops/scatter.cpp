@@ -302,8 +302,7 @@ void Engine::scatterWorker(unsigned tid) {
             unsigned featLayer = c.layer;
             std::string tensorName;
             if (c.dir == PROP_TYPE::FORWARD) {
-                outputLayer -= 1;
-                tensorName = "h";
+                tensorName = "z";
             } else {
                 outputLayer += 1;
                 featLayer += 1;
@@ -356,10 +355,9 @@ void Engine::scatterWorker(unsigned tid) {
             unsigned endScat = timestamp_ms();
             // Add chunk into appropriate aggregate queue
             // printLog(nodeId, "SCATTER: Finished %s", c.str().c_str());
-            aggQueueLock.lock();
-            aggregateQueue.push(c);
+            c.vertex = false;
+            resComm->NNCompute(c);
             vecTimeScatter[c.dir * numLayers + c.layer] += endScat - startScat;
-            aggQueueLock.unlock();
 
             delete[] batchedIds;
             bs.reset();
@@ -415,9 +413,9 @@ void Engine::ghostReceiver(unsigned tid) {
                 bufPtr += sizeof(unsigned);
                 // Get proper variables depending on forward or backward
                 if (dir == PROP_TYPE::FORWARD) {
-                    tensorName = "fg";
+                    tensorName = "fg_z";
                 } else {
-                    tensorName = "bg";
+                    tensorName = "bg_d";
                 }
                 std::map<unsigned, unsigned> &globalToGhostVtcs =
                     dir == PROP_TYPE::FORWARD ? graph.srcGhostVtcs
