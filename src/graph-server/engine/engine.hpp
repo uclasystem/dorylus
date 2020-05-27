@@ -297,6 +297,10 @@ public:
     ChunkQueue scatterQueue;
     Lock scatQueueLock;
 
+    ChunkQueue driverQueue;
+    Lock drvQueueLock;
+    void asyncDriver(unsigned tid);
+
     unsigned staleness;
     volatile CONVERGE_STATE convergeState = CONVERGE_STATE::EARLY;
     unsigned minEpoch;
