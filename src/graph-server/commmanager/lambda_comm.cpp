@@ -18,6 +18,7 @@ LambdaComm::LambdaComm(Engine *_engine) :
         savedNNTensors(_engine->savedNNTensors), savedETensors(_engine->savedEdgeTensors),
         resLock(_engine->scatQueueLock), resQueue(_engine->scatterQueue),
         aggLock(_engine->aggQueueLock), aggQueue(_engine->aggregateQueue),
+        drvLock(_engine->drvQueueLock), driverQueue(_engine->driverQueue),
         ctx(2), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
         numListeners(4), engine(_engine) { // TODO: Decide numListeners.
     nodeId = _engine->nodeId;
@@ -133,7 +134,9 @@ bool LambdaComm::NNRecv(Chunk &chunk) {
             chunk.layer = 0;
             chunk.vertex = true;
 
-            NNCompute(chunk);
+            drvLock.lock();
+            driverQueue.push(chunk);
+            drvLock.unlock();
         } else {
             if (chunk.vertex && chunk.dir == PROP_TYPE::FORWARD) {
                 chunk.vertex = !chunk.vertex;

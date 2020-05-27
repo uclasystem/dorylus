@@ -72,6 +72,8 @@ public:
     ChunkQueue& resQueue;
     Lock &aggLock;
     ChunkQueue& aggQueue;
+    Lock& drvLock;
+    ChunkQueue& driverQueue;
 
     std::thread *relaunchThd;
     void asyncRelaunchLoop();
