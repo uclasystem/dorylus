@@ -158,7 +158,7 @@ void Engine::aggregator(unsigned tid) {
         } else {
             Chunk c = aggregateQueue.top();
             aggregateQueue.pop();
-            printLog(nodeId, "Aggregating %s", c.str().c_str());
+            // printLog(nodeId, "Aggregating %s", c.str().c_str());
             aggQueueLock.unlock();
 
             double startAgg = getTimer();

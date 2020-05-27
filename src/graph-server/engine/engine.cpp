@@ -604,15 +604,17 @@ void Engine::runPipeline() {
 
     // TODO: (YIFAN) driver is running forever!
     driver.join();
+
     double edt = getTimer();
     asyncAvgEpochTime = (edt - stt) / numAsyncEpochs;
 
     // Wait for all nodes to finish
     nodeManager.barrier();
+    aggHalt = true;
+    commHalt = true;
     for (unsigned tid = 0; tid < cThreads; ++tid) {
         aggWrkrThds[tid].join();
     }
-    commHalt = true;
     swt.join();
     grt.join();
     {
@@ -647,14 +649,45 @@ void Engine::asyncDriver(unsigned tid) {
         }
 
         Chunk c = driverQueue.top();
-        ////////////
-        // Some logic here for staleness bound and exit
-        ////////////
-        if (c.isFirstLayer() && c.epoch == currEpoch + 1) {
-            ++currEpoch;
-            ++numAsyncEpochs;
-            printLog(nodeId, "STARTING epoch %u [%u]", currEpoch,
-                        c.epoch);
+        // Stop & Staleness Check
+        if (c.isFirstLayer()) {
+            if (c.epoch == numEpochs) {
+                while (!driverQueue.empty()) {
+                    driverQueue.pop();
+                    ++finishedChunks;
+                }
+                aggQueueLock.unlock();
+                if (finishedChunks == numLambdasForward) {
+                    ++currEpoch;
+                    break;
+                }
+
+                bs.sleep();
+                continue;
+
+            // There is a chunk but it is beyond the staleness bound
+            } else if (staleness != UINT_MAX && c.epoch > minEpoch + staleness) {
+                // Read incoming message buffer to see if there are
+                // updates to the minEpoch
+                nodeManager.readEpochUpdates();
+                drvQueueLock.unlock();
+
+                bs.sleep();
+                // Messages to check how often a node is blocking
+                if ((bs.trails + 1) % 1000 == 0) {
+                    printLog(nodeId, "Blocking. MinE %u, Finished %u",
+                        minEpoch,
+                        nodesFinishedEpoch[minEpoch % (staleness + 1)]);
+                }
+                continue;
+            }
+
+            if (c.epoch == currEpoch + 1) {
+                ++currEpoch;
+                ++numAsyncEpochs;
+                printLog(nodeId, "STARTING epoch %u [%u]", currEpoch,
+                            c.epoch);
+            }
         }
         driverQueue.pop();
         drvQueueLock.unlock();

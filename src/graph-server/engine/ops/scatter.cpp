@@ -287,7 +287,7 @@ void Engine::scatterWorker(unsigned tid) {
         } else {
             Chunk c = scatterQueue.top();
             scatterQueue.pop();
-            printLog(nodeId, "Scattering %s", c.str().c_str());
+            // printLog(nodeId, "Scattering %s", c.str().c_str());
             scatQueueLock.unlock();
 
             unsigned startScat = timestamp_ms();
