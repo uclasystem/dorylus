@@ -26,27 +26,32 @@ void CPUComm::NNCompute(Chunk &chunk) {
 
     if (chunk.dir == PROP_TYPE::FORWARD) {
         if (chunk.vertex) {
-            printLog(nodeId, "CPU FORWARD vtx NN started");
+            // printLog(nodeId, "CPU FORWARD vtx NN started");
             vtxNNForward(currLayer, currLayer == (totalLayers - 1));
         } else {
-            printLog(nodeId, "CPU FORWARD edg NN started");
+            // printLog(nodeId, "CPU FORWARD edg NN started");
             edgNNForward(currLayer, currLayer == (totalLayers - 1));
         }
     }
     if (chunk.dir == PROP_TYPE::BACKWARD) {
         if (chunk.vertex) {
-            printLog(nodeId, "CPU BACKWARD vtx NN started");
+            // printLog(nodeId, "CPU BACKWARD vtx NN started");
             vtxNNBackward(currLayer);
         } else {
-            printLog(nodeId, "CPU BACKWARD edg NN started");
+            // printLog(nodeId, "CPU BACKWARD edg NN started");
             edgNNBackward(currLayer);
         }
     }
-    printLog(nodeId, "CPU NN Done");
+    // printLog(nodeId, "CPU NN Done");
 }
 
 void CPUComm::vtxNNForward(unsigned layer, bool lastLayer) {
-    Matrix feats = savedNNTensors[layer]["h"];
+    Matrix feats;
+    if (layer == 0) {
+        feats = savedNNTensors[layer]["h"];
+    } else {
+        feats = savedNNTensors[layer - 1]["ah"];
+    }
     Matrix weight = msgService.getWeightMatrix(layer);
 
     Matrix z = feats.dot(weight);
@@ -58,7 +63,12 @@ void CPUComm::vtxNNForward(unsigned layer, bool lastLayer) {
 void CPUComm::vtxNNBackward(unsigned layer) {
     Matrix weight = msgService.getWeightMatrix(layer);
     Matrix grad = savedNNTensors[layer]["aTg"];
-    Matrix h = savedNNTensors[layer]["h"];
+    Matrix h;
+    if (layer == 0) {
+        h = savedNNTensors[layer]["h"];
+    } else {
+        h = savedNNTensors[layer - 1]["ah"];
+    }
 
     Matrix weightUpdates = h.dot(grad, true, false);
     msgService.sendWeightUpdate(weightUpdates, layer);

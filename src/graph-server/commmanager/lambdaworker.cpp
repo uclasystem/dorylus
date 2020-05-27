@@ -123,7 +123,7 @@ void LambdaWorker::sendTensors(zmq::message_t& client_id, Chunk &chunk) {
                 return;
             } else {
                 Matrix& reqMatrix = found->second;
-                printLog(manager->nodeId, "SUM %s:%u = %f", name.c_str(), chunk.layer, reqMatrix.sum());
+                // printLog(manager->nodeId, "SUM %s:%u = %f", name.c_str(), chunk.layer, reqMatrix.sum());
                 sendTensor(reqMatrix, chunk, more);
             }
         }
@@ -281,7 +281,7 @@ void LambdaWorker::sendEdgeTensor(zmq::message_t& client_id, Chunk& chunk) {
     manager->timeoutMtx.unlock();
 
     if (exist) {
-        printLog(manager->nodeId, "YEE BOI");
+        // printLog(manager->nodeId, "YEE BOI");
         workersocket.send(client_id, ZMQ_SNDMORE);
         sendTensor(chunk);
     } else {
@@ -312,15 +312,15 @@ void LambdaWorker::sendTensor(Chunk& chunk) {
 
     zmq::message_t edgeChunkInfoMsg((numLvids + 1) * sizeof(unsigned long long));
     std::memcpy(edgeChunkInfoMsg.data(), csc.columnPtrs + chunk.lowBound, (numLvids + 1) * sizeof(unsigned long long));
-    std::string colPtrsStr = "Actual colPtrs: ";
-    for (unsigned lvid = chunk.lowBound; lvid <= chunk.upBound; ++lvid) {
-        colPtrsStr += std::to_string(csc.columnPtrs[lvid]) + " ";
-    }
-    unsigned long long* colPtrMsgData = (unsigned long long*) edgeChunkInfoMsg.data();
-    colPtrsStr += "\ncolPtrData colPtrs: ";
-    for (unsigned lvid = 0; lvid <= numLvids; ++lvid) {
-        colPtrsStr += std::to_string(colPtrMsgData[lvid]) + " ";
-    }
+    // std::string colPtrsStr = "Actual colPtrs: ";
+    // for (unsigned lvid = chunk.lowBound; lvid <= chunk.upBound; ++lvid) {
+    //     colPtrsStr += std::to_string(csc.columnPtrs[lvid]) + " ";
+    // }
+    // unsigned long long* colPtrMsgData = (unsigned long long*) edgeChunkInfoMsg.data();
+    // colPtrsStr += "\ncolPtrData colPtrs: ";
+    // for (unsigned lvid = 0; lvid <= numLvids; ++lvid) {
+    //     colPtrsStr += std::to_string(colPtrMsgData[lvid]) + " ";
+    // }
     workersocket.send(responseHeader, ZMQ_SNDMORE);
     workersocket.send(edgeChunkInfoMsg);
 }
@@ -332,16 +332,33 @@ int LambdaWorker::recvTensor(Chunk &chunk) {
     workersocket.recv(&tensorData);
 
     std::string name = parseName((char*)tensorHeader.data());
-    TensorMap& tensorMap = manager->savedNNTensors[chunk.layer];
-    auto found = tensorMap.find(name);
-    if (found == tensorMap.end()) {
-        printLog(manager->nodeId, "Lambda %s returned unknown tensor '%s'. Make sure to allocate it before running lambdas!",
-                 chunk.str().c_str(), name.c_str());
-        return 1;
-     }
+    // printLog(manager->nodeId, "recv %s from %s", name.c_str(), chunk.str().c_str());
+    if (!chunk.vertex) {
+        return 0; // ignore edge upd
+    }
+    if (name == "grad") {
+        TensorMap& tensorMap = manager->savedNNTensors[chunk.layer - 1];
+        auto found = tensorMap.find(name);
+        if (found == tensorMap.end()) {
+            printLog(manager->nodeId, "Lambda %s returned unknown tensor '%s'. Make sure to allocate it before running lambdas!",
+                    chunk.str().c_str(), name.c_str());
+            return 1;
+        }
 
-    FeatType* dptr = found->second.get(chunk.lowBound);
-    std::memcpy(dptr, tensorData.data(), tensorData.size());
+        FeatType* dptr = found->second.get(chunk.lowBound);
+        std::memcpy(dptr, tensorData.data(), tensorData.size());
+    } else {
+        TensorMap& tensorMap = manager->savedNNTensors[chunk.layer];
+        auto found = tensorMap.find(name);
+        if (found == tensorMap.end()) {
+            printLog(manager->nodeId, "Lambda %s returned unknown tensor '%s'. Make sure to allocate it before running lambdas!",
+                    chunk.str().c_str(), name.c_str());
+            return 1;
+        }
+
+        FeatType* dptr = found->second.get(chunk.lowBound);
+        std::memcpy(dptr, tensorData.data(), tensorData.size());
+    }
 
     return 0;
 }

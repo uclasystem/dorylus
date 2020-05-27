@@ -87,11 +87,13 @@ bool LambdaComm::NNRecv(Chunk &chunk) {
     if (async) engine->vecTimeLambdaWait[chunk.dir * engine->numLayers + chunk.layer] += exeTime;
     timeoutTable.erase(chunk);
 
-    auto recordFound = recordTable.find(getAbsLayer(chunk, 2));
-    if (recordFound == recordTable.end()) {
-        recordTable[getAbsLayer(chunk, 2)] = exeTime;
-    } else {
-        recordTable[getAbsLayer(chunk, 2)] = recordFound->second * 0.95 + exeTime * (1.0 - 0.95);
+    if (chunk.vertex) {
+        auto recordFound = recordTable.find(getAbsLayer(chunk, 2));
+        if (recordFound == recordTable.end()) {
+            recordTable[getAbsLayer(chunk, 2)] = exeTime;
+        } else {
+            recordTable[getAbsLayer(chunk, 2)] = recordFound->second * 0.95 + exeTime * (1.0 - 0.95);
+        }
     }
     timeoutMtx.unlock();
 
@@ -152,10 +154,16 @@ void LambdaComm::asyncRelaunchLoop() {
             if (found == recordTable.end()) {
                 continue; // No lambda finished.
             }
-            if (currTS - kv.second > std::max(MIN_TIMEOUT, 3 * found->second)) {
-                // printLog(nodeId, "curr %u, timed %u, chunk %s", currTS - kv.second, 3 * found->second,
-                //     kv.first.str().c_str());
-                relaunchLambda(kv.first);
+            if (kv.first.vertex) {
+                if (currTS - kv.second > std::max(MIN_TIMEOUT, 3 * found->second)) {
+                    // printLog(nodeId, "curr %u, timed %u, chunk %s", currTS - kv.second, 3 * found->second,
+                    //     kv.first.str().c_str());
+                    relaunchLambda(kv.first);
+                }
+            } else {
+                if (currTS - kv.second > TIMEOUT_PERIOD) {
+                    relaunchLambda(kv.first);
+                }
             }
         }
         usleep(SLEEP_PERIOD);
@@ -262,7 +270,7 @@ void LambdaComm::setupAwsClient() {
     Aws::Client::ClientConfiguration clientConfig;
     clientConfig.requestTimeoutMs = 900000;
     clientConfig.maxConnections = 1000;
-    clientConfig.region = "us-west-2";
+    clientConfig.region = "us-east-2";
     m_client = Aws::MakeShared<Aws::Lambda::LambdaClient>(ALLOCATION_TAG,
                                                           clientConfig);
 }

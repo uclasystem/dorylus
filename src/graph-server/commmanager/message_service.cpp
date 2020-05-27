@@ -87,7 +87,7 @@ void sendTensors(zmq::socket_t &socket, Chunk &chunk,
     populateHeader(header.data(), OP::PUSH, chunk);
     socket.send(header, ZMQ_SNDMORE);
     for (uint32_t u = 0; u < matrices.size(); ++u) {
-        std::cout << "Sending tensor " << matrices[u].name() << std::endl;
+        // std::cout << "Sending tensor " << matrices[u].name() << std::endl;
         zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
         populateHeader(tensorHeader.data(), OP::PUSH,
                        matrices[u].name().c_str(), chunk.layer,
@@ -105,10 +105,10 @@ void sendTensors(zmq::socket_t &socket, Chunk &chunk,
     }
 
     if (ack) {
-        std::cout << "Waiting on ACK" << std::endl;
+        // std::cout << "Waiting on ACK" << std::endl;
         zmq::message_t ack;
         socket.recv(&ack);
-        std::cout << "Received ACK" << std::endl;
+        // std::cout << "Received ACK" << std::endl;
     }
 }
 
@@ -134,7 +134,7 @@ void MessageService::setUpWeightSocket(char *addr) {
     wsocket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
     char whost_port[50];
     sprintf(whost_port, "tcp://%s:%u", addr, wPort);
-    printf("connect to %s\n", whost_port);
+    // printf("connect to %s\n", whost_port);
     wsocket.connect(whost_port);
 }
 

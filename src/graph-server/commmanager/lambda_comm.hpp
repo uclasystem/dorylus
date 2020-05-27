@@ -39,9 +39,9 @@
 #include "../../common/utils.hpp"
 
 
-static const bool relaunching = false;
+static const bool relaunching = true;
 
-#define LAMBDA_VTX_NN "john-gat"
+#define LAMBDA_VTX_NN "gat"
 #define ALLOCATION_TAG "LambdaComm"
 
 class LambdaWorker;

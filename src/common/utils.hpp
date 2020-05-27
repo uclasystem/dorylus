@@ -84,8 +84,8 @@ struct Chunk {
 
     std::string str() const {
         char buf[128];
-        sprintf(buf, "%u:%s:%u:%u/%u", epoch, dir == PROP_TYPE::FORWARD ? "F" : "B",
-          layer, localId, globalId);
+        sprintf(buf, "%u:%s:%u:%u/%u: vtx %u", epoch, dir == PROP_TYPE::FORWARD ? "F" : "B",
+          layer, localId, globalId, vertex);
 
         return std::string(buf);
     }
