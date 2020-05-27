@@ -36,8 +36,6 @@ ComputingServer::ComputingServer(GPUComm *gpu_comm)
     loadWeightServers(weightServerAddrs, gpu_comm->wServersFile);
     msgService.setUpWeightSocket(
         weightServerAddrs.at(nodeId % weightServerAddrs.size()));
-
-    msgService.prefetchWeightsMatrix(totalLayers);
 }
 
 // Start listening to main thread
@@ -47,13 +45,23 @@ void ComputingServer::terminate() {
 
 // Start GAT-Specific Code
 void ComputingServer::vtxNNForward(unsigned layer, bool lastLayer) {
-    Matrix feats = (*gpuComm->tensorMap)["h"];
-    Matrix h = layer == 0 ? (*gpuComm->tensorMap)["h"]
-                          : gpuComm->engine->savedNNTensors[layer - 1]["ah"];
+    Matrix feats;
+    if (layer == 0) {
+        feats = (*gpuComm->tensorMap)["h"];
+    } else {
+        feats = gpuComm->engine->savedNNTensors[layer - 1]["ah"];
+    }
     Matrix weight = msgService.getWeightMatrix(layer);
-    auto z = cu.dot(h, weight);
-    memcpy((*gpuComm->tensorMap)["z"].getData(), z.getData(), z.getDataSize());
-    delete[] z.getData();
+    CuMatrix cu_h = cu.wrapMatrix(feats);
+    CuMatrix cu_w = cu.wrapMatrix(weight);
+    cout<<"cu_h "<<cu_h.shape()<<endl;
+    cout<<"cu_w "<<cu_w.shape()<<endl;
+    CuMatrix z = cu_h.dot(cu_w);
+    cout << "z " << z.shape() << endl;
+    // delete[] z.getData();
+    z.setData((*gpuComm->tensorMap)["z"].getData());
+    z.updateMatrixFromGPU();
+
     CuMatrix::freeGPU();
 }
 
@@ -70,9 +78,8 @@ void ComputingServer::edgNNForward(unsigned layer, bool lastLayer) {
     az.setData((*gpuComm->tensorMap)["az"].getData());
     az.updateMatrixFromGPU();
     CuMatrix e_dst = cu.wrapMatrix(Matrix(1, nnz, (char *)NULL));
-    auto cusparseStat = cusparseSgthr(
-        cu.spHandle, nnz, az.devPtr, e_dst.devPtr, adj->csrRowInd,
-        CUSPARSE_INDEX_BASE_ZERO);  
+    auto cusparseStat = cusparseSgthr(cu.spHandle, nnz, az.devPtr, e_dst.devPtr,
+                                      adj->csrRowInd, CUSPARSE_INDEX_BASE_ZERO);
     assert(CUSPARSE_STATUS_SUCCESS == cusparseStat);
 
     auto act_edge = cu.leakyRelu(e_dst, 0.01);
@@ -91,7 +98,7 @@ void ComputingServer::edgNNBackward(unsigned layer) {
     CuMatrix e = *adj;
     unsigned edgCnt = e.nnz;
 
-    CuMatrix az_edge=cu.wrapMatrix(Matrix(e.nnz,1,(char*)NULL));
+    CuMatrix az_edge = cu.wrapMatrix(Matrix(e.nnz, 1, (char *)NULL));
     auto cusparseStat = cusparseSgthr(
         cu.spHandle, e.nnz, zaTensor.devPtr, az_edge.devPtr,
         e.csrRowInd,  // Not sure need to see the actually adjmatrix***
@@ -146,7 +153,7 @@ void ComputingServer::vtxNNBackward(unsigned layer) {
     auto grad = cu.wrapMatrix((*gpuComm->tensorMap)["aTg"]);
     auto h = cu.wrapMatrix(host_h);
     auto weightUpdates = h.dot(grad, true, false);
-    cout<<"weightUpdates "<<weightUpdates.shape()<<endl;
+    cout << "weightUpdates " << weightUpdates.shape() << endl;
     weightUpdates.updateMatrixFromGPU();
     msgService.sendWeightUpdate(weightUpdates, layer);
     weightUpdates.free();

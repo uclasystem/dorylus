@@ -134,6 +134,7 @@ CuMatrix CuMatrix::extractRow(unsigned row) {
 }
 
 void CuMatrix::deviceMalloc() {
+    std::cout<<"deviceMalloc\n";
     unsigned rows = this->getRows();
     unsigned cols = this->getCols();
     cudaStat = cudaMalloc((void **)&devPtr, rows * cols * sizeof(FeatType));

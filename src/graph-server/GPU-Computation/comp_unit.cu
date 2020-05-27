@@ -226,7 +226,11 @@ CuMatrix ComputingUnit::activateBackward(CuMatrix &x, CuMatrix &y,
 CuMatrix ComputingUnit::dot(Matrix &A, Matrix &B) {
     CuMatrix devA(A, handle);
     CuMatrix devB(B, handle);
+    cout<<"devA "<<devA.shape()<<endl;
+    cout<<"devB "<<devB.shape()<<endl;
+
     CuMatrix devC = devA.dot(devB);
+    cout<<"dot done\n";
     devC.updateMatrixFromGPU();
     return devC;
 }
