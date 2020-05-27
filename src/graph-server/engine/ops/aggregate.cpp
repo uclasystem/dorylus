@@ -36,15 +36,13 @@ FeatType *Engine::aggregate(FeatType **edgsTensor, unsigned edgsCnt,
 
     // Loading tensor in CPU
     FeatType *outputTensor = savedNNTensors[layer]["ah"].getData();
-    FeatType *gTensor = savedNNTensors[layer]["fg"].getData();
+    FeatType *gTensor = savedNNTensors[layer]["fg_z"].getData();
     FeatType *hTensor = savedNNTensors[layer]["z"].getData();
 
-    std::cout<<"111\n";
     // Load Feature into GPU memory
     CuMatrix feat;
-    feat.loadSpDense(hTensor, gTensor, graph.localVtxCnt, graph.dstGhostCnt,
+    feat.loadSpDense(hTensor, gTensor, graph.localVtxCnt, graph.srcGhostCnt,
                      featDim);
-    std::cout<<"222\n";
 
     switch (aggregator) {
         case (AGGREGATOR::WSUM): {

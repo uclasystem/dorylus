@@ -72,6 +72,7 @@ void CPUComm::vtxNNBackward(unsigned layer) {
 
     Matrix weightUpdates = h.dot(grad, true, false);
     msgService.sendWeightUpdate(weightUpdates, layer);
+    cout<<"weightUpdates "<<weightUpdates.shape()<<endl;
 
     weightUpdates.free();
 
