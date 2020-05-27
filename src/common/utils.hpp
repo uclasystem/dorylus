@@ -74,8 +74,10 @@ struct Chunk {
         return
             epoch > rhs.epoch || (epoch == rhs.epoch && (
             dir > rhs.dir || (dir == rhs.dir && (
-            layer > rhs.layer || (layer == rhs.layer && (
-            (vertex && !rhs.vertex) || (vertex == rhs.vertex && (
+            (dir == PROP_TYPE::FORWARD && layer > rhs.layer) ||
+            (dir == PROP_TYPE::BACKWARD && layer < rhs.layer) || (layer == rhs.layer && (
+            (dir == PROP_TYPE::FORWARD && !vertex && rhs.vertex) ||
+            (dir == PROP_TYPE::BACKWARD && vertex && !rhs.vertex) || (vertex == rhs.vertex && (
             localId > rhs.localId || (localId == rhs.localId && (
             globalId > rhs.globalId || (globalId == rhs.globalId && (
             lowBound > rhs.lowBound || (lowBound == rhs.lowBound && (
@@ -91,10 +93,10 @@ struct Chunk {
     }
 
     bool isFirstLayer() {
-        return dir == PROP_TYPE::FORWARD && layer == 0;
+        return dir == PROP_TYPE::FORWARD && layer == 0 && vertex;
     }
     bool isLastLayer() {
-        return dir == PROP_TYPE::BACKWARD && layer == 0;
+        return dir == PROP_TYPE::BACKWARD && layer == 0 && vertex;
     }
 };
 

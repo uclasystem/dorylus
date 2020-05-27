@@ -60,5 +60,5 @@ Chunk incLayer(const Chunk &chunk, unsigned numLayers) {
 }
 
 bool isLastLayer(const Chunk &chunk) {
-    return chunk.dir == PROP_TYPE::BACKWARD && chunk.layer == 0;
+    return chunk.dir == PROP_TYPE::BACKWARD && chunk.layer == 0 && chunk.vertex;
 }
