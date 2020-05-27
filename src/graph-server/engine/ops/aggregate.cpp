@@ -37,13 +37,15 @@ FeatType *Engine::aggregate(FeatType **edgsTensor, unsigned edgsCnt,
     // Loading tensor in CPU
     FeatType *outputTensor = savedNNTensors[layer]["ah"].getData();
     FeatType *gTensor = savedNNTensors[layer]["fg"].getData();
-    FeatType *hTensor = (layer == 0) ? savedNNTensors[layer]["x"].getData()
-                                     : savedNNTensors[layer - 1]["h"].getData();
+    FeatType *hTensor = savedNNTensors[layer]["z"].getData();
 
+    std::cout<<"111\n";
     // Load Feature into GPU memory
     CuMatrix feat;
-    feat.loadSpDense(hTensor, gTensor, graph.localVtxCnt, graph.srcGhostCnt,
+    feat.loadSpDense(hTensor, gTensor, graph.localVtxCnt, graph.dstGhostCnt,
                      featDim);
+    std::cout<<"222\n";
+
     switch (aggregator) {
         case (AGGREGATOR::WSUM): {
             CuMatrix dummy_e = cu.wrapMatrix(
@@ -51,6 +53,7 @@ FeatType *Engine::aggregate(FeatType **edgsTensor, unsigned edgsCnt,
             CuMatrix e = *NormAdjMatrixIn;
             e.csrVal = dummy_e.devPtr;
             CuMatrix out = cu.aggregate(e, feat);
+            std::cout<<"Out shape: "<<out.shape()<<std::endl;
             out.setData(outputTensor);
             out.updateMatrixFromGPU();
             cudaDeviceSynchronize();

@@ -14,7 +14,7 @@ CuMatrix::CuMatrix(Matrix M, const cublasHandle_t &handle_)
     if (getData() != NULL) deviceSetMatrix();
 }
 
-void CuMatrix::explicitFree(){
+void CuMatrix::explicitFree() {
     CuMatrix::MemoryPool.erase(devPtr);
     cudaFree(devPtr);
 }
@@ -99,7 +99,8 @@ void CuMatrix::loadSpCSC(cusparseHandle_t &handle, Graph &graph) {
     cusparseXcsr2coo(handle, csrRowPtr, nnz, getRows(), csrRowInd,
                      CUSPARSE_INDEX_BASE_ZERO);
 }
-//You could probably make this function load two matrices instead of pointers and numbers
+// You could probably make this function load two matrices instead of pointers
+// and numbers
 void CuMatrix::loadSpDense(FeatType *vtcsTensor, FeatType *ghostTensor,
                            unsigned numLocalVertices, unsigned numGhostVertices,
                            unsigned numFeat) {
@@ -233,19 +234,28 @@ CuMatrix CuMatrix::dot(CuMatrix &B, bool A_trans, bool B_trans, float alpha,
     }
     return C;
 }
+//Fake inplace actually really slow...
+CuMatrix CuMatrix::transpose(bool inplace) {
+    if (inplace) {
+        if (getData() == NULL) 
+            updateMatrixFromGPU();
+        explicitFree();
+        Matrix result = transpose_();
+        return CuMatrix(result, handle);
+    } else {
+        CuMatrix res(Matrix(getCols(), getRows(), (FeatType *)NULL), handle);
 
-CuMatrix CuMatrix::transpose() {
-    CuMatrix res(Matrix(getCols(), getRows(), (FeatType *)NULL), handle);
-    float alpha = 1.0;
-    float beta = 0.;
+        float alpha = 1.0;
+        float beta = 0.;
 
-    stat = cublasSgeam(handle, CUBLAS_OP_T, CUBLAS_OP_N, getRows(), getCols(),
-                       &alpha, devPtr, getCols(), &beta, devPtr, getRows(),
-                       res.devPtr, getRows());
-    if (stat != CUBLAS_STATUS_SUCCESS) {
-        cublasDestroy(handle);
-        exit(EXIT_FAILURE);
+        stat = cublasSgeam(handle, CUBLAS_OP_T, CUBLAS_OP_N, getRows(),
+                           getCols(), &alpha, devPtr, getCols(), &beta, devPtr,
+                           getRows(), res.devPtr, getRows());
+        if (stat != CUBLAS_STATUS_SUCCESS) {
+            cublasDestroy(handle);
+            exit(EXIT_FAILURE);
+        }
+
+        return res;
     }
-
-    return res;
 }

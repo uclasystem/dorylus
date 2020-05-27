@@ -36,7 +36,7 @@ class CuMatrix : public Matrix {
     void updateMatrixFromGPU();
     void scale(const float &alpha);
     CuMatrix dot(CuMatrix &B, bool A_trans = false, bool B_trans = false, float alpha = 1., float beta = 0.);
-    CuMatrix transpose();
+    CuMatrix transpose(bool inplace=false);
 
     void deviceMalloc();
     void deviceSetMatrix();

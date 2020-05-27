@@ -48,8 +48,10 @@ void ComputingServer::terminate() {
 // Start GAT-Specific Code
 void ComputingServer::vtxNNForward(unsigned layer, bool lastLayer) {
     Matrix feats = (*gpuComm->tensorMap)["h"];
+    Matrix h = layer == 0 ? (*gpuComm->tensorMap)["h"]
+                          : gpuComm->engine->savedNNTensors[layer - 1]["ah"];
     Matrix weight = msgService.getWeightMatrix(layer);
-    auto z = cu.dot(feats, weight);
+    auto z = cu.dot(h, weight);
     memcpy((*gpuComm->tensorMap)["z"].getData(), z.getData(), z.getDataSize());
     delete[] z.getData();
     CuMatrix::freeGPU();
@@ -82,79 +84,76 @@ void ComputingServer::edgNNForward(unsigned layer, bool lastLayer) {
 void ComputingServer::edgNNBackward(unsigned layer) {
     CuMatrix a = cu.wrapMatrix(msgService.getaMatrix(layer));
 
-    auto gradTensor = cu.wrapMatrix((*gpuComm->tensorMap)["grad"]);
     auto zaTensor = cu.wrapMatrix((*gpuComm->tensorMap)["az"]);
-    unsigned featDim = gradTensor.getCols();
+     cout << "leakyReluPrime\n";
+    CuMatrix d_lrelu = cu.leakyReluPrime(zaTensor, 0.01);  // n x 1
+    zaTensor.explicitFree();
+
+
+
     CuMatrix *adj =
         (CuMatrix *)gpuComm->engine->adjIn;  // any engineer with pursuit should
                                              // not write this;too ugly
     CuMatrix e = *adj;
     unsigned edgCnt = e.nnz;
 
-    cout<<"leakyReluPrime\n";
-    CuMatrix d_lrelu = cu.leakyReluPrime(zaTensor, 0.01);  // n x 1
-    zaTensor.explicitFree();
+    
+    cout << "gatherRows d_P_edge \n";
+    auto gradTensor = cu.wrapMatrix((*gpuComm->tensorMap)["grad"]);
+    cout<<"gradTensor.shape "<< gradTensor.shape()<<endl;
+    cout<<"e.nnz "<< e.nnz<<endl;
+    auto d_P_edge = cu.gatherRowsGthr(gradTensor, e.csrRowInd, e.nnz);
+    gradTensor.explicitFree();
+
+    cout<<"d_P_edge.shape "<<d_P_edge.shape();
+
     CuMatrix d_lrelu_edge =
         cu.wrapMatrix(Matrix(e.nnz, 1, (char *)NULL));  // BCAST |V| to |E|
-    cout<<"cusparseSgthr\n";
+    cout << "cusparseSgthr\n";
     auto cusparseStat = cusparseSgthr(
         cu.spHandle, e.nnz, d_lrelu.devPtr, d_lrelu_edge.devPtr,
         e.csrRowInd,  // Not sure need to see the actually adjmatrix***
         CUSPARSE_INDEX_BASE_ZERO);  // gather the 1st half of az//
     assert(CUSPARSE_STATUS_SUCCESS == cusparseStat);
 
-    vector<int> src_indices(e.nnz);
-    vector<int> dst_indices(e.nnz);
-    cudaMemcpy(src_indices.data(), e.csrRowInd, sizeof(int) * e.nnz,
-               cudaMemcpyDeviceToHost);
-    cudaMemcpy(dst_indices.data(), e.csrColInd, sizeof(int) * e.nnz,
-               cudaMemcpyDeviceToHost);
 
-    cout<<"gatherRows d_P_edge \n";
-    // auto d_P_edge = cu.gatherRows(gradTensor, src_indices);
-    auto d_P_edge = cu.gatherRowsGthr(gradTensor, e.csrRowInd,e.nnz);
-    cudaDeviceSynchronize();
-    cout<<"scaleRowsByVector\n";
+    cout << "scaleRowsByVector\n";
     cu.scaleRowsByVector(d_P_edge, d_lrelu_edge);  //(|E|, featDim)
     auto d_Act = d_P_edge;
     d_lrelu.explicitFree();
-    cout<<d_Act.shape()<<endl;
+    cout <<"d_Act.shape() "<< d_Act.shape() << endl;
 
     if (layer != 0) {
         // Shape of dA: (|E|, 1), serve as gradient of each edge for backward
         // agg
-        cout<<"d_Act.dot(a)\n";
+        cout << "d_Act.dot(a)\n";
         auto dA = d_Act.dot(a);
         dA.setData((*gpuComm->tensorMap)["dA"].getData());
         dA.updateMatrixFromGPU();
         dA.explicitFree();
     }
-    cout<<"d_Act_reduce\n";
+    cout << "d_Act_reduce\n";
     auto d_Act_reduce = cu.reduceColumns(d_Act);
-    CuMatrix::MemoryPool.erase(d_Act.devPtr);
-    cudaFree(d_Act.devPtr);
+    d_Act.explicitFree();
 
-    cout<<"gatherRows gatherRows\n";
+    cout << "gatherRows gatherRows\n";
     auto z = cu.wrapMatrix((*gpuComm->tensorMap)["z"]);
-    // auto z_src=cu.gatherRows(z, src_indices);
-    // auto z_dst=cu.gatherRows(z, dst_indices);
-    auto z_src=cu.gatherRowsGthr(z, e.csrRowInd,e.nnz);
-    auto z_dst=cu.gatherRowsGthr(z, e.csrColInd,e.nnz);
-    CuMatrix::MemoryPool.erase(z.devPtr);
-    cudaDeviceSynchronize();
-    cudaFree(z.devPtr);
-    cout<<"zz=z_src.dot(z_dst\n";
-    auto zz=z_src.dot(z_dst,true,false);
-    cout<<"da\n";
+    cout << "zz=z.dot(z\n";
+    auto zz = z.dot(z, true, false);
+    cout << "da\n";
     CuMatrix da = zz.dot(d_Act_reduce, false, true);
     da.updateMatrixFromGPU();
     msgService.sendaUpdate(da, layer);
     CuMatrix::freeGPU();
 }
 void ComputingServer::vtxNNBackward(unsigned layer) {
+    Matrix host_h = layer == 0
+                        ? (*gpuComm->tensorMap)["h"]
+                        : gpuComm->engine->savedNNTensors[layer - 1]["ah"];
+
     auto weight = cu.wrapMatrix(msgService.getWeightMatrix(layer));
     auto grad = cu.wrapMatrix((*gpuComm->tensorMap)["aTg"]);
-    auto h = cu.wrapMatrix((*gpuComm->tensorMap)["h"]);
+    auto h = cu.wrapMatrix(host_h);
     auto weightUpdates = h.dot(grad, true, false);
     weightUpdates.updateMatrixFromGPU();
     msgService.sendWeightUpdate(weightUpdates, layer);

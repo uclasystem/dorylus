@@ -347,3 +347,14 @@ std::string Matrix::signature() {
 
     return output.str();
 }
+
+Matrix Matrix::transpose_(){
+    Matrix t(cols,rows,new FeatType[cols*rows]);
+    #pragma omp parallel for
+    for (int i =0;i<rows;++i){
+        for(int j=0;j<cols;++j){
+            data[cols*i+j]=t.getData()[j*rows+i];
+        }
+    }
+    return t;
+}

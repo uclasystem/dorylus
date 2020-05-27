@@ -6,9 +6,7 @@
 #include <memory>
 
 #include "cblas.h"
-
 #include "utils.hpp"
-
 
 /**
  *
@@ -16,19 +14,19 @@
  *
  */
 class Matrix {
-public:
+   public:
     Matrix();
     Matrix(const char* _name, unsigned _rows, unsigned _cols);
-    Matrix(const char* _name, unsigned _rows, unsigned _cols, FeatType *_data);
+    Matrix(const char* _name, unsigned _rows, unsigned _cols, FeatType* _data);
     Matrix(unsigned _rows, unsigned _cols);
-    Matrix(unsigned _rows, unsigned _cols, FeatType *_data);
-    Matrix(unsigned _rows, unsigned _cols, char *_data);
+    Matrix(unsigned _rows, unsigned _cols, FeatType* _data);
+    Matrix(unsigned _rows, unsigned _cols, char* _data);
 
     std::string name();
     unsigned getRows();
     unsigned getCols();
     unsigned getNumElemts();
-    FeatType *getData() const;
+    FeatType* getData() const;
     size_t getDataSize() const;
 
     // Get a specific element in the matrix
@@ -42,8 +40,9 @@ public:
     void setRows(unsigned _rows);
     void setCols(unsigned _cols);
     void setDims(unsigned _rows, unsigned _cols);
-    void setData(FeatType *_data);
+    void setData(FeatType* _data);
     void free();
+    Matrix transpose_();
 
     bool empty();
 
@@ -80,24 +79,24 @@ public:
     void operator-=(Matrix& M);
 
     // Matrix multiplication
-    // If using this make sure to assign it to a new matrix as overwriting the current matrix
-    // will cause a dangling pointer
-    Matrix dot(Matrix& M, bool transpose1 = false, bool transpose2 = false, float scale = 1.0);
+    // If using this make sure to assign it to a new matrix as overwriting the
+    // current matrix will cause a dangling pointer
+    Matrix dot(Matrix& M, bool transpose1 = false, bool transpose2 = false,
+               float scale = 1.0);
 
     float sum();
     std::string shape();
     std::string str();
     std::string signature();
 
-private:
+   private:
     std::string tensorName;
     unsigned rows;
     unsigned cols;
-    FeatType *data;
+    FeatType* data;
 };
 
 typedef std::map<std::string, Matrix> TensorMap;
 typedef std::map<std::string, FeatType**> ETensorMap;
-
 
 #endif

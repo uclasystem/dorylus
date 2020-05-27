@@ -101,9 +101,9 @@ CuMatrix ComputingUnit::gatherRowsGthr(CuMatrix m, int *indices, int len) {
         cusparseSgthr(spHandle, len, m_trans.devPtr + i * m.getRows(),
                       out.devPtr + i * len, indices, CUSPARSE_INDEX_BASE_ZERO);
     }
-    CuMatrix outT=out.transpose();
-    out.explicitFree();
     m_trans.explicitFree();
+    cout<<"Transposing\n";
+    CuMatrix outT=out.transpose();
     return outT;
 }
 CuMatrix ComputingUnit::leakyRelu(CuMatrix &m, float coef) {
