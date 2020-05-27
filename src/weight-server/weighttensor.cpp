@@ -106,19 +106,19 @@ void WeightTensor::decRef(Chunk &chunk) {
     auto found = chunk2Ver.find(chunk);
     if (found != chunk2Ver.end()) {
         ver = chunk2Ver[chunk];
+        RefMat &rmat = ver2Mat[ver];
+        rmat.refCnt--;
+        if (ver < currVer && rmat.refCnt == 0) { // an old stashed weights is done. We can safely delete it.
+            rmat.mat.free();
+            ver2Mat.erase(ver);
+            // std::cerr << "weights " << ver << " done. deleted..." << std::endl;
+        }
+        chunk2Ver.erase(chunk);
+        // std::cerr << "PUT chunk " << chunk.layer << ":" << chunk.globalId << "-" << chunk.lowBound <<
+        //             " dir: " << chunk.dir << " -> ver: " << ver << std::endl;
     } else {
         std::cerr << "wrong chunk dec ref! " << chunk.str() << std::endl;
     }
-    RefMat &rmat = ver2Mat[ver];
-    rmat.refCnt--;
-    if (ver < currVer && rmat.refCnt == 0) { // an old stashed weights is done. We can safely delete it.
-        rmat.mat.free();
-        ver2Mat.erase(ver);
-        // std::cerr << "weights " << ver << " done. deleted..." << std::endl;
-    }
-    chunk2Ver.erase(chunk);
-    // std::cerr << "PUT chunk " << chunk.layer << ":" << chunk.globalId << "-" << chunk.lowBound <<
-    //             " dir: " << chunk.dir << " -> ver: " << ver << std::endl;
 }
 
 void WeightTensor::stopUpdate() {
@@ -255,56 +255,57 @@ std::string WeightTensor::tryApplyUpdate(AdamOptimizer *adamOpt, unsigned layer,
     FeatType checkSum = 0;
     FeatType maxEle, minEle;
 
-    Matrix &wmat = updateVersion(false);
-    FeatType *wPtr = wmat.getData();
+    // Matrix &wmat =
+    updateVersion(false);
+    // FeatType *wPtr = wmat.getData();
 
-    const unsigned numElemts = localUpdMat.getNumElemts();
+    // const unsigned numElemts = localUpdMat.getNumElemts();
     if (sync) {
-        FeatType *lPtr = localUpdMat.getData();
-        FeatType *gPtr = ghostUpdMat.getData();
-        for (unsigned u = 0; u < numElemts; ++u) {
-            lPtr[u] += gPtr[u];
-            if (CORRECT_CHECK) {
-                checkSum += std::fabs(lPtr[u]);
-            }
-        }
-        adamOpt->update(layer, wPtr, lPtr);
+        // FeatType *lPtr = localUpdMat.getData();
+        // FeatType *gPtr = ghostUpdMat.getData();
+        // for (unsigned u = 0; u < numElemts; ++u) {
+        //     lPtr[u] += gPtr[u];
+        //     if (CORRECT_CHECK) {
+        //         checkSum += std::fabs(lPtr[u]);
+        //     }
+        // }
+        // adamOpt->update(layer, wPtr, lPtr);
 
-        if (CORRECT_CHECK) {
-            maxEle = *(std::max_element(lPtr, lPtr + numElemts));
-            minEle = *(std::min_element(lPtr, lPtr + numElemts));
-        }
+        // if (CORRECT_CHECK) {
+        //     maxEle = *(std::max_element(lPtr, lPtr + numElemts));
+        //     minEle = *(std::min_element(lPtr, lPtr + numElemts));
+        // }
 
-        for (unsigned u = 0; u < numElemts; ++u) {
-            lPtr[u] = 0.0;
-            gPtr[u] = 0.0;
-        }
+        // for (unsigned u = 0; u < numElemts; ++u) {
+        //     lPtr[u] = 0.0;
+        //     gPtr[u] = 0.0;
+        // }
         localUpdCnt = 0;
         ghostUpdCnt = 0;
     } else if (updTensor) { // async && applyGhostUpdate
-        if (CORRECT_CHECK) {
-            for (unsigned u = 0; u < numElemts; ++u) {
-                checkSum += std::fabs(updTensor[u]);
-            }
+        // if (CORRECT_CHECK) {
+        //     for (unsigned u = 0; u < numElemts; ++u) {
+        //         checkSum += std::fabs(updTensor[u]);
+        //     }
 
-            maxEle = *(std::max_element(updTensor, updTensor + numElemts));
-            minEle = *(std::min_element(updTensor, updTensor + numElemts));
-        }
-        adamOpt->update(layer, wPtr, updTensor);
+        //     maxEle = *(std::max_element(updTensor, updTensor + numElemts));
+        //     minEle = *(std::min_element(updTensor, updTensor + numElemts));
+        // }
+        // adamOpt->update(layer, wPtr, updTensor);
     } else { // async && applyLocalUpdate
-        FeatType *lPtr = localUpdMat.getData();
-        if (CORRECT_CHECK) {
-            for (unsigned u = 0; u < numElemts; ++u) {
-                checkSum += std::fabs(lPtr[u]);
-            }
+        // FeatType *lPtr = localUpdMat.getData();
+        // if (CORRECT_CHECK) {
+        //     for (unsigned u = 0; u < numElemts; ++u) {
+        //         checkSum += std::fabs(lPtr[u]);
+        //     }
 
-            maxEle = *(std::max_element(lPtr, lPtr + numElemts));
-            minEle = *(std::min_element(lPtr, lPtr + numElemts));
-        }
-        adamOpt->update(layer, wPtr, lPtr);
-        for (unsigned u = 0; u < numElemts; ++u) {
-            lPtr[u] = 0.0;
-        }
+        //     maxEle = *(std::max_element(lPtr, lPtr + numElemts));
+        //     minEle = *(std::min_element(lPtr, lPtr + numElemts));
+        // }
+        // adamOpt->update(layer, wPtr, lPtr);
+        // for (unsigned u = 0; u < numElemts; ++u) {
+        //     lPtr[u] = 0.0;
+        // }
         localUpdCnt = 0;
     }
 
