@@ -159,7 +159,6 @@ void Engine::aggregator(unsigned tid) {
             Chunk c = aggregateQueue.top();
             aggregateQueue.pop();
             printLog(nodeId, "Aggregating %s", c.str().c_str());
-            sleep_ms(1000);
             aggQueueLock.unlock();
 
             double startAgg = getTimer();
@@ -176,7 +175,6 @@ void Engine::aggregator(unsigned tid) {
                 c.layer += 1;
                 c.vertex = true;
                 resComm->NNCompute(c);
-                printLog(nodeId, "Launching AV for Layer %u", c.layer);
             } else if (c.dir == PROP_TYPE::FORWARD) {
                 c.vertex = false;
                 c.dir = PROP_TYPE::BACKWARD;
@@ -195,11 +193,11 @@ void Engine::aggregator(unsigned tid) {
                     outputDeriv[i] -= labelPtr[i];
                 }
 
-                printLog(nodeId, "Calculated predictions and launched AEB");
                 scatQueueLock.lock();
                 scatterQueue.push(c);
-                scatQueueLock.lock();
+                scatQueueLock.unlock();
             } else {
+                c.vertex = true;
                 resComm->NNCompute(c);
             }
 
@@ -233,8 +231,6 @@ void Engine::aggregateChunk(Chunk &c) {
     unsigned lvid = c.lowBound;
     unsigned limit = c.upBound;
     unsigned featDim = getFeatDim(c.layer + 1);
-
-    if (nodeId == 0) printLog(nodeId, "FEAT DIM %u", featDim);
 
     FeatType *featTensor = savedNNTensors[c.layer]["z"].getData();
     FeatType *aggTensor = savedNNTensors[c.layer]["az"].getData();
