@@ -415,14 +415,14 @@ void Engine::run() {
             graph.localVtxCnt, getFeatDim(numLayers), localVerticesLabels);
 
         // Run one synchronous epoch
-//        {
-//            double epochStart = getTimer();
-//            FeatType *tensor = runForward(0);
-//            runBackward(tensor);
-//            double epochTime = getTimer() - epochStart;
-//            printLog(nodeId, "Time for epoch %u: %f ms", 0, epochTime);
-//            addEpochTime(epochTime);
-//        }
+        // {
+        //     double epochStart = getTimer();
+        //     FeatType *tensor = runForward(0);
+        //     runBackward(tensor);
+        //     double epochTime = getTimer() - epochStart;
+        //     printLog(nodeId, "Time for epoch %u: %f ms", 0, epochTime);
+        //     addEpochTime(epochTime);
+        // }
 
         if (nodeId == 0) {
             printLog(nodeId, "Finished SYNCHRONOUS epoch, starting PIPELINE");
@@ -656,7 +656,7 @@ void Engine::asyncDriver(unsigned tid) {
                     driverQueue.pop();
                     ++finishedChunks;
                 }
-                aggQueueLock.unlock();
+                drvQueueLock.unlock();
                 if (finishedChunks == numLambdasForward) {
                     ++currEpoch;
                     break;
