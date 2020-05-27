@@ -11,7 +11,8 @@
 #include "../../common/matrix.hpp"
 #include "../../common/utils.hpp"
 #include "../graph/graph.hpp"
-#include "cusparse.h"
+#include <cusparse.h>
+
 
 
 class CuMatrix : public Matrix {

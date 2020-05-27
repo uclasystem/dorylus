@@ -51,7 +51,7 @@ FeatType *Engine::aggregate(FeatType **edgsTensor, unsigned edgsCnt,
             CuMatrix e = *NormAdjMatrixIn;
             e.csrVal = dummy_e.devPtr;
             CuMatrix out = cu.aggregate(e, feat);
-            std::cout<<"Out shape: "<<out.shape()<<std::endl;
+            std::cout << "Out shape: " << out.shape() << std::endl;
             out.setData(outputTensor);
             out.updateMatrixFromGPU();
             cudaDeviceSynchronize();
@@ -117,14 +117,38 @@ FeatType *Engine::aggregateBackward(FeatType **eVGradTensor, unsigned edgsCnt,
 
 #ifdef _GPU_ENABLED_
     printf("Aggregate start back\n");
-    CuMatrix feat;
-    feat.loadSpDense(gradTensor, savedNNTensors[layer]["bg_d"].getData(),
-                     graph.localVtxCnt, graph.dstGhostCnt, featDim);
+    // CuMatrix feat;
+    // feat.loadSpDense(gradTensor, savedNNTensors[layer]["bg_d"].getData(),
+    //                  graph.localVtxCnt, graph.srcGhostCnt, featDim);
     switch (aggregator) {
         case (AGGREGATOR::WSUM): {
-            CuMatrix out = cu.aggregate(*NormAdjMatrixOut, feat);
-            out.setData(outputTensor);
-            out.updateMatrixFromGPU();
+            // dA*Z first
+
+            CuMatrix z;
+            z.loadSpDense(savedNNTensors[layer]["z"].getData(),
+                          savedNNTensors[layer]["fg_z"].getData(),
+                          graph.localVtxCnt, graph.srcGhostCnt,
+                          savedNNTensors[layer]["z"].getCols());
+            CuMatrix dummydA = cu.wrapMatrix(
+                savedNNTensors[layer]["dA"]);  // for getting dA into VRAM
+            CuMatrix dA = *NormAdjMatrixIn;
+            dA.csrVal = dummydA.devPtr;
+            CuMatrix dAZ = cu.aggregate(dA, z);
+
+            //A.dP
+            CuMatrix dP;
+            dP.loadSpDense(gradTensor, savedNNTensors[layer]["bg_d"].getData(),
+                           graph.localVtxCnt, graph.dstGhostCnt,
+                           savedNNTensors[layer]["bg_d"].getCols());
+
+            CuMatrix dummyA= cu.wrapMatrix(Matrix(1,graph.backwardAdj.nnz,graph.backwardAdj.values));
+            CuMatrix A = *NormAdjMatrixOut;
+            CuMatrix AdP = cu.aggregate(A, dP);
+            cu.hadamardAdd(AdP,dAZ);
+            CuMatrix res=AdP;
+            res.setData(outputTensor);
+            res.updateMatrixFromGPU();
+            CuMatrix::freeGPU();
             std::cout << "Finish GPU aggregation\n";
             break;
         }

@@ -123,7 +123,6 @@ public:
     Graph graph;
     //gpucomm need these for applyedge 
     void* adjIn;
-    void* adjOut;
 
 
     unsigned dThreads;

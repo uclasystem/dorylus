@@ -19,7 +19,6 @@ ComputingUnit &ComputingUnit::getInstance() {
 }
 
 ComputingUnit::ComputingUnit() {
-    cudaStreamCreate(&stream);
     stat = cublasCreate(&handle);
     if (stat != CUBLAS_STATUS_SUCCESS) {
         printf("CUBLAS initialization failed\n");
@@ -75,10 +74,6 @@ CuMatrix ComputingUnit::aggregate(CuMatrix &sparse, CuMatrix &dense) {
                                 CUSPARSE_MM_ALG_DEFAULT, buffer);
     assert(CUSPARSE_STATUS_SUCCESS == cusparseStat);
     C = C.transpose();
-    // scaleRowsByVector(dense, norms); //
-
-    // hadamardAdd(C, dense);
-    // cudaDeviceSynchronize();
     return C;
 }
 CuMatrix ComputingUnit::gatherRows(CuMatrix m, std::vector<int> indices) {

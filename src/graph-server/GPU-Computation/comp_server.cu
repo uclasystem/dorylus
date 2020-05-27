@@ -54,11 +54,7 @@ void ComputingServer::vtxNNForward(unsigned layer, bool lastLayer) {
     Matrix weight = msgService.getWeightMatrix(layer);
     CuMatrix cu_h = cu.wrapMatrix(feats);
     CuMatrix cu_w = cu.wrapMatrix(weight);
-    cout<<"cu_h "<<cu_h.shape()<<endl;
-    cout<<"cu_w "<<cu_w.shape()<<endl;
     CuMatrix z = cu_h.dot(cu_w);
-    cout << "z " << z.shape() << endl;
-    // delete[] z.getData();
     z.setData((*gpuComm->tensorMap)["z"].getData());
     z.updateMatrixFromGPU();
 
@@ -101,7 +97,7 @@ void ComputingServer::edgNNBackward(unsigned layer) {
     CuMatrix az_edge = cu.wrapMatrix(Matrix(e.nnz, 1, (char *)NULL));
     auto cusparseStat = cusparseSgthr(
         cu.spHandle, e.nnz, zaTensor.devPtr, az_edge.devPtr,
-        e.csrRowInd,  // Not sure need to see the actually adjmatrix***
+        e.csrRowInd,  // Not sure, need to see the actually adjmatrix***
         CUSPARSE_INDEX_BASE_ZERO);  // gather the 1st half of az//
     assert(CUSPARSE_STATUS_SUCCESS == cusparseStat);
 

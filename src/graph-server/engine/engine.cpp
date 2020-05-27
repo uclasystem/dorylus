@@ -115,14 +115,15 @@ void Engine::init(int argc, char *argv[]) {
     printLog(nodeId, "Loading SparseMatrices for GPU");
     NormAdjMatrixIn = new CuMatrix();
     NormAdjMatrixOut = new CuMatrix();
-    //no need for gat
-    // Matrix norms(graph.localVtxCnt, 1, graph.vtxDataVec.data());
-    // Norms = new CuMatrix(norms, cu.handle);
-    // CuMatrix::MemoryPool.erase(Norms->devPtr);
+    
+    Matrix norms(graph.localVtxCnt, 1, graph.vtxDataVec.data());
+    Norms = new CuMatrix(norms, cu.handle);
+    CuMatrix::MemoryPool.erase(Norms->devPtr);
+    
     NormAdjMatrixIn->loadSpCSC(cu.spHandle, graph);
     NormAdjMatrixOut->loadSpCSR(cu.spHandle, graph);
+    
     adjIn=(void*)NormAdjMatrixIn;
-    adjOut=(void*)NormAdjMatrixOut;
 #endif
 
     // Initialize synchronization utilities.
@@ -399,7 +400,7 @@ void Engine::run() {
             double epochStart = getTimer();
             FeatType *predictData = runForward(epoch);
             runBackward(predictData);
-
+            nodeManager.barrier();
             double epochTime = getTimer() - epochStart;
             printLog(nodeId, "Time for epoch %u: %f ms", epoch, epochTime);
             addEpochTime(epochTime);

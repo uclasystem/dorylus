@@ -60,8 +60,10 @@ void CuMatrix::loadSpCSR(cusparseHandle_t &handle, Graph &graph) {
     setRows(graph.localVtxCnt);
     setCols(total);
 
-    cusparseXcsr2coo(handle, csrRowPtr, nnz, getCols(), csrRowInd,
-                     CUSPARSE_INDEX_BASE_ZERO);
+    // auto cusparseStat=cusparseXcsr2coo(handle, csrRowPtr, nnz, getCols(), csrRowInd,
+    //                  CUSPARSE_INDEX_BASE_ZERO);
+    // assert(CUSPARSE_STATUS_SUCCESS == cusparseStat);
+
 }
 
 void CuMatrix::loadSpCSC(cusparseHandle_t &handle, Graph &graph) {
@@ -96,8 +98,10 @@ void CuMatrix::loadSpCSC(cusparseHandle_t &handle, Graph &graph) {
     setRows(graph.localVtxCnt);
     setCols(total);
 
-    cusparseXcsr2coo(handle, csrRowPtr, nnz, getRows(), csrRowInd,
+    auto cusparseStat = cusparseXcsr2coo(handle, csrRowPtr, nnz, graph.localVtxCnt, csrRowInd,
                      CUSPARSE_INDEX_BASE_ZERO);
+    assert(CUSPARSE_STATUS_SUCCESS == cusparseStat);
+
 }
 // You could probably make this function load two matrices instead of pointers
 // and numbers
@@ -134,7 +138,6 @@ CuMatrix CuMatrix::extractRow(unsigned row) {
 }
 
 void CuMatrix::deviceMalloc() {
-    std::cout<<"deviceMalloc\n";
     unsigned rows = this->getRows();
     unsigned cols = this->getCols();
     cudaStat = cudaMalloc((void **)&devPtr, rows * cols * sizeof(FeatType));
