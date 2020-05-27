@@ -66,8 +66,16 @@ LambdaWorker::work(unsigned _wid) {
                     sendEdgeTensor(identity, chunk);
                     break;
                 }
+                case (OP::PULLEINFO): {
+                    sendEdgeInfo(identity, chunk);
+                    break;
+                }
                 case (OP::PUSH): {
                     recvTensors(identity, chunk);
+                    break;
+                }
+                case (OP::PUSHE): {
+                    recvETensors(identity, chunk);
                     break;
                 }
                 case (OP::EVAL): {
@@ -193,6 +201,53 @@ void LambdaWorker::recvTensors(zmq::message_t& client_id, Chunk &chunk) {
     }
 }
 
+void LambdaWorker::recvETensors(zmq::message_t& client_id, Chunk& chunk) {
+    manager->timeoutMtx.lock();
+    bool exist = manager->timeoutTable.find(chunk) != manager->timeoutTable.end();
+    manager->timeoutMtx.unlock();
+    // printLog(manager->nodeId, "CHecking exist");
+    if (exist) {
+        int ret = 0;
+        unsigned more = 1;
+        size_t usize = sizeof(unsigned);
+        while (more && ret == 0) {
+            // printLog(manager->nodeId, "recv");
+            ret = recvETensor(chunk);
+            workersocket.getsockopt(ZMQ_RCVMORE, &more, &usize);
+        }
+
+        if (ret == 0 && manager->NNRecv(chunk)) {
+            zmq::message_t ack;
+            workersocket.send(client_id, ZMQ_SNDMORE);
+            workersocket.send(ack);
+        } else { // Error, Give up this chunk
+            zmq::message_t ack(3 * sizeof(unsigned));
+            *(int *)(ack.data()) = -1;
+            workersocket.send(client_id, ZMQ_SNDMORE);
+            workersocket.send(ack);
+        }
+    } else {
+        zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
+        unsigned more = 1;
+        size_t usize = sizeof(unsigned);
+        while (more) {
+            zmq::message_t tensorData;
+            workersocket.recv(&tensorHeader);
+            workersocket.recv(&tensorData);
+
+            workersocket.getsockopt(ZMQ_RCVMORE, &more, &usize);
+        }
+        zmq::message_t ack(3 * sizeof(unsigned));
+        *(int *)(ack.data()) = -1;
+        workersocket.send(client_id, ZMQ_SNDMORE);
+        workersocket.send(ack);
+
+        std::string errMsg = "[ ERROR ] when receiving from " + chunk.str() + ": ";
+        errMsg += "Received duplicate results. Discarding...";
+        printLog(manager->nodeId, errMsg.c_str());
+    }
+}
+
 void LambdaWorker::recvEvalData(zmq::message_t &client_id, Chunk &chunk) {
     manager->timeoutMtx.lock();
     bool exist = manager->timeoutTable.find(chunk) != manager->timeoutTable.end();
@@ -280,10 +335,27 @@ void LambdaWorker::sendEdgeTensor(zmq::message_t& client_id, Chunk& chunk) {
     bool exist = manager->timeoutTable.find(chunk) != manager->timeoutTable.end();
     manager->timeoutMtx.unlock();
 
+    // printLog(manager->nodeId, "CHecking exit");
     if (exist) {
-        // printLog(manager->nodeId, "YEE BOI");
-        workersocket.send(client_id, ZMQ_SNDMORE);
-        sendTensor(chunk);
+        TensorMap& tMap = manager->savedNNTensors[chunk.layer];
+        zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
+        workersocket.recv(&tensorHeader);
+
+        std::string name = parseName((char*)tensorHeader.data());
+        auto found = tMap.find(name);
+        if (found == tMap.end()) {
+            workersocket.send(client_id, ZMQ_SNDMORE);
+            printLog(manager->nodeId, "Requested tensor '%s' not found",
+                     name.c_str());
+            zmq::message_t errorHeader(TENSOR_HDR_SIZE);
+            populateHeader(errorHeader.data(), ERR_HEADER_FIELD, name.c_str());
+            workersocket.send(client_id, ZMQ_SNDMORE);
+            workersocket.send(errorHeader);
+        } else {
+            // printLog(manager->nodeId, "SENDING");
+            workersocket.send(client_id, ZMQ_SNDMORE);
+            sendEdgeTensorChunk(found->second, chunk);
+        }
     } else {
         printLog(manager->nodeId, "Chunk %u DNE", chunk.localId);
         workersocket.send(client_id, ZMQ_SNDMORE);
@@ -295,14 +367,28 @@ void LambdaWorker::sendEdgeTensor(zmq::message_t& client_id, Chunk& chunk) {
         sprintf(errMsg, "[ ERROR ] when sending chunk: %s %u",
             chunk.str().c_str(), chunk.vertex);
         printLog(manager->nodeId, errMsg);
-
     }
+}
+
+void LambdaWorker::sendEdgeTensorChunk(Matrix& eTensor, Chunk& chunk) {
+    CSCMatrix<EdgeType>& csc = (manager->engine->graph).forwardAdj;
+    unsigned nChunkEdges = csc.columnPtrs[chunk.upBound] - csc.columnPtrs[chunk.lowBound];
+    unsigned long long baseIndex = csc.columnPtrs[chunk.lowBound];
+
+    zmq::message_t responseHeader(TENSOR_HDR_SIZE);
+    zmq::message_t edgeDataMsg(nChunkEdges * sizeof(FeatType));
+    populateHeader(responseHeader.data(), nChunkEdges, 1);
+    std::memcpy(edgeDataMsg.data(), eTensor.getData() + baseIndex, nChunkEdges * sizeof(FeatType));
+
+    workersocket.send(responseHeader, ZMQ_SNDMORE);
+    workersocket.send(edgeDataMsg);
 }
 
 // JOHN: A lot of information needed for this has to be accessed through engine
 //  which is ugly. TODO: Extend matrix class to EdgeMatrix so that all infomration
 //  can be encapsulated without accessing engine
-void LambdaWorker::sendTensor(Chunk& chunk) {
+void LambdaWorker::sendEdgeInfo(zmq::message_t& client_id, Chunk& chunk) {
+    // printLog(manager->nodeId, "SEND EDGE INFO");
     CSCMatrix<EdgeType>& csc = (manager->engine->graph).forwardAdj;
     unsigned numLvids = chunk.upBound - chunk.lowBound;
     unsigned numChunkEdges = csc.columnPtrs[chunk.upBound] - csc.columnPtrs[chunk.lowBound];
@@ -321,8 +407,10 @@ void LambdaWorker::sendTensor(Chunk& chunk) {
     // for (unsigned lvid = 0; lvid <= numLvids; ++lvid) {
     //     colPtrsStr += std::to_string(colPtrMsgData[lvid]) + " ";
     // }
+    workersocket.send(client_id, ZMQ_SNDMORE);
     workersocket.send(responseHeader, ZMQ_SNDMORE);
     workersocket.send(edgeChunkInfoMsg);
+    // printLog(manager->nodeId, "MESSGAES SENT FOR EDGE INFO");
 }
 
 int LambdaWorker::recvTensor(Chunk &chunk) {
@@ -359,6 +447,29 @@ int LambdaWorker::recvTensor(Chunk &chunk) {
         FeatType* dptr = found->second.get(chunk.lowBound);
         std::memcpy(dptr, tensorData.data(), tensorData.size());
     }
+
+    return 0;
+}
+
+int LambdaWorker::recvETensor(Chunk& chunk) {
+    zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
+    workersocket.recv(&tensorHeader);
+    zmq::message_t tensorData;
+    workersocket.recv(&tensorData);
+
+    std::string name = parseName((char*)tensorHeader.data());
+    TensorMap& tensorMap = manager->savedNNTensors[chunk.layer];
+    auto found = tensorMap.find(name);
+    if (found == tensorMap.end()) {
+        printLog(manager->nodeId, "Lambda %s returned unknown tensor '%s'. Make sure to allocate it before running lambdas!",
+                 chunk.str().c_str(), name.c_str());
+        return 1;
+    }
+
+    // printLog(manager->nodeId, "Copying edge values");
+    CSCMatrix<EdgeType>& csc = (manager->engine->graph).forwardAdj;
+    FeatType* eDptr = found->second.get(csc.columnPtrs[chunk.lowBound]);
+    std::memcpy(eDptr, tensorData.data(), tensorData.size());
 
     return 0;
 }
