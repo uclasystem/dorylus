@@ -91,13 +91,11 @@ apply_edge(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chu
     Matrix edgeVals = leakyReLU(edgeValInputs);
     edgeVals.setName("A");
 
-    std::vector<Matrix> toSend;
-    toSend.push_back(edgeVals);
-
+    std::vector<Matrix> toSend = {edgeVals, edgeValInputs};
     int ret = sendEdgeTensors(data_socket, chunk, toSend, true);
 
-    for (auto& M : toSend)
-        deleteMatrix(M);
+    deleteMatrix(edgeValInputs);
+    deleteMatrix(edgeVals);
 
     return constructResp(true, chunk.localId, "Finished apply edge");
 }
@@ -165,20 +163,15 @@ apply_edge_backward(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, C
     grad.free();
     dLRelu.free();
 
-    if (chunk.layer != 0) {
-        Matrix dA = dAct.dot(a);
-        dA.setName("dA");
-        // std::cerr << "dA " << dA.shape() << std::endl;
+    Matrix dA = dAct.dot(a);
+    dA.setName("dA");
+    // std::cerr << "dA " << dA.shape() << std::endl;
 
-        std::vector<Matrix> toSend;
-        toSend.push_back(dA);
-        // std::cerr << "Sending dA tensor" << std::endl;
-        sendEdgeTensors(data_socket, chunk, toSend, true);
-        // std::cerr << "Fin send" << std::endl;
-        dA.free();
-    } else {
-        sendFinMsg(data_socket, chunk);
-    }
+    std::vector<Matrix> toSend = { dA };
+    // std::cerr << "Sending dA tensor" << std::endl;
+    sendEdgeTensors(data_socket, chunk, toSend, true);
+    // std::cerr << "Fin send" << std::endl;
+    dA.free();
 
     Matrix dAct_reduce = reduce(dAct);
     dAct.free();
@@ -190,10 +183,10 @@ apply_edge_backward(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, C
     zz.free();
 
     da.setName("a_i");
-    std::vector<Matrix> weightUpds;
-    weightUpds.push_back(da);
+    std::vector<Matrix> weightUpds = { da };
     // std::cerr << "Sending weight upd" << std::endl;
     sendTensors(weights_socket, chunk, weightUpds);
+    da.free();
 
     for (auto &w : weights) {
         w.free();
@@ -219,10 +212,12 @@ apply_vertex(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &c
     }
 
     Matrix& H = matrices[0];
+    // std::cerr << "Get H " << H.shape() << std::endl;
     std::vector<std::string> weightRequests{"w"};
     std::vector<Matrix> weights = reqTensors(weights_socket, chunk, weightRequests);
     for (auto& W : weights) {
         if (W.empty()){
+            H.free();
             std::cout << W.name() << " is empty" << std::endl;
             return constructResp(false, chunk.localId, W.name() + " is empty");
         }
@@ -233,15 +228,14 @@ apply_vertex(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &c
     }
 
     Matrix& W = weights[0];
+    // std::cerr << "Get W " << W.shape() << std::endl;
 
     Matrix Z = H.dot(W);
     Z.setName("z");
     deleteMatrix(H);
     deleteMatrix(W);
 
-    std::vector<Matrix> toSend;
-    toSend.push_back(Z);
-
+    std::vector<Matrix> toSend = {Z};
     std::cout << "Sending Z tensor" << std::endl;
     int ret = sendTensors(data_socket, chunk, toSend, true);
     std::cout << "Fin send" << std::endl;

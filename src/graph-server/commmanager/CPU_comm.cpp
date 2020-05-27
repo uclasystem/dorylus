@@ -115,12 +115,10 @@ void CPUComm::edgNNBackward(unsigned layer) {
     Matrix dAct = expandHadamardMul(gradTensor, dLRelu, engine->graph.forwardAdj);
     dLRelu.free();
 
-    if (layer != 0) {
-        // Shape of dA: (|E|, 1), serve as gradient of each edge for backward agg
-        Matrix dA = dAct.dot(a);
-        memcpy(savedNNTensors[layer]["dA"].getData(), dA.getData(), dA.getDataSize());
-        dA.free();
-    }
+    // Shape of dA: (|E|, 1), serve as gradient of each edge for backward agg
+    Matrix dA = dAct.dot(a);
+    memcpy(savedNNTensors[layer]["dA"].getData(), dA.getData(), dA.getDataSize());
+    dA.free();
 
     // reduce dAct(|E|, featDim) to (1, featDim)
     // Do this first to optmize computation and save memory
