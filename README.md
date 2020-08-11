@@ -6,6 +6,9 @@ This is GNN-LAMBDA system, a *Scalable*, *Resource-efficient* & *Affordable* com
 
 Now the main logic of the engine has been completely simplified, and we integrate it with AWS Lambda threads. Ultimate goal is to achieve "*Affordable AI*" with the benefit of **cheap scalability** brought by serverless computing.
 
+## Important Note
++ When cloning repo, name the clone target directory 'gnn-lambda' ( `git clone git@bitbucket.org:jothor/dorylus.git gnn-lambda` )
+
 
 ## Architecture
 
