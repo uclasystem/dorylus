@@ -237,7 +237,7 @@ void Engine::aggregateChunk(Chunk &c) {
     unsigned featDim = getFeatDim(c.layer + 1);
 
     FeatType *featTensor = savedNNTensors[c.layer]["z"].getData();
-    FeatType *aggTensor = savedNNTensors[c.layer]["az"].getData();
+    FeatType *aggTensor = savedNNTensors[c.layer]["ah"].getData();
     FeatType **eFeatsTensor = savedEdgeTensors[c.layer]["fedge"];
 
     FeatType *chunkPtr = getVtxFeat(aggTensor, lvid, featDim);
