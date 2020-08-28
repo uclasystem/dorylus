@@ -22,11 +22,11 @@ WeightServer::WeightServer(std::string &wserverFile, std::string &myPrIpFile, st
     // Read the dsh file to get info about all weight server nodes.
     initWServerComm(allNodeIps);
 
+    createOutputFile(tmpFile);
+
     // Read in layer configurations and initialize weight matrices.
     initWeights();
     initAdamOpt(adam);
-
-    createOutputFile(tmpFile);
 }
 
 WeightServer::~WeightServer() {
@@ -822,7 +822,7 @@ void WeightServer::closeOutputFile() {
 /** Logging utility. */
 void
 WeightServer::serverLog(std::string info) {
-    char msg[512];
+    char msg[4096];
     sprintf(msg, "[ WS %3d ] %s\n", nodeId, info.c_str());
     fprintf(stderr, "%s", msg);
 }

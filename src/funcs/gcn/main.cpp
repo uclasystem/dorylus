@@ -29,7 +29,8 @@ using namespace aws::lambda_runtime;
 using namespace std::chrono;
 
 invocation_response
-finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chunk, bool eval) {
+finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chunk,
+           bool eval, unsigned trainset_size) {
     std::cout << "FINAL LAYER" << std::endl;
     std::vector<std::string> dataRequests{"ah", "lab"};
     std::vector<std::string> weightRequests{"w"};
@@ -81,6 +82,7 @@ finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chu
 
     // Backward computation
     Matrix d_out = preds - labels;
+    d_out /= trainset_size;
     deleteMatrix(labels);
     deleteMatrix(preds);
 
@@ -265,7 +267,8 @@ forwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &c
  *
  */
 invocation_response
-apply_phase(std::string dataserver, std::string weightserver, unsigned dport, unsigned wport, Chunk &chunk, bool eval) {
+apply_phase(std::string dataserver, std::string weightserver, unsigned dport, unsigned wport,
+            Chunk &chunk, bool eval, unsigned trainset_size) {
     zmq::context_t ctx(2);
 
     // Creating identity
@@ -302,7 +305,7 @@ apply_phase(std::string dataserver, std::string weightserver, unsigned dport, un
     if (chunk.dir == PROP_TYPE::FORWARD && chunk.layer < 1) {
         return forwardLayer(data_socket, weights_socket, chunk);
     } else if (chunk.dir == PROP_TYPE::FORWARD && chunk.layer == 1) {
-        return finalLayer(data_socket, weights_socket, chunk, eval);
+        return finalLayer(data_socket, weights_socket, chunk, eval, trainset_size);
     } else if (chunk.dir == PROP_TYPE::BACKWARD) {
         return backwardLayer(data_socket, weights_socket, chunk);
     }
@@ -330,6 +333,7 @@ my_handler(invocation_request const& request) {
     unsigned dport = v.GetInteger("dport");
     unsigned wport = v.GetInteger("wport");
     bool eval = v.GetBool("eval");
+    unsigned trainset_size = v.GetInteger("trainset_size");
 
     Chunk chunk;
     chunk.localId = v.GetInteger("id");
@@ -345,7 +349,7 @@ my_handler(invocation_request const& request) {
               << dataserver << ":" << dport << ", FORWARD layer " << chunk.layer
               << "." << std::endl;
 
-    return apply_phase(dataserver, weightserver, dport, wport, chunk, eval);
+    return apply_phase(dataserver, weightserver, dport, wport, chunk, eval, trainset_size);
 }
 
 int

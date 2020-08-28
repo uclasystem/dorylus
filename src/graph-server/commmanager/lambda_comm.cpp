@@ -198,6 +198,7 @@ void LambdaComm::invokeLambda(const Chunk &chunk) {
     jsonPayload.WithInteger("wport", wport);
     // jsonPayload.WithBool("eval", (chunk.epoch == 0) || ((chunk.epoch + 1) % 5 == 0));
     jsonPayload.WithBool("eval", true);
+    jsonPayload.WithInteger("trainset_size", engine->graph.globalVtxCnt * TRAIN_PORTION); // For averaging initial backward gradient
 
     jsonPayload.WithInteger("id", chunk.localId);
     jsonPayload.WithInteger("gid", chunk.globalId);
