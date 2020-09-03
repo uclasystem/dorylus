@@ -27,6 +27,6 @@ fi
 
 cd build
 cmake .. -DBUILD_GRAPH=yes -DBACKEND=${backend} -DCMAKE_BUILD_TYPE=${build_type}
-make
+make -j
 
 mv graph-server/graphserver .

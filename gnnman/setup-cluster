@@ -33,9 +33,15 @@ ${EC2MAN_CMD} weight all prip > wserverip
 
 ## Create `kill-all` file
 cp run/kill-all .
-sed -i s/{{user}}/$( python3 -m ec2man graph user )/ kill-all
-sed -i s/{{WSERVER0}}/$( python3 -m ec2man weight 0 prip )/ kill-all
-sed -i s/{{GSERVER0}}/$( python3 -m ec2man graph 0 prip )/ kill-all
+if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    sed -i s/{{user}}/$( python3 -m ec2man graph user )/ kill-all
+    sed -i s/{{WSERVER0}}/$( python3 -m ec2man weight 0 prip )/ kill-all
+    sed -i s/{{GSERVER0}}/$( python3 -m ec2man graph 0 prip )/ kill-all
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+    sed -i "" s/{{user}}/$( python3 -m ec2man graph user )/ kill-all
+    sed -i "" s/{{WSERVER0}}/$( python3 -m ec2man weight 0 prip )/ kill-all
+    sed -i "" s/{{GSERVER0}}/$( python3 -m ec2man graph 0 prip )/ kill-all
+fi
 
 ${EC2MAN_CMD} graph all put wserverip run/wserverport dshmachines run/*.config run/gserverport run/dataport run/ctrlport run/nodeport run/numlambdasforward run/numlambdasbackward kill-all ~/.aws
 rm -f dshmachines kill-all wserverip
