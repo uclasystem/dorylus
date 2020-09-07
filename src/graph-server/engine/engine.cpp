@@ -299,7 +299,9 @@ void Engine::run() {
 
             double epochTime = getTimer() - epochStart;
             printLog(nodeId, "Time for epoch %u: %f ms", epoch, epochTime);
-            addEpochTime(epochTime);
+            if (epoch > 0) {
+                addEpochTime(epochTime);
+            }
             if (convergeState == CONVERGE_STATE::DONE) {
                 printLog(nodeId, "Early stop at epoch %u", epoch);
                 break;

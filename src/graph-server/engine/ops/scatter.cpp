@@ -27,6 +27,7 @@ FeatType **Engine::scatter(FeatType *vtcsTensor, unsigned vtcsCnt,
     // Start data communicators.
     commHalt = false;
     recvCnt = 0;
+    ghostVtcsRecvd = 0;
     forwardGhostVerticesDataOut = savedNNTensors[layer + 1]["fg"].getData();
     if (forwardGhostVerticesDataOut == NULL) {
         printLog(nodeId, "Forward scatter buffer pointer is NULL");
@@ -35,7 +36,25 @@ FeatType **Engine::scatter(FeatType *vtcsTensor, unsigned vtcsCnt,
         std::bind(&Engine::forwardGhostReceiver, this, std::placeholders::_1);
     dataPool->perform(fgr_fp);
 
-    sendForwardGhostUpdates(vtcsTensor, featDim);
+    auto sendWrkr =
+        std::bind(&Engine::sendForwardGhostUpdates, this, std::placeholders::_1,
+                std::placeholders::_2, std::placeholders::_3, std::placeholders::_4);
+    unsigned thdCnt = dThreads; // std::max(4u, cThreads);
+    std::vector<std::thread> sendThds;
+    for (unsigned tid = 0; tid < thdCnt; ++tid) {
+        sendThds.push_back(std::thread(sendWrkr, vtcsTensor, featDim, tid, thdCnt));
+    }
+
+    for (unsigned tid = 0; tid < thdCnt; ++tid) {
+        sendThds[tid].join();
+    }
+
+    // Wait for all remote schedulings sent by me to be handled.
+    recvCntLock.lock();
+    if (recvCnt > 0) {
+        recvCntCond.wait();
+    }
+    recvCntLock.unlock();
 
     // TODO: (YIFAN) we can optimize this to extend comm protocol. Mark the last
     // packet sent so this node knows when to exit ghostCommunicator.
@@ -66,6 +85,7 @@ FeatType **Engine::scatterBackward(FeatType *gradTensor, unsigned vtcsCnt,
     // Start data communicators.
     commHalt = false;
     recvCnt = 0;
+    ghostVtcsRecvd = 0;
     // YIFAN: Do we really need reset bkwdRecvCnt? Same question for all 3 reset
     // JOHN: Yifan, no we don't. I implemented that when I suspected that
     //  having a single counter for fwd and bkwd was the problem with pipelining
@@ -74,7 +94,25 @@ FeatType **Engine::scatterBackward(FeatType *gradTensor, unsigned vtcsCnt,
         std::bind(&Engine::backwardGhostReceiver, this, std::placeholders::_1);
     dataPool->perform(bgr_fp);
 
-    sendBackwardGhostGradients(gradTensor, featDim);
+    auto sendWrkr =
+            std::bind(&Engine::sendBackwardGhostGradients, this, std::placeholders::_1,
+                std::placeholders::_2, std::placeholders::_3, std::placeholders::_4);
+    unsigned thdCnt = dThreads; // std::max(4u, cThreads);
+    std::vector<std::thread> sendThds;
+    for (unsigned tid = 0; tid < thdCnt; ++tid) {
+        sendThds.push_back(std::thread(sendWrkr, gradTensor, featDim, tid, thdCnt));
+    }
+
+    for (unsigned tid = 0; tid < thdCnt; ++tid) {
+        sendThds[tid].join();
+    }
+
+    // Wait for all remote schedulings sent by me to be handled.
+    recvCntLock.lock();
+    if (recvCnt > 0) {
+        recvCntCond.wait();
+    }
+    recvCntLock.unlock();
 
     //## Global Iteration barrier. ##/
     // TODO: (YIFAN) we can optimize this to extend comm protocal. Mark the last
@@ -111,7 +149,6 @@ void Engine::forwardGhostReceiver(unsigned tid) {
     const int MAX_PERIOD = 4096;
     int SLEEP_PERIOD = INIT_PERIOD;
     unsigned sender, topic;
-    unsigned vtcsRecvd = 0;
     unsigned featDim = getFeatDim(layer + 1);
     FeatType *msgBuf = (FeatType *)new char[MAX_MSG_SIZE];
 
@@ -146,7 +183,10 @@ void Engine::forwardGhostReceiver(unsigned tid) {
                 // Using MAX_IDTYPE - 1 as the receive signal.
                 commManager.dataPushOut(sender, nodeId, MAX_IDTYPE - 1, NULL,
                                         0);
-                vtcsRecvd += topic;
+                recvCntLock.lock();
+                ghostVtcsRecvd += topic;
+                recvCntLock.unlock();
+                // __sync_fetch_and_add(&ghostVtcsRecvd, topic);
 
                 char *bufPtr = (char *)msgBuf;
                 unsigned recvGhostVCnt = topic;
@@ -169,9 +209,10 @@ void Engine::forwardGhostReceiver(unsigned tid) {
                 recvCntLock.lock();
                 recvCnt--;
                 recvCntLock.unlock();
+                // __sync_fetch_and_add(&recvCnt, -1);
             }
             recvCntLock.lock();
-            if (recvCnt == 0 && vtcsRecvd == graph.srcGhostCnt) {
+            if (recvCnt == 0 && ghostVtcsRecvd == graph.srcGhostCnt) {
                 recvCntCond.signal();
             }
             recvCntLock.unlock();
@@ -202,7 +243,6 @@ void Engine::backwardGhostReceiver(unsigned tid) {
     const int MAX_PERIOD = 4096;
     int SLEEP_PERIOD = INIT_PERIOD;
     unsigned sender, topic;
-    unsigned vtcsRecvd = 0;
     unsigned featDim = getFeatDim(layer);
     FeatType *msgBuf = (FeatType *)new char[MAX_MSG_SIZE];
 
@@ -231,7 +271,10 @@ void Engine::backwardGhostReceiver(unsigned tid) {
                 // Using MAX_IDTYPE - 1 as the receive signal.
                 commManager.dataPushOut(sender, nodeId, MAX_IDTYPE - 1, NULL,
                                         0);
-                vtcsRecvd += topic;
+                recvCntLock.lock();
+                ghostVtcsRecvd += topic;
+                recvCntLock.unlock();
+                // __sync_fetch_and_add(&ghostVtcsRecvd, topic);
 
                 char *bufPtr = (char *)msgBuf;
                 unsigned recvGhostVCnt = topic;
@@ -254,9 +297,10 @@ void Engine::backwardGhostReceiver(unsigned tid) {
                 recvCntLock.lock();
                 recvCnt--;
                 recvCntLock.unlock();
+                // __sync_fetch_and_add(&recvCnt, -1);
             }
             recvCntLock.lock();
-            if (recvCnt == 0 && vtcsRecvd == graph.dstGhostCnt) {
+            if (recvCnt == 0 && ghostVtcsRecvd == graph.dstGhostCnt) {
                 recvCntCond.signal();
             }
             recvCntLock.unlock();
@@ -472,8 +516,8 @@ void Engine::ghostReceiver(unsigned tid) {
 // Loop through all local vertices and do the data send out work.
 // If there are any remote edges for a vertex, should send this vid to
 // other nodes for their ghost's update.
-inline void Engine::sendForwardGhostUpdates(FeatType *inputTensor,
-                                            unsigned featDim) {
+inline void Engine::sendForwardGhostUpdates(FeatType *inputTensor, unsigned featDim,
+                                            unsigned tid, unsigned thdCnt) {
     bool batchFlag = true;
     unsigned BATCH_SIZE =
         std::max(((batchFlag ? MAX_MSG_SIZE : 4096) - DATA_HEADER_SIZE) /
@@ -485,10 +529,14 @@ inline void Engine::sendForwardGhostUpdates(FeatType *inputTensor,
         }
 
         unsigned forwardGhostVCnt = graph.forwardLocalVtxDsts[nid].size();
-        for (unsigned ib = 0; ib < forwardGhostVCnt; ib += BATCH_SIZE) {
-            unsigned sendBatchSize = (forwardGhostVCnt - ib) < BATCH_SIZE
-                                         ? (forwardGhostVCnt - ib)
-                                         : BATCH_SIZE;
+        unsigned blockCnt = (forwardGhostVCnt + thdCnt - 1) / thdCnt;
+        unsigned stt = blockCnt * tid;
+        unsigned end = std::min(stt + blockCnt, forwardGhostVCnt);
+
+        for (unsigned ib = stt; ib < end; ib += BATCH_SIZE) {
+            unsigned sendBatchSize = (end - ib) < BATCH_SIZE
+                                   ? (end - ib)
+                                   : BATCH_SIZE;
 
             forwardVerticesPushOut(nid, sendBatchSize,
                                    graph.forwardLocalVtxDsts[nid].data() + ib,
@@ -496,14 +544,9 @@ inline void Engine::sendForwardGhostUpdates(FeatType *inputTensor,
             recvCntLock.lock();
             recvCnt++;
             recvCntLock.unlock();
+            // __sync_fetch_and_add(&recvCnt, 1);
         }
     }
-    // Wait for all remote schedulings sent by me to be handled.
-    recvCntLock.lock();
-    if (recvCnt > 0) {
-        recvCntCond.wait();
-    }
-    recvCntLock.unlock();
 }
 
 inline void Engine::forwardVerticesPushOut(unsigned receiver, unsigned totCnt,
@@ -557,8 +600,8 @@ void Engine::verticesPushOut(unsigned receiver, unsigned totCnt,
 //////////////////////////////////////////////////////////
 // Below are private backward functions for the engine. //
 //////////////////////////////////////////////////////////
-void Engine::sendBackwardGhostGradients(FeatType *gradTensor,
-                                        unsigned featDim) {
+void Engine::sendBackwardGhostGradients(FeatType *gradTensor, unsigned featDim,
+                                        unsigned tid, unsigned thdCnt) {
     // Loop through all local vertices and do the data send out work. If there
     // are any remote edges for a vertex, should send this vid to other nodes
     // for their ghost's update.
@@ -572,10 +615,14 @@ void Engine::sendBackwardGhostGradients(FeatType *gradTensor,
             continue;
         }
         unsigned backwardGhostVCnt = graph.backwardLocalVtxDsts[nid].size();
-        for (unsigned ib = 0; ib < backwardGhostVCnt; ib += BATCH_SIZE) {
-            unsigned sendBatchSize = (backwardGhostVCnt - ib) < BATCH_SIZE
-                                         ? (backwardGhostVCnt - ib)
-                                         : BATCH_SIZE;
+        const unsigned blockCnt = (backwardGhostVCnt + thdCnt - 1) / thdCnt;
+        unsigned stt = blockCnt * tid;
+        unsigned end = std::min(stt + blockCnt, backwardGhostVCnt);
+
+        for (unsigned ib = stt; ib < end; ib += BATCH_SIZE) {
+            unsigned sendBatchSize = (end - ib) < BATCH_SIZE
+                                   ? (end - ib)
+                                   : BATCH_SIZE;
 
             backwardVerticesPushOut(nid, sendBatchSize,
                                     graph.backwardLocalVtxDsts[nid].data() + ib,
@@ -583,14 +630,9 @@ void Engine::sendBackwardGhostGradients(FeatType *gradTensor,
             recvCntLock.lock();
             recvCnt++;
             recvCntLock.unlock();
+            // __sync_fetch_and_add(&recvCnt, 1);
         }
     }
-    // Wait for all remote schedulings sent by me to be handled.
-    recvCntLock.lock();
-    if (recvCnt > 0) {
-        recvCntCond.wait();
-    }
-    recvCntLock.unlock();
 }
 
 inline void Engine::backwardVerticesPushOut(unsigned receiver, unsigned totCnt,

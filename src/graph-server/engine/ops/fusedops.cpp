@@ -146,12 +146,21 @@ void Engine::fusedGAS() {
         recvCnt = 0;
         ghostVtcsRecvd = 0;
 
+        unsigned commThdCnt = std::max(2u, cThreads / 4);
+
         auto ghstRcvr =
             std::bind(&Engine::gasRcver, this, std::placeholders::_1);
-        std::thread grt(ghstRcvr, 0);
+        std::vector<std::thread> ghstRcvrThds;
+        for (unsigned tid = 0; tid < 1; ++tid) {
+            ghstRcvrThds.push_back(std::thread(ghstRcvr, tid));
+        }
+
         auto scttrWrkr =
             std::bind(&Engine::gasScter, this, std::placeholders::_1);
-        std::thread swt(scttrWrkr, 1);
+        std::vector<std::thread> sctterWrkrThds;
+        for (unsigned tid = 0; tid < commThdCnt; ++tid) {
+            sctterWrkrThds.push_back(std::thread(scttrWrkr, tid));
+        }
 
         for (unsigned cid = 0; cid < numLambdasForward; ++cid) {
             unsigned chunkSize =
@@ -167,7 +176,7 @@ void Engine::fusedGAS() {
             std::bind(&Engine::gasAgger, this, std::placeholders::_1);
         std::vector<std::thread> aggWrkrThds;
         for (unsigned tid = 0; tid < cThreads; ++tid) {
-            aggWrkrThds.push_back(std::thread(aggWrkr, 2 + tid));
+            aggWrkrThds.push_back(std::thread(aggWrkr, tid));
         }
         for (unsigned tid = 0; tid < cThreads; ++tid) {
             aggWrkrThds[tid].join();
@@ -185,8 +194,12 @@ void Engine::fusedGAS() {
         // Wait for all nodes to finish
         nodeManager.barrier();
         commHalt = true;
-        swt.join();
-        grt.join();
+        for (unsigned tid = 0; tid < commThdCnt; ++tid) {
+            sctterWrkrThds[tid].join();
+        }
+        for (unsigned tid = 0; tid < 1; ++tid) {
+            ghstRcvrThds[tid].join();
+        }
 
         vecTimeScatter[layer] += getTimer() - sttTimer;
     }
@@ -373,8 +386,8 @@ void Engine::gasScter(unsigned tid) {
                 unsigned ghostVCnt = batchedIds[nid].size();
                 for (unsigned ib = 0; ib < ghostVCnt; ib += BATCH_SIZE) {
                     unsigned sendBatchSize = (ghostVCnt - ib) < BATCH_SIZE
-                                                 ? (ghostVCnt - ib)
-                                                 : BATCH_SIZE;
+                                           ? (ghostVCnt - ib)
+                                           : BATCH_SIZE;
 
                     verticesPushOut(nid, sendBatchSize,
                                     batchedIds[nid].data() + ib, scatterTensor,

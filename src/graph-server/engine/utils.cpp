@@ -508,11 +508,25 @@ void Engine::readLayerConfigFile(std::string &layerConfigFileName) {
  *
  */
 void Engine::readFeaturesFile(std::string &featuresFileName) {
+    bool cache = true;
+    if (cache) {
+        std::string cacheFeatsFile = datasetDir + "feats" + std::to_string(layerConfig[0]) + "." + std::to_string(nodeId) + ".bin";
+        std::ifstream infile(cacheFeatsFile.c_str());
+        if (!infile.good()) {
+            printLog(nodeId, "No feature cache, loading raw data...",
+                     cacheFeatsFile.c_str(), std::strerror(errno));
+        } else {
+            printLog(nodeId, "Loading feature cache from %s...", cacheFeatsFile.c_str());
+            infile.read((char *)forwardVerticesInitData, sizeof(FeatType) * graph.localVtxCnt * layerConfig[0]);
+            infile.read((char *)forwardGhostInitData, sizeof(FeatType) * graph.srcGhostCnt * layerConfig[0]);
+            infile.close();
+            return;
+        }
+    }
     std::ifstream infile(featuresFileName.c_str());
     if (!infile.good())
         printLog(nodeId, "Cannot open features file: %s [Reason: %s]",
                  featuresFileName.c_str(), std::strerror(errno));
-
     assert(infile.good());
 
     FeaturesHeaderType fHeader;
@@ -543,6 +557,22 @@ void Engine::readFeaturesFile(std::string &featuresFileName) {
     }
     infile.close();
     assert(gvid == graph.globalVtxCnt);
+
+    if (cache) {
+        std::string cacheFeatsFile = datasetDir + "feats" + std::to_string(layerConfig[0]) + "." + std::to_string(nodeId) + ".bin";
+        std::ifstream infile(cacheFeatsFile.c_str());
+        if (infile.good()) {
+            return;
+        }
+        std::ofstream outfile(cacheFeatsFile.c_str());
+        if (!outfile.good()) {
+            printLog(nodeId, "Cannot open output cache file: %s [Reason: %s]",
+                     cacheFeatsFile.c_str(), std::strerror(errno));
+        }
+        outfile.write((char *)forwardVerticesInitData, sizeof(FeatType) * graph.localVtxCnt * layerConfig[0]);
+        outfile.write((char *)forwardGhostInitData, sizeof(FeatType) * graph.srcGhostCnt * layerConfig[0]);
+        outfile.close();
+    }
 }
 
 /**

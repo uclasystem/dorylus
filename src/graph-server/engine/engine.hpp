@@ -23,7 +23,7 @@
 #include "../../common/matrix.hpp"
 
 // Max size (bytes) for a message received by the data communicator.
-#define MAX_MSG_SIZE (5 * 1024 * 1024)
+#define MAX_MSG_SIZE (1 * 1024 * 1024)
 #define NODE_ID_DIGITS 8 // Digits num of node id.
 #define NODE_ID_HEADER "%8X" // Header for node id. For communication.
 #define DATA_HEADER_SIZE (NODE_ID_DIGITS + sizeof(unsigned) * 5)
@@ -266,8 +266,8 @@ public:
         return localVerticesLabels + lvid * getFeatDim(numLayers);
     }
 
-    void sendForwardGhostUpdates(FeatType *inputTensor, unsigned featDim);
-    void sendBackwardGhostGradients(FeatType *gradTensor, unsigned featDim);
+    void sendForwardGhostUpdates(FeatType *inputTensor, unsigned featDim, unsigned tid, unsigned thdCnt);
+    void sendBackwardGhostGradients(FeatType *gradTensor, unsigned featDim, unsigned tid, unsigned thdCnt);
 
     // All pipeline related functions/members
     void loadChunks();
