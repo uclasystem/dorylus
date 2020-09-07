@@ -56,7 +56,7 @@ public:
 
     bool sync; // sync mode or async pipeline
     bool BLOCK = false;
-    float LEARNING_RATE = 0.01;
+    float LEARNING_RATE = 0.02;
     unsigned epoch = 0;
     void lrDecay();
 

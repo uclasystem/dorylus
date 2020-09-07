@@ -265,7 +265,7 @@ void WeightServer::tryEarlyStop(AccLoss &accloss) {
 
     CONVERGE_STATE currState =
         (accloss.acc >= targetAcc)        ? CONVERGE_STATE::DONE : // early stop
-        // (accloss.acc >= targetAcc - 0.04) ? CONVERGE_STATE::CLOSE: // switch to sync
+        (accloss.acc >= targetAcc - 0.02) ? CONVERGE_STATE::CLOSE: // switch to sync
                                             CONVERGE_STATE::EARLY;
 
     // state transition can only be in order EARLY -> CLOSE -> DONE
