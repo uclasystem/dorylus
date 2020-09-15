@@ -147,11 +147,12 @@ void Engine::fusedGAS() {
         ghostVtcsRecvd = 0;
 
         unsigned commThdCnt = std::max(2u, cThreads / 4);
+        // unsigned commThdCnt = 1;
 
         auto ghstRcvr =
             std::bind(&Engine::gasRcver, this, std::placeholders::_1);
         std::vector<std::thread> ghstRcvrThds;
-        for (unsigned tid = 0; tid < 1; ++tid) {
+        for (unsigned tid = 0; tid < commThdCnt; ++tid) {
             ghstRcvrThds.push_back(std::thread(ghstRcvr, tid));
         }
 
@@ -197,7 +198,7 @@ void Engine::fusedGAS() {
         for (unsigned tid = 0; tid < commThdCnt; ++tid) {
             sctterWrkrThds[tid].join();
         }
-        for (unsigned tid = 0; tid < 1; ++tid) {
+        for (unsigned tid = 0; tid < commThdCnt; ++tid) {
             ghstRcvrThds[tid].join();
         }
 
