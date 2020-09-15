@@ -48,6 +48,7 @@ FeatType *Engine::aggregate(FeatType **edgsTensor, unsigned edgsCnt,
     switch (aggregator) {
         case (AGGREGATOR::WSUM): {
             CuMatrix out = cu.aggregate(*NormAdjMatrixIn, feat, *Norms);
+            cudaFree(feat.devPtr);
             out.setData(outputTensor);
             out.updateMatrixFromGPU();
             cudaDeviceSynchronize();
@@ -120,6 +121,7 @@ FeatType *Engine::aggregateBackward(FeatType **eVGradTensor, unsigned edgsCnt,
     switch (aggregator) {
         case (AGGREGATOR::WSUM): {
             CuMatrix out = cu.aggregate(*NormAdjMatrixOut, feat, *Norms);
+            cudaFree(feat.devPtr);
             out.setData(outputTensor);
             out.updateMatrixFromGPU();
             // std::cout << "Finish GPU aggregation\n";
