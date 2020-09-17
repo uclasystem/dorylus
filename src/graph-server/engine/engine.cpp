@@ -470,13 +470,24 @@ void Engine::runAsyncPipeline() {
     commHalt = false;
     maxEpoch = 0; // for async/sync switching
 
+    unsigned commThdCnt = std::max(2u, cThreads / 4);
+    // unsigned commThdCnt = 1;
     auto ghstRcvr =
         std::bind(&Engine::ghostReceiver, this, std::placeholders::_1);
-    std::thread grt(ghstRcvr, 0);
+
+    // std::thread grt(ghstRcvr, 0);
+    std::vector<std::thread> ghstRcvrThds;
+    for (unsigned tid = 0; tid < commThdCnt; ++tid) {
+        ghstRcvrThds.push_back(std::thread(ghstRcvr, tid));
+    }
 
     auto scttrWrkr =
         std::bind(&Engine::scatterWorker, this, std::placeholders::_1);
-    std::thread swt(scttrWrkr, 1);
+    // std::thread swt(scttrWrkr, 1);
+    std::vector<std::thread> sctterWrkrThds;
+    for (unsigned tid = 0; tid < commThdCnt; ++tid) {
+        sctterWrkrThds.push_back(std::thread(scttrWrkr, tid));
+    }
 
     auto aggWrkr =
         std::bind(&Engine::aggregator, this, std::placeholders::_1);
@@ -494,8 +505,15 @@ void Engine::runAsyncPipeline() {
     // Wait for all nodes to finish
     nodeManager.barrier();
     commHalt = true;
-    swt.join();
-    grt.join();
+    // swt.join();
+    // grt.join();
+    for (unsigned tid = 0; tid < commThdCnt; ++tid) {
+        sctterWrkrThds[tid].join();
+    }
+    for (unsigned tid = 0; tid < commThdCnt; ++tid) {
+        ghstRcvrThds[tid].join();
+    }
+
     {
         // clean up
         unsigned sender, topic;
