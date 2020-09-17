@@ -5,6 +5,7 @@
 #include <iostream>
 #include <memory>
 #include <sstream>
+#include <random>
 #include <string>
 #include <thread>
 #include <cmath>
@@ -28,6 +29,24 @@ using namespace Aws::Utils::Json;
 using namespace aws::lambda_runtime;
 using namespace std::chrono;
 
+
+std::vector<char> constructIdentity(unsigned locId, unsigned layer, unsigned dir, std::string& ip) {
+    size_t identity_len = sizeof(unsigned) * 4 + ip.length();
+    std::vector<char> identity(identity_len);
+
+    std::random_device rd;
+    std::mt19937 generator(rd());
+
+    unsigned rand = generator();
+    std::cout << "RAND " << rand << std::endl;
+    serialize(identity.data(), 0, locId);
+    serialize(identity.data(), 1, layer);
+    serialize(identity.data(), 2, rand);
+    serialize(identity.data(), 3, dir);
+    std::memcpy(identity.data() + (sizeof(unsigned) * 4), ip.c_str(), ip.length());
+
+    return identity;
+}
 
 invocation_response
 apply_edge(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chunk) {
@@ -330,19 +349,13 @@ apply_phase(std::string dataserver, std::string weightserver, unsigned dport, un
     zmq::context_t ctx(2);
 
     // Creating identity
-    size_t identity_len = sizeof(unsigned) * 3 + dataserver.length();
-    char identity[identity_len];
-    memcpy(identity, (char *) &chunk.localId, sizeof(unsigned));
-    std::srand(time(NULL));
-    *(unsigned *)(identity + sizeof(unsigned)) = chunk.layer;
-    *(unsigned *)(identity + sizeof(unsigned) * 2) = rand();
-    memcpy(identity + sizeof(unsigned) * 3, (char *) dataserver.c_str(), dataserver.length());
+    auto identity = constructIdentity(chunk.localId, chunk.layer, chunk.vertex, dataserver);
 
     zmq::socket_t weights_socket(ctx, ZMQ_DEALER);
     zmq::socket_t data_socket(ctx, ZMQ_DEALER);
     std::cout << "Setting up comms" << std::endl;
     try {
-        weights_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
+        weights_socket.setsockopt(ZMQ_IDENTITY, identity.data(), identity.size());
         if (RESEND) {
             weights_socket.setsockopt(ZMQ_RCVTIMEO, TIMEOUT_PERIOD);
         }
@@ -350,7 +363,7 @@ apply_phase(std::string dataserver, std::string weightserver, unsigned dport, un
         sprintf(whost_port, "tcp://%s:%u", weightserver.c_str(), wport);
         weights_socket.connect(whost_port);
 
-        data_socket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
+        data_socket.setsockopt(ZMQ_IDENTITY, identity.data(), identity.size());
         if (RESEND) {
             data_socket.setsockopt(ZMQ_RCVTIMEO, TIMEOUT_PERIOD);
         }

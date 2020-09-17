@@ -40,7 +40,7 @@ LambdaWorker::work(unsigned _wid) {
             if (!workersocket.recv(&identity)) {
                 continue;
             }
-            if (identity.size() != sizeof(unsigned) * 4 + manager->nodeIp.size() + 1) {
+            if (identity.size() != sizeof(unsigned) * 4 + manager->nodeIp.size()) {
                 printLog(manager->nodeId, "identity size %u", identity.size());
                 continue;
             }
