@@ -1,0 +1,39 @@
+# DGL-sampling
+
+Code for our baseline: DGL-sampling.
+
+Sampling and training with GraphSAGE model.
+
+## Environment Requirement
+* DGL v0.5.0 with CUDA support
+* CUDA 10.2
+* pyinstrument
+
+## Structure
+This `\dgl-sampling` folder is essentially the `\dgl_code` directory (refer to [DGL Distributed Training](https://github.com/dmlc/dgl/blob/master/examples/pytorch/graphsage/experimental/README.md) or Section Run, step 2).
+
+* `load_{amazon, reddit_large}.py`: load our large graphs (Amazon, Reddit-large).
+* `train_dist.py`: code for GraphSAGE distributed training.
+
+## Run
+1. Refer to [DGL Distributed Training](https://github.com/dmlc/dgl/blob/master/examples/pytorch/graphsage/experimental/README.md)
+2. To distribute datasets and codes to all machines:
+```bash
+python ~/code/dgl/tools/copy_files.py \
+--ip_config ip_config.txt \
+--workspace ~/graphsage \
+--rel_data_path reddit_large \
+--part_config data/reddit_large.json \
+--script_folder ~/dgl_code
+```
+3. To start training in a distributed manner:
+```bash
+python ~/code/dgl/tools/launch.py \
+--workspace ~/graphsage \
+--num_trainers 1 \
+--num_samplers 1 \
+--num_servers 1 \
+--part_config reddit_large/reddit_large.json \
+--ip_config ip_config.txt \
+"python ~/graphsage/dgl_code/train_dist.py --graph_name reddit_large --ip_config ip_config.txt --num_servers 1 --num_workers 1 --num_gpus 1"
+```
