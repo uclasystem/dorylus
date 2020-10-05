@@ -36,10 +36,11 @@ void AdamOptimizer::nextIteration() {
 void AdamOptimizer::update(unsigned layer, FeatType *weight, FeatType *gradient) {
     unsigned size = dims[layer] * dims[layer + 1];
     for (unsigned i = 0; i < size; ++i) {
+        float gt = gradient[i] + WEIGHT_DECAY * weight[i];
         float prev_m = momentum[layer][i];
-        momentum[layer][i] = BETA1 * prev_m + (1. - BETA1) * gradient[i];
         float prev_d = decay[layer][i];
-        decay[layer][i] = BETA2 * prev_d + (1. - BETA2) * gradient[i] * gradient[i];
+        momentum[layer][i] = BETA1 * prev_m + (1. - BETA1) * gt;
+        decay[layer][i] = BETA2 * prev_d + (1. - BETA2) * gt * gt;
         float delta = lr_t * (momentum[layer][i]) / (sqrt(decay[layer][i]) + EPSILON);
 
         weight[i] -= delta;

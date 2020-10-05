@@ -152,9 +152,9 @@ void LambdaComm::asyncRelaunchLoop() {
             if (found == recordTable.end()) {
                 continue; // No lambda finished.
             }
-            if (currTS - kv.second > std::max(MIN_TIMEOUT, 5 * found->second)) {
-                // printLog(nodeId, "curr %u, timed %u, chunk %s", currTS - kv.second, 5 * found->second,
-                //     kv.first.str().c_str());
+            if (currTS - kv.second > std::max(MIN_TIMEOUT, 3 * found->second)) {
+                printLog(nodeId, "curr %u, timed %u, chunk %s", currTS - kv.second, 3 * found->second,
+                    kv.first.str().c_str());
                 relaunchLambda(kv.first);
             }
         }
@@ -198,6 +198,7 @@ void LambdaComm::invokeLambda(const Chunk &chunk) {
     jsonPayload.WithInteger("wport", wport);
     // jsonPayload.WithBool("eval", (chunk.epoch == 0) || ((chunk.epoch + 1) % 5 == 0));
     jsonPayload.WithBool("eval", true);
+    jsonPayload.WithInteger("trainset_size", engine->graph.globalVtxCnt * TRAIN_PORTION); // For averaging initial backward gradient
 
     jsonPayload.WithInteger("id", chunk.localId);
     jsonPayload.WithInteger("gid", chunk.globalId);
@@ -266,6 +267,7 @@ void LambdaComm::setupAwsClient() {
     Aws::Client::ClientConfiguration clientConfig;
     clientConfig.requestTimeoutMs = 900000;
     clientConfig.maxConnections = 200;
+    clientConfig.region = "us-east-2";
     m_client = Aws::MakeShared<Aws::Lambda::LambdaClient>(ALLOCATION_TAG,
                                                           clientConfig);
 }

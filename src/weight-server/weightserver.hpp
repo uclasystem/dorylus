@@ -27,7 +27,7 @@
 #include "../common/utils.hpp"
 
 
-#define NUM_LISTENERS 4
+#define NUM_LISTENERS 6
 
 #define UPD_HEADER_SIZE (4 + sizeof(unsigned) * 2)
 #define IDENTITY_SIZE 4
@@ -56,7 +56,7 @@ public:
 
     bool sync; // sync mode or async pipeline
     bool BLOCK = false;
-    float LEARNING_RATE = 0.01;
+    float LEARNING_RATE = 0.02;
     unsigned epoch = 0;
     void lrDecay();
 

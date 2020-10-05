@@ -311,7 +311,7 @@ std::string WeightTensor::tryApplyUpdate(AdamOptimizer *adamOpt, unsigned layer,
 
     if (CORRECT_CHECK) {
         char buf[512];
-        sprintf(buf, " Weight Grad Agg: %.5e Max element: %.2f Min element: %.2f",
+        sprintf(buf, " Weight Grad Agg: %.5f Max element: %.5f Min element: %.5f",
                 checkSum, maxEle, minEle);
         checkInfo = std::string(buf);
     } else {

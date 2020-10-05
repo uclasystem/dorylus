@@ -57,6 +57,7 @@ void CPUComm::processForward(unsigned layer, bool lastLayer) {
         maskout(predictions, labels);
 
         Matrix d_output = hadamardSub(predictions, labels);
+        d_output /= engine->graph.globalVtxCnt * TRAIN_PORTION; // Averaging init backward gradient
         Matrix weight = msgService.getWeightMatrix(layer);
         Matrix interGrad = d_output.dot(weight, false, true);
         memcpy((*tensorMap)["grad"].getData(), interGrad.getData(),

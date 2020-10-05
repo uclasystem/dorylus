@@ -319,7 +319,7 @@ float Matrix::sum() {
     float sum = 0;
     unsigned numElemts = getNumElemts();
     for (unsigned u = 0; u < numElemts; ++u) {
-        sum += data[u];
+        sum += std::fabs(data[u]);
     }
 
     return sum;
@@ -327,12 +327,50 @@ float Matrix::sum() {
 
 std::string Matrix::shape() { return "(" + std::to_string(rows) + ", " + std::to_string(cols) + ")"; }
 
+// std::string Matrix::str() {
+//     std::stringstream output;
+//     output << "Matrix " << tensorName << "\n";
+//     output << "Dims: " << shape() << "\n";
+//     for (unsigned i = 0; i < rows; ++i) {
+//         for (unsigned j = 0; j < cols; ++j) {
+//             output << std::fixed << std::setprecision(8) << data[i * cols + j] << " ";
+//         }
+//         output << "\n";
+//     }
+//     return output.str();
+// }
+
 std::string Matrix::str() {
     std::stringstream output;
     output << "Matrix " << tensorName << "\n";
     output << "Dims: " << shape() << "\n";
-    for (unsigned i = 0; i < rows; ++i) {
-        for (unsigned j = 0; j < cols; ++j) {
+    unsigned row_part1 = std::min(rows, 3u);
+    unsigned row_part2 = std::max(row_part1 + 3, rows) - 3;
+
+    unsigned col_part1 = std::min(cols, 3u);
+    unsigned col_part2 = std::max(col_part1 + 3, cols) - 3;
+
+    for (unsigned i = 0; i < row_part1; ++i) {
+        for (unsigned j = 0; j < col_part1; ++j) {
+            output << std::fixed << std::setprecision(8) << data[i * cols + j] << " ";
+        }
+        if (col_part2 > col_part1)
+            output << "... ";
+        for (unsigned j = col_part2; j < cols; ++j) {
+            output << std::fixed << std::setprecision(8) << data[i * cols + j] << " ";
+        }
+        output << "\n";
+    }
+    if (row_part2 > row_part1) {
+        output << "...\n";
+    }
+    for (unsigned i = row_part2; i < rows; ++i) {
+        for (unsigned j = 0; j < col_part1; ++j) {
+            output << std::fixed << std::setprecision(8) << data[i * cols + j] << " ";
+        }
+        if (col_part2 > col_part1)
+            output << "... ";
+        for (unsigned j = col_part2; j < cols; ++j) {
             output << std::fixed << std::setprecision(8) << data[i * cols + j] << " ";
         }
         output << "\n";

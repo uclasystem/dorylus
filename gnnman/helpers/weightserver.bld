@@ -21,6 +21,6 @@ fi
 
 cd build
 cmake .. -DBUILD_WEIGHT=yes -DCMAKE_BUILD_TYPE=${build_type}
-make
+make -j
 
 mv weight-server/weightserver .

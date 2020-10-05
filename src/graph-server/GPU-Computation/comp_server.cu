@@ -101,7 +101,6 @@ void ComputingServer::gradLoss(unsigned layer, CuMatrix pred, bool report) {
     // here it can be optimized by fetching directly from Forward;
     Matrix labels = (*gpuComm->tensorMap)["lab"];
     CuMatrix cuLabels = cu.wrapMatrix(labels);
-    CuMatrix d_output = cu.hadamardSub(pred, cuLabels);
 
     if (report) {
         float acc, loss;
@@ -112,6 +111,9 @@ void ComputingServer::gradLoss(unsigned layer, CuMatrix pred, bool report) {
         printLog(nodeId, "batch Acc: %f, Loss: %f", acc / valsetSize, loss / valsetSize);
     }
     cu.maskout(pred, cuLabels);
+
+    CuMatrix d_output = cu.hadamardSub(pred, cuLabels);
+    d_output.scale(1.0 / (gpuComm->engine->graph.globalVtxCnt * TRAIN_PORTION));
 
     Matrix weight = msgService.getWeightMatrix(layer);
     CuMatrix cuWeights = cu.wrapMatrix(weight);

@@ -299,7 +299,9 @@ void Engine::run() {
 
             double epochTime = getTimer() - epochStart;
             printLog(nodeId, "Time for epoch %u: %f ms", epoch, epochTime);
-            addEpochTime(epochTime);
+            if (epoch > 0) {
+                addEpochTime(epochTime);
+            }
             if (convergeState == CONVERGE_STATE::DONE) {
                 printLog(nodeId, "Early stop at epoch %u", epoch);
                 break;
@@ -388,13 +390,13 @@ FeatType *Engine::runForward(unsigned epoch) {
     // forwardGhostInitData, graph.localVtxCnt, getFeatDim(layer));
     FeatType **eVFeatsTensor = savedEdgeTensors[0]["fedge"];
     for (layer = 0; layer < numLayers; ++layer) {
-        // inputTensor = aggregate(eVFeatsTensor, graph.localInEdgeCnt,
-        //                         getFeatDim(layer), AGGREGATOR::WSUM);
-        // inputTensor =
-        //     applyVertex(inputTensor, graph.localVtxCnt, getFeatDim(layer),
-        //                 getFeatDim(layer + 1), layer == numLayers - 1);
-        inputTensor = fusedGatherApply(eVFeatsTensor, graph.localInEdgeCnt,
-                        getFeatDim(layer), getFeatDim(layer + 1), AGGREGATOR::WSUM);
+        inputTensor = aggregate(eVFeatsTensor, graph.localInEdgeCnt,
+                                getFeatDim(layer), AGGREGATOR::WSUM);
+        inputTensor =
+            applyVertex(inputTensor, graph.localVtxCnt, getFeatDim(layer),
+                        getFeatDim(layer + 1), layer == numLayers - 1);
+        // inputTensor = fusedGatherApply(eVFeatsTensor, graph.localInEdgeCnt,
+        //                 getFeatDim(layer), getFeatDim(layer + 1), AGGREGATOR::WSUM);
         if (layer < numLayers - 1) {  // don't need scatter at the last layer.
             eVFeatsTensor =
                 scatter(inputTensor, graph.localVtxCnt, getFeatDim(layer + 1));
@@ -441,13 +443,13 @@ void Engine::runBackward(FeatType *initGradTensor) {
                                          eVGradTensor + graph.localOutEdgeCnt,
                                          eVGradTensor, getFeatDim(layer),
                                          getFeatDim(layer));
-        // gradTensor = aggregateBackward(eVGradTensor, graph.localOutEdgeCnt,
-        //                                getFeatDim(layer), AGGREGATOR::WSUM);
-        // gradTensor =
-        //     applyVertexBackward(gradTensor, graph.localVtxCnt,
-        //                         getFeatDim(layer - 1), getFeatDim(layer));
-        gradTensor = fusedGatherApplyBackward(eVGradTensor, graph.localOutEdgeCnt,
-                        getFeatDim(layer - 1), getFeatDim(layer), AGGREGATOR::WSUM);
+        gradTensor = aggregateBackward(eVGradTensor, graph.localOutEdgeCnt,
+                                       getFeatDim(layer), AGGREGATOR::WSUM);
+        gradTensor =
+            applyVertexBackward(gradTensor, graph.localVtxCnt,
+                                getFeatDim(layer - 1), getFeatDim(layer));
+        // gradTensor = fusedGatherApplyBackward(eVGradTensor, graph.localOutEdgeCnt,
+        //                 getFeatDim(layer - 1), getFeatDim(layer), AGGREGATOR::WSUM);
     }
 
     timeBackwardProcess += getTimer();
@@ -468,13 +470,24 @@ void Engine::runAsyncPipeline() {
     commHalt = false;
     maxEpoch = 0; // for async/sync switching
 
+    unsigned commThdCnt = std::max(2u, cThreads / 4);
+    // unsigned commThdCnt = 1;
     auto ghstRcvr =
         std::bind(&Engine::ghostReceiver, this, std::placeholders::_1);
-    std::thread grt(ghstRcvr, 0);
+
+    // std::thread grt(ghstRcvr, 0);
+    std::vector<std::thread> ghstRcvrThds;
+    for (unsigned tid = 0; tid < commThdCnt; ++tid) {
+        ghstRcvrThds.push_back(std::thread(ghstRcvr, tid));
+    }
 
     auto scttrWrkr =
         std::bind(&Engine::scatterWorker, this, std::placeholders::_1);
-    std::thread swt(scttrWrkr, 1);
+    // std::thread swt(scttrWrkr, 1);
+    std::vector<std::thread> sctterWrkrThds;
+    for (unsigned tid = 0; tid < commThdCnt; ++tid) {
+        sctterWrkrThds.push_back(std::thread(scttrWrkr, tid));
+    }
 
     auto aggWrkr =
         std::bind(&Engine::aggregator, this, std::placeholders::_1);
@@ -492,8 +505,15 @@ void Engine::runAsyncPipeline() {
     // Wait for all nodes to finish
     nodeManager.barrier();
     commHalt = true;
-    swt.join();
-    grt.join();
+    // swt.join();
+    // grt.join();
+    for (unsigned tid = 0; tid < commThdCnt; ++tid) {
+        sctterWrkrThds[tid].join();
+    }
+    for (unsigned tid = 0; tid < commThdCnt; ++tid) {
+        ghstRcvrThds[tid].join();
+    }
+
     {
         // clean up
         unsigned sender, topic;

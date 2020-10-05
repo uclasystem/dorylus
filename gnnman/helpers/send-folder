@@ -15,7 +15,7 @@ EC2MAN_CMD="python3 -m ec2man"
 
 FOLDER=$( pwd )/$1
 
-for MACH in $( cat ~/dshmachines ); do
+for MACH in $( tail -n +2 ~/dshmachines ); do
     ssh ${MACH} "mkdir -p ${FOLDER}"
     scp -r ${FOLDER} ${MACH}:$( dirname ${FOLDER} ) > /dev/null
 done

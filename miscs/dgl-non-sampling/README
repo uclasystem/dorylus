@@ -1,0 +1,11 @@
+# DGL-non-sampling Implementation
+
+Code for our baseline: DGL-non-sampling.
+
+## Environment Requirement
+DGL with CUDA support (>=0.4.3)
+
+## Structure
+* `header.c`: convert Dorylus feature file to DGL feature file
+* `{train, gcn, graphconv, zeroopt}.py`: code for GCN training. See comments at the beginning of each file
+* `\data`: parameter initial values and masks

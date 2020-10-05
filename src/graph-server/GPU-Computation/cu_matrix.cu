@@ -19,7 +19,11 @@ Matrix CuMatrix::getMatrix() {
 }
 
 void CuMatrix::freeGPU() {
-    for (auto ptr : MemoryPool) cudaFree(ptr);
+    for (auto ptr : MemoryPool) {
+        if (ptr) {
+            cudaFree(ptr);
+        }
+    }
 }
 
 void CuMatrix::loadSpCSR(cusparseHandle_t &handle, Graph &graph) {
@@ -102,7 +106,7 @@ void CuMatrix::loadSpDense(FeatType *vtcsTensor, FeatType *ghostTensor,
     assert(cudaStat == cudaSuccess);
     setRows(totalVertices);
     setCols(numFeat);
-    MemoryPool.insert(devPtr);
+    // MemoryPool.insert(devPtr);
 }
 
 CuMatrix CuMatrix::extractRow(unsigned row) {

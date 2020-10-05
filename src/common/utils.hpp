@@ -104,8 +104,8 @@ Chunk createChunk(unsigned rows, unsigned nChunks, unsigned id, unsigned layer, 
 struct BackoffSleeper {
     unsigned trails = 0;
     unsigned failedTrials = 0;
-    const int INIT_PERIOD = 256;
-    const int MAX_PERIOD = 4096;
+    const int INIT_PERIOD = 1024;
+    const int MAX_PERIOD = 16384;
     int SLEEP_PERIOD = INIT_PERIOD;
 
     void sleep() {
