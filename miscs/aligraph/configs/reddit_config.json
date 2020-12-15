@@ -1,0 +1,24 @@
+{
+    "edge_type": "relation", 
+    "learning_rate": 0.0001,
+    "neighs_num": [
+        25,
+        10
+    ], 
+    "test_batch_size": 10,
+    "node_type": "item", 
+    "batch_size": 140,
+    "learning_algo": "adam", 
+    "in_drop_rate": 0.0, 
+    "dataset_folder": "/filepool/reddit/", 
+    "epoch": 200,
+    "full_graph_mode": false, 
+    "features_num": 602, 
+    "categorical_attrs_desc": "", 
+    "agg_type": "gcn", 
+    "class_num": 41, 
+    "val_batch_size": 300,
+    "weight_decay": 0,
+    "hops_num": 2, 
+    "hidden_dim": 128
+}
