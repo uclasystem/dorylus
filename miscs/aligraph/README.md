@@ -14,6 +14,13 @@ Make sure that there is some networked file system accessible by all
 nodes, such as NFS or HDFS.
 For each dataset, prepare it according to the instructions at the following
 [link](https://github.com/alibaba/graph-learn/blob/master/docs/quick_start_en.md#31-data-preparation).
+If the data is already in Dorylus's format, the `convert-to-aligraph.py`
+script will do this automatically with the following:
+```
+python convert-to-aligraph.py [dataset folder]
+```
+where `dataset foler` contains the files `graph.bsnap`, `features.bsnap`,
+and `labels.bsnap`.
 
 Finally, specify the cluster configuration in the `run-dist.sh` file.
 For example, with a cluster with IPs `172.31.1.1, 172.31.2.2, 172.31.3.3`,
