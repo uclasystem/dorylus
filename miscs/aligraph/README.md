@@ -50,3 +50,13 @@ system, such as `/mnt/[dataset]`.
 In addition, there should exist some config in the configs directory called
 `configs/[dataset]_config.json`.
 For examples on the options you can provide to a config, see the examples.
+
+If you update a configuration or cluster configuraiton, make sure to sync it
+across all nodes using the `for-all.sh` script.
+
+## Profiling Execution
+Just a note that in order to profile the epoch times you either need to sum
+the output times from the log or replace the DistTFTrainer from the graph-learn
+repo with a version that tracks epoch times.
+To do this just grab the file `graph-learn/graphlearn/python/model/tf/trainer.py`
+from the AliGraph repo and use your local version.
