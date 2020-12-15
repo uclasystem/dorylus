@@ -3,8 +3,6 @@
 dataset=${1}
 cnt=${2}
 cnt=${cnt:-1}
-host_file=${3}
-host_file=${host_file:-~/group_ips}
 
 TRACKER=/filepool/tracker
 echo "Resetting tracker directory ${TRACKER}"
@@ -18,7 +16,7 @@ fi
 echo $(( $run_mark + 1 )) > run-mark
 
 index=0
-for ip in $( cat ${host_file} ); do
+for ip in $( cat ~/group_ips ); do
 	ssh $ip "cd graph-learn/examples/tf/gcn; bash deploy-2.sh ${dataset} ${index} ${cnt} ${run_mark}" &
 	((index++))
 	sleep 2
