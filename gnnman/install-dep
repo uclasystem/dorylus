@@ -24,9 +24,9 @@ EC2MAN_CMD="python3 -m ec2man"
 
 # For graph servers.
 echo "Processing context 'graph'..."
-${EC2MAN_CMD} graph all ssh -t "./gnn-lambda/gnnman/helpers/graphserver.install"
+${EC2MAN_CMD} graph all ssh -t "./dorylus/gnnman/helpers/graphserver.install"
 
 
 # For weight servers.
 echo "Processing context 'weight'..."
-${EC2MAN_CMD} weight all ssh -t "./gnn-lambda/gnnman/helpers/weightserver.install"
+${EC2MAN_CMD} weight all ssh -t "./dorylus/gnnman/helpers/weightserver.install"

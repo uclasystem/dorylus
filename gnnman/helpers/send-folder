@@ -4,11 +4,11 @@
 ## Send a folder to all the nodes specified in `~/dshmachines`. TO be invoked on the remote machine.
 ## Must have achieved passwd-less ssh among friend machines.
 ##
-## File path should be specified relative to `gnn-lambda/` directory.
+## File path should be specified relative to `dorylus/` directory.
 ##
 
 
-cd ${HOME}/gnn-lambda/
+cd ${HOME}/dorylus/
 
 EC2MAN_CMD="python3 -m ec2man"
 
