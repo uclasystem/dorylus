@@ -1,4 +1,4 @@
-# GNN-LAMBDA
+# Dorylus
 
 This is Dorylus, a *Scalable*, *Resource-efficient* & *Affordable*
 computation system for
