@@ -6,8 +6,8 @@
 ## Usage: $ ./gnnman/send-source [--force]
 ##
 ## Options:
-##      Default: Use `rsync` to send the updates on local `gnn-lambda/` folder to all remote machines.
-##      --force: Force to delete the existing `~/gnn-lambda/` folder on remote machines, and send a completely new copy.
+##      Default: Use `rsync` to send the updates on local `dorylus/` folder to all remote machines.
+##      --force: Force to delete the existing `~/dorylus/` folder on remote machines, and send a completely new copy.
 ##
 
 
@@ -24,12 +24,12 @@ for CTX in graph weight; do
     # If in force mode, delete existing repo.
     if [[ $1 == "--force" ]]; then
         echo "Deleting existing repo..."
-        ${EC2MAN_CMD} ${CTX} all ssh "rm -rf gnn-lambda/"
+        ${EC2MAN_CMD} ${CTX} all ssh "rm -rf dorylus/"
     fi
 
     # Send repo updates using `rsync`.
     echo "Sending new updates..."
-    ${EC2MAN_CMD} ${CTX} all rsync -zz --exclude ".git*" --exclude "wiki" --exclude "README.md" --exclude "data" --exclude "miscs" --exclude "inputs" --exclude "results" ../gnn-lambda &
+    ${EC2MAN_CMD} ${CTX} all rsync -zz --exclude ".git*" --exclude "wiki" --exclude "README.md" --exclude "data" --exclude "miscs" --exclude "inputs" --exclude "results" ../dorylus &
 
 done
 

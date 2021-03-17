@@ -6,19 +6,19 @@
 
 
 # Basic packages.
-cd ${HOME}/gnn-lambda/gnnman/helpers/
+cd ${HOME}/dorylus/gnnman/helpers/
 source basic.install
 
 
 # ZeroMQ stuff.
-cd ${HOME}/gnn-lambda/gnnman/helpers/
+cd ${HOME}/dorylus/gnnman/helpers/
 source zmq.install
 
 
 # BLAS stuff.
-cd ${HOME}/gnn-lambda/gnnman/helpers/
+cd ${HOME}/dorylus/gnnman/helpers/
 source blas.install
 
 # AWSSDK Install
-cd ${HOME}/gnn-lambda/gnnman/helpers/
+cd ${HOME}/dorylus/gnnman/helpers/
 source aws-cpp-sdk.install

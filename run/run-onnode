@@ -11,7 +11,7 @@
 ##      Dataset: Only needed for graphservers.
 ##
 
-cd ${HOME}/gnn-lambda/
+cd ${HOME}/dorylus/
 
 case $1 in
     #
@@ -157,7 +157,7 @@ case $1 in
             --pipeline ${PIPELINE} \
             --staleness ${STALE_BOUND}"
         echo ${DSH_COMMAND}
-        dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ${DSH_COMMAND}" 2>&1 | tee ${LOGFILE}
+        dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/dorylus && ${DSH_COMMAND}" 2>&1 | tee ${LOGFILE}
 
 
         # Gather the output files.
@@ -248,7 +248,7 @@ case $1 in
             ${SYNC} \
             ${TARGET_ACC} \
             ${BLOCK}"
-        dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ${DSH_COMMAND}"
+        dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/dorylus && ${DSH_COMMAND}"
 
         # Gather the output files.
         OUTFILEDIR=${HOME}/outfiles/${RUN_MARK}.weights
