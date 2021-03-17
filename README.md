@@ -1,6 +1,6 @@
 # GNN-LAMBDA
 
-This is GNN-LAMBDA system, a *Scalable*, *Resource-efficient* & *Affordable*
+This is Dorylus, a *Scalable*, *Resource-efficient* & *Affordable*
 computation system for
 [Graph Neural Networks](https://tkipf.github.io/graph-convolutional-networks/),
 built upon an architecture combining cheap data servers on
@@ -15,4 +15,4 @@ Now the main logic of the engine has been completely simplified, and we integrat
 
 ## User Guide
 
-Check our [Wiki page](https://bitbucket.org/jothor/dorylus/wiki/Home) for managing your EC2 clusters, building & running our GNN-LAMBDA system.
+Check our [Wiki page](https://bitbucket.org/jothor/dorylus/wiki/Home) for managing your EC2 clusters, building & running Dorylus.
