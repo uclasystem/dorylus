@@ -28,7 +28,7 @@ LambdaComm::LambdaComm(Engine *_engine) :
     createWorkers();
     startRelaunchThd();
 
-    lambdaOut = std::ofstream(std::string("lambdats") + std::to_string(numChunk) + std::string(".txt"), std::ofstream::out);
+    lambdaOut = std::ofstream(std::string("lambdas") + std::to_string(numChunk) + std::string(".txt"), std::ofstream::out);
 }
 
 LambdaComm::~LambdaComm() {
