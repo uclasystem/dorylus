@@ -290,6 +290,7 @@ public:
     ChunkQueue scatterQueue;
     Lock scatQueueLock;
 
+    unsigned timeoutRatio;
     unsigned staleness;
     volatile CONVERGE_STATE convergeState = CONVERGE_STATE::EARLY;
     unsigned minEpoch;

@@ -1,0 +1,21 @@
+#!/bin/bash
+
+##
+## Mount the nfs server on all graph servers to access the datasets
+## Assumes that the NFS server has the datasets in the directory /mnt/filepool
+## Easiest if you have setup passwordless sudo and SSH keys
+##
+## Usage: $ ./gnnman/mount-nfs-server
+##
+
+cd $( dirname $0 )/..
+EC2MAN_CMD="python3 -m ec2man"
+
+NFS_PRIP=$( ${EC2MAN_CMD} nfs 0 prip )
+
+MOUNT_CMD="sudo mkdir -p /filepool; \
+            sudo chmod 777 /filepool; \
+            sudo mount ${NFS_PRIP}:/mnt/filepool/ /filepool"
+
+echo $MOUNT_CMD
+${EC2MAN_CMD} graph all ssh "${MOUNT_CMD}"
