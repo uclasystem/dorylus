@@ -18,6 +18,7 @@ LambdaComm::LambdaComm(Engine *_engine) :
         savedNNTensors(_engine->savedNNTensors),
         resLock(_engine->scatQueueLock), resQueue(_engine->scatterQueue),
         aggLock(_engine->aggQueueLock), aggQueue(_engine->aggregateQueue),
+        timeoutRatio(_engine->timeoutRatio),
         ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
         numListeners(4), engine(_engine) { // TODO: Decide numListeners.
     nodeId = _engine->nodeId;
@@ -152,7 +153,7 @@ void LambdaComm::asyncRelaunchLoop() {
             if (found == recordTable.end()) {
                 continue; // No lambda finished.
             }
-            if (currTS - kv.second > std::max(MIN_TIMEOUT, 3 * found->second)) {
+            if (currTS - kv.second > std::max(MIN_TIMEOUT, timeoutRatio * found->second)) {
                 printLog(nodeId, "curr %u, timed %u, chunk %s", currTS - kv.second, 3 * found->second,
                     kv.first.str().c_str());
                 relaunchLambda(kv.first);
