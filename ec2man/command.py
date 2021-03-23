@@ -122,6 +122,11 @@ def handle_command(ec2_cli, ctx, instance, op, args):
         print("Rebooting instance " + instance.id + "...")
         ec2_cli.reboot_instances(InstanceIds=[instance.id])
 
+    # Terminate the instance
+    elif op == 'terminate':
+        print("Terminating instance " + instance.id + "...")
+        ec2_cli.terminate_instances(InstanceIds=[instance.id])
+
     # Check the state of the instance.
     elif op == "state":
         response = ec2_cli.describe_instances(InstanceIds=[instance.id])

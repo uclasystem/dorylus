@@ -1,11 +1,14 @@
 import boto3
 import json
 import os
+import sys
 import pickle
 import subprocess
 import multiprocessing
+import argparse
 
 import ec2man
+import ec2man.ec2_launcher
 
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/"
@@ -211,6 +214,10 @@ def main(args):
         if len(args) >= 3:
             machine_list = args[2]
         process_setup(machine_list)
+        return
+
+    elif len(args) >= 2 and args[1] == 'allocate':
+        ec2_launcher.launch_ec2_instances(sys.argv[2:])
         return
 
     ctx_name, target = args[1], args[2]
