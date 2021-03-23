@@ -124,6 +124,12 @@ def handle_command(ec2_cli, ctx, instance, op, args):
 
     # Terminate the instance
     elif op == 'terminate':
+        if '-f' not in args:
+            confirm = input("Are you sure you want to terminate " + str(instance.id) + "?\n"
+                "Type 'terminate' to confirm.\n")
+            if confirm != 'terminate':
+                return instance
+
         print("Terminating instance " + instance.id + "...")
         ec2_cli.terminate_instances(InstanceIds=[instance.id])
 
