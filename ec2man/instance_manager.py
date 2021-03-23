@@ -2,6 +2,7 @@ import os
 import boto3
 import argparse
 
+## Allocate new instances
 def launch_ec2_instances(input_args):
 	ec2 = boto3.resource('ec2')
 	instances = []
@@ -10,12 +11,15 @@ def launch_ec2_instances(input_args):
 	parser.add_argument('--ami', type=str)
 	parser.add_argument('--type', type=str)
 	parser.add_argument('--cnt', type=int, default=1)
-	parser.add_argument('--ctx', type=str, default='graph')
+	parser.add_argument('--ctx', type=str, default=None)
 	parser.add_argument('--az', type=str, default=None)
 	parser.add_argument('--sg', type=str, default=None)
 
-	print("INPUT ARGS:", input_args)
 	opts = parser.parse_args(input_args)
+
+	if opts.ctx== None:
+		print("Must provide a context for the allocated instances")
+		return 13
 
 	args = {
 		'ImageId': opts.ami,
@@ -33,10 +37,21 @@ def launch_ec2_instances(input_args):
 		if opts.az[:-1] == 'us-east-2':
 			args['SecurityGroupIds'] = ['sg-098524cf5a5d0011f'],
 
+	print("Instance options:", args)
 	response = ec2.create_instances(**args)
 	instance_ids = [inst.id for inst in response]
 
+	print("Adding " + str(len(instance_ids)) + " machines to context " + opts.ctx)
 	with open('ec2man/machines', 'a') as f:
 		f.write('\n')
-		for id in instance_ids:
-			f.write(" ".join([id, opts.ctx]) + '\n')
+		for ec2_id in instance_ids:
+			f.write(" ".join([ec2_id, opts.ctx]) + '\n')
+
+def add_managed_ec2_instance(input_args):
+	context = input_args[0]
+	instances = input_args[1:]
+	print("Adding " + str(len(instances)) + " machines to context " + context)
+	with open('ec2man/machines', 'a') as f:
+		f.write('\n')
+		for ec2_id in instances:
+			f.write(" ".join([ec2_id, context]) + '\n')
