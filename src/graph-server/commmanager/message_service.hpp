@@ -13,7 +13,6 @@
 // This class is used for CPU/GPU <-> weight server communication
 class MessageService {
    public:
-    MessageService(){};
     MessageService(unsigned wPort_, unsigned nodeId_);
 
     // weight server related

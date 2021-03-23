@@ -79,6 +79,7 @@ void Engine::init(int argc, char *argv[]) {
         vecTimeApplyVtx.push_back(0.0);
         vecTimeScatter.push_back(0.0);
         vecTimeApplyEdg.push_back(0.0);
+        vecTimeLambdaInvoke.push_back(0.0);
         vecTimeLambdaWait.push_back(0.0);
     }
 
@@ -192,10 +193,28 @@ void Engine::destroy() {
 
     delete resComm;
 
-    delete[] forwardVerticesInitData;
-    delete[] forwardGhostInitData;
+    if (gnn_type == GNN::GCN) {
+        delete[] forwardVerticesInitData;
+        delete[] forwardGhostInitData;
 
-    delete[] localVerticesLabels;
+        delete[] localVerticesLabels;
+    } else if (gnn_type == GNN::GAT) {
+        delete[] forwardGhostInitData;
+        for (int i = 0; i < numLayers; i++) {
+            auto &kkv = savedNNTensors[i];
+            for (auto &kv : kkv) {
+                if (kv.first == "A") {
+                    continue;
+                }
+                kv.second.free();
+            }
+        }
+        for (auto &kkv : savedEdgeTensors) {
+            for (auto &kv : kkv) {
+                delete[] kv.second;
+            }
+        }
+    }
 }
 
 
@@ -372,16 +391,30 @@ void Engine::preallocateGCN() {
 
 
 void Engine::run() {
+    switch (gnn_type) {
+        case GNN::GCN:
+            runGCN();
+            break;
+        case GNN::GAT:
+            // runGAT();
+            break;
+        default:
+            printLog(nodeId, "Unsupported GNN type");
+    }
+}
+
+
+void Engine::runGCN() {
     const bool syncPipelineFlag = true;
     if (!pipeline) {
         for (unsigned epoch = 0; epoch < numEpochs; ++epoch) {
             double epochStart = getTimer();
             if (syncPipelineFlag) { // sync pipeline
-                runForwardSyncPipeline(epoch);
-                runBackwardSyncPipline();
+                runForwardSyncPipelineGCN(epoch);
+                runBackwardSyncPiplineGCN();
             } else { // sync sequential
-                FeatType *predictData = runForward(epoch);
-                runBackward(predictData);
+                FeatType *predictData = runForwardGCN(epoch);
+                runBackwardGCN(predictData);
             }
             // YIFAN: we set a barrier only for pipeline to make sure weight is
             // updated. Seq-sync version usually won't go wrong since there are
@@ -412,11 +445,11 @@ void Engine::run() {
         {
             double epochStart = getTimer();
             if (syncPipelineFlag) {
-                runForwardSyncPipeline(0);
-                runBackwardSyncPipline();
+                runForwardSyncPipelineGCN(0);
+                runBackwardSyncPiplineGCN();
             } else {
-                FeatType *tensor = runForward(0);
-                runBackward(tensor);
+                FeatType *tensor = runForwardGCN(0);
+                runBackwardGCN(tensor);
             }
             // YIFAN: going to run pipeline so no need for barrier here.
             // nodeManager.barrier();
@@ -428,20 +461,20 @@ void Engine::run() {
         if (nodeId == 0) {
             printLog(nodeId, "Finished SYNCHRONOUS epoch, starting PIPELINE");
         }
-        loadChunks();
+        loadChunksGCN();
         // Start pipeline
-        runAsyncPipeline();
+        runAsyncPipelineGCN();
 
         if (convergeState != CONVERGE_STATE::DONE) {
             for (unsigned epoch = currEpoch; epoch < numEpochs; ++epoch) {
                 double epochStart = getTimer();
                 if (syncPipelineFlag) { // sync pipeline
-                    runForwardSyncPipeline(epoch);
-                    runBackwardSyncPipline();
+                    runForwardSyncPipelineGCN(epoch);
+                    runBackwardSyncPiplineGCN();
                     nodeManager.barrier();
                 } else { // sync sequential
-                    FeatType *predictData = runForward(epoch);
-                    runBackward(predictData);
+                    FeatType *predictData = runForwardGCN(epoch);
+                    runBackwardGCN(predictData);
                 }
 
                 double epochTime = getTimer() - epochStart;
@@ -466,7 +499,7 @@ void Engine::run() {
  * data communicator threads.
  *
  */
-FeatType *Engine::runForward(unsigned epoch) {
+FeatType *Engine::runForwardGCN(unsigned epoch) {
     currEpoch = epoch;
     // Make sure all nodes start running the forward-prop phase.
     if (nodeId == 0) {
@@ -516,7 +549,7 @@ FeatType *Engine::runForward(unsigned epoch) {
  * threads.
  *
  */
-void Engine::runBackward(FeatType *initGradTensor) {
+void Engine::runBackwardGCN(FeatType *initGradTensor) {
     // if (nodeId == 0) {
     //     printLog(nodeId, "Epoch %u BACKWARD starts...", currEpoch);
     // }
@@ -554,7 +587,7 @@ void Engine::runBackward(FeatType *initGradTensor) {
 /**
  * Run the deep-pipeline version where all stages happen in parallel
  */
-void Engine::runAsyncPipeline() {
+void Engine::runAsyncPipelineGCN() {
     double stt = getTimer();
 
     resComm->setAsync(true, currEpoch);
@@ -626,7 +659,7 @@ void Engine::runAsyncPipeline() {
     resComm->setAsync(false, currEpoch - 1);
 }
 
-void Engine::runForwardSyncPipeline(unsigned epoch) {
+void Engine::runForwardSyncPipelineGCN(unsigned epoch) {
     currEpoch = epoch;
     // Make sure all nodes start running the forward-prop phase.
     if (nodeId == 0) {
@@ -645,7 +678,7 @@ void Engine::runForwardSyncPipeline(unsigned epoch) {
     // }
 }
 
-void Engine::runBackwardSyncPipline() {
+void Engine::runBackwardSyncPiplineGCN() {
     // if (nodeId == 0) {
     //     printLog(nodeId, "Epoch %u BACKWARD starts...", currEpoch);
     // }

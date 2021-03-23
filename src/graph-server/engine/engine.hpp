@@ -55,14 +55,15 @@ public:
     void preallocateGCN();
     void preallocateGAT();
 
-    FeatType *runForward(unsigned epoch);
-    void runBackward(FeatType *backwardInitData);
+    FeatType *runForwardGCN(unsigned epoch);
+    void runBackwardGCN(FeatType *backwardInitData);
 
     void run();
-    void runAsyncPipeline();
+    void runGCN();
+    void runAsyncPipelineGCN();
 
-    void runForwardSyncPipeline(unsigned epoch);
-    void runBackwardSyncPipline();
+    void runForwardSyncPipelineGCN(unsigned epoch);
+    void runBackwardSyncPiplineGCN();
 
     void output();
     void destroy();
@@ -134,6 +135,9 @@ public:
     // Config of number of features in each layer.
     std::vector<unsigned> layerConfig;
     unsigned numLayers = 0;
+
+    std::vector<Matrix> *vtxNNSavedTensors; // intermediate data for vertex NN backward computation.
+    std::vector<Matrix> *edgNNSavedTensors; // intermediate data for edge NN backward computation.
 
     std::vector< TensorMap > savedNNTensors;
     std::vector< ETensorMap > savedEdgeTensors;
@@ -283,7 +287,7 @@ public:
     void sendBackwardGhostGradients(FeatType *gradTensor, unsigned featDim, unsigned tid, unsigned thdCnt);
 
     // All pipeline related functions/members
-    void loadChunks();
+    void loadChunksGCN();
 
     void pipelineForwardGhostUpdates(unsigned tid);
     void pipelineBackwardGhostGradients(FeatType* inputTensor, unsigned featDim);

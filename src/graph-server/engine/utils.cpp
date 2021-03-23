@@ -631,7 +631,7 @@ void Engine::readLabelsFile(std::string &labelsFileName) {
     assert(gvid == graph.globalVtxCnt);
 }
 
-void Engine::loadChunks() {
+void Engine::loadChunksGCN() {
     unsigned vtcsCnt = graph.localVtxCnt;
     for (unsigned cid = 0; cid < numLambdasForward; ++cid) {
         unsigned chunkSize =

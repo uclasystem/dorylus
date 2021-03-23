@@ -32,8 +32,11 @@ class CPUComm : public ResourceComm {
     // void sendShutdownMessage();
 
     // compute related
-    void processForward(unsigned layer, bool lastLayer);
-    void processBackward(unsigned layer);
+    void vtxNNForward(unsigned layer, bool lastLayer);
+    void vtxNNBackward(unsigned layer);
+    void edgNNForward(unsigned layer, bool lastLayer);
+    void edgNNBackward(unsigned layer);
+
     void getTrainStat(Matrix &preds, Matrix &labels, float &acc,
                            float &loss);
     void maskout(Matrix &preds, Matrix &labels);
@@ -51,7 +54,7 @@ class CPUComm : public ResourceComm {
     unsigned dPort;
     unsigned wPort;
 
-    TensorMap *tensorMap;
+    std::vector<TensorMap> &savedNNTensors;
 
     Engine *engine;
 
@@ -59,12 +62,35 @@ class CPUComm : public ResourceComm {
     MessageService msgService;
 
     Chunk c;
+
+    // GCN specific
+    void vtxNNForwardGCN(unsigned layer, bool lastLayer);
+    void vtxNNBackwardGCN(unsigned layer);
+    void edgNNForwardGCN(unsigned layer, bool lastLayer) {}
+    void edgNNBackwardGCN(unsigned layer) {}
+    // GAT specific
+    void vtxNNForwardGAT(unsigned layer, bool lastLayer) {}
+    void vtxNNBackwardGAT(unsigned layer) {}
+    void edgNNForwardGAT(unsigned layer, bool lastLayer) {}
+    void edgNNBackwardGAT(unsigned layer) {}
 };
 
 Matrix activateDerivative(Matrix &mat);
+Matrix hadamardMul(Matrix &A, Matrix &B);
 Matrix hadamardSub(Matrix &A, Matrix &B);
 Matrix softmax(Matrix &mat);
 Matrix activate(Matrix &mat);
+// GAT compute utils
+Matrix expandDot(Matrix &m, Matrix &v, CSCMatrix<EdgeType> &forwardAdj);
+Matrix expandHadamardMul(Matrix &m, Matrix &v, CSCMatrix<EdgeType> &forwardAdj);
+Matrix expandMulZZ(FeatType **edgFeats, unsigned edgCnt, unsigned featDim);
+Matrix reduce(Matrix &mat);
+
+Matrix leakyRelu(Matrix &mat);
+Matrix leakyReluBackward(Matrix &mat);
+
 void loadWeightServers(std::vector<char *> &addresses,
                        const std::string &wServersFile);
+
+void deleteMatrix(Matrix &mat);
 #endif  // CPU_COMM_HPP
