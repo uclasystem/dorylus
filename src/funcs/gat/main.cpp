@@ -30,20 +30,17 @@ using namespace aws::lambda_runtime;
 using namespace std::chrono;
 
 
-std::vector<char> constructIdentity(unsigned locId, unsigned layer, unsigned dir, std::string& ip) {
-    size_t identity_len = sizeof(unsigned) * 4 + ip.length();
-    std::vector<char> identity(identity_len);
+#define IDENTITY_SIZE (sizeof(Chunk) + sizeof(unsigned))
+std::vector<char> constructIdentity(Chunk &chunk) {
+    std::vector<char> identity(IDENTITY_SIZE);
 
     std::random_device rd;
     std::mt19937 generator(rd());
 
     unsigned rand = generator();
     std::cout << "RAND " << rand << std::endl;
-    serialize(identity.data(), 0, locId);
-    serialize(identity.data(), 1, layer);
-    serialize(identity.data(), 2, rand);
-    serialize(identity.data(), 3, dir);
-    std::memcpy(identity.data() + (sizeof(unsigned) * 4), ip.c_str(), ip.length());
+    std::memcpy(identity.data(), &chunk, sizeof(chunk));
+    std::memcpy(identity.data() + sizeof(chunk), &rand, sizeof(unsigned));
 
     return identity;
 }
@@ -349,7 +346,7 @@ apply_phase(std::string dataserver, std::string weightserver, unsigned dport, un
     zmq::context_t ctx(2);
 
     // Creating identity
-    auto identity = constructIdentity(chunk.localId, chunk.layer, chunk.vertex, dataserver);
+    auto identity = constructIdentity(chunk);
 
     zmq::socket_t weights_socket(ctx, ZMQ_DEALER);
     zmq::socket_t data_socket(ctx, ZMQ_DEALER);

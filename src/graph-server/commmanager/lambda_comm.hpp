@@ -41,7 +41,6 @@
 
 static const bool relaunching = true;
 
-#define LAMBDA_VTX_NN "gcn"
 #define ALLOCATION_TAG "LambdaComm"
 
 class LambdaWorker;
@@ -67,6 +66,7 @@ public:
     bool async;
     int outdateEpoch;
     std::vector<TensorMap>& savedNNTensors;
+    std::vector<ETensorMap>& savedETensors;
     Lock &resLock;
     ChunkQueue& resQueue;
     Lock &aggLock;
@@ -91,6 +91,7 @@ public:
     std::map<unsigned, AccLoss> accLossTable; // epoch -> AccLoss
 
     // Invoke lambda function
+    std::string LAMBDA_NAME;
     void invokeLambda(const Chunk &chunk);
     static void callback(const Aws::Lambda::LambdaClient *client,
                          const Aws::Lambda::Model::InvokeRequest &invReq,
