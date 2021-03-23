@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <chrono>
 #include <ratio>
+#include <random>
 #include <iostream>
 #include <memory>
 #include <sstream>
@@ -29,7 +30,8 @@ using namespace aws::lambda_runtime;
 using namespace std::chrono;
 
 invocation_response
-finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chunk, bool eval) {
+finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chunk,
+           bool eval, unsigned trainset_size) {
     std::cout << "FINAL LAYER" << std::endl;
     std::vector<std::string> dataRequests{"ah", "lab"};
     std::vector<std::string> weightRequests{"w"};
@@ -77,8 +79,11 @@ finalLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &chu
         sendAccLoss(data_socket, weights_socket, preds, labels, chunk);
     }
 
+    maskout(preds, labels);
+
     // Backward computation
     Matrix d_out = preds - labels;
+    d_out /= trainset_size;
     deleteMatrix(labels);
     deleteMatrix(preds);
 
@@ -249,6 +254,23 @@ forwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &c
     }
 }
 
+std::vector<char> constructIdentity(unsigned glbId, unsigned layer, unsigned dir, std::string& ip) {
+    size_t identity_len = sizeof(unsigned) * 4 + ip.length() + 1;
+    std::vector<char> identity(identity_len);
+
+    std::random_device rd;
+    std::mt19937 generator(rd());
+
+    unsigned rand = generator();
+    std::cout << "RAND " << rand << std::endl;
+    serialize(identity.data(), 0, glbId);
+    serialize(identity.data(), 1, layer);
+    serialize(identity.data(), 2, rand);
+    serialize(identity.data(), 3, dir);
+    std::memcpy(identity.data() + (sizeof(unsigned) * 4), ip.c_str(), ip.length());
+
+    return identity;
+}
 
 /**
  *
@@ -263,17 +285,21 @@ forwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &c
  *
  */
 invocation_response
-apply_phase(std::string dataserver, std::string weightserver, unsigned dport, unsigned wport, Chunk &chunk, bool eval) {
+apply_phase(std::string dataserver, std::string weightserver, unsigned dport, unsigned wport,
+            Chunk &chunk, bool eval, unsigned trainset_size) {
     zmq::context_t ctx(2);
 
     // Creating identity
-    size_t identity_len = sizeof(unsigned) * 3 + dataserver.length();
-    char identity[identity_len];
-    memcpy(identity, (char *) &chunk.localId, sizeof(unsigned));
-    std::srand(time(NULL));
-    *(unsigned *)(identity + sizeof(unsigned)) = chunk.layer;
-    *(unsigned *)(identity + sizeof(unsigned) * 2) = rand();
-    memcpy(identity + sizeof(unsigned) * 3, (char *) dataserver.c_str(), dataserver.length());
+    auto identity_raw = constructIdentity(chunk.globalId, chunk.layer, chunk.dir, dataserver);
+    char *identity = identity_raw.data();
+    size_t identity_len = identity_raw.size();
+    // size_t identity_len = sizeof(unsigned) * 3 + dataserver.length();
+    // char identity[identity_len];
+    // memcpy(identity, (char *) &chunk.localId, sizeof(unsigned));
+    // std::srand(time(NULL));
+    // *(unsigned *)(identity + sizeof(unsigned)) = chunk.layer;
+    // *(unsigned *)(identity + sizeof(unsigned) * 2) = rand();
+    // memcpy(identity + sizeof(unsigned) * 3, (char *) dataserver.c_str(), dataserver.length());
 
     zmq::socket_t weights_socket(ctx, ZMQ_DEALER);
     zmq::socket_t data_socket(ctx, ZMQ_DEALER);
@@ -300,7 +326,7 @@ apply_phase(std::string dataserver, std::string weightserver, unsigned dport, un
     if (chunk.dir == PROP_TYPE::FORWARD && chunk.layer < 1) {
         return forwardLayer(data_socket, weights_socket, chunk);
     } else if (chunk.dir == PROP_TYPE::FORWARD && chunk.layer == 1) {
-        return finalLayer(data_socket, weights_socket, chunk, eval);
+        return finalLayer(data_socket, weights_socket, chunk, eval, trainset_size);
     } else if (chunk.dir == PROP_TYPE::BACKWARD) {
         return backwardLayer(data_socket, weights_socket, chunk);
     }
@@ -328,6 +354,7 @@ my_handler(invocation_request const& request) {
     unsigned dport = v.GetInteger("dport");
     unsigned wport = v.GetInteger("wport");
     bool eval = v.GetBool("eval");
+    unsigned trainset_size = v.GetInteger("trainset_size");
 
     Chunk chunk;
     chunk.localId = v.GetInteger("id");
@@ -343,7 +370,7 @@ my_handler(invocation_request const& request) {
               << dataserver << ":" << dport << ", FORWARD layer " << chunk.layer
               << "." << std::endl;
 
-    return apply_phase(dataserver, weightserver, dport, wport, chunk, eval);
+    return apply_phase(dataserver, weightserver, dport, wport, chunk, eval, trainset_size);
 }
 
 int

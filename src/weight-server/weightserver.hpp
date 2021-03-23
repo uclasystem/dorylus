@@ -51,9 +51,10 @@ public:
     WeightServer(std::string &wserverFile, std::string &myPrIpFile, std::string &gserverFile,
                  unsigned _listenerPort, unsigned _serverPort, unsigned _gport,
                  std::string &configFile, std::string &tmpFile,
-                 bool _sync, float _targetAcc, bool block);
+                 bool _sync, float _targetAcc, bool block, GNN _gnn_type);
     ~WeightServer();
 
+    GNN gnn_type;
     bool sync; // sync mode or async pipeline
     bool BLOCK = false;
     float LEARNING_RATE = 0.02;
@@ -105,7 +106,11 @@ public:
     // Read in layer configurations. The master constructs the weight matrices and then sends them
     // to the workers.
     void initWeights();
+    void initWeightsMasterGCN();
+    void initWeightsMasterGAT();
     void distributeWeights();
+    void distributeWeightsGCN();
+    void distributeWeightsGAT();
     void freeWeights();
     std::vector<unsigned> dims;
     // [layer][name][version] -> versioned weight tensor

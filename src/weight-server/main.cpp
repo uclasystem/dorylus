@@ -8,7 +8,7 @@
 int
 main(int argc, char *argv[]) {
 // TODO: May need to start using an arg parser like boost.
-    assert(argc >= 12);
+    assert(argc >= 13);
     std::string wserverFile = argv[1];
     std::string myPrIpFile = argv[2];
     std::string gserverFile = argv[3];
@@ -22,10 +22,22 @@ main(int argc, char *argv[]) {
     float targetAcc = std::atof(argv[10]);
     bool block = (bool)(std::atoi(argv[11])); // for CPU/GPU
 
+    std::string gnn_name = std::string(argv[12]);
+    GNN gnn_type;
+    if (gnn_name == "GCN") { // GCN or GAT
+        gnn_type = GNN::GCN;
+    } else if (gnn_name == "GAT") {
+        gnn_type = GNN::GAT;
+    } else {
+        std::cerr << "GNN type '" << gnn_name << "' is not supported!" << std::endl;
+        exit(-1);
+    }
+
     WeightServer ws(wserverFile, myPrIpFile, gserverFile,
                     listenerPort, serverPort, gport,
                     configFile, tmpFile,
-                    sync, targetAcc, block);
+                    sync, targetAcc, block,
+                    gnn_type);
 
     // Run in a detached thread because so that we can wait
     // on a condition variable.

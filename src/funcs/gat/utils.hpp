@@ -28,4 +28,15 @@ deleteMatrix(Matrix &mat) {
     }
 }
 
+void
+deleteEdgeTensor(EdgeTensor& et) {
+    delete[] et.edgeMapping;
+    delete[] et.chunkData;
+}
+
+void
+deleteEdgeInfo(EdgeInfo& ei) {
+    delete[] ei.edgePtrs;
+}
+
 #endif

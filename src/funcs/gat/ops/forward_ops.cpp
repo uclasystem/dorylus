@@ -35,6 +35,17 @@ tanh(Matrix& mat) {
     return Matrix(mat.getRows(), mat.getCols(), activationData);
 }
 
+Matrix
+leakyReLU(Matrix& mat) {
+    float alpha = .01;
+    FeatType* result = new FeatType[mat.getNumElemts()];
+    FeatType* matxData = mat.getData();
+
+    for (unsigned i = 0; i < mat.getNumElemts(); ++i)
+        result[i] = (matxData[i] > 0) ? matxData[i] : alpha * matxData[i];
+
+    return Matrix(mat.getRows(), mat.getCols(), result);
+}
 
 unsigned
 getMaxIndex(FeatType* row, unsigned length) {
@@ -92,4 +103,39 @@ checkLoss(Matrix& preds, Matrix& labels) {
     }
 
     return totalLoss;
+}
+
+Matrix
+edgeMatMul(EdgeInfo& eInfo, Matrix& A, Matrix& B) {
+    FeatType* result = new FeatType[eInfo.nChunkEdges * 1];
+
+    FeatType* weightValues = B.getData();
+
+//    for (unsigned u = 0; u < A.getCols(); ++u) {
+//        std::cout << weightValues[u] << " ";
+//    }
+//    std::cout << std::endl;
+//
+//    for (unsigned vid = 0; vid < eInfo.numLvids; ++vid) {
+//        FeatType* vidFeats = A.get(vid);
+//        for (unsigned vInd = 0; vInd < A.getCols(); ++vInd) {
+//            std::cout << vidFeats[vInd] << " ";
+//        }
+//        std::cout << std::endl;
+//    }
+
+    unsigned eIndex = 0;
+    for (unsigned vid = 0; vid < eInfo.numLvids; ++vid) {
+        FeatType* vidFeats = A.get(vid);
+        for (unsigned eid = 0; eid < eInfo.edgePtrs[vid + 1] - eInfo.edgePtrs[vid];
+             ++eid) {
+            FeatType eValue = 0.0;
+            for (unsigned v = 0; v < A.getCols(); ++v) {
+                eValue += vidFeats[v] * weightValues[v];
+            }
+            result[eIndex++] = eValue;
+        }
+    }
+
+    return Matrix(eInfo.nChunkEdges, 1, result);
 }

@@ -42,11 +42,13 @@ case $1 in
             $COMM_THREADS=1
         fi
         COMM_THREADS=4
+        GNN_TYPE="GCN"
 
         let MODE=0
         let PIPELINE=0
         let NUM_EPOCHS=10
         let STALE_BOUND=4294967295
+        let PREPROCESS=0
         for var in "$@"
         do
             if [ $var = "GPU" ] || [ $var = "gpu" ]; then
@@ -80,6 +82,14 @@ case $1 in
 
             if [[ $var = --s=* ]] || [[ $var = --staleness=* ]]; then
                 STALE_BOUND="${var#*=}"
+            fi
+
+            if [[ $var = --g=* ]] || [[ $var = --gnn=* ]]; then
+                GNN_TYPE="${var#*=}"
+            fi
+
+            if [[ $var = --preprocess ]]; then
+                PREPROCESS=1
             fi
         done
 
@@ -155,7 +165,9 @@ case $1 in
             --validationFrequency 1 \
             --MODE ${MODE} \
             --pipeline ${PIPELINE} \
-            --staleness ${STALE_BOUND}"
+            --staleness ${STALE_BOUND} \
+            --gnn ${GNN_TYPE} \
+            --preprocess ${PREPROCESS}"
         echo ${DSH_COMMAND}
         dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ${DSH_COMMAND}" 2>&1 | tee ${LOGFILE}
 
@@ -174,6 +186,7 @@ case $1 in
           echo -e "\e[92;1mThis round of execution seems successful, congrats ;)\e[0m"
         else
           echo -e "\e[91;1mExecution fails (at least on this node), check the log file!\e[0m"
+          ~/kill-all
         fi
         ;;
 
@@ -199,6 +212,7 @@ case $1 in
         SYNC=1
         TARGET_ACC="0.9"
         BLOCK=0
+        GNN_TYPE="GCN"
         for var in "$@"
         do
             if [ $var = "--p" ] || [ $var = "--pipeline" ]; then
@@ -206,6 +220,8 @@ case $1 in
                 SYNC=1
             elif [[ $var = --t=* ]] || [[ $var = --targetacc=* ]]; then
                 TARGET_ACC="${var#*=}"
+            elif [[ $var = --g=* ]] || [[ $var == --gnn=* ]]; then
+                GNN_TYPE="${var#*=}"
             fi
 
             if [ $var = "GPU" ] || [ $var = "gpu" ] || [ $var = "CPU" ] || [ $var = "cpu" ]; then
@@ -247,7 +263,9 @@ case $1 in
             ${TMPFILEDIR} \
             ${SYNC} \
             ${TARGET_ACC} \
-            ${BLOCK}"
+            ${BLOCK} \
+            ${GNN_TYPE}"
+
         dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ${DSH_COMMAND}"
 
         # Gather the output files.

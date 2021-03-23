@@ -2,22 +2,14 @@
 
 cd $( dirname $0 )
 
-id=i-0aa46bc9c9691625c
+id=i-09caeb2f45761dccd
 
 case $1 in
     "id")
         echo ${id}
         ;;
-    "rsync")
-        pubip=$( ./ec2-instance.sh pubip )
-        if [[ $2 == "--force" ]]; then
-            ssh -i /home/thorpedoes/.ssh/id_rsa jothor@${pubip} "rm -rf func-testing"
-        fi
-
-        rsync -zz -auzh -e "ssh -i /home/thorpedoes/.ssh/id_rsa" ../graph-server/utils ../funcs ../common jothor@${pubip}:func-testing/
-        ;;
     "ssh")
-        pubip=$( ./ec2-instance.sh pubip )
+        pubip=$( ./preproc-instance.sh pubip )
 
         ssh -i /home/thorpedoes/.ssh/id_rsa jothor@${pubip}
         ;;
@@ -35,6 +27,10 @@ case $1 in
         ;;
     "stop")
         aws ec2 stop-instances --instance-ids ${id}
+        ;;
+    "reboot")
+        aws ec2 reboot-instances --instance-ids ${id}
+        echo "Rebooting Preproc Server..."
         ;;
     "state")
         aws ec2 describe-instances --filter Name=instance-id,Values=${id} --query Reservations[*].Instances[*].State --output text

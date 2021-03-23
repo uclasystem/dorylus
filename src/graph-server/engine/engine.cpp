@@ -65,7 +65,6 @@ void Engine::init(int argc, char *argv[]) {
         datasetDir + "graph." + std::to_string(nodeId) + ".bin";
     // detect whether preprocessed
     {
-        bool forcePreprocess = false;
         std::ifstream gfile(graphFile.c_str(), std::ios::binary);
         if (!gfile.good() || forcePreprocess) {
             DataLoader dl(datasetDir, nodeId, numNodes, undirected);
@@ -166,7 +165,7 @@ void Engine::init(int argc, char *argv[]) {
     timeInit += getTimer();
     printLog(nodeId, "Engine initialization complete.");
 
-    preallocate_tensors(GNN::GCN);
+    preallocate_tensors(gnn_type);
     start_time = getCurrentTime();
 }
 
@@ -205,8 +204,101 @@ void Engine::preallocate_tensors(GNN gnn_type) {
         case GNN::GCN:
             preallocateGCN();
             break;
+        case GNN::GAT:
+            preallocateGAT();
+            break;
         default:
             printLog(nodeId, "Unrecognized benchmark type");
+    }
+}
+
+void Engine::preallocateGAT() {
+    unsigned vtxCnt = graph.localVtxCnt;
+
+    // Store input tesnors
+    savedNNTensors[0]["h"] =
+        Matrix(vtxCnt, getFeatDim(0), forwardVerticesInitData);
+
+//    savedNNTensors[0]["fg"] =
+//        Matrix(graph.srcGhostCnt, getFeatDim(0), forwardGhostInitData);
+    savedNNTensors[numLayers - 1]["lab"] =
+        Matrix(vtxCnt, getFeatDim(numLayers), localVerticesLabels);
+
+    // forward tensor allocation
+    for (layer = 0; layer < numLayers; ++layer) {
+        //unsigned featDim = getFeatDim(layer);
+        unsigned nextFeatDim = getFeatDim(layer + 1);
+
+        FeatType *zTensor = new FeatType[vtxCnt * nextFeatDim];
+        std::memset(zTensor, 0, sizeof(FeatType) * vtxCnt * nextFeatDim);
+        savedNNTensors[layer]["z"] = Matrix(vtxCnt, nextFeatDim, zTensor);
+
+        // Technically not e_i because needs LeakyReLU
+        FeatType* azTensor = new FeatType[graph.forwardAdj.nnz * 1];
+        std::memset(azTensor, 0, sizeof(FeatType) * graph.forwardAdj.nnz * 1);
+        savedNNTensors[layer]["az"] = Matrix(graph.forwardAdj.nnz, 1, azTensor);
+
+        FeatType *ghostZTensor =
+            new FeatType[graph.srcGhostCnt * nextFeatDim];
+        std::memset(ghostZTensor, 0, sizeof(FeatType) * graph.srcGhostCnt * nextFeatDim);
+        savedNNTensors[layer]["fg_z"] =
+            Matrix(graph.srcGhostCnt, nextFeatDim, ghostZTensor);
+
+        // Just storing these as matrices for easy access
+        // Actually they are just edge values to be used with CSC/CSR
+        FeatType* ATensor = graph.forwardAdj.values;
+        std::memset(ATensor, 0, sizeof(FeatType) * graph.forwardAdj.nnz * 1);
+        savedNNTensors[layer]["A"] =
+            Matrix(graph.forwardAdj.nnz, 1, ATensor);
+
+        // Attention scores stored in CSCMatrix<>::values
+
+        FeatType **eVFeatsTensor = srcVFeats2eFeats(
+            zTensor, ghostZTensor, vtxCnt, nextFeatDim);
+        savedEdgeTensors[layer]["fedge"] = eVFeatsTensor;
+
+        FeatType *ahTensor = new FeatType[vtxCnt * nextFeatDim];
+        std::memset(ahTensor, 0, sizeof(FeatType) * vtxCnt * nextFeatDim);
+        savedNNTensors[layer]["ah"] = Matrix("ah", vtxCnt, nextFeatDim, ahTensor);
+
+        if (layer < numLayers - 1) {
+            FeatType *hTensor = new FeatType[vtxCnt * nextFeatDim];
+            std::memset(hTensor, 0, sizeof(FeatType) * vtxCnt * nextFeatDim);
+            savedNNTensors[layer + 1]["h"] = Matrix(vtxCnt, nextFeatDim, hTensor);
+        }
+//            FeatType **edgeTensor =
+//                srcVFeats2eFeats(hTensor, ghostTensor, vtxCnt, nextFeatDim);
+//            savedEdgeTensors[layer + 1]["fedge"] = edgeTensor;
+    }
+
+    // backward tensor allocation
+    for (layer = numLayers - 1; layer >= 0; --layer) {
+        unsigned featDim = getFeatDim(layer + 1);
+
+        // LOSS GRAD TENSORS
+        FeatType *gradTensor = new FeatType[vtxCnt * featDim];
+        savedNNTensors[layer]["grad"] =
+            Matrix("grad", vtxCnt, featDim, gradTensor);
+
+        // APPLY EDGE TENSORS
+        FeatType* gradATensor =
+            new FeatType[graph.forwardAdj.nnz * 1];
+        std::memset(gradATensor, 0, sizeof(FeatType) * graph.forwardAdj.nnz * 1);
+        savedNNTensors[layer]["dA"] =
+            Matrix(graph.forwardAdj.nnz, 1, gradATensor);
+
+        // GATHER TENSORS
+        FeatType *aTgTensor = new FeatType[vtxCnt * featDim];
+        savedNNTensors[layer]["aTg"] = Matrix(vtxCnt, featDim, aTgTensor);
+
+        // SCATTER TENSORS
+        FeatType *ghostTensor = new FeatType[graph.dstGhostCnt * featDim];
+        savedNNTensors[layer]["bg_d"] =
+            Matrix(graph.dstGhostCnt, featDim, ghostTensor);
+
+        FeatType **eGrad =
+            dstVFeats2eFeats(gradTensor, ghostTensor, vtxCnt, featDim);
+        savedEdgeTensors[layer]["bedge"] = eGrad;
     }
 }
 

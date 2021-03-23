@@ -105,10 +105,10 @@ void sendTensors(zmq::socket_t &socket, Chunk &chunk,
     }
 
     if (ack) {
-        std::cout << "Waiting on ACK" << std::endl;
+        // std::cout << "Waiting on ACK" << std::endl;
         zmq::message_t ack;
         socket.recv(&ack);
-        std::cout << "Received ACK" << std::endl;
+        // std::cout << "Received ACK" << std::endl;
     }
 }
 
@@ -172,13 +172,13 @@ void MessageService::prefetchWeightsMatrix(unsigned totalLayers) {
         if (wSndThread.joinable()) wSndThread.join();
 
         for (unsigned i = 0; i < weights.size(); ++i) {
-            if (weights[i] != NULL) {
+            if (weights[i]) {
                 delete[] weights[i]->getData();
                 delete weights[i];
             }
         }
         for (unsigned j = 0; j < totalLayers; ++j) {
-            Chunk c={0};
+            Chunk c = { 0 };
             c.layer = j;
             c.epoch = epoch;
             c.globalId=nodeId;

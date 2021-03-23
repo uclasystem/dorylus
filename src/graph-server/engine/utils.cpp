@@ -385,6 +385,7 @@ Engine::parseArgs(int argc, char *argv[]) {
 
     ("MODE", boost::program_options::value<unsigned>(), "0: Lambda, 1: GPU, 2: CPU")
     ("pipeline", boost::program_options::value<bool>(), "0: Sequential, 1: Pipelined")
+    ("gnn", boost::program_options::value<std::string>(), "GNN type: [GCN | GAT]")
     ("staleness", boost::program_options::value<unsigned>()->default_value(unsigned(UINT_MAX)),
       "Bound on staleness")
     ;
@@ -466,6 +467,17 @@ Engine::parseArgs(int argc, char *argv[]) {
 
     assert(vm.count("pipeline"));
     pipeline = vm["pipeline"].as<bool>();
+
+    assert(vm.count("gnn"));
+    std::string gnn_name = vm["gnn"].as<std::string>();
+    if (gnn_name == "GCN") {
+        gnn_type = GNN::GCN;
+    } else if (gnn_name == "GAT") {
+        gnn_type = GNN::GAT;
+    } else {
+        std::cerr << "Unsupported GNN type: " << gnn_name << std::endl;
+        exit(-1);
+    }
 
     assert(vm.count("staleness"));
     staleness = vm["staleness"].as<unsigned>();

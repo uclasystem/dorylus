@@ -9,12 +9,12 @@
 WeightServer::WeightServer(std::string &wserverFile, std::string &myPrIpFile, std::string &gserverFile,
                            unsigned _listenerPort, unsigned _serverPort, unsigned _gport,
                            std::string &configFile, std::string &tmpFile,
-                           bool _sync, float _targetAcc, bool block)
+                           bool _sync, float _targetAcc, bool block, GNN _gnn_type)
     : ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), // gsocket(ctx, ZMQ_DEALER),
       listenerPort(_listenerPort), serverPort(_serverPort), gport(_gport),
       dataCtx(1), publisher(dataCtx, ZMQ_PUB), subscriber(dataCtx, ZMQ_SUB),
       numLambdas(0), term(false), adam(true), convergeState(CONVERGE_STATE::EARLY),
-      sync(_sync), targetAcc(_targetAcc), BLOCK(block) {
+      sync(_sync), targetAcc(_targetAcc), BLOCK(block), gnn_type(_gnn_type) {
 
     std::vector<std::string> allNodeIps =
         parseNodeConfig(configFile, wserverFile, myPrIpFile, gserverFile);
@@ -85,6 +85,9 @@ void WeightServer::stopWorkers() {
  *
  */
 void WeightServer::applyUpdate(unsigned layer, std::string& name) {
+    if (gnn_type == GNN::GAT) {
+        return; // For now using fake update tensor `a` with adam for GAT
+    }
     Timer updateTimer;
     updateTimer.start();
 
@@ -112,7 +115,7 @@ void WeightServer::applyUpdate(unsigned layer, std::string& name) {
         // lrDecay();
     }
     if (nodeId == 0 && checkInfo != "") {
-        serverLog(std::string("Local Layer ") + std::to_string(layer) + " " + checkInfo);
+        serverLog(name + std::string(" Local Layer ") + std::to_string(layer) + " " + checkInfo);
     }
 
     std::unique_lock<std::mutex> ul(ackCntMtx);
@@ -157,7 +160,7 @@ void WeightServer::receiver() {
                 // lrDecay();
             }
             if (nodeId == 0 && checkInfo != "") {
-                serverLog(std::string("Ghost Layer ") + std::to_string(layer) + " " + checkInfo);
+                serverLog(name + std::string(" Ghost Layer ") + std::to_string(layer) + " " + checkInfo);
             }
         } else if (topic == CTRL_MSG::ACK) {
             subMtx.unlock();
@@ -354,7 +357,7 @@ WeightServer::initWServerComm(std::vector<std::string> &allNodeIps) {
         fillHeader(outMsg2, -1, CTRL_MSG::INITDONE);
         pushoutMsg(outMsg2);
     } else {
-        unsigned sender;
+        unsigned sender = -2; // a random init id to make compiler happy
         unsigned msgType;
         zmq::message_t inMsg;   // Recv msg 1.
         while (subscriber.recv(&inMsg)) {
@@ -485,29 +488,67 @@ WeightServer::initWeights() {
 
     // If master node, initialize the weight matrices according to the layer config.
     if (nodeId == 0) {
-        for (unsigned u = 0; u < weightsStore.size(); ++u) {
-            // Hardcoding this to xavier init for now. Eventually need to make it
-            // configurable
-            Matrix w = xavierInitializer(dims[u], dims[u + 1]);
-            weightsStore[u]["w"] = WeightTensor(w, &wMtxs[u]["w"], &uMtxs[u]["w"], sync);
-
-            // Initialize layer biases
-            // TODO:
-            //  Make this configurable based on whether or not a bias matrix is requested
-            //  for a NN module
-            bool initBiasFlag = false;
-            if (initBiasFlag) {
-                Matrix b = initBias(dims[u + 1]);
-                weightsStore[u]["b"] = WeightTensor(b, &wMtxs[u]["b"], &uMtxs[u]["b"], sync);
-            }
+        switch (gnn_type) {
+            case GNN::GCN:
+                initWeightsMasterGCN();
+                break;
+            case GNN::GAT:
+                initWeightsMasterGAT();
+                break;
+            default:
+                serverLog("Wrong GNN type!");
+                exit(-1);
         }
-
-        for (unsigned u = 0; u < weightsStore.size(); ++u)
-            serverLog("Layer " + std::to_string(u) + " - Weights: " + weightsStore[u]["w"].currMat().shape());
     }
 
     distributeWeights();
     setGhostUpdTot(numNode - 1);
+}
+
+void
+WeightServer::initWeightsMasterGCN() {
+    for (unsigned u = 0; u < weightsStore.size(); ++u) {
+        // Hardcoding this to xavier init for now.
+        Matrix w = xavierInitializer(dims[u], dims[u + 1]);
+        weightsStore[u]["w"] = WeightTensor(w, &wMtxs[u]["w"], &uMtxs[u]["w"], sync);
+
+        // Initialize layer biases
+        bool initBiasFlag = false;
+        if (initBiasFlag) {
+            Matrix b = initBias(dims[u + 1]);
+            weightsStore[u]["b"] = WeightTensor(b, &wMtxs[u]["b"], &uMtxs[u]["b"], sync);
+        }
+    }
+
+    for (unsigned u = 0; u < weightsStore.size(); ++u)
+        serverLog("Layer " + std::to_string(u) + " - Weights: " + weightsStore[u]["w"].currMat().shape());
+}
+
+void
+WeightServer::initWeightsMasterGAT() {
+    for (unsigned u = 0; u < weightsStore.size(); ++u) {
+        // Hardcoding this to xavier init for now.
+        Matrix w = xavierInitializer(dims[u], dims[u + 1]);
+        weightsStore[u]["w"] = WeightTensor(w, &wMtxs[u]["w"], &uMtxs[u]["w"], sync);
+
+        Matrix a_i = kaimingInitializer(dims[u + 1], 1);
+        weightsStore[u]["a_i"] = WeightTensor(a_i, &wMtxs[u]["a_i"], &uMtxs[u]["a_i"], sync);
+        Matrix a_j = kaimingInitializer(dims[u + 1], 1);
+        weightsStore[u]["a_j"] = WeightTensor(a_j, &wMtxs[u]["a_j"], &uMtxs[u]["a_j"], sync);
+
+        // Initialize layer biases
+        bool initBiasFlag = false;
+        if (initBiasFlag) {
+            Matrix b = initBias(dims[u + 1]);
+            weightsStore[u]["b"] = WeightTensor(b, &wMtxs[u]["b"], &uMtxs[u]["b"], sync);
+        }
+    }
+
+    for (unsigned u = 0; u < weightsStore.size(); ++u) {
+        serverLog("Layer " + std::to_string(u) + " - Weights: " + weightsStore[u]["w"].currMat().shape());
+        serverLog("Layer " + std::to_string(u) + " - Alpha_i: " + weightsStore[u]["a_i"].currMat().shape());
+        serverLog("Layer " + std::to_string(u) + " - Alpha_j: " + weightsStore[u]["a_j"].currMat().shape());
+    }
 }
 
 /**
@@ -604,6 +645,21 @@ WeightServer::initBias(unsigned dim, float initVal) {
  */
 void
 WeightServer::distributeWeights() {
+    switch (gnn_type) {
+        case GNN::GCN:
+            distributeWeightsGCN();
+            break;
+        case GNN::GAT:
+            distributeWeightsGAT();
+            break;
+        default:
+            serverLog("Wrong GNN type!");
+            exit(-1);
+    }
+}
+
+void
+WeightServer::distributeWeightsGCN() {
     if (nodeId == 0) {
         // Master sends all the weight matrices to the worker nodes.
         pubMtx.lock();
@@ -660,6 +716,107 @@ WeightServer::distributeWeights() {
 
             Matrix w(dims[layer], dims[layer+1], (FeatType*)matxData);
             weightsStore[layer]["w"] = WeightTensor(w, &wMtxs[layer]["w"], &uMtxs[layer]["w"], sync);
+            ++layer;
+
+            size_t more_size = sizeof(more);
+            subscriber.getsockopt(ZMQ_RCVMORE, &more, &more_size);
+        } while (more);
+        subMtx.unlock();
+
+        // After all matrices have been received, alert the master.
+        zmq::message_t ackMsg(UPD_HEADER_SIZE);
+        fillHeader(ackMsg, sender, CTRL_MSG::ACK);
+        pubMtx.lock();
+        publisher.send(ackMsg);
+        pubMtx.unlock();
+    }
+
+    if (nodeId == 0)
+        serverLog("All nodes up to date.");
+}
+
+void
+WeightServer::distributeWeightsGAT() {
+    if (nodeId == 0) {
+        // Master sends all the weight matrices to the worker nodes.
+        pubMtx.lock();
+        zmq::message_t header(UPD_HEADER_SIZE);
+        fillHeader(header, -1, CTRL_MSG::DATA);
+        publisher.send(header, ZMQ_SNDMORE);
+
+        for (unsigned i = 0; i < weightsStore.size(); ++i) {
+            Matrix& weights = weightsStore[i]["w"].currMat();
+            Matrix& alpha_i = weightsStore[i]["a_i"].currMat();
+            Matrix& alpha_j = weightsStore[i]["a_j"].currMat();
+
+            zmq::message_t weightData(weights.getDataSize());
+            std::memcpy((char *) weightData.data(), weights.getData(), weights.getDataSize());
+            zmq::message_t alphaiData(alpha_i.getDataSize());
+            std::memcpy((char*) alphaiData.data(), alpha_i.getData(), alpha_i.getDataSize());
+            zmq::message_t alphajData(alpha_j.getDataSize());
+            std::memcpy((char*) alphajData.data(), alpha_j.getData(), alpha_j.getDataSize());
+
+            if (i == weightsStore.size() - 1) {
+                publisher.send(alphaiData, ZMQ_SNDMORE);
+                publisher.send(alphajData, ZMQ_SNDMORE);
+                publisher.send(weightData);
+            } else {
+                publisher.send(alphaiData, ZMQ_SNDMORE);
+                publisher.send(alphajData, ZMQ_SNDMORE);
+                publisher.send(weightData, ZMQ_SNDMORE);
+            }
+        }
+        pubMtx.unlock();
+
+        // Get an ACK from every worker node that they have received the weights.
+        zmq::message_t inMsg(UPD_HEADER_SIZE);
+        int acksNeeded = numNode - 1;
+        while (acksNeeded > 0) {
+            subMtx.lock();
+            subscriber.recv(&inMsg);
+            subMtx.unlock();
+
+            unsigned sender;
+            unsigned msgType;
+            parseHeader(inMsg, sender, msgType);
+            if (msgType == CTRL_MSG::ACK) {
+                acksNeeded--;
+            }
+        }
+        // Worker code.
+    } else {
+        // Worker receives each weight matrix.
+        unsigned sender;
+        unsigned msgType;
+        zmq::message_t header(UPD_HEADER_SIZE);
+        subMtx.lock();
+        subscriber.recv(&header);
+        parseHeader(header, sender, msgType);
+
+        unsigned layer = 0;
+        int more = 0;
+        do {
+            zmq::message_t alphaiMsg;
+            zmq::message_t alphajMsg;
+            zmq::message_t weightData;
+
+            subscriber.recv(&alphaiMsg);
+            subscriber.recv(&alphajMsg);
+            subscriber.recv(&weightData);
+
+            char* matxData = new char[weightData.size()];
+            char* alphaiData = new char[alphaiMsg.size()];
+            char* alphajData = new char[alphajMsg.size()];
+            std::memcpy(matxData, weightData.data(), weightData.size());
+            std::memcpy(alphaiData, alphaiMsg.data(), alphaiMsg.size());
+            std::memcpy(alphajData, alphajMsg.data(), alphajMsg.size());
+
+            Matrix w(dims[layer], dims[layer+1], (FeatType*)matxData);
+            Matrix a_i(alphaiMsg.size() / 4, 1, alphaiData);
+            Matrix a_j(alphajMsg.size() / 4, 1, alphajData);
+            weightsStore[layer]["w"] = WeightTensor(w, &wMtxs[layer]["w"], &uMtxs[layer]["w"], sync);
+            weightsStore[layer]["a_i"] = WeightTensor(a_i, &wMtxs[layer]["a_i"], &uMtxs[layer]["a_i"], sync);
+            weightsStore[layer]["a_j"] = WeightTensor(a_j, &wMtxs[layer]["a_j"], &uMtxs[layer]["a_j"], sync);
             ++layer;
 
             size_t more_size = sizeof(more);

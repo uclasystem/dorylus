@@ -41,8 +41,6 @@ struct LabelsHeaderType {
 };
 
 
-enum GNN { GCN };
-
 
 /**
  *
@@ -55,6 +53,7 @@ public:
     void init(int argc, char *argv[]);
     void preallocate_tensors(GNN gnn_type);
     void preallocateGCN();
+    void preallocateGAT();
 
     FeatType *runForward(unsigned epoch);
     void runBackward(FeatType *backwardInitData);
@@ -99,6 +98,16 @@ public:
                         unsigned inFeatDim, unsigned outFeatDim,
                         bool aggregate, bool scatter);
 
+    // TENSOR OPS
+    // NOTE: Implementing in engine for now but need to move
+    //  later
+    FeatType* softmax(FeatType* inputTensor, FeatType* result, unsigned rows, unsigned cols);
+    Matrix softmax_prime(FeatType* valuesTensor, FeatType* softmaxOutput, unsigned size);
+    Matrix sparse_dense_elemtwise_mult(CSCMatrix<EdgeType>& csc,
+      FeatType* sparseInputTensor, FeatType* denseInputTensor);
+    FeatType* leakyReLU(FeatType* matxData, unsigned vecSize);
+    FeatType leakyReLU(FeatType f);
+
     void makeBarrier();
 
     unsigned getNumEpochs();
@@ -119,6 +128,8 @@ public:
 
     unsigned cThreads;
     ThreadPool *computePool = NULL;
+
+    GNN gnn_type;
 
     // Config of number of features in each layer.
     std::vector<unsigned> layerConfig;
@@ -171,6 +182,8 @@ public:
     std::string dshMachinesFile;
     std::string myPrIpFile;
     std::string myPubIpFile;
+
+    bool forcePreprocess = false;
 
     std::time_t start_time;
     std::time_t end_time;
