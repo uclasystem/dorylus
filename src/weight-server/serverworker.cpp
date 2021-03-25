@@ -58,7 +58,7 @@ ServerWorker::work() {
                     break;
                 }
                 case (OP::INFO): { // Used to tell how many lambda threads it should expect for this round.
-                    unsigned arg = parse<unsigned>((char *) header.data(), 1);
+                    unsigned arg = parse<unsigned>((char *)header.data(), 1);
                     setNumLambdas(identity, arg);
                     break;
                 }

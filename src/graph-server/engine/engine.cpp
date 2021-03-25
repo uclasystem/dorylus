@@ -874,6 +874,7 @@ void Engine::applyVertexWorkFunc(unsigned tid) {
 void Engine::scatterWorkFunc(unsigned tid) {
     BackoffSleeper bs;
     while (!pipelineHalt) {
+        // Sync all nodes during scatter
         if (SCStashQueue.size() == numLambdasForward) {
             if (tid == 0) {
                 unsigned totalGhostCnt = currDir == PROP_TYPE::FORWARD
@@ -1008,7 +1009,9 @@ void Engine::scheduleFunc(unsigned tid) {
                 schQueue.unlock();
 
                 nodeManager.barrier();
-                if (currEpoch >= numEpochs) {
+                // get a chunk for `numE + 1` means [1, numEpochs] finished
+                if (currEpoch >= numEpochs + 1 ||
+                    convergeState == CONVERGE_STATE::DONE) {
                     pipelineHalt = true;
                     break;
                 }

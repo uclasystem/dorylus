@@ -443,6 +443,7 @@ std::vector<std::string> WeightServer::parseNodeConfig(std::string &configFile, 
 
     // read graph server ip file
     if (nodeId == 0) {
+        int gserverId = 0;
         std::ifstream ipFile(gserverFile);
         assert(ipFile.good());
         std::string line, masterIp;
@@ -454,16 +455,17 @@ std::vector<std::string> WeightServer::parseNodeConfig(std::string &configFile, 
                 char hostPort[50];
                 sprintf(hostPort, "tcp://%s:%u", line.c_str(), gport);
                 // serverLog(std::string("gserver: ") + hostPort);
-                unsigned idtyLen = sizeof(unsigned) * 3 + line.size();
-                char identity[idtyLen];
+                Chunk idChunk = { UINT_MAX, UINT_MAX, UINT_MAX, UINT_MAX, UINT_MAX,
+                                  PROP_TYPE::FORWARD, UINT_MAX, false };
+                const unsigned IDENTITY_LEN = sizeof(Chunk) + sizeof(unsigned);
+                char identity[IDENTITY_LEN];
                 char *idtPtr = identity;
-                for (unsigned i = 0; i < 3; ++i) {
-                    *(unsigned *)idtPtr = -1u;
-                    idtPtr += sizeof(unsigned);
-                }
-                memcpy(idtPtr, line.c_str(), line.size());
-                gsockets[gsockets.size() - 1].setsockopt(ZMQ_IDENTITY, identity, idtyLen);
+                memcpy(idtPtr, &idChunk, sizeof(Chunk));
+                idtPtr += sizeof(Chunk);
+                *(unsigned *)idtPtr = gserverId;
+                gsockets[gsockets.size() - 1].setsockopt(ZMQ_IDENTITY, identity, IDENTITY_LEN);
                 gsockets[gsockets.size() - 1].connect(hostPort);
+                gserverId++;
             }
         }
         // // only master node's IP needed
