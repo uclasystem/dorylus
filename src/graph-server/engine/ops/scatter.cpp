@@ -424,11 +424,7 @@ void Engine::scatterWorker(unsigned tid) {
 
 void Engine::ghostReceiver(unsigned tid) {
     // printLog(nodeId, "RECEIVER: Starting");
-    // backoff sleep strategy to improve CPU utilization
-    int failedTrials = 0;
-    const int INIT_PERIOD = 256;
-    const int MAX_PERIOD = 4096;
-    int SLEEP_PERIOD = INIT_PERIOD;
+    BackoffSleeper bs;
     unsigned sender, topic;
     std::string tensorName;
     FeatType *msgBuf = (FeatType *)new char[MAX_MSG_SIZE];
@@ -437,12 +433,7 @@ void Engine::ghostReceiver(unsigned tid) {
     while (true) {
         // No message in queue.
         if (!commManager.dataPullIn(&sender, &topic, msgBuf, MAX_MSG_SIZE)) {
-            usleep(SLEEP_PERIOD);  // sleep a little and give up CPUs
-            failedTrials++;
-            if (failedTrials == 64 && SLEEP_PERIOD < MAX_PERIOD) {
-                failedTrials = 0;
-                SLEEP_PERIOD *= 2;
-            }
+            bs.sleep();
             if (commHalt) {
                 break;
             }
@@ -450,6 +441,8 @@ void Engine::ghostReceiver(unsigned tid) {
         } else {
             // A normal ghost value broadcast.
             if (topic < MAX_IDTYPE - 1) {
+                // Using MAX_IDTYPE - 1 as the receive signal.
+                commManager.dataPushOut(sender, nodeId, MAX_IDTYPE - 1, NULL, 0);
                 char *bufPtr = (char *)msgBuf;
                 unsigned recvGhostVCnt = topic;
                 unsigned featDim = *(unsigned *)bufPtr;
@@ -489,14 +482,30 @@ void Engine::ghostReceiver(unsigned tid) {
                     bufPtr += sizeof(FeatType) * featDim;
                 }
 
+                recvCntLock.lock();
+                ghostVtcsRecvd += topic;
+                recvCntLock.unlock();
+
                 // A respond to a broadcast, and the topic vertex is in my local
                 // vertices. I should update the corresponding recvWaiter's
                 // value. If waiters become empty, send a signal in case the
                 // workers are waiting on it to be empty at the layer barrier.
-            } else {}  // (topic == MAX_IDTYPE - 1)
+            } else { // (topic == MAX_IDTYPE - 1)
+                recvCntLock.lock();
+                recvCnt--;
+                recvCntLock.unlock();
+                // __sync_fetch_and_add(&recvCnt, -1);
+            }
+            unsigned totalGhostCnt = currDir == PROP_TYPE::FORWARD
+                                   ? graph.srcGhostCnt
+                                   : graph.dstGhostCnt;
+            recvCntLock.lock();
+            if (recvCnt == 0 && ghostVtcsRecvd == totalGhostCnt) {
+                recvCntCond.signal();
+            }
+            recvCntLock.unlock();
 
-            SLEEP_PERIOD = INIT_PERIOD;
-            failedTrials = 0;
+            bs.reset();
         }
     }
 

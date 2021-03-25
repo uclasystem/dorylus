@@ -639,7 +639,7 @@ void Engine::loadChunksGCN() {
         unsigned lowBound = cid * chunkSize;
         unsigned upBound = std::min(lowBound + chunkSize, vtcsCnt);
 
-        aggregateQueue.push(Chunk{cid, nodeId * numLambdasForward + cid,
+        schQueue.push(Chunk{cid, nodeId * numLambdasForward + cid,
                                   lowBound, upBound, 0, PROP_TYPE::FORWARD, 1,
                                   true});
     }

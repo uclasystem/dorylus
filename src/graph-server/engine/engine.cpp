@@ -403,94 +403,85 @@ void Engine::run() {
     }
 }
 
-
 void Engine::runGCN() {
-    const bool syncPipelineFlag = true;
-    if (!pipeline) {
-        for (unsigned epoch = 0; epoch < numEpochs; ++epoch) {
-            double epochStart = getTimer();
-            if (syncPipelineFlag) { // sync pipeline
-                runForwardSyncPipelineGCN(epoch);
-                runBackwardSyncPiplineGCN();
-            } else { // sync sequential
-                FeatType *predictData = runForwardGCN(epoch);
-                runBackwardGCN(predictData);
-            }
-            // YIFAN: we set a barrier only for pipeline to make sure weight is
-            // updated. Seq-sync version usually won't go wrong since there are
-            // aggregation between two applyVertex, that time should be enough
-            // for weight update
-            nodeManager.barrier();
+    using ThreadVector = std::vector<std::thread>;
+    commHalt = false;
+    pipelineHalt = false;
+    unsigned commThdCnt = std::max(2u, cThreads / 4);
+    // unsigned commThdCnt = 1;
 
-            double epochTime = getTimer() - epochStart;
-            printLog(nodeId, "Time for epoch %u: %f ms", epoch, epochTime);
-            if (epoch > 0) {
-                addEpochTime(epochTime);
-            }
-            if (convergeState == CONVERGE_STATE::DONE) {
-                printLog(nodeId, "Early stop at epoch %u", epoch);
-                break;
-            }
-        }
-    } else { // async pipeline. For lambda only
-        // Run synchronous epoch to setup data
-        savedNNTensors[0]["x"] =
-            Matrix(graph.localVtxCnt, getFeatDim(0), forwardVerticesInitData);
-        savedNNTensors[0]["fghost"] =
-            Matrix(graph.srcGhostCnt, getFeatDim(0), forwardGhostInitData);
-        savedNNTensors[numLayers - 1]["lab"] = Matrix(
-            graph.localVtxCnt, getFeatDim(numLayers), localVerticesLabels);
-
-        // Run one synchronous epoch
-        {
-            double epochStart = getTimer();
-            if (syncPipelineFlag) {
-                runForwardSyncPipelineGCN(0);
-                runBackwardSyncPiplineGCN();
-            } else {
-                FeatType *tensor = runForwardGCN(0);
-                runBackwardGCN(tensor);
-            }
-            // YIFAN: going to run pipeline so no need for barrier here.
-            // nodeManager.barrier();
-            double epochTime = getTimer() - epochStart;
-            printLog(nodeId, "Time for epoch %u: %f ms", 0, epochTime);
-            addEpochTime(epochTime);
-        }
-
-        if (nodeId == 0) {
-            printLog(nodeId, "Finished SYNCHRONOUS epoch, starting PIPELINE");
-        }
-        loadChunksGCN();
-        // Start pipeline
-        runAsyncPipelineGCN();
-
-        if (convergeState != CONVERGE_STATE::DONE) {
-            for (unsigned epoch = currEpoch; epoch < numEpochs; ++epoch) {
-                double epochStart = getTimer();
-                if (syncPipelineFlag) { // sync pipeline
-                    runForwardSyncPipelineGCN(epoch);
-                    runBackwardSyncPiplineGCN();
-                    nodeManager.barrier();
-                } else { // sync sequential
-                    FeatType *predictData = runForwardGCN(epoch);
-                    runBackwardGCN(predictData);
-                }
-
-                double epochTime = getTimer() - epochStart;
-                printLog(nodeId, "Time for epoch %u: %f ms", epoch, epochTime);
-                addEpochTime(epochTime);
-                if (convergeState == CONVERGE_STATE::DONE) {
-                    printLog(nodeId, "Early stop at epoch %u", epoch);
-                    break;
-                }
-            }
-        }
-        printLog(nodeId, "Finished, shutting down...");
+    auto gaWrkrFunc =
+        std::bind(&Engine::gatherWorkFunc, this, std::placeholders::_1);
+    ThreadVector gaWrkrThds;
+    for (unsigned tid = 0; tid < cThreads; ++tid) {
+        gaWrkrThds.push_back(std::thread(gaWrkrFunc, 2 + tid));
+    }
+    auto avWrkrFunc =
+        std::bind(&Engine::applyVertexWorkFunc, this, std::placeholders::_1);
+    ThreadVector avWrkrThds;
+    for (unsigned tid = 0; tid < cThreads; ++tid) {
+        avWrkrThds.push_back(std::thread(avWrkrFunc, tid));
+    }
+    auto scWrkrFunc =
+        std::bind(&Engine::scatterWorkFunc, this, std::placeholders::_1);
+    // std::thread swt(scWrkrFunc, 1);
+    ThreadVector scWrkrThds;
+    for (unsigned tid = 0; tid < commThdCnt; ++tid) {
+        scWrkrThds.push_back(std::thread(scWrkrFunc, tid));
+    }
+    auto ghstRcvrFunc =
+        std::bind(&Engine::ghostReceiver, this, std::placeholders::_1);
+    ThreadVector ghstRcvrThds;
+    for (unsigned tid = 0; tid < commThdCnt; ++tid) {
+        ghstRcvrThds.push_back(std::thread(ghstRcvrFunc, tid));
+    }
+    auto aeWrkrFunc =
+        std::bind(&Engine::applyEdgeWorkFunc, this, std::placeholders::_1);
+    ThreadVector aeWrkrThds;
+    for (unsigned tid = 0; tid < 1; ++tid) {
+        aeWrkrThds.push_back(std::thread(aeWrkrFunc, tid));
     }
 
-    end_time = getCurrentTime();
+    loadChunksGCN();
+    // Start scheduler
+    auto schedFunc =
+        std::bind(&Engine::scheduleFunc, this, std::placeholders::_1);
+    ThreadVector schedulerThds;
+    for (unsigned tid = 0; tid < 1; ++tid) {
+        schedulerThds.push_back(std::thread(schedFunc, tid));
+    }
+
+    for (unsigned tid = 0; tid < 1; ++tid) {
+        schedulerThds[tid].join();
+    }
+    // Wait for all nodes to finish
+    nodeManager.barrier();
+    commHalt = true;
+    for (unsigned tid = 0; tid < cThreads; ++tid) {
+        gaWrkrThds[tid].join();
+        avWrkrThds[tid].join();
+    }
+    for (unsigned tid = 0; tid < 1; ++tid)
+        aeWrkrThds[tid].join();
+    for (unsigned tid = 0; tid < commThdCnt; ++tid)
+        scWrkrThds[tid].join();
+    for (unsigned tid = 0; tid < commThdCnt; ++tid)
+        ghstRcvrThds[tid].join();
+
+    {
+        // clean up
+        unsigned sender, topic;
+        char *msgBuf = new char[MAX_MSG_SIZE];
+        if (commManager.dataPullIn(&sender, &topic, msgBuf,
+                                    MAX_MSG_SIZE)) {
+            printLog(nodeId, "CLEAN UP: Still msgs in buffer");
+        };
+        while (commManager.dataPullIn(&sender, &topic, msgBuf,
+                                    MAX_MSG_SIZE)) {};
+        delete[] msgBuf;
+    }
 }
+
 
 /**
  *
@@ -699,5 +690,338 @@ void Engine::runBackwardSyncPiplineGCN() {
     numSyncEpochs++;
 }
 
+void Engine::aggregateGCN(Chunk &c) {
+    unsigned lvid = c.lowBound;
+    unsigned limit = c.upBound;
+
+    if (c.dir == PROP_TYPE::FORWARD) { // forward
+        unsigned featDim = getFeatDim(c.layer);
+        FeatType *featTensor = NULL;
+        if (c.layer == 0)
+            featTensor =
+                getVtxFeat(savedNNTensors[c.layer]["x"].getData(), lvid, featDim);
+        else
+            featTensor = getVtxFeat(savedNNTensors[c.layer - 1]["h"].getData(),
+                                    lvid, featDim);
+
+        FeatType **eFeatsTensor = savedEdgeTensors[c.layer]["fedge"];  // input tensor
+        FeatType *aggTensor = savedNNTensors[c.layer]["ah"].getData(); // output tensor
+
+        FeatType *chunkPtr = getVtxFeat(aggTensor, lvid, featDim);
+        std::memcpy(chunkPtr, featTensor,
+                    sizeof(FeatType) * (limit - lvid) * featDim);
+        while (lvid < limit) {
+            // Read out data of the current layer of given vertex.
+            FeatType *currDataDst = getVtxFeat(aggTensor, lvid, featDim);
+            // Apply normalization factor on the current data.
+            {
+                const EdgeType normFactor = graph.vtxDataVec[lvid];
+                for (unsigned i = 0; i < featDim; ++i) {
+                    currDataDst[i] *= normFactor;
+                }
+            }
+            // Aggregate from incoming neighbors.
+            for (uint64_t eid = graph.forwardAdj.columnPtrs[lvid];
+                eid < graph.forwardAdj.columnPtrs[lvid + 1]; ++eid) {
+                EdgeType normFactor = graph.forwardAdj.values[eid];
+                for (unsigned j = 0; j < featDim; ++j) {
+                    currDataDst[j] += eFeatsTensor[eid][j] * normFactor;
+                }
+            }
+            lvid++;
+        }
+    } else { // backward
+        unsigned featDim = getFeatDim(c.layer + 1);
+        FeatType *featTensor = getVtxFeat(
+            savedNNTensors[c.layer + 1]["grad"].getData(), lvid, featDim);
+        FeatType *aggTensor = savedNNTensors[c.layer]["aTg"].getData();
+        FeatType **eFeatsTensor = savedEdgeTensors[c.layer]["bedge"];
+
+        FeatType *chunkPtr = getVtxFeat(aggTensor, lvid, featDim);
+        std::memcpy(chunkPtr, featTensor,
+                    sizeof(FeatType) * (limit - lvid) * featDim);
+        while (lvid < limit) {
+            // Read out data of the current layer of given vertex.
+            FeatType *currDataDst = getVtxFeat(aggTensor, lvid, featDim);
+            // Apply normalization factor on the current data.
+            {
+                const EdgeType normFactor = graph.vtxDataVec[lvid];
+                for (unsigned i = 0; i < featDim; ++i) {
+                    currDataDst[i] *= normFactor;
+                }
+            }
+            // Aggregate from neighbors.
+            for (uint64_t eid = graph.backwardAdj.rowPtrs[lvid];
+                eid < graph.backwardAdj.rowPtrs[lvid + 1]; ++eid) {
+                EdgeType normFactor = graph.backwardAdj.values[eid];
+                for (unsigned j = 0; j < featDim; ++j) {
+                    currDataDst[j] += eFeatsTensor[eid][j] * normFactor;
+                }
+            }
+            lvid++;
+        }
+    }
+}
+
+void Engine::applyVertexGCN(Chunk &c) {
+    resComm->NNCompute(c);
+}
+
+void Engine::scatterGCN(Chunk &c) {
+    unsigned outputLayer = c.layer;
+    unsigned featLayer = c.layer;
+    std::string tensorName;
+    if (c.dir == PROP_TYPE::FORWARD) {
+        outputLayer -= 1;
+        tensorName = "h";
+    } else {
+        outputLayer += 1;
+        featLayer += 1;
+        tensorName = "grad";
+    }
+    FeatType *scatterTensor =
+        savedNNTensors[outputLayer][tensorName].getData();
+
+    unsigned startId = c.lowBound;
+    unsigned endId = c.upBound;
+    unsigned featDim = getFeatDim(featLayer);
+
+    std::map<unsigned, std::vector<unsigned>> &ghostMap =
+        c.dir == PROP_TYPE::FORWARD ? graph.forwardGhostMap
+                                    : graph.backwardGhostMap;
+
+    // Create a series of buckets for batching sendout messages to nodes
+    std::vector<unsigned> *batchedIds =
+        new std::vector<unsigned>[numNodes];
+    for (unsigned lvid = startId; lvid < endId; ++lvid) {
+        for (unsigned nid : ghostMap[lvid]) {
+            batchedIds[nid].push_back(lvid);
+        }
+    }
+
+    // batch sendouts similar to the sequential version
+    const unsigned BATCH_SIZE = std::max(
+        (MAX_MSG_SIZE - DATA_HEADER_SIZE) /
+            (sizeof(unsigned) + sizeof(FeatType) * featDim),
+        1ul);  // at least send one vertex
+    for (unsigned nid = 0; nid < numNodes; ++nid) {
+        if (nid == nodeId)
+            continue;
+        unsigned ghostVCnt = batchedIds[nid].size();
+        for (unsigned ib = 0; ib < ghostVCnt; ib += BATCH_SIZE) {
+            unsigned sendBatchSize = (ghostVCnt - ib) < BATCH_SIZE
+                                   ? (ghostVCnt - ib) : BATCH_SIZE;
+            verticesPushOut(nid, sendBatchSize,
+                            batchedIds[nid].data() + ib, scatterTensor,
+                            featDim, c);
+            recvCntLock.lock();
+            recvCnt++;
+            recvCntLock.unlock();
+        }
+    }
+
+    delete[] batchedIds;
+}
+
+void Engine::gatherWorkFunc(unsigned tid) {
+    BackoffSleeper bs;
+    while (!pipelineHalt) {
+        GAQueue.lock();
+        if (GAQueue.empty()) {
+            GAQueue.unlock();
+            bs.sleep();
+            continue;
+        }
+
+        Chunk c = GAQueue.top();
+        // printLog(nodeId, "GA: Got %s", c.str().c_str());
+        GAQueue.pop();
+        GAQueue.unlock();
+
+        if (gnn_type == GNN::GCN) {
+            aggregateGCN(c);
+            AVQueue.lock();
+            AVQueue.push(c);
+            AVQueue.unlock();
+        } else {
+            abort();
+        }
+
+        bs.reset();
+    }
+    GAQueue.clear();
+}
+
+void Engine::applyVertexWorkFunc(unsigned tid) {
+    BackoffSleeper bs;
+    while (!pipelineHalt) {
+        AVQueue.lock();
+        if (AVQueue.empty()) {
+            AVQueue.unlock();
+            bs.sleep();
+            continue;
+        }
+
+        Chunk c = AVQueue.top();
+        // printLog(nodeId, "AV: Got %s", c.str().c_str());
+        AVQueue.pop();
+        AVQueue.unlock();
+
+        if (gnn_type == GNN::GCN) {
+            applyVertexGCN(c);
+        } else {
+            abort();
+        }
+
+        bs.reset();
+    }
+    AVQueue.clear();
+}
+
+void Engine::scatterWorkFunc(unsigned tid) {
+    BackoffSleeper bs;
+    while (!pipelineHalt) {
+        if (SCStashQueue.size() == numLambdasForward) {
+            if (tid == 0) {
+                unsigned totalGhostCnt = currDir == PROP_TYPE::FORWARD
+                                       ? graph.srcGhostCnt
+                                       : graph.dstGhostCnt;
+                recvCntLock.lock();
+                while (recvCnt > 0 || ghostVtcsRecvd != totalGhostCnt) {
+                    recvCntCond.wait();
+                    // usleep(1000 * 1000);
+                }
+                recvCntLock.unlock();
+                nodeManager.barrier();
+                recvCnt = 0;
+                ghostVtcsRecvd = 0;
+                while (!SCStashQueue.empty()) {
+                    Chunk sc = SCStashQueue.top();
+                    SCStashQueue.pop();
+                    AEQueue.push_atomic(sc);
+                }
+            } else {
+                bs.sleep();
+                continue; // other threads wait on SCQueue
+            }
+        }
+
+        SCQueue.lock();
+        if (SCQueue.empty()) {
+            SCQueue.unlock();
+            bs.sleep();
+            continue;
+        }
+
+        Chunk c = SCQueue.top();
+        // printLog(nodeId, "SC: Got %s", c.str().c_str());
+        unsigned absLayer = getAbsLayer(c, numLayers);
+        if (absLayer != layer) {
+            layer = absLayer;
+            currDir = c.dir;
+        }
+        SCQueue.pop();
+        SCQueue.unlock();
+
+        if (gnn_type == GNN::GCN) {
+            scatterGCN(c);
+        } else {
+            abort();
+        }
+
+        SCStashQueue.push_atomic(c);
+
+        bs.reset();
+    }
+    SCQueue.clear();
+}
+
+// Only for single thread because of the barrier
+void Engine::applyEdgeWorkFunc(unsigned tid) {
+    BackoffSleeper bs;
+    while (!pipelineHalt) {
+        AEQueue.lock();
+        if (AEQueue.empty()) {
+            AEQueue.unlock();
+            bs.sleep();
+            continue;
+        }
+
+        Chunk c = AEQueue.top();
+        // printLog(nodeId, "AE: Got %s", c.str().c_str());
+        AEQueue.pop();
+        AEQueue.unlock();
+
+        if (gnn_type == GNN::GCN) {
+            applyEdgeGCN(c); // do nothing
+            GAQueue.lock();
+            GAQueue.push(c);
+            GAQueue.unlock();
+        }
+
+        bs.reset();
+    }
+    AEQueue.clear();
+}
+
+void Engine::scheduleFunc(unsigned tid) {
+    double sttTime = getTimer();
+    double endTime;
+
+    BackoffSleeper bs;
+    while (!pipelineHalt) {
+        schQueue.lock();
+        if (schQueue.empty()) {
+            schQueue.unlock();
+            bs.sleep();
+            continue;
+        }
+
+        Chunk c = schQueue.top();
+        // printLog(nodeId, "SCHEDULER: Got %s", c.str().c_str());
+        if (c.epoch > currEpoch) { // some chunk finishes curr epoch
+            // Block until all chunks in this epoch finish
+            if (schQueue.size() < numLambdasForward) {
+                schQueue.unlock();
+                bs.sleep();
+                continue;
+            } else { // Enter next epoch. This is an atomic section
+                endTime = getTimer();
+                if (currEpoch > 0) { // skip epoch 0
+                    unsigned epochTime = endTime - sttTime;
+                    addEpochTime(epochTime);
+                    printLog(nodeId, "Time for epoch %u: %lfms",
+                        currEpoch, endTime - sttTime);
+                }
+                sttTime = endTime;
+                ++currEpoch;
+                schQueue.pop();
+                schQueue.unlock();
+
+                nodeManager.barrier();
+                if (currEpoch >= numEpochs) {
+                    pipelineHalt = true;
+                    break;
+                }
+
+                // some initialization...
+                layer = 0;
+                printLog(nodeId, "Epoch %u starts...", currEpoch);
+            }
+        } else {
+            schQueue.pop();
+            schQueue.unlock();
+        }
+
+        if (gnn_type == GNN::GCN) {
+            GAQueue.lock();
+            GAQueue.push(c);
+            GAQueue.unlock();
+        }
+
+        bs.reset();
+    }
+    schQueue.clear();
+}
 
 Engine engine;

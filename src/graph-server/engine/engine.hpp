@@ -41,6 +41,29 @@ struct LabelsHeaderType {
 };
 
 
+class LockChunkQueue {
+public:
+  void lock() { lk.lock(); }
+  void unlock() { lk.unlock(); }
+
+  bool empty() const { return cq.empty(); }
+  size_t size() const { return cq.size(); }
+  const Chunk &top() const { return cq.top(); }
+  void push(const Chunk &chunk) { cq.push(chunk); }
+  void push_atomic(const Chunk &chunk) {
+    lk.lock();
+    cq.push(chunk);
+    lk.unlock();
+  }
+  void pop() { cq.pop(); }
+  void clear() {
+    while (!cq.empty())
+      cq.pop();
+  }
+private:
+  Lock lk;
+  ChunkQueue cq;
+};
 
 /**
  *
@@ -70,6 +93,24 @@ public:
     bool master();
 
     // HIGH LEVEL SAGA FUNCITONS
+    void aggregateGCN(Chunk &chunk);
+    void applyVertexGCN(Chunk &chunk);
+    void scatterGCN(Chunk &chunk);
+    void applyEdgeGCN(Chunk &chunk) {}
+    LockChunkQueue schQueue;
+    LockChunkQueue GAQueue;
+    LockChunkQueue AVQueue;
+    LockChunkQueue SCQueue;
+    LockChunkQueue AEQueue;
+    void gatherWorkFunc(unsigned tid);
+    void applyVertexWorkFunc(unsigned tid);
+    void scatterWorkFunc(unsigned tid);
+    void applyEdgeWorkFunc(unsigned tid);
+    void scheduleFunc(unsigned tid);
+    LockChunkQueue SCStashQueue;
+    PROP_TYPE currDir;
+    bool pipelineHalt = false;
+
     FeatType* aggregate(FeatType **eVFeatsTensor, unsigned edgsCnt,
                         unsigned featDim, AGGREGATOR aggregator);
     FeatType* applyVertex(FeatType *vtcsTensor, unsigned vtcsCnt,

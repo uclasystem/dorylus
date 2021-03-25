@@ -67,10 +67,6 @@ public:
     int outdateEpoch;
     std::vector<TensorMap>& savedNNTensors;
     std::vector<ETensorMap>& savedETensors;
-    Lock &resLock;
-    ChunkQueue& resQueue;
-    Lock &aggLock;
-    ChunkQueue& aggQueue;
 
     std::thread *relaunchThd;
     void asyncRelaunchLoop();
@@ -89,6 +85,11 @@ public:
     };
     std::mutex accMtx;
     std::map<unsigned, AccLoss> accLossTable; // epoch -> AccLoss
+
+    // Push result chunks back to queues
+    void NNRecvCallback(Chunk &chunk);
+    void NNRecvCallbackGCN(Chunk &chunk);
+    void NNRecvCallbackGAT(Chunk &chunk);
 
     // Invoke lambda function
     std::string LAMBDA_NAME;

@@ -16,8 +16,6 @@ LambdaComm::LambdaComm(Engine *_engine) :
         relaunchCnt(0),
         dport(_engine->dataserverPort), wport(_engine->weightserverPort),
         savedNNTensors(_engine->savedNNTensors), savedETensors(_engine->savedEdgeTensors),
-        resLock(_engine->scatQueueLock), resQueue(_engine->scatterQueue),
-        aggLock(_engine->aggQueueLock), aggQueue(_engine->aggregateQueue),
         ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
         numListeners(4), engine(_engine) { // TODO: Decide numListeners.
     nodeId = _engine->nodeId;
@@ -55,8 +53,7 @@ void LambdaComm::setAsync(bool _async, unsigned currEpoch) {
 }
 
 void LambdaComm::NNCompute(Chunk &chunk) {
-    // printLog(nodeId, "NNComp: %u:%u:%s", chunk.layer, chunk.localId,
-    //   chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
+    // printLog(nodeId, "NNComp: chunk %s", chunk.str().c_str());
     timeoutMtx.lock();
     if (timeoutTable.find(chunk) != timeoutTable.end()) {
         printLog(nodeId, "ERROR! duplicated chunk %s", chunk.str().c_str());
@@ -68,15 +65,9 @@ void LambdaComm::NNCompute(Chunk &chunk) {
 }
 
 void LambdaComm::NNSync() {
-    while (resQueue.size() != engine->numLambdasForward) {
-        usleep(20*1000);
-    }
-
-    resLock.lock();
-    for (unsigned u = 0; u < engine->numLambdasForward; ++u) {
-        resQueue.pop();
-    }
-    resLock.unlock();
+    // while (resQueue.size() != engine->numLambdasForward) {
+    //     usleep(20*1000);
+    // }
 }
 
 bool LambdaComm::NNRecv(Chunk &chunk) {
@@ -104,9 +95,27 @@ bool LambdaComm::NNRecv(Chunk &chunk) {
     }
     timeoutMtx.unlock();
 
+    NNRecvCallback(chunk);
+    return true;
+}
+
+void LambdaComm::NNRecvCallback(Chunk &chunk) {
+    switch (engine->gnn_type) {
+        case GNN::GCN:
+            NNRecvCallbackGCN(chunk);
+            break;
+        case GNN::GAT:
+            NNRecvCallbackGAT(chunk);
+            break;
+        default:
+            abort();
+    }
+}
+
+void LambdaComm::NNRecvCallbackGCN(Chunk &chunk) {
     // filter out outdate chunks after switching sync/async
     if ((int)(chunk.epoch) <= outdateEpoch) {
-        return true;
+        return;
     }
 
     // If bounded-staleness enabled, increment the finished chunks for this epoch
@@ -114,38 +123,39 @@ bool LambdaComm::NNRecv(Chunk &chunk) {
     // TODO (JOHN): Consider using __sync_fetch ops here to make code cleaner and
     //  still achieve synchronization
     Chunk nextChunk = incLayer(chunk, 2);
-    if (async && isLastLayer(chunk)) {
-        if (engine->staleness != UINT_MAX) {
-            unsigned ind = chunk.epoch % (engine->staleness + 1);
-            engine->finishedChunkLock.lock();
-            if (++(engine->numFinishedEpoch[ind]) == numChunk) {
-                engine->finishedChunkLock.unlock();
-                // printLog(nodeId, "FINISHED epoch %u. Total finished %u", chunk.epoch, engine->nodesFinishedEpoch[ind]+1);
-                engine->numFinishedEpoch[ind] = 0;
+    if (isLastLayer(chunk)) {
+        if (async) {
+            if (engine->staleness != UINT_MAX) {
+                unsigned ind = chunk.epoch % (engine->staleness + 1);
+                engine->finishedChunkLock.lock();
+                if (++(engine->numFinishedEpoch[ind]) == numChunk) {
+                    engine->finishedChunkLock.unlock();
+                    // printLog(nodeId, "FINISHED epoch %u. Total finished %u", chunk.epoch, engine->nodesFinishedEpoch[ind]+1);
+                    engine->numFinishedEpoch[ind] = 0;
 
-                engine->sendEpochUpdate(chunk.epoch);
-                engine->finishedNodeLock.lock();
-                if (++(engine->nodesFinishedEpoch[ind]) == numNodes + 1) {
-                    ++(engine->minEpoch);
-                    engine->nodesFinishedEpoch[ind] = 0;
+                    engine->sendEpochUpdate(chunk.epoch);
+                    engine->finishedNodeLock.lock();
+                    if (++(engine->nodesFinishedEpoch[ind]) == numNodes + 1) {
+                        ++(engine->minEpoch);
+                        engine->nodesFinishedEpoch[ind] = 0;
+                    }
+                    engine->finishedNodeLock.unlock();
+                } else {
+                    engine->finishedChunkLock.unlock();
                 }
-                engine->finishedNodeLock.unlock();
-            } else {
-                engine->finishedChunkLock.unlock();
             }
         }
-
-        aggLock.lock();
-        aggQueue.push(nextChunk);
-        aggLock.unlock();
+        engine->schQueue.lock();
+        engine->schQueue.push(nextChunk);
+        engine->schQueue.unlock();
     } else {
-        resLock.lock();
-        resQueue.push(nextChunk);
-        resLock.unlock();
+        engine->SCQueue.lock();
+        engine->SCQueue.push(nextChunk);
+        engine->SCQueue.unlock();
     }
-
-    return true;
 }
+
+void LambdaComm::NNRecvCallbackGAT(Chunk &chunk) {}
 
 void LambdaComm::asyncRelaunchLoop() {
 #define MIN_TIMEOUT 500u     // at least wait for MIN_TIMEOUT ms before relaunching
