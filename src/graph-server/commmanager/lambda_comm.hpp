@@ -86,11 +86,6 @@ public:
     std::mutex accMtx;
     std::map<unsigned, AccLoss> accLossTable; // epoch -> AccLoss
 
-    // Push result chunks back to queues
-    void NNRecvCallback(Chunk &chunk);
-    void NNRecvCallbackGCN(Chunk &chunk);
-    void NNRecvCallbackGAT(Chunk &chunk);
-
     // Invoke lambda function
     std::string LAMBDA_NAME;
     void invokeLambda(const Chunk &chunk);

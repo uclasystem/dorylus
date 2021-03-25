@@ -691,74 +691,64 @@ void Engine::runBackwardSyncPiplineGCN() {
 }
 
 void Engine::aggregateGCN(Chunk &c) {
-    unsigned lvid = c.lowBound;
-    unsigned limit = c.upBound;
+    unsigned start = c.lowBound;
+    unsigned end = c.upBound;
+    PROP_TYPE dir = c.dir;
 
-    if (c.dir == PROP_TYPE::FORWARD) { // forward
-        unsigned featDim = getFeatDim(c.layer);
-        FeatType *featTensor = NULL;
-        if (c.layer == 0)
-            featTensor =
-                getVtxFeat(savedNNTensors[c.layer]["x"].getData(), lvid, featDim);
-        else
-            featTensor = getVtxFeat(savedNNTensors[c.layer - 1]["h"].getData(),
-                                    lvid, featDim);
+    unsigned featDim;
+    FeatType *featTensor = NULL;
+    FeatType **inputTensor = NULL;
+    FeatType *outputTensor = NULL;
+    if (dir == PROP_TYPE::FORWARD) { // forward
+        featDim = getFeatDim(c.layer);
+        featTensor = c.layer == 0
+                   ? getVtxFeat(savedNNTensors[c.layer]["x"].getData(),
+                                start, featDim)
+                   : getVtxFeat(savedNNTensors[c.layer - 1]["h"].getData(),
+                                start, featDim);
+        inputTensor = savedEdgeTensors[c.layer]["fedge"];  // input edgeFeatsTensor
+        outputTensor = savedNNTensors[c.layer]["ah"].getData(); // output aggregatedTensor
+    } else { // backward
+        featDim = getFeatDim(c.layer + 1);
+        featTensor = getVtxFeat(savedNNTensors[c.layer + 1]["grad"].getData(),
+                                start, featDim);
+        inputTensor = savedEdgeTensors[c.layer]["bedge"];
+        outputTensor = savedNNTensors[c.layer]["aTg"].getData();
+    }
+    FeatType *chunkPtr = getVtxFeat(outputTensor, start, featDim);
+    std::memcpy(chunkPtr, featTensor,
+                sizeof(FeatType) * (end - start) * featDim);
 
-        FeatType **eFeatsTensor = savedEdgeTensors[c.layer]["fedge"];  // input tensor
-        FeatType *aggTensor = savedNNTensors[c.layer]["ah"].getData(); // output tensor
-
-        FeatType *chunkPtr = getVtxFeat(aggTensor, lvid, featDim);
-        std::memcpy(chunkPtr, featTensor,
-                    sizeof(FeatType) * (limit - lvid) * featDim);
-        while (lvid < limit) {
-            // Read out data of the current layer of given vertex.
-            FeatType *currDataDst = getVtxFeat(aggTensor, lvid, featDim);
-            // Apply normalization factor on the current data.
-            {
-                const EdgeType normFactor = graph.vtxDataVec[lvid];
-                for (unsigned i = 0; i < featDim; ++i) {
-                    currDataDst[i] *= normFactor;
-                }
+#ifdef _CPU_ENABLED_
+#pragma omp parallel for
+#endif
+    for (unsigned lvid = start; lvid < end; lvid++) {
+        // Read out data of the current layer of given vertex.
+        FeatType *currDataDst = getVtxFeat(outputTensor, lvid, featDim);
+        // Apply normalization factor on the current data.
+        {
+            const EdgeType normFactor = graph.vtxDataVec[lvid];
+            for (unsigned i = 0; i < featDim; ++i) {
+                currDataDst[i] *= normFactor;
             }
-            // Aggregate from incoming neighbors.
+        }
+        // Aggregate from incoming neighbors.
+        if (dir == PROP_TYPE::FORWARD) { // using forward adj mat
             for (uint64_t eid = graph.forwardAdj.columnPtrs[lvid];
                 eid < graph.forwardAdj.columnPtrs[lvid + 1]; ++eid) {
                 EdgeType normFactor = graph.forwardAdj.values[eid];
                 for (unsigned j = 0; j < featDim; ++j) {
-                    currDataDst[j] += eFeatsTensor[eid][j] * normFactor;
+                    currDataDst[j] += inputTensor[eid][j] * normFactor;
                 }
             }
-            lvid++;
-        }
-    } else { // backward
-        unsigned featDim = getFeatDim(c.layer + 1);
-        FeatType *featTensor = getVtxFeat(
-            savedNNTensors[c.layer + 1]["grad"].getData(), lvid, featDim);
-        FeatType *aggTensor = savedNNTensors[c.layer]["aTg"].getData();
-        FeatType **eFeatsTensor = savedEdgeTensors[c.layer]["bedge"];
-
-        FeatType *chunkPtr = getVtxFeat(aggTensor, lvid, featDim);
-        std::memcpy(chunkPtr, featTensor,
-                    sizeof(FeatType) * (limit - lvid) * featDim);
-        while (lvid < limit) {
-            // Read out data of the current layer of given vertex.
-            FeatType *currDataDst = getVtxFeat(aggTensor, lvid, featDim);
-            // Apply normalization factor on the current data.
-            {
-                const EdgeType normFactor = graph.vtxDataVec[lvid];
-                for (unsigned i = 0; i < featDim; ++i) {
-                    currDataDst[i] *= normFactor;
-                }
-            }
-            // Aggregate from neighbors.
+        } else { // using backward adj mat
             for (uint64_t eid = graph.backwardAdj.rowPtrs[lvid];
                 eid < graph.backwardAdj.rowPtrs[lvid + 1]; ++eid) {
                 EdgeType normFactor = graph.backwardAdj.values[eid];
                 for (unsigned j = 0; j < featDim; ++j) {
-                    currDataDst[j] += eFeatsTensor[eid][j] * normFactor;
+                    currDataDst[j] += inputTensor[eid][j] * normFactor;
                 }
             }
-            lvid++;
         }
     }
 }
@@ -790,24 +780,26 @@ void Engine::scatterGCN(Chunk &c) {
         c.dir == PROP_TYPE::FORWARD ? graph.forwardGhostMap
                                     : graph.backwardGhostMap;
 
+    // batch sendouts similar to the sequential version
+    const unsigned BATCH_SIZE = std::max(
+        (MAX_MSG_SIZE - DATA_HEADER_SIZE) /
+            (sizeof(unsigned) + sizeof(FeatType) * featDim),
+        1ul);  // at least send one vertex
     // Create a series of buckets for batching sendout messages to nodes
-    std::vector<unsigned> *batchedIds =
-        new std::vector<unsigned>[numNodes];
+    auto *batchedIds = new std::vector<unsigned>[numNodes];
     for (unsigned lvid = startId; lvid < endId; ++lvid) {
         for (unsigned nid : ghostMap[lvid]) {
             batchedIds[nid].push_back(lvid);
         }
     }
 
-    // batch sendouts similar to the sequential version
-    const unsigned BATCH_SIZE = std::max(
-        (MAX_MSG_SIZE - DATA_HEADER_SIZE) /
-            (sizeof(unsigned) + sizeof(FeatType) * featDim),
-        1ul);  // at least send one vertex
     for (unsigned nid = 0; nid < numNodes; ++nid) {
         if (nid == nodeId)
             continue;
         unsigned ghostVCnt = batchedIds[nid].size();
+#if defined(_CPU_ENABLED_) || defined(_GPU_ENABLED_)
+#pragma omp parallel for
+#endif
         for (unsigned ib = 0; ib < ghostVCnt; ib += BATCH_SIZE) {
             unsigned sendBatchSize = (ghostVCnt - ib) < BATCH_SIZE
                                    ? (ghostVCnt - ib) : BATCH_SIZE;
@@ -817,6 +809,7 @@ void Engine::scatterGCN(Chunk &c) {
             recvCntLock.lock();
             recvCnt++;
             recvCntLock.unlock();
+            // __sync_fetch_and_add(&recvCnt, 1);
         }
     }
 
@@ -911,7 +904,23 @@ void Engine::scatterWorkFunc(unsigned tid) {
             SCQueue.unlock();
             bs.sleep();
             continue;
+        } 
+#if defined(_CPU_ENABLED_) || defined(_GPU_ENABLED_)
+        // A barrier for pipeline
+        // This barrier is for CPU/GPU only at the beginning of
+        // the scatter phase to prevent someone send messages
+        // too early.
+        else if (SCQueue.size() == numLambdasForward) {
+            SCQueue.unlock();
+            if (tid == 0) {
+                nodeManager.barrier();
+                SCQueue.lock();
+            } else {
+                bs.sleep();
+                continue;
+            }
         }
+#endif
 
         Chunk c = SCQueue.top();
         // printLog(nodeId, "SC: Got %s", c.str().c_str());

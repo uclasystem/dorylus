@@ -95,67 +95,9 @@ bool LambdaComm::NNRecv(Chunk &chunk) {
     }
     timeoutMtx.unlock();
 
-    NNRecvCallback(chunk);
+    NNRecvCallback(engine, async, chunk);
     return true;
 }
-
-void LambdaComm::NNRecvCallback(Chunk &chunk) {
-    switch (engine->gnn_type) {
-        case GNN::GCN:
-            NNRecvCallbackGCN(chunk);
-            break;
-        case GNN::GAT:
-            NNRecvCallbackGAT(chunk);
-            break;
-        default:
-            abort();
-    }
-}
-
-void LambdaComm::NNRecvCallbackGCN(Chunk &chunk) {
-    // filter out outdate chunks after switching sync/async
-    if ((int)(chunk.epoch) <= outdateEpoch) {
-        return;
-    }
-
-    // If bounded-staleness enabled, increment the finished chunks for this epoch
-    // If the min epoch has finished, allow chunks to move to the next epoch
-    // TODO (JOHN): Consider using __sync_fetch ops here to make code cleaner and
-    //  still achieve synchronization
-    Chunk nextChunk = incLayer(chunk, 2);
-    if (isLastLayer(chunk)) {
-        if (async) {
-            if (engine->staleness != UINT_MAX) {
-                unsigned ind = chunk.epoch % (engine->staleness + 1);
-                engine->finishedChunkLock.lock();
-                if (++(engine->numFinishedEpoch[ind]) == numChunk) {
-                    engine->finishedChunkLock.unlock();
-                    // printLog(nodeId, "FINISHED epoch %u. Total finished %u", chunk.epoch, engine->nodesFinishedEpoch[ind]+1);
-                    engine->numFinishedEpoch[ind] = 0;
-
-                    engine->sendEpochUpdate(chunk.epoch);
-                    engine->finishedNodeLock.lock();
-                    if (++(engine->nodesFinishedEpoch[ind]) == numNodes + 1) {
-                        ++(engine->minEpoch);
-                        engine->nodesFinishedEpoch[ind] = 0;
-                    }
-                    engine->finishedNodeLock.unlock();
-                } else {
-                    engine->finishedChunkLock.unlock();
-                }
-            }
-        }
-        engine->schQueue.lock();
-        engine->schQueue.push(nextChunk);
-        engine->schQueue.unlock();
-    } else {
-        engine->SCQueue.lock();
-        engine->SCQueue.push(nextChunk);
-        engine->SCQueue.unlock();
-    }
-}
-
-void LambdaComm::NNRecvCallbackGAT(Chunk &chunk) {}
 
 void LambdaComm::asyncRelaunchLoop() {
 #define MIN_TIMEOUT 500u     // at least wait for MIN_TIMEOUT ms before relaunching

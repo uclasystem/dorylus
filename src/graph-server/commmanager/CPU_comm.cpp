@@ -41,6 +41,7 @@ void CPUComm::NNCompute(Chunk &chunk) {
         }
     }
     // printLog(nodeId, "CPU NN Done");
+    NNRecvCallback(engine, false, chunk);
 }
 
 void CPUComm::vtxNNForward(unsigned layer, bool lastLayer) {
