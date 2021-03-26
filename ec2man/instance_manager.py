@@ -34,7 +34,7 @@ def launch_ec2_instances(input_args):
 
 	if opts.az != None:
 		args['Placement'] = { 'AvailabilityZone': opts.az }
-		if opts.az[:-1] == 'us-east-2':
+		if opts.az[:-1] == 'us-east-1':
 			args['SecurityGroupIds'] = ['sg-098524cf5a5d0011f'],
 
 	print("Instance options:", args)
