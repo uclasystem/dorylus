@@ -408,6 +408,7 @@ void Engine::runGCN() {
     commHalt = false;
     pipelineHalt = false;
     unsigned commThdCnt = std::max(2u, cThreads / 4);
+    // unsigned commThdCnt = cThreads;
     // unsigned commThdCnt = 1;
 
     auto gaWrkrFunc =
@@ -419,7 +420,7 @@ void Engine::runGCN() {
     auto avWrkrFunc =
         std::bind(&Engine::applyVertexWorkFunc, this, std::placeholders::_1);
     ThreadVector avWrkrThds;
-    for (unsigned tid = 0; tid < cThreads; ++tid) {
+    for (unsigned tid = 0; tid < 1; ++tid) {
         avWrkrThds.push_back(std::thread(avWrkrFunc, tid));
     }
     auto scWrkrFunc =
@@ -445,7 +446,7 @@ void Engine::runGCN() {
     loadChunksGCN();
     // Start scheduler
     auto schedFunc =
-        std::bind(&Engine::scheduleFunc, this, std::placeholders::_1);
+        std::bind(&Engine::scheduleAsyncFunc, this, std::placeholders::_1);
     ThreadVector schedulerThds;
     for (unsigned tid = 0; tid < 1; ++tid) {
         schedulerThds.push_back(std::thread(schedFunc, tid));
@@ -459,10 +460,11 @@ void Engine::runGCN() {
     commHalt = true;
     for (unsigned tid = 0; tid < cThreads; ++tid) {
         gaWrkrThds[tid].join();
-        avWrkrThds[tid].join();
     }
-    for (unsigned tid = 0; tid < 1; ++tid)
+    for (unsigned tid = 0; tid < 1; ++tid) {
+        avWrkrThds[tid].join();
         aeWrkrThds[tid].join();
+    }
     for (unsigned tid = 0; tid < commThdCnt; ++tid)
         scWrkrThds[tid].join();
     for (unsigned tid = 0; tid < commThdCnt; ++tid)
@@ -669,7 +671,7 @@ void Engine::runForwardSyncPipelineGCN(unsigned epoch) {
     // }
 }
 
-void Engine::runBackwardSyncPiplineGCN() {
+void Engine::runBackwardSyncPipelineGCN() {
     // if (nodeId == 0) {
     //     printLog(nodeId, "Epoch %u BACKWARD starts...", currEpoch);
     // }
@@ -797,7 +799,7 @@ void Engine::scatterGCN(Chunk &c) {
         if (nid == nodeId)
             continue;
         unsigned ghostVCnt = batchedIds[nid].size();
-#if defined(_CPU_ENABLED_) || defined(_GPU_ENABLED_)
+#if false || defined(_CPU_ENABLED_) || defined(_GPU_ENABLED_)
 #pragma omp parallel for
 #endif
         for (unsigned ib = 0; ib < ghostVCnt; ib += BATCH_SIZE) {
@@ -806,10 +808,12 @@ void Engine::scatterGCN(Chunk &c) {
             verticesPushOut(nid, sendBatchSize,
                             batchedIds[nid].data() + ib, scatterTensor,
                             featDim, c);
-            recvCntLock.lock();
-            recvCnt++;
-            recvCntLock.unlock();
-            // __sync_fetch_and_add(&recvCnt, 1);
+            if (!async) {
+                // recvCntLock.lock();
+                // recvCnt++;
+                // recvCntLock.unlock();
+                __sync_fetch_and_add(&recvCnt, 1);
+            }
         }
     }
 
@@ -833,9 +837,8 @@ void Engine::gatherWorkFunc(unsigned tid) {
 
         if (gnn_type == GNN::GCN) {
             aggregateGCN(c);
-            AVQueue.lock();
-            AVQueue.push(c);
-            AVQueue.unlock();
+            // applyVertexGCN(c);
+            AVQueue.push_atomic(c);
         } else {
             abort();
         }
@@ -845,6 +848,7 @@ void Engine::gatherWorkFunc(unsigned tid) {
     GAQueue.clear();
 }
 
+// We could merge GA and AV since GA always calls AV
 void Engine::applyVertexWorkFunc(unsigned tid) {
     BackoffSleeper bs;
     while (!pipelineHalt) {
@@ -905,7 +909,7 @@ void Engine::scatterWorkFunc(unsigned tid) {
             SCQueue.unlock();
             bs.sleep();
             continue;
-        } 
+        }
 #if defined(_CPU_ENABLED_) || defined(_GPU_ENABLED_)
         // A barrier for pipeline
         // This barrier is for CPU/GPU only at the beginning of
@@ -939,7 +943,13 @@ void Engine::scatterWorkFunc(unsigned tid) {
             abort();
         }
 
-        SCStashQueue.push_atomic(c);
+        // Sync-Scatter for sync-pipeline and
+        // the first epoch in asyn-pipeline only
+        if (!async || c.epoch == 1) {
+            SCStashQueue.push_atomic(c);
+        } else {
+            AEQueue.push_atomic(c);
+        }
 
         bs.reset();
     }
@@ -964,9 +974,7 @@ void Engine::applyEdgeWorkFunc(unsigned tid) {
 
         if (gnn_type == GNN::GCN) {
             applyEdgeGCN(c); // do nothing
-            GAQueue.lock();
-            GAQueue.push(c);
-            GAQueue.unlock();
+            GAQueue.push_atomic(c);
         }
 
         bs.reset();
@@ -995,9 +1003,13 @@ void Engine::scheduleFunc(unsigned tid) {
                 schQueue.unlock();
                 bs.sleep();
                 continue;
-            } else { // Enter next epoch. This is an atomic section
+            } else  { // Enter next epoch. This is an atomic section
                 endTime = getTimer();
-                if (currEpoch > 0) { // skip epoch 0
+                if (currEpoch == 0) { // Epoch 0. Training begining
+                    layer = 0;
+                    async = mode == LAMBDA && staleness != UINT_MAX;
+                    printLog(nodeId, "Async: %d", async);
+                } else { // Timing, skip epoch 0
                     unsigned epochTime = endTime - sttTime;
                     addEpochTime(epochTime);
                     printLog(nodeId, "Time for epoch %u: %lfms",
@@ -1020,6 +1032,165 @@ void Engine::scheduleFunc(unsigned tid) {
                 layer = 0;
                 printLog(nodeId, "Epoch %u starts...", currEpoch);
             }
+        } else {
+            schQueue.pop();
+            schQueue.unlock();
+        }
+
+        if (gnn_type == GNN::GCN) {
+            GAQueue.lock();
+            GAQueue.push(c);
+            GAQueue.unlock();
+        }
+
+        bs.reset();
+    }
+    schQueue.clear();
+}
+
+void Engine::scheduleAsyncFunc(unsigned tid) {
+    double asyncStt = 0, asyncEnd = 0;
+    double syncStt  = 0, syncEnd  = 0;
+    // unsigned numAsyncEpochs = 0;
+
+    BackoffSleeper bs;
+    while (!pipelineHalt) {
+        schQueue.lock();
+        if (schQueue.empty()) {
+            schQueue.unlock();
+            bs.sleep();
+            continue;
+        }
+
+        Chunk c = schQueue.top();
+        // printLog(nodeId, "SCHEDULER: Got %s", c.str().c_str());
+        if (c.epoch > currEpoch) { // some chunk finishes curr epoch
+            // (1) get a chunk for `numE + 1` means [1, numEpochs] finished
+            if (c.epoch > numEpochs ||
+                convergeState == CONVERGE_STATE::DONE) {
+                unsigned finishedChunks = schQueue.size();
+                schQueue.unlock();
+                // (1.1) wait all chunks to finish
+                if (finishedChunks < numLambdasForward) {
+                    bs.sleep();
+                    continue;
+                } else { // (1.2) all chunks are done, exiting
+                    if (async) {
+                        asyncEnd = getTimer();
+                    } else {
+                        syncEnd = getTimer();
+                        double epochTime = syncEnd - syncStt;
+                        addEpochTime(epochTime);
+                        printLog(nodeId, "Time for epoch %u: %.2lfms",
+                                 currEpoch, epochTime);
+                    }
+                    if (numAsyncEpochs) {
+                        double totalAsyncTime = asyncEnd - asyncStt;
+                        asyncAvgEpochTime = totalAsyncTime / numAsyncEpochs;
+                    }
+                    pipelineHalt = true;
+                    break;
+                }
+            }
+            // (2) converge state switches so we turn off async pipeline
+            if (async && convergeState != CONVERGE_STATE::EARLY) {
+                nodeManager.readEpochUpdates();
+                // find the current epoch of the fastest node
+                if (maxEpoch == 0) {
+                    maxEpoch = currEpoch;
+                    for (unsigned e = minEpoch + staleness; e >= minEpoch; e--) {
+                        if (nodesFinishedEpoch[e % (staleness + 1)] > 0) {
+                            maxEpoch = e;
+                            break;
+                        }
+                    }
+                    printLog(nodeId, "max epoch %u, curr epoch %u",
+                                maxEpoch, currEpoch);
+                }
+                // (2.1) wait all chunks finishing maxEpoch
+                if (c.epoch > maxEpoch) {
+                    unsigned finishedChunks = schQueue.size();
+                    schQueue.unlock();
+                    if (finishedChunks < numLambdasForward) {
+                        bs.sleep();
+                        continue;
+                    } else { // (2.2) all chunks finish, switch to sync
+                        nodeManager.barrier();
+                        // nodeManager.readEpochUpdates();
+                        printLog(nodeId, "Switch to sync");
+                        // debug
+                        // printLog(nodeId, "Scatter stats: %u %u",
+                        //          recvCnt, ghostVtcsRecvd);
+                        async = false;
+                        asyncEnd = getTimer();
+                        syncStt = asyncEnd;
+                        minEpoch = maxEpoch + 1;
+                        maxEpoch = 0;
+                        // reset scatter status
+                        recvCnt = 0;
+                        ghostVtcsRecvd = 0;
+                        continue;
+                    }
+                }
+            }
+            // (3) bounded-staleness
+            if (async && c.epoch > minEpoch + staleness) {
+                nodeManager.readEpochUpdates();
+                schQueue.unlock();
+                // block until minEpoch being updated
+                if (c.epoch > minEpoch + staleness)
+                    bs.sleep();
+                continue;
+            }
+
+            // (4) sync mode. sync all chunks after a epoch
+            if (!async && schQueue.size() < numLambdasForward) {
+                schQueue.unlock();
+                bs.sleep();
+                continue;
+            }
+            if (currEpoch == 0) { // Epoch 0. Training begining
+                layer = 0;
+                async = false;
+                syncStt = getTimer();
+            }
+            // Timing, skip epoch 0 and the async-sync transition epoch
+            if (!async && currEpoch >= minEpoch) {
+                // printLog(nodeId, "curr %u max %u", currEpoch, maxEpoch);
+                syncEnd = getTimer();
+                double epochTime = syncEnd - syncStt;
+                addEpochTime(epochTime);
+                printLog(nodeId, "Time for epoch %u: %.2lfms",
+                    currEpoch, epochTime);
+                syncStt = syncEnd;
+            }
+            if (currEpoch == 1) { // Async pipeline starts from epoch 1
+                ++minEpoch; // assert(minEpoch == 1)
+                async = mode == LAMBDA &&
+                        pipeline &&
+                        staleness != UINT_MAX;
+                if (async) {
+                    printLog(nodeId, "Switch to async at epoch %u",
+                            currEpoch);
+                    asyncStt = getTimer();
+                }
+            }
+
+            if (async)
+                ++numAsyncEpochs;
+            else
+                ++numSyncEpochs;
+            ++currEpoch;
+            schQueue.pop();
+            schQueue.unlock();
+
+            // some initialization...
+            layer = 0;
+            if (async)
+                printLog(nodeId, "Async Epoch %u [%u:%u] starts...",
+                         currEpoch, minEpoch, minEpoch + staleness);
+            else
+                printLog(nodeId, "Sync Epoch %u starts...", currEpoch);
         } else {
             schQueue.pop();
             schQueue.unlock();

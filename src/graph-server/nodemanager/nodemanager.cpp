@@ -139,11 +139,11 @@ NodeManager::barrier() {
         } else if (nMsg.messageType == EPOCH) {
             unsigned epoch = nMsg.info;
             unsigned ind = epoch % (engine->staleness + 1);
-            //printLog(me.id, "Got update for epoch %u, Total %u", epoch,
-            //  engine->nodesFinishedEpoch[ind] + 1);
+            // printLog(me.id, "Got update for epoch %u, Total %u", epoch,
+            //  engine->nodesFinishedEpoch[ind]);
 
             engine->finishedChunkLock.lock();
-            if (++(engine->numFinishedEpoch[ind] = numNodes)){
+            if (++(engine->numFinishedEpoch[ind] = numNodes)) {
                 ++(engine->minEpoch);
                 engine->numFinishedEpoch[ind] = 0;
             }
@@ -180,11 +180,12 @@ void NodeManager::readEpochUpdates() {
         if (nMsg.messageType == EPOCH) {
             unsigned epoch = nMsg.info;
             unsigned ind = epoch % (engine->staleness + 1);
-            //printLog(me.id, "Got update for epoch %u, Total %u", epoch,
-            //  engine->nodesFinishedEpoch[ind] + 1);
+            // printLog(me.id, "Got update for epoch %u, Total %u", epoch,
+            //  engine->nodesFinishedEpoch[ind]);
 
             engine->finishedNodeLock.lock();
-            if (++(engine->nodesFinishedEpoch[ind]) == numNodes + 1) {
+            // If the min epoch has finished, allow chunks to move to the next epoch
+            if (++(engine->nodesFinishedEpoch[ind]) == numNodes) {
                 ++(engine->minEpoch);
                 engine->nodesFinishedEpoch[ind] = 0;
             }

@@ -20,9 +20,9 @@ LambdaComm::LambdaComm(Engine *_engine) :
         numListeners(4), engine(_engine) { // TODO: Decide numListeners.
     nodeId = _engine->nodeId;
     if (engine->gnn_type == GNN::GCN) {
-        LAMBDA_NAME = "gcn";
+        LAMBDA_NAME = "yifan-gcn";
     } else if (engine->gnn_type == GNN::GAT) {
-        LAMBDA_NAME = "gat";
+        LAMBDA_NAME = "yifan-gat";
     } else {
         LAMBDA_NAME = "invalid_lambda_name";
     }
@@ -82,7 +82,7 @@ bool LambdaComm::NNRecv(Chunk &chunk) {
     }
 
     unsigned exeTime = timestamp_ms() - entry->second;
-    if (async) engine->vecTimeLambdaWait[chunk.dir * engine->numLayers + chunk.layer] += exeTime;
+    // if (engine->async) engine->vecTimeLambdaWait[chunk.dir * engine->numLayers + chunk.layer] += exeTime;
     timeoutTable.erase(chunk);
 
     if (chunk.vertex) {
@@ -95,13 +95,13 @@ bool LambdaComm::NNRecv(Chunk &chunk) {
     }
     timeoutMtx.unlock();
 
-    NNRecvCallback(engine, async, chunk);
+    NNRecvCallback(engine, chunk);
     return true;
 }
 
 void LambdaComm::asyncRelaunchLoop() {
 #define MIN_TIMEOUT 500u     // at least wait for MIN_TIMEOUT ms before relaunching
-#define TIMEOUT_PERIOD 3000u // wait for up to TIMEOUT_PERIOD ms before relaunching
+#define TIMEOUT_PERIOD 6000u // wait for up to TIMEOUT_PERIOD ms before relaunching
 #define SLEEP_PERIOD (MIN_TIMEOUT * 1000) // sleep SLEEP_PERIOD us and then check the condition.
 
     if (!relaunching) return;
@@ -113,14 +113,18 @@ void LambdaComm::asyncRelaunchLoop() {
             if (found == recordTable.end()) {
                 continue; // No lambda finished.
             }
+            unsigned currDur = currTS - kv.second;
             if (kv.first.vertex) {
-                if (currTS - kv.second > std::max(MIN_TIMEOUT, 3 * found->second)) {
-                    printLog(nodeId, "curr %u, timed %u, chunk %s", currTS - kv.second, 3 * found->second,
+                unsigned timeout = std::max(MIN_TIMEOUT, 5 * found->second);
+                if (currDur > timeout) {
+                    printLog(nodeId, "curr %u, timed %u, chunk %s", currDur, timeout,
                         kv.first.str().c_str());
                     relaunchLambda(kv.first);
                 }
             } else {
                 if (currTS - kv.second > TIMEOUT_PERIOD) {
+                    printLog(nodeId, "curr %u, timed %u, chunk %s", currDur, TIMEOUT_PERIOD,
+                        kv.first.str().c_str());
                     relaunchLambda(kv.first);
                 }
             }

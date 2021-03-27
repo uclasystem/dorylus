@@ -86,7 +86,7 @@ public:
     void runAsyncPipelineGCN();
 
     void runForwardSyncPipelineGCN(unsigned epoch);
-    void runBackwardSyncPiplineGCN();
+    void runBackwardSyncPipelineGCN();
 
     void output();
     void destroy();
@@ -107,9 +107,11 @@ public:
     void scatterWorkFunc(unsigned tid);
     void applyEdgeWorkFunc(unsigned tid);
     void scheduleFunc(unsigned tid);
+    void scheduleAsyncFunc(unsigned tid);
     LockChunkQueue SCStashQueue;
     PROP_TYPE currDir;
     bool pipelineHalt = false;
+    bool async = false;
 
     FeatType* aggregate(FeatType **eVFeatsTensor, unsigned edgsCnt,
                         unsigned featDim, AGGREGATOR aggregator);

@@ -426,7 +426,6 @@ void Engine::ghostReceiver(unsigned tid) {
     // printLog(nodeId, "RECEIVER: Starting");
     BackoffSleeper bs;
     unsigned sender, topic;
-    std::string tensorName;
     FeatType *msgBuf = (FeatType *)new char[MAX_MSG_SIZE];
 
     // While loop, looping infinitely to get the next message.
@@ -441,8 +440,10 @@ void Engine::ghostReceiver(unsigned tid) {
         } else {
             // A normal ghost value broadcast.
             if (topic < MAX_IDTYPE - 1) {
-                // Using MAX_IDTYPE - 1 as the receive signal.
-                commManager.dataPushOut(sender, nodeId, MAX_IDTYPE - 1, NULL, 0);
+                if (!async) {
+                    // Using MAX_IDTYPE - 1 as the receive signal.
+                    commManager.dataPushOut(sender, nodeId, MAX_IDTYPE - 1, NULL, 0);
+                }
                 char *bufPtr = (char *)msgBuf;
                 unsigned recvGhostVCnt = topic;
                 unsigned featDim = *(unsigned *)bufPtr;
@@ -452,11 +453,8 @@ void Engine::ghostReceiver(unsigned tid) {
                 unsigned dir = *(unsigned *)bufPtr;
                 bufPtr += sizeof(unsigned);
                 // Get proper variables depending on forward or backward
-                if (dir == PROP_TYPE::FORWARD) {
-                    tensorName = "fg";
-                } else {
-                    tensorName = "bg";
-                }
+                std::string tensorName = dir == PROP_TYPE::FORWARD
+                                       ? "fg" : "bg";
                 std::map<unsigned, unsigned> &globalToGhostVtcs =
                     dir == PROP_TYPE::FORWARD ? graph.srcGhostVtcs
                                               : graph.dstGhostVtcs;
@@ -482,28 +480,36 @@ void Engine::ghostReceiver(unsigned tid) {
                     bufPtr += sizeof(FeatType) * featDim;
                 }
 
-                recvCntLock.lock();
-                ghostVtcsRecvd += topic;
-                recvCntLock.unlock();
+                if (!async) {
+                    // recvCntLock.lock();
+                    // ghostVtcsRecvd += topic;
+                    // recvCntLock.unlock();
+                    __sync_fetch_and_add(&ghostVtcsRecvd, topic);
+                }
 
                 // A respond to a broadcast, and the topic vertex is in my local
                 // vertices. I should update the corresponding recvWaiter's
                 // value. If waiters become empty, send a signal in case the
                 // workers are waiting on it to be empty at the layer barrier.
             } else { // (topic == MAX_IDTYPE - 1)
-                recvCntLock.lock();
-                recvCnt--;
-                recvCntLock.unlock();
-                // __sync_fetch_and_add(&recvCnt, -1);
+                if (!async) {
+                    // recvCntLock.lock();
+                    // recvCnt--;
+                    // recvCntLock.unlock();
+                    __sync_fetch_and_add(&recvCnt, -1);
+                }
             }
             unsigned totalGhostCnt = currDir == PROP_TYPE::FORWARD
                                    ? graph.srcGhostCnt
                                    : graph.dstGhostCnt;
-            recvCntLock.lock();
-            if (recvCnt == 0 && ghostVtcsRecvd == totalGhostCnt) {
-                recvCntCond.signal();
+
+            if (!async) {
+                recvCntLock.lock();
+                if (recvCnt == 0 && ghostVtcsRecvd == totalGhostCnt) {
+                    recvCntCond.signal();
+                }
+                recvCntLock.unlock();
             }
-            recvCntLock.unlock();
 
             bs.reset();
         }
