@@ -1,5 +1,6 @@
 #include <cmath>
 #include <iostream>
+#include <thread>
 
 #include "../../common/utils.hpp"
 #include "comp_server.cuh"
@@ -103,12 +104,34 @@ void ComputingServer::gradLoss(unsigned layer, CuMatrix pred, bool report) {
     CuMatrix cuLabels = cu.wrapMatrix(labels);
 
     if (report) {
-        float acc, loss;
-        cu.getTrainStat(pred, cuLabels, acc, loss);
-        unsigned valsetSize = (unsigned)(pred.getRows() * VAL_PORTION);
-        msgService.sendAccloss(acc, loss, pred.getRows());
-        // printLog(nodeId, "valset size %u, total size %u", valsetSize, pred.getRows());
-        printLog(nodeId, "batch Acc: %f, Loss: %f", acc / valsetSize, loss / valsetSize);
+        Matrix cpuPreds = pred.getMatrix();
+        // Asynchronously do acc, loss calc on CPUs
+        std::thread evalThread([&](Matrix labels) {
+            Matrix cpuPreds = pred.getMatrix();
+            float acc = 0.0, loss = 0.0;
+            unsigned featDim = labels.getCols();
+            unsigned valStt = (unsigned)(labels.getRows() * TRAIN_PORTION);
+            unsigned valEnd = valStt + (unsigned)(labels.getRows() * VAL_PORTION);
+            for (unsigned i = valStt; i < valEnd; i++) {
+                FeatType *currLabel = labels.getData() + i * labels.getCols();
+                FeatType *currPred = cpuPreds.getData() + i * labels.getCols();
+                acc += currLabel[argmax(currPred, currPred + featDim)];
+                loss -= std::log(currPred[argmax(currLabel, currLabel + featDim)]);
+            }
+            printLog(nodeId, "ACC %f, LOSS %f", acc, loss);
+            msgService.sendAccloss(acc, loss, cpuPreds.getRows());
+            unsigned valsetSize = (unsigned)(cpuPreds.getRows() * VAL_PORTION);
+            printLog(nodeId, "batch Acc: %f, Loss: %f", acc / valsetSize, loss / valsetSize);
+            cpuPreds.free();
+        },
+        labels);
+        evalThread.detach();
+//        float acc, loss;
+//        cu.getTrainStat(pred, cuLabels, acc, loss);
+//        unsigned valsetSize = (unsigned)(pred.getRows() * VAL_PORTION);
+//        msgService.sendAccloss(acc, loss, pred.getRows());
+//        // printLog(nodeId, "valset size %u, total size %u", valsetSize, pred.getRows());
+//        printLog(nodeId, "batch Acc: %f, Loss: %f", acc / valsetSize, loss / valsetSize);
     }
     cu.maskout(pred, cuLabels);
 
