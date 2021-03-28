@@ -205,6 +205,7 @@ case $1 in
         SYNC=1
         TARGET_ACC="0.9"
         BLOCK=0
+        LEARNING_RATE="0.01"
         for var in "$@"
         do
             if [ $var = "--p" ] || [ $var = "--pipeline" ]; then
@@ -212,6 +213,10 @@ case $1 in
                 SYNC=1
             elif [[ $var = --t=* ]] || [[ $var = --targetacc=* ]]; then
                 TARGET_ACC="${var#*=}"
+            fi
+
+            if [[ $var = --lr=* ]] || [[ $var = -learning_rate=* ]]; then
+                LEARNING_RATE="${var#*=}"
             fi
 
             if [ $var = "GPU" ] || [ $var = "gpu" ] || [ $var = "CPU" ] || [ $var = "cpu" ]; then
@@ -253,7 +258,9 @@ case $1 in
             ${TMPFILEDIR} \
             ${SYNC} \
             ${TARGET_ACC} \
-            ${BLOCK}"
+            ${BLOCK} \
+            ${LEARNING_RATE}"
+        echo ${DSH_COMMAND}
         dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/dorylus && ${DSH_COMMAND}"
 
         # Gather the output files.

@@ -9,12 +9,13 @@
 WeightServer::WeightServer(std::string &wserverFile, std::string &myPrIpFile, std::string &gserverFile,
                            unsigned _listenerPort, unsigned _serverPort, unsigned _gport,
                            std::string &configFile, std::string &tmpFile,
-                           bool _sync, float _targetAcc, bool block)
+                           bool _sync, float _targetAcc, bool block,
+                           float _learning_rate)
     : ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), // gsocket(ctx, ZMQ_DEALER),
       listenerPort(_listenerPort), serverPort(_serverPort), gport(_gport),
       dataCtx(1), publisher(dataCtx, ZMQ_PUB), subscriber(dataCtx, ZMQ_SUB),
       numLambdas(0), term(false), adam(true), convergeState(CONVERGE_STATE::EARLY),
-      sync(_sync), targetAcc(_targetAcc), BLOCK(block) {
+      sync(_sync), targetAcc(_targetAcc), BLOCK(block), learning_rate(_learning_rate) {
 
     std::vector<std::string> allNodeIps =
         parseNodeConfig(configFile, wserverFile, myPrIpFile, gserverFile);
@@ -518,7 +519,10 @@ WeightServer::initWeights() {
  */
 Matrix
 WeightServer::xavierInitializer(unsigned dim1, unsigned dim2) {
-    std::default_random_engine dre(8888);
+    std::random_device rd;
+    std::mt19937 generator(rd());
+    unsigned rand_seed = generator();
+    std::default_random_engine dre(rand_seed);
     std::uniform_real_distribution<float> dist(-1, 1);
 
     unsigned dataSize = dim1 * dim2;
@@ -541,7 +545,10 @@ WeightServer::xavierInitializer(unsigned dim1, unsigned dim2) {
  */
 Matrix
 WeightServer::kaimingInitializer(unsigned dim1, unsigned dim2) {
-    std::default_random_engine dre(8888);
+    std::random_device rd;
+    std::mt19937 generator(rd());
+    unsigned rand_seed = generator();
+    std::default_random_engine dre(rand_seed);
     std::normal_distribution<float> dist(0, 1);
 
     unsigned dataSize = dim1 * dim2;
@@ -566,7 +573,10 @@ Matrix
 WeightServer::randomInitializer(unsigned dim1, unsigned dim2,
                                    float lowerBound, float upperBound) {
     assert(lowerBound < upperBound);
-    std::default_random_engine dre(8888);
+    std::random_device rd;
+    std::mt19937 generator(rd());
+    unsigned rand_seed = generator();
+    std::default_random_engine dre(rand_seed);
     std::uniform_real_distribution<float> dist(lowerBound, upperBound);
 
     unsigned dataSize = dim1 * dim2;
@@ -795,7 +805,7 @@ void WeightServer::freeWeights() {
 void WeightServer::initAdamOpt(bool adam) {
     // Initialize the adam optimizer if this is the master
     if (adam) {
-        adamOpt = new AdamOptimizer(LEARNING_RATE, dims);
+        adamOpt = new AdamOptimizer(learning_rate, dims);
     } else {
         adamOpt = NULL;
     }
