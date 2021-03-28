@@ -1,0 +1,30 @@
+#!/bin/bash
+
+##
+## Run the system on the given context. TO be invoked on only MASTER node.
+## Must be invoked after a proper `setuup-cluster` & `bld-system`!!!
+##
+## Usage: $ ./run/run-dorylus [Dataset] 
+##
+## Arguments:
+##      Dataset: The dataset to run
+##
+##	--l|-lambdas:		Set the number of lambdas
+##	--lr|-learning_rate:	Set the learning rate
+##	--p|-pipeline:		Enable pipeline version of Dorylus
+##	--e|-epochs:		Set the number of epochs
+##	--s|-staleness:		Set the staleness bound for asynchrony
+##	--tr|-timeout_ratio:	Tune how long the system waits for lambdas before relaunch
+##	--t|-targetacc:		Set a target accuracy for Dorylus (for early stop)
+##	cpu|gpu:		Enable cpu or gpu version (must rebuild source code to change)
+##
+
+
+cd $( dirname $0 )/..
+
+EC2MAN_CMD='python3 -m ec2man'
+ARGS="${@}"
+
+${EC2MAN_CMD} weight 0 ssh "cd dorylus; ./run/run-onnode weight ${ARGS}" &
+
+${EC2MAN_CMD} graph 0 ssh "cd dorylus; ./run/run-onnode graph ${ARGS}"
