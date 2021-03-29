@@ -1079,10 +1079,14 @@ void Engine::scheduleFunc(unsigned tid) {
     schQueue.clear();
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 void Engine::scheduleAsyncFunc(unsigned tid) {
     double asyncStt = 0, asyncEnd = 0;
     double syncStt  = 0, syncEnd  = 0;
     // unsigned numAsyncEpochs = 0;
+    const bool BLOCK = true;
+    bool block = BLOCK;
 
     BackoffSleeper bs;
     while (!pipelineHalt) {
@@ -1148,20 +1152,24 @@ void Engine::scheduleAsyncFunc(unsigned tid) {
                         // nodeManager.readEpochUpdates();
                         printLog(nodeId, "Switch to sync from %u",
                                  maxEpoch + 1);
-                        async = false;
-                        asyncEnd = getTimer();
-                        syncStt = asyncEnd;
-                        // reset [min|max] epoch info
-                        minEpoch = maxEpoch + 1;
-                        maxEpoch = 0;
                         // reset scatter status
                         recvCnt = 0;
                         ghostVtcsRecvd = 0;
+                        // reset [min|max] epoch info
+                        minEpoch = maxEpoch + 1;
+                        maxEpoch = 0;
+
+                        async = false;
+                        // reset timer
+                        asyncEnd = getTimer();
+                        syncStt = asyncEnd;
+                        // reset block status
+                        block = BLOCK;
                         continue;
                     }
                 }
             }
-            // (3) bounded-staleness
+            // (3) Bounded-staleness
             if (async && c.epoch > minEpoch + staleness) {
                 nodeManager.readEpochUpdates();
                 schQueue.unlock();
@@ -1170,20 +1178,21 @@ void Engine::scheduleAsyncFunc(unsigned tid) {
                     bs.sleep();
                 continue;
             }
-
-            // (4) sync mode. sync all chunks after a epoch
-            if (!async && schQueue.size() < numLambdasForward) {
-                schQueue.unlock();
-                bs.sleep();
+            // (4) Sync mode
+            if (!async && block) {
+                // (4.1) Sync all chunks after a epoch
+                if (tid == 0 && schQueue.size() == numLambdasForward) {
+                    schQueue.unlock();
+                    // Only master thread will call barrier
+                    nodeManager.barrier();
+                    block = false;
+                } else { // Waiting all chunks finish or not master thd
+                    schQueue.unlock();
+                    bs.sleep();
+                }
                 continue;
             }
-            if (currEpoch == START_EPOCH) { // Epoch 0. Training begining
-                layer = 0;
-                maxEpoch = 0;
-                async = false;
-                syncStt = getTimer();
-            }
-            // Timing, skip epoch 0 and the async-sync transition epoch
+            // (4.2) Timing, skip epoch 0 and the async-sync transition epoch
             if (!async && currEpoch >= minEpoch) {
                 syncEnd = getTimer();
                 double epochTime = syncEnd - syncStt;
@@ -1191,8 +1200,20 @@ void Engine::scheduleAsyncFunc(unsigned tid) {
                 printLog(nodeId, "Time for epoch %u: %.2lfms",
                     currEpoch, epochTime);
                 syncStt = syncEnd;
+                // reset block status
+                block = BLOCK;
             }
-            if (currEpoch == START_EPOCH + 1) { // Async pipeline starts from epoch 1
+
+            // (5) Start of the pipeline
+            // (5.1) Epoch 0. Training begining
+            if (currEpoch == START_EPOCH) {
+                layer = 0;
+                maxEpoch = 0;
+                async = false;
+                syncStt = getTimer();
+                block = BLOCK;
+            // (5.2) Epoch 1. Async pipeline starts
+            } else if (currEpoch == START_EPOCH + 1) {
                 ++minEpoch; // assert(minEpoch == 1)
                 async = mode == LAMBDA &&
                         pipeline &&
@@ -1236,5 +1257,6 @@ void Engine::scheduleAsyncFunc(unsigned tid) {
     }
     schQueue.clear();
 }
+#pragma GCC diagnostic pop
 
 Engine engine;
