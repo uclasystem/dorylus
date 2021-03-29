@@ -3,7 +3,7 @@
 ##
 ## Mount the nfs server on all graph servers to access the datasets
 ## Assumes that the NFS server has the datasets in the directory /mnt/filepool
-## Easiest if you have setup passwordless sudo and SSH keys
+## Assumes you have passwordless sudo setup on remote nodes
 ##
 ## Usage: $ ./gnnman/mount-nfs-server
 ##
