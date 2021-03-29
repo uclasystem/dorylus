@@ -188,7 +188,7 @@ backwardLayer(zmq::socket_t& data_socket, zmq::socket_t& weights_socket, Chunk &
     resultGrad.setName("grad");
     std::vector<Matrix> toSend{resultGrad};
     int ret = 0;
-    if (chunk.layer != 0) {
+    if (chunk.layer > 0) { // not the last layer
         ret = sendTensors(data_socket, chunk, toSend, true);
     } else { // the last backward layer (layer 0), skip sending the grad back
         ret = sendFinMsg(data_socket, chunk);

@@ -85,9 +85,6 @@ void WeightServer::stopWorkers() {
  *
  */
 void WeightServer::applyUpdate(unsigned layer, std::string& name) {
-    if (gnn_type == GNN::GAT) {
-        return; // For now using fake update tensor `a` with adam for GAT
-    }
     Timer updateTimer;
     updateTimer.start();
 
@@ -109,7 +106,12 @@ void WeightServer::applyUpdate(unsigned layer, std::string& name) {
     publisher.send(updateDataMsg);
     pubMtx.unlock();
 
-    std::string checkInfo = weightsStore[layer][name].tryApplyUpdate(adamOpt, layer);
+    std::string checkInfo;
+    if (gnn_type == GNN::GCN) {
+        checkInfo = weightsStore[layer][name].tryApplyUpdate(adamOpt, layer);
+    } else {
+        checkInfo = weightsStore[layer][name].tryApplyUpdateFake(adamOpt, layer);
+    }
     if (checkInfo != "") {
         __sync_fetch_and_add(&epoch, 1);
         // lrDecay();

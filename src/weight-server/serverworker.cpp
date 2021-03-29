@@ -85,7 +85,9 @@ void ServerWorker::sendTensors(zmq::message_t& client_id, Chunk &chunk) {
     }
     unsigned more = 1;
     workersocket.send(client_id, ZMQ_SNDMORE);
-    WeightTensorMap& weights = ws.weightsStore[chunk.layer];
+    unsigned featLayer = chunk.vertex ? chunk.layer : chunk.layer - 1;
+    // unsigned featLayer = chunk.layer;
+    WeightTensorMap& weights = ws.weightsStore[featLayer];
     while (more) {
         zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
         workersocket.recv(&tensorHeader);
@@ -107,7 +109,9 @@ void ServerWorker::sendTensors(zmq::message_t& client_id, Chunk &chunk) {
 
 void ServerWorker::recvTensors(zmq::message_t& client_id, Chunk &chunk) {
     unsigned more = 1;
-    WeightTensorMap& weights = ws.weightsStore[chunk.layer];
+    unsigned featLayer = chunk.vertex ? chunk.layer : chunk.layer - 1;
+    // unsigned featLayer = chunk.layer;
+    WeightTensorMap& weights = ws.weightsStore[featLayer];
     while (more) {
         recvUpdateTensor(chunk, weights);
 
@@ -159,10 +163,12 @@ void ServerWorker::recvUpdateTensor(Chunk &chunk, WeightTensorMap& weights) {
     } else {
         found->second.decRef(chunk);
         FeatType* newUpdate = (FeatType*) tensorData.data();
-        unsigned localUpdCnt = ws.weightsStore[chunk.layer][name].localUpdate(newUpdate);
+        unsigned featLayer = chunk.vertex ? chunk.layer : chunk.layer - 1;
+        // unsigned featLayer = chunk.layer;
+        unsigned localUpdCnt = ws.weightsStore[featLayer][name].localUpdate(newUpdate);
 
-        if (ws.weightsStore[chunk.layer][name].localUpdTot == localUpdCnt) {
-            ws.applyUpdate(chunk.layer, name);
+        if (ws.weightsStore[featLayer][name].localUpdTot == localUpdCnt) {
+            ws.applyUpdate(featLayer, name);
         }
     }
 }

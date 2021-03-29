@@ -34,6 +34,7 @@ WeightComm::WeightComm(std::string wserversFile, unsigned _wserverPort) :
         wsockets[ind].connect(whost_port);
 
         wserverAddrs.push_back(addr);
+        free(addr);
     }
     wserverCnt = wsockets.size();
 }

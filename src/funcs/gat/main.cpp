@@ -373,13 +373,13 @@ apply_phase(std::string dataserver, std::string weightserver, unsigned dport, un
     std::cout << "Finished comm setup" << std::endl;
 
     std::cout << chunk.str() << std::endl;
-    if (chunk.vertex != 0 && chunk.dir == PROP_TYPE::FORWARD) {
+    if (chunk.vertex && chunk.dir == PROP_TYPE::FORWARD) {
         return apply_vertex(data_socket, weights_socket, chunk);
-    } else if (chunk.vertex != 0 && chunk.dir == PROP_TYPE::BACKWARD) {
+    } else if (chunk.vertex && chunk.dir == PROP_TYPE::BACKWARD) {
         return apply_vertex_backward(data_socket, weights_socket, chunk);
-    } else if (chunk.vertex == 0 && chunk.dir == PROP_TYPE::FORWARD) {
+    } else if (!chunk.vertex && chunk.dir == PROP_TYPE::FORWARD) {
         return apply_edge(data_socket, weights_socket, chunk);
-    } else {
+    } else { // !chunk.vertex && chunk.dir == PROP_TYPE::BACKWARD
         return apply_edge_backward(data_socket, weights_socket, chunk);
     }
 

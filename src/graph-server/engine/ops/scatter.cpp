@@ -423,6 +423,19 @@ void Engine::scatterWorker(unsigned tid) {
 }
 
 void Engine::ghostReceiver(unsigned tid) {
+    switch (gnn_type) {
+        case GNN::GCN:
+            ghostReceiverGCN(tid);
+            break;
+        case GNN::GAT:
+            ghostReceiverGAT(tid);
+            break;
+        default:
+            abort();
+    }
+}
+
+void Engine::ghostReceiverGCN(unsigned tid) {
     // printLog(nodeId, "RECEIVER: Starting");
     BackoffSleeper bs;
     unsigned sender, topic;
@@ -455,6 +468,109 @@ void Engine::ghostReceiver(unsigned tid) {
                 // Get proper variables depending on forward or backward
                 std::string tensorName = dir == PROP_TYPE::FORWARD
                                        ? "fg" : "bg";
+                std::map<unsigned, unsigned> &globalToGhostVtcs =
+                    dir == PROP_TYPE::FORWARD ? graph.srcGhostVtcs
+                                              : graph.dstGhostVtcs;
+
+                // printLog(nodeId, "RECEIVER: Got msg %u:%s", layer,
+                //   dir == PROP_TYPE::FORWARD ? "F" : "B");
+                FeatType *ghostData =
+                    savedNNTensors[layer][tensorName].getData();
+                if (ghostData == NULL) {
+                    printLog(nodeId,
+                             "RECEIVER: Coudn't find tensor '%s' for layer %u",
+                             tensorName.c_str(), layer);
+                }
+
+                // Update ghost vertices
+                for (unsigned i = 0; i < recvGhostVCnt; ++i) {
+                    unsigned gvid = *(unsigned *)bufPtr;
+                    bufPtr += sizeof(unsigned);
+                    FeatType *dataPtr = getVtxFeat(
+                        ghostData, globalToGhostVtcs[gvid] - graph.localVtxCnt,
+                        featDim);
+                    memcpy(dataPtr, bufPtr, sizeof(FeatType) * featDim);
+                    bufPtr += sizeof(FeatType) * featDim;
+                }
+
+                if (!async) {
+                    // recvCntLock.lock();
+                    // ghostVtcsRecvd += topic;
+                    // recvCntLock.unlock();
+                    __sync_fetch_and_add(&ghostVtcsRecvd, topic);
+                }
+
+                // A respond to a broadcast, and the topic vertex is in my local
+                // vertices. I should update the corresponding recvWaiter's
+                // value. If waiters become empty, send a signal in case the
+                // workers are waiting on it to be empty at the layer barrier.
+            } else { // (topic == MAX_IDTYPE - 1)
+                if (!async) {
+                    // recvCntLock.lock();
+                    // recvCnt--;
+                    // recvCntLock.unlock();
+                    __sync_fetch_and_add(&recvCnt, -1);
+                }
+            }
+            unsigned totalGhostCnt = currDir == PROP_TYPE::FORWARD
+                                   ? graph.srcGhostCnt
+                                   : graph.dstGhostCnt;
+
+            if (!async) {
+                recvCntLock.lock();
+                if (recvCnt == 0 && ghostVtcsRecvd == totalGhostCnt) {
+                    recvCntCond.signal();
+                }
+                recvCntLock.unlock();
+            }
+
+            bs.reset();
+        }
+    }
+
+    if (commManager.dataPullIn(&sender, &topic, msgBuf, MAX_MSG_SIZE)) {
+        printLog(nodeId, "CLEAN UP: Still messages in buffer");
+        // clean up
+        while (commManager.dataPullIn(&sender, &topic, msgBuf,
+                                        MAX_MSG_SIZE)) {};
+    }
+    delete[] msgBuf;
+}
+
+
+void Engine::ghostReceiverGAT(unsigned tid) {
+    // printLog(nodeId, "RECEIVER: Starting");
+    BackoffSleeper bs;
+    unsigned sender, topic;
+    FeatType *msgBuf = (FeatType *)new char[MAX_MSG_SIZE];
+
+    // While loop, looping infinitely to get the next message.
+    while (true) {
+        // No message in queue.
+        if (!commManager.dataPullIn(&sender, &topic, msgBuf, MAX_MSG_SIZE)) {
+            bs.sleep();
+            if (commHalt) {
+                break;
+            }
+            // Pull in the next message, and process this message.
+        } else {
+            // A normal ghost value broadcast.
+            if (topic < MAX_IDTYPE - 1) {
+                if (!async) {
+                    // Using MAX_IDTYPE - 1 as the receive signal.
+                    commManager.dataPushOut(sender, nodeId, MAX_IDTYPE - 1, NULL, 0);
+                }
+                char *bufPtr = (char *)msgBuf;
+                unsigned recvGhostVCnt = topic;
+                unsigned featDim = *(unsigned *)bufPtr;
+                bufPtr += sizeof(unsigned);
+                unsigned layer = *(unsigned *)bufPtr;
+                bufPtr += sizeof(unsigned);
+                unsigned dir = *(unsigned *)bufPtr;
+                bufPtr += sizeof(unsigned);
+                // Get proper variables depending on forward or backward
+                std::string tensorName = dir == PROP_TYPE::FORWARD
+                                       ? "fg_z" : "bg_d";
                 std::map<unsigned, unsigned> &globalToGhostVtcs =
                     dir == PROP_TYPE::FORWARD ? graph.srcGhostVtcs
                                               : graph.dstGhostVtcs;
@@ -598,8 +714,13 @@ void Engine::verticesPushOut(unsigned receiver, unsigned totCnt,
     char *msgPtr = (char *)(msg.data());
     sprintf(msgPtr, NODE_ID_HEADER, receiver);
     msgPtr += NODE_ID_DIGITS;
-    unsigned featLayer = c.dir == PROP_TYPE::FORWARD
-                       ? c.layer : c.layer - 1;
+    unsigned featLayer;
+    if (gnn_type == GNN::GCN) { // YIFAN: fix this
+        featLayer = c.dir == PROP_TYPE::FORWARD
+                  ? c.layer : c.layer - 1;
+    } else if (gnn_type == GNN::GAT) {
+        featLayer = c.layer - 1;
+    }
     populateHeader(msgPtr, nodeId, totCnt, featDim, featLayer, c.dir);
     msgPtr += sizeof(unsigned) * 5;
 

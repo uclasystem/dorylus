@@ -275,6 +275,7 @@ void LambdaComm::loadWServerIps(std::string wsFile) {
             continue;
         char *addr = strdup(line.c_str());
         wservers.push_back(addr);
+        free(addr);
     }
 }
 

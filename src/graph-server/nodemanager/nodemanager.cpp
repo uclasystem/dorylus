@@ -134,21 +134,7 @@ NodeManager::barrier() {
     while (remaining > 0) {
         nodeSubscriber->recv(&inMsg);
         NodeMessage nMsg = *((NodeMessage *) inMsg.data());
-        if (nMsg.messageType == BARRIER) {
-            --remaining;
-        } else if (nMsg.messageType == EPOCH) {
-            unsigned epoch = nMsg.info;
-            unsigned ind = epoch % (engine->staleness + 1);
-            // printLog(me.id, "Got update for epoch %u, Total %u", epoch,
-            //  engine->nodesFinishedEpoch[ind]);
-
-            engine->finishedChunkLock.lock();
-            if (++(engine->numFinishedEpoch[ind] = numNodes)) {
-                ++(engine->minEpoch);
-                engine->numFinishedEpoch[ind] = 0;
-            }
-            engine->finishedChunkLock.unlock();
-        }
+        parseNodeMsg(nMsg);
     }
 
     // No redundant messages sent, so there should be no remaining messages in flight or in someone's
@@ -158,16 +144,50 @@ NodeManager::barrier() {
     // printLog(me.id, "Left that global barrier |xxx|.");
 }
 
+inline bool NodeManager::parseNodeMsg(NodeMessage &nMsg) {
+    bool ret = false;
+    if (nMsg.messageType == BARRIER) {
+        --remaining;
+        ret = true;
+    } else if (nMsg.messageType == MINEPOCH) {
+        if (nMsg.id != me.id) { // skip myself
+            unsigned epoch = nMsg.info;
+            unsigned ind = epoch % (engine->staleness + 1);
+            // printLog(me.id, "Got update for epoch %u, Total %u", epoch,
+            //  engine->nodesFinishedEpoch[ind]);
+            engine->finishedNodeLock.lock();
+            // If the min epoch has finished, allow chunks to move to the next epoch
+            if (++(engine->nodesFinishedEpoch[ind]) == numNodes) {
+                ++(engine->minEpoch);
+                // engine->maxEpoch = engine->minEpoch + engine->staleness;
+                engine->nodesFinishedEpoch[ind] = 0;
+            }
+            engine->finishedNodeLock.unlock();
+        }
+        ret = true;
+    }
+    return ret;
+}
 
 /**
  * Update all other nodes with the current epoch I am running
  */
-void NodeManager::sendEpochUpdate(unsigned currEpoch) {
+void NodeManager::sendEpochUpdate(unsigned epoch) {
     zmq::message_t outMsg(sizeof(NodeMessage));
-    NodeMessage nMsg(EPOCH, currEpoch);
+    NodeMessage nMsg(MINEPOCH, epoch, me.id);
     std::memcpy(outMsg.data(), &nMsg, sizeof(NodeMessage));
 
     nodePublisher->send(outMsg);
+
+    unsigned ind = epoch % (engine->staleness + 1);
+    engine->finishedNodeLock.lock();
+    // If the min epoch has finished, allow chunks to move to the next epoch
+    if (++(engine->nodesFinishedEpoch[ind]) == numNodes) {
+        ++(engine->minEpoch);
+        // engine->maxEpoch = engine->minEpoch + engine->staleness;
+        engine->nodesFinishedEpoch[ind] = 0;
+    }
+    engine->finishedNodeLock.unlock();
 }
 
 /**
@@ -177,23 +197,35 @@ void NodeManager::readEpochUpdates() {
     zmq::message_t inMsg;
     while (nodeSubscriber->krecv(&inMsg, ZMQ_DONTWAIT)) {
         NodeMessage nMsg = *(NodeMessage*) inMsg.data();
-        if (nMsg.messageType == EPOCH) {
-            unsigned epoch = nMsg.info;
-            unsigned ind = epoch % (engine->staleness + 1);
-            // printLog(me.id, "Got update for epoch %u, Total %u", epoch,
-            //  engine->nodesFinishedEpoch[ind]);
+        parseNodeMsg(nMsg);
+    }
+}
 
-            engine->finishedNodeLock.lock();
-            // If the min epoch has finished, allow chunks to move to the next epoch
-            if (++(engine->nodesFinishedEpoch[ind]) == numNodes) {
-                ++(engine->minEpoch);
-                engine->nodesFinishedEpoch[ind] = 0;
-            }
-            engine->finishedNodeLock.unlock();
-        } else if (nMsg.messageType == BARRIER) {
-            --remaining;
+unsigned NodeManager::syncCurrEpoch(unsigned epoch) {
+    // Send Current epoch message.
+    zmq::message_t outMsg(sizeof(NodeMessage));
+    NodeMessage nMsg(MAXEPOCH, epoch, me.id);
+    *((NodeMessage *) outMsg.data()) = nMsg;
+    nodePublisher->send(outMsg);
+
+    unsigned maxEpoch = epoch;
+    // Keep receiving messages until heard from all (including self).
+    // Use a different counter other than remaining to avoid conflicts
+    unsigned received = 0;
+    zmq::message_t inMsg;
+    while (received < numNodes) {
+        nodeSubscriber->recv(&inMsg);
+        NodeMessage nMsg = *((NodeMessage *) inMsg.data());
+        if (nMsg.messageType == MAXEPOCH) {
+            unsigned epoch = nMsg.info;
+            if (epoch > maxEpoch)
+                maxEpoch = epoch;
+            ++received;
+        } else {
+            parseNodeMsg(nMsg);
         }
     }
+    return maxEpoch;
 }
 
 

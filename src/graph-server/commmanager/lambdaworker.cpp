@@ -115,7 +115,8 @@ void LambdaWorker::sendTensors(zmq::message_t& client_id, Chunk &chunk) {
     if (exist) {
         workersocket.send(client_id, ZMQ_SNDMORE);
 
-        TensorMap& tensorMap = manager->savedNNTensors[chunk.layer];
+        unsigned featLayer = chunk.vertex ? chunk.layer : chunk.layer - 1; // YIFAN: fix this
+        TensorMap& tensorMap = manager->savedNNTensors[featLayer];
         unsigned more = 1;
         while (more) {
             zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
@@ -125,7 +126,7 @@ void LambdaWorker::sendTensors(zmq::message_t& client_id, Chunk &chunk) {
             auto found = tensorMap.find(name);
             if (found == tensorMap.end()) {
                 printLog(manager->nodeId, "Requested tensor '%s' not found for layer %u",
-                         name.c_str(), chunk.layer);
+                         name.c_str(), featLayer);
                 zmq::message_t errorHeader(TENSOR_HDR_SIZE);
                 populateHeader(errorHeader.data(), ERR_HEADER_FIELD, name.c_str());
                 workersocket.send(client_id, ZMQ_SNDMORE);
@@ -338,7 +339,8 @@ void LambdaWorker::sendEdgeTensor(zmq::message_t& client_id, Chunk& chunk) {
 
     // printLog(manager->nodeId, "Checking exit");
     if (exist) {
-        TensorMap& tMap = manager->savedNNTensors[chunk.layer];
+        unsigned featLayer = chunk.vertex ? chunk.layer : chunk.layer - 1;
+        TensorMap& tMap = manager->savedNNTensors[featLayer];
         zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
         workersocket.recv(&tensorHeader);
 
@@ -347,7 +349,7 @@ void LambdaWorker::sendEdgeTensor(zmq::message_t& client_id, Chunk& chunk) {
         if (found == tMap.end()) {
             workersocket.send(client_id, ZMQ_SNDMORE);
             printLog(manager->nodeId, "Requested tensor '%s' not found for layer %u",
-                     name.c_str(), chunk.layer);
+                     name.c_str(), featLayer);
             zmq::message_t errorHeader(TENSOR_HDR_SIZE);
             populateHeader(errorHeader.data(), ERR_HEADER_FIELD, name.c_str());
             workersocket.send(client_id, ZMQ_SNDMORE);
@@ -424,14 +426,22 @@ int LambdaWorker::recvTensor(Chunk &chunk) {
     if (!chunk.vertex)
         return 0;
 
-    TensorMap& tensorMap = manager->savedNNTensors[chunk.layer];
+    unsigned featLayer = chunk.vertex ? chunk.layer : chunk.layer - 1;
+    if (manager->engine->gnn_type == GNN::GAT && name == "grad") {
+        featLayer = chunk.layer - 1;
+    }
+    TensorMap& tensorMap = manager->savedNNTensors[featLayer];
     auto found = tensorMap.find(name);
     if (found == tensorMap.end()) {
         printLog(manager->nodeId, "Lambda %s returned unknown tensor %u:'%s'. Make sure to allocate it before running lambdas!",
-                 chunk.str().c_str(), chunk.layer, name.c_str());
+                 chunk.str().c_str(), featLayer, name.c_str());
         return 1;
-     }
+    }
 
+    // printLog(manager->nodeId, "get Tensor %s (%u, %u) from %s, dst %s",
+    //          name.c_str(), chunk.upBound - chunk.lowBound,
+    //          tensorData.size() / (chunk.upBound - chunk.lowBound) / 4,
+    //          chunk.str().c_str(), found->second.shape().c_str());
     FeatType* dptr = found->second.get(chunk.lowBound);
     std::memcpy(dptr, tensorData.data(), tensorData.size());
 
@@ -445,7 +455,8 @@ int LambdaWorker::recvETensor(Chunk& chunk) {
     workersocket.recv(&tensorData);
 
     std::string name = parseName((char*)tensorHeader.data());
-    TensorMap& tensorMap = manager->savedNNTensors[chunk.layer];
+    unsigned featLayer = chunk.vertex ? chunk.layer : chunk.layer - 1;
+    TensorMap& tensorMap = manager->savedNNTensors[featLayer];
     auto found = tensorMap.find(name);
     if (found == tensorMap.end()) {
         printLog(manager->nodeId, "Lambda %s returned unknown tensor '%s'. Make sure to allocate it before running lambdas!",

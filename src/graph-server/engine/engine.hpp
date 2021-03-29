@@ -96,9 +96,10 @@ public:
     void aggregateGCN(Chunk &chunk);
     void applyVertexGCN(Chunk &chunk);
     void scatterGCN(Chunk &chunk);
-    void applyEdgeGCN(Chunk &chunk) {}
+    void applyEdgeGCN(Chunk &chunk);
 
     void aggregateGAT(Chunk &chunk);
+    void predictGAT(Chunk &chunk);
     void applyVertexGAT(Chunk &chunk);
     void scatterGAT(Chunk &chunk);
     void applyEdgeGAT(Chunk &chunk);
@@ -302,6 +303,8 @@ public:
     void aggregator(unsigned tid);
     void scatterWorker(unsigned tid);
     void ghostReceiver(unsigned tid);
+    void ghostReceiverGCN(unsigned tid);
+    void ghostReceiverGAT(unsigned tid);
 
     void gasAgger(unsigned tid);
     void gasScter(unsigned tid);

@@ -85,9 +85,9 @@ void Engine::init(int argc, char *argv[]) {
     }
 
     // Save intermediate tensors during forward phase for backward computation.
-    savedTensors = new std::vector<Matrix>[numLayers];
-    savedNNTensors.resize(numLayers);
-    savedEdgeTensors.resize(numLayers);
+    savedTensors = new std::vector<Matrix>[numLayers]; // YIFAN: remove this
+    savedNNTensors.resize(numLayers + 1);
+    savedEdgeTensors.resize(numLayers + 1);
 
     // Track the number of chunks finished at each epoch;
     if (staleness != UINT_MAX) {
@@ -239,13 +239,13 @@ void Engine::preallocateGAT() {
     savedNNTensors[0]["h"] =
         Matrix(vtxCnt, getFeatDim(0), forwardVerticesInitData);
 
-//    savedNNTensors[0]["fg"] =
-//        Matrix(graph.srcGhostCnt, getFeatDim(0), forwardGhostInitData);
+    // savedNNTensors[0]["fg"] =
+    //     Matrix(graph.srcGhostCnt, getFeatDim(0), forwardGhostInitData);
     savedNNTensors[numLayers - 1]["lab"] =
         Matrix(vtxCnt, getFeatDim(numLayers), localVerticesLabels);
 
     // forward tensor allocation
-    for (layer = 0; layer < numLayers; ++layer) {
+    for (int layer = 0; layer < numLayers; ++layer) {
         //unsigned featDim = getFeatDim(layer);
         unsigned nextFeatDim = getFeatDim(layer + 1);
 
@@ -286,13 +286,13 @@ void Engine::preallocateGAT() {
             std::memset(hTensor, 0, sizeof(FeatType) * vtxCnt * nextFeatDim);
             savedNNTensors[layer + 1]["h"] = Matrix(vtxCnt, nextFeatDim, hTensor);
         }
-//            FeatType **edgeTensor =
-//                srcVFeats2eFeats(hTensor, ghostTensor, vtxCnt, nextFeatDim);
-//            savedEdgeTensors[layer + 1]["fedge"] = edgeTensor;
+        // FeatType **edgeTensor =
+        //     srcVFeats2eFeats(hTensor, ghostTensor, vtxCnt, featDim);
+        // savedEdgeTensors[layer + 1]["fedge"] = edgeTensor;
     }
 
     // backward tensor allocation
-    for (layer = numLayers - 1; layer >= 0; --layer) {
+    for (int layer = numLayers - 1; layer >= 0; --layer) {
         unsigned featDim = getFeatDim(layer + 1);
 
         // LOSS GRAD TENSORS
@@ -338,7 +338,7 @@ void Engine::preallocateGCN() {
     savedEdgeTensors[0]["fedge"] = eVFeatsTensor;
 
     // forward tensor allocation
-    for (layer = 0; layer < numLayers; ++layer) {
+    for (int layer = 0; layer < numLayers; ++layer) {
         unsigned featDim = getFeatDim(layer);
         unsigned nextFeatDim = getFeatDim(layer + 1);
 
@@ -367,7 +367,7 @@ void Engine::preallocateGCN() {
     }
 
     // backward tensor allocation
-    for (layer = numLayers - 1; layer > 0; --layer) {
+    for (int layer = numLayers - 1; layer > 0; --layer) {
         unsigned featDim = getFeatDim(layer);
 
         // APPLY TENSORS
@@ -397,7 +397,7 @@ void Engine::run() {
             runGCN();
             break;
         case GNN::GAT:
-            // runGAT();
+            runGCN(); // GAT and GCN share the same pipeline
             break;
         default:
             printLog(nodeId, "Unsupported GNN type");
@@ -443,6 +443,7 @@ void Engine::runGCN() {
     for (unsigned tid = 0; tid < 1; ++tid) {
         aeWrkrThds.push_back(std::thread(aeWrkrFunc, tid));
     }
+    nodeManager.barrier();
 
     loadChunksGCN();
     // Start scheduler
@@ -484,7 +485,6 @@ void Engine::runGCN() {
         delete[] msgBuf;
     }
 }
-
 
 /**
  *
@@ -824,6 +824,10 @@ void Engine::scatterGCN(Chunk &c) {
     delete[] batchedIds;
 }
 
+void Engine::applyEdgeGCN(Chunk &chunk) {
+    GAQueue.push_atomic(chunk);
+}
+
 void Engine::gatherWorkFunc(unsigned tid) {
     BackoffSleeper bs;
     while (!pipelineHalt) {
@@ -846,7 +850,9 @@ void Engine::gatherWorkFunc(unsigned tid) {
         } else if (gnn_type == GNN::GAT) {
             aggregateGAT(c);
             if (c.dir == PROP_TYPE::FORWARD &&
-                c.layer == numLayers) { // forward of last layer
+                c.layer == numLayers) { // last forward layer
+                predictGAT(c);
+
                 c.dir = PROP_TYPE::BACKWARD; // switch direction
                 SCQueue.push_atomic(c);
             } else {
@@ -879,16 +885,22 @@ void Engine::applyVertexWorkFunc(unsigned tid) {
 
         if (gnn_type == GNN::GCN)
             applyVertexGCN(c);
-        else
+        else if (gnn_type == GNN::GAT)
             applyVertexGAT(c);
+        else
+            abort();
 
         bs.reset();
     }
     AVQueue.clear();
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 void Engine::scatterWorkFunc(unsigned tid) {
     BackoffSleeper bs;
+    const bool BLOCK = true;
+    bool block = BLOCK;
     while (!pipelineHalt) {
         // Sync all nodes during scatter
         if (SCStashQueue.size() == numLambdasForward) {
@@ -903,6 +915,7 @@ void Engine::scatterWorkFunc(unsigned tid) {
                 }
                 recvCntLock.unlock();
                 nodeManager.barrier();
+                block = BLOCK;
                 recvCnt = 0;
                 ghostVtcsRecvd = 0;
                 while (!SCStashQueue.empty()) {
@@ -927,12 +940,14 @@ void Engine::scatterWorkFunc(unsigned tid) {
         // This barrier is for CPU/GPU only at the beginning of
         // the scatter phase to prevent someone send messages
         // too early.
-        else if (SCQueue.size() == numLambdasForward) {
-            SCQueue.unlock();
-            if (tid == 0) {
+        else if (block) {
+            if (tid == 0 && SCQueue.size() == numLambdasForward) {
+                SCQueue.unlock();
                 nodeManager.barrier();
+                block = false;
                 SCQueue.lock();
             } else {
+                SCQueue.unlock();
                 bs.sleep();
                 continue;
             }
@@ -969,6 +984,7 @@ void Engine::scatterWorkFunc(unsigned tid) {
     }
     SCQueue.clear();
 }
+#pragma GCC diagnostic pop
 
 // Only for single thread because of the barrier
 void Engine::applyEdgeWorkFunc(unsigned tid) {
@@ -987,11 +1003,9 @@ void Engine::applyEdgeWorkFunc(unsigned tid) {
         AEQueue.unlock();
 
         if (gnn_type == GNN::GCN) {
-            applyEdgeGCN(c); // do nothing
-            GAQueue.push_atomic(c);
+            applyEdgeGCN(c); // do nothing but push chunk to GAQueue
         } else if (gnn_type == GNN::GAT) {
             applyEdgeGAT(c);
-            GAQueue.push_atomic(c);
         } else {
             abort();
         }
@@ -1113,36 +1127,33 @@ void Engine::scheduleAsyncFunc(unsigned tid) {
             }
             // (2) converge state switches so we turn off async pipeline
             if (async && convergeState != CONVERGE_STATE::EARLY) {
-                nodeManager.readEpochUpdates();
-                // find the current epoch of the fastest node
-                if (maxEpoch == 0) {
-                    maxEpoch = currEpoch;
-                    for (unsigned e = minEpoch + staleness; e >= minEpoch; e--) {
-                        if (nodesFinishedEpoch[e % (staleness + 1)] > 0) {
-                            maxEpoch = e;
-                            break;
-                        }
+                if (maxEpoch == 0) { // haven't synced max epoch
+                    schQueue.unlock();
+                    // (2.1) master thread sync epoch with other nodes
+                    if (tid == 0) {
+                        maxEpoch = nodeManager.syncCurrEpoch(currEpoch);
+                        // printLog(nodeId, "Max epoch %u", maxEpoch);
+                    } else { // block other threads if any
+                        bs.sleep();
                     }
-                    printLog(nodeId, "max epoch %u, curr epoch %u",
-                                maxEpoch, currEpoch);
+                    continue;
                 }
-                // (2.1) wait all chunks finishing maxEpoch
+                // (2.2) wait all chunks finishing maxEpoch
                 if (c.epoch > maxEpoch) {
                     unsigned finishedChunks = schQueue.size();
                     schQueue.unlock();
                     if (finishedChunks < numLambdasForward) {
                         bs.sleep();
                         continue;
-                    } else { // (2.2) all chunks finish, switch to sync
+                    } else { // (2.3) all chunks finish, switch to sync
                         nodeManager.barrier();
                         // nodeManager.readEpochUpdates();
-                        printLog(nodeId, "Switch to sync");
-                        // debug
-                        // printLog(nodeId, "Scatter stats: %u %u",
-                        //          recvCnt, ghostVtcsRecvd);
+                        printLog(nodeId, "Switch to sync from %u",
+                                 maxEpoch + 1);
                         async = false;
                         asyncEnd = getTimer();
                         syncStt = asyncEnd;
+                        // reset [min|max] epoch info
                         minEpoch = maxEpoch + 1;
                         maxEpoch = 0;
                         // reset scatter status
@@ -1170,12 +1181,12 @@ void Engine::scheduleAsyncFunc(unsigned tid) {
             }
             if (currEpoch == 0) { // Epoch 0. Training begining
                 layer = 0;
+                maxEpoch = 0;
                 async = false;
                 syncStt = getTimer();
             }
             // Timing, skip epoch 0 and the async-sync transition epoch
             if (!async && currEpoch >= minEpoch) {
-                // printLog(nodeId, "curr %u max %u", currEpoch, maxEpoch);
                 syncEnd = getTimer();
                 double epochTime = syncEnd - syncStt;
                 addEpochTime(epochTime);
@@ -1216,9 +1227,11 @@ void Engine::scheduleAsyncFunc(unsigned tid) {
         }
 
         if (gnn_type == GNN::GCN) {
-            GAQueue.lock();
-            GAQueue.push(c);
-            GAQueue.unlock();
+            GAQueue.push_atomic(c);
+        } else if (gnn_type == GNN::GAT) {
+            AVQueue.push_atomic(c);
+        } else {
+            abort();
         }
 
         bs.reset();
