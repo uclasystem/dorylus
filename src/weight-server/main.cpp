@@ -21,8 +21,9 @@ main(int argc, char *argv[]) {
     bool sync = (bool)(std::atoi(argv[9]));
     float targetAcc = std::atof(argv[10]);
     bool block = (bool)(std::atoi(argv[11])); // for CPU/GPU
-
     std::string gnn_name = std::string(argv[12]);
+    float learning_rate = std::atof(argv[13]);
+
     GNN gnn_type;
     if (gnn_name == "GCN") { // GCN or GAT
         gnn_type = GNN::GCN;
@@ -37,7 +38,8 @@ main(int argc, char *argv[]) {
                     listenerPort, serverPort, gport,
                     configFile, tmpFile,
                     sync, targetAcc, block,
-                    gnn_type);
+                    gnn_type,
+                    learning_rate);
 
     // Run in a detached thread because so that we can wait
     // on a condition variable.

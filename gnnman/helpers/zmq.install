@@ -18,7 +18,7 @@ if [[ ! $( ldconfig -p | grep zmq ) ]]; then    # Only install if not have been 
     make
     sudo make install
     sudo ldconfig
-    sudo mv ../gnn-lambda/src/utils/zmq.hpp /usr/local/include
+    sudo mv ../dorylus/src/utils/zmq.hpp /usr/local/include
     cd ..
     rm -rf zeromq-4.3.2
 fi

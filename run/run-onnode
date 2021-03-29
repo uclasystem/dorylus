@@ -11,7 +11,7 @@
 ##      Dataset: Only needed for graphservers.
 ##
 
-cd ${HOME}/gnn-lambda/
+cd ${HOME}/dorylus/
 
 case $1 in
     #
@@ -49,6 +49,7 @@ case $1 in
         let NUM_EPOCHS=10
         let STALE_BOUND=4294967295
         let PREPROCESS=0
+        let TO_RATIO=3
         for var in "$@"
         do
             if [ $var = "GPU" ] || [ $var = "gpu" ]; then
@@ -91,11 +92,15 @@ case $1 in
             if [[ $var = --preprocess ]]; then
                 PREPROCESS=1
             fi
+
+            if [[ $var = --tr=* ]] || [[ $var = --timeout_ratio=* ]]; then
+                TO_RATIO="${var#*=}"
+            fi
         done
 
         # After processing args, check to see if GPU enables
         # If so, disable pipelining
-        if [[ ($MODE -eq 1 || $MODE -eq 2)  &&  $PIPELINE -eq 1 ]]; then
+        if [[ ($MODE -eq 1 || $MODE -eq 2) && $PIPELINE -eq 1 ]]; then
             echo "GPU/CPU and pipeline cannot be used together. Disabling pipeline"
             PIPELINE=0
         fi
@@ -167,9 +172,10 @@ case $1 in
             --pipeline ${PIPELINE} \
             --staleness ${STALE_BOUND} \
             --gnn ${GNN_TYPE} \
-            --preprocess ${PREPROCESS}"
+            --preprocess ${PREPROCESS} \
+            --timeout_ratio ${TO_RATIO}"
         echo ${DSH_COMMAND}
-        dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ${DSH_COMMAND}" 2>&1 | tee ${LOGFILE}
+        dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/dorylus && ${DSH_COMMAND}" 2>&1 | tee ${LOGFILE}
 
 
         # Gather the output files.
@@ -213,6 +219,7 @@ case $1 in
         TARGET_ACC="0.9"
         BLOCK=0
         GNN_TYPE="GCN"
+        LEARNING_RATE="0.01"
         for var in "$@"
         do
             if [ $var = "--p" ] || [ $var = "--pipeline" ]; then
@@ -222,6 +229,10 @@ case $1 in
                 TARGET_ACC="${var#*=}"
             elif [[ $var = --g=* ]] || [[ $var == --gnn=* ]]; then
                 GNN_TYPE="${var#*=}"
+            fi
+
+            if [[ $var = --lr=* ]] || [[ $var = -learning_rate=* ]]; then
+                LEARNING_RATE="${var#*=}"
             fi
 
             if [ $var = "GPU" ] || [ $var = "gpu" ] || [ $var = "CPU" ] || [ $var = "cpu" ]; then
@@ -264,9 +275,11 @@ case $1 in
             ${SYNC} \
             ${TARGET_ACC} \
             ${BLOCK} \
-            ${GNN_TYPE}"
+            ${GNN_TYPE} \
+            ${LEARNING_RATE}"
 
-        dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/gnn-lambda && ${DSH_COMMAND}"
+        echo ${DSH_COMMAND}
+        dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/dorylus && ${DSH_COMMAND}"
 
         # Gather the output files.
         OUTFILEDIR=${HOME}/outfiles/${RUN_MARK}.weights

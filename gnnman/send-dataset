@@ -1,12 +1,16 @@
 #!/bin/bash
 
+#### DEPRECATED ####
+## Just use the NFS server setup now
+#### DEPRECATED ####
+
 ##
 ## Send the dataset to all the graphservers listed in ec2 manager.
 ##
 ## Usage: $ ./gnnman/send-dataset <PathToDataFolder> <Name>
 ##
 ## Arguments:
-##      PathToDataFolder: Path to `data/` folder, relative to root dir `gnn-lambda/`.
+##      PathToDataFolder: Path to `data/` folder, relative to root dir `dorylus`
 ##      Name: Folder name under `/filepool/` for this dataset.
 ##
 ## You might be prompted to enter the sudo passwd on remote machines.

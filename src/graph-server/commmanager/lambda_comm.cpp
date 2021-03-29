@@ -16,6 +16,7 @@ LambdaComm::LambdaComm(Engine *_engine) :
         relaunchCnt(0),
         dport(_engine->dataserverPort), wport(_engine->weightserverPort),
         savedNNTensors(_engine->savedNNTensors), savedETensors(_engine->savedEdgeTensors),
+        timeoutRatio(_engine->timeoutRatio),
         ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
         numListeners(4), engine(_engine) { // TODO: Decide numListeners.
     nodeId = _engine->nodeId;
@@ -33,7 +34,7 @@ LambdaComm::LambdaComm(Engine *_engine) :
     createWorkers();
     startRelaunchThd();
 
-    lambdaOut = std::ofstream(std::string("lambdats") + std::to_string(numChunk) + std::string(".txt"), std::ofstream::out);
+    lambdaOut = std::ofstream(std::string("lambdas") + std::to_string(numChunk) + std::string(".txt"), std::ofstream::out);
 }
 
 LambdaComm::~LambdaComm() {
@@ -115,7 +116,7 @@ void LambdaComm::asyncRelaunchLoop() {
             }
             unsigned currDur = currTS - kv.second;
             if (kv.first.vertex) {
-                unsigned timeout = std::max(MIN_TIMEOUT, 5 * found->second);
+                unsigned timeout = std::max(MIN_TIMEOUT, timeoutRatio * found->second);
                 if (currDur > timeout) {
                     printLog(nodeId, "curr %u, timed %u, chunk %s", currDur, timeout,
                         kv.first.str().c_str());

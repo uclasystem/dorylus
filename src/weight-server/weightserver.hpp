@@ -51,13 +51,14 @@ public:
     WeightServer(std::string &wserverFile, std::string &myPrIpFile, std::string &gserverFile,
                  unsigned _listenerPort, unsigned _serverPort, unsigned _gport,
                  std::string &configFile, std::string &tmpFile,
-                 bool _sync, float _targetAcc, bool block, GNN _gnn_type);
+                 bool _sync, float _targetAcc, bool block, GNN _gnn_type,
+                 float _learning_rate=0.01);
     ~WeightServer();
 
     GNN gnn_type;
     bool sync; // sync mode or async pipeline
     bool BLOCK = false;
-    float LEARNING_RATE = 0.02;
+    float learning_rate;
     unsigned epoch = 0;
     void lrDecay();
 

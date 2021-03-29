@@ -1,13 +1,16 @@
-#! /bin/bash
+#!/bin/bash
 
 ##
 ## Runs a command for both contexts
 ##
 
-contexts=("graph" "weight")
+cd $( dirname $0 )/..
+
+contexts=$( cat ec2man/machines | awk '{print $2}' | uniq )
+EC2MAN_CMD="python3 -m ec2man"
 
 for ctx in ${contexts[@]}; do
-    echo ${ctx}:
-    python -m ec2man $ctx "${@}"
+    echo ${ctx}
+    ${EC2MAN_CMD} $ctx "${@}"
     echo
 done

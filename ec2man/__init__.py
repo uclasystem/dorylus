@@ -1,11 +1,14 @@
 import boto3
 import json
 import os
+import sys
 import pickle
 import subprocess
 import multiprocessing
+import argparse
 
 import ec2man
+import ec2man.instance_manager
 
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/"
@@ -14,6 +17,8 @@ CTX_DIR = EC2_DIR + "contexts/"
 
 
 help_str = ("Usage: python3 -m ec2man help\n"
+            "       python3 -m ec2man allocate [--ami AMI] [--type TYPE] [--cnt CNT] [--ctx CTX] [--az AZ] [--sg SG]\n"
+            "       python3 -m ec2man add <Context> <ec2 id> [ec2 id]...\n"
             "       python3 -m ec2man setup\n"
             "       python3 -m ec2man <Context> info\n"
             "       python3 -m ec2man <Context> dshfile\n"
@@ -211,6 +216,14 @@ def main(args):
         if len(args) >= 3:
             machine_list = args[2]
         process_setup(machine_list)
+        return
+
+    elif len(args) >= 2 and args[1] == 'allocate':
+        instance_manager.launch_ec2_instances(sys.argv[2:])
+        return
+
+    elif len(args) >= 2 and args[1] == 'add':
+        instance_manager.add_managed_ec2_instance(sys.argv[2:])
         return
 
     ctx_name, target = args[1], args[2]

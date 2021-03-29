@@ -69,6 +69,7 @@ public:
     std::vector<ETensorMap>& savedETensors;
 
     std::thread *relaunchThd;
+    int timeoutRatio;
     void asyncRelaunchLoop();
     void relaunchLambda(const Chunk &chunk);
     unsigned relaunchCnt;

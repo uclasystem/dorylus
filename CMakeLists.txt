@@ -11,7 +11,7 @@ endif()
 
 
 # Project name.
-project(gnn-lambda LANGUAGES CXX)
+project(dorylus LANGUAGES CXX)
 
 
 # Include ZeroMQ.

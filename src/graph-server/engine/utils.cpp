@@ -390,6 +390,8 @@ Engine::parseArgs(int argc, char *argv[]) {
     ("gnn", boost::program_options::value<std::string>(), "GNN type: [GCN | GAT]")
     ("staleness", boost::program_options::value<unsigned>()->default_value(unsigned(UINT_MAX)),
       "Bound on staleness")
+    ("timeout_ratio", boost::program_options::value<unsigned>()->default_value(unsigned(1)),
+        "How long to wait for relaunch")
     ;
 
     boost::program_options::variables_map vm;
@@ -483,6 +485,9 @@ Engine::parseArgs(int argc, char *argv[]) {
 
     assert(vm.count("staleness"));
     staleness = vm["staleness"].as<unsigned>();
+
+    assert(vm.count("timeout_ratio"));
+    timeoutRatio = vm["timeout_ratio"].as<unsigned>();
 
     printLog(404, "Parsed configuration: dThreads = %u, cThreads = %u, datasetDir = %s, featuresFile = %s, dshMachinesFile = %s, "
              "myPrIpFile = %s, undirected = %s, data port set -> %u, control port set -> %u, node port set -> %u",

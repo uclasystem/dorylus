@@ -4,5 +4,5 @@ WEIGHTSERVER={{user}}@{{WSERVER0}}
 GRAPHSERVER={{user}}@{{GSERVER0}}
 
 cd ${HOME}
-dsh -m ${GRAPHSERVER} "./gnn-lambda/run/kill-zombies graph"
-dsh -m ${WEIGHTSERVER} "./gnn-lambda/run/kill-zombies weight"
+dsh -m ${GRAPHSERVER} "./dorylus/run/kill-zombies graph"
+dsh -m ${WEIGHTSERVER} "./dorylus/run/kill-zombies weight"

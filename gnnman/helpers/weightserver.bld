@@ -5,7 +5,7 @@
 ##
 
 
-cd ${HOME}/gnn-lambda/
+cd ${HOME}/dorylus/
 
 build_type="Release"
 for var in "${@}"; do
