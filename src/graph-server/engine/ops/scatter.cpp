@@ -598,7 +598,9 @@ void Engine::verticesPushOut(unsigned receiver, unsigned totCnt,
     char *msgPtr = (char *)(msg.data());
     sprintf(msgPtr, NODE_ID_HEADER, receiver);
     msgPtr += NODE_ID_DIGITS;
-    populateHeader(msgPtr, nodeId, totCnt, featDim, c.layer, c.dir);
+    unsigned featLayer = c.dir == PROP_TYPE::FORWARD
+                       ? c.layer : c.layer - 1;
+    populateHeader(msgPtr, nodeId, totCnt, featDim, featLayer, c.dir);
     msgPtr += sizeof(unsigned) * 5;
 
     for (unsigned i = 0; i < totCnt; ++i) {

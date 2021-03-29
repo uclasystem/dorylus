@@ -86,11 +86,11 @@ bool LambdaComm::NNRecv(Chunk &chunk) {
     timeoutTable.erase(chunk);
 
     if (chunk.vertex) {
-        auto recordFound = recordTable.find(getAbsLayer(chunk, 2));
+        auto recordFound = recordTable.find(engine->getAbsLayer(chunk));
         if (recordFound == recordTable.end()) {
-            recordTable[getAbsLayer(chunk, 2)] = exeTime;
+            recordTable[engine->getAbsLayer(chunk)] = exeTime;
         } else {
-            recordTable[getAbsLayer(chunk, 2)] = recordFound->second * 0.95 + exeTime * (1.0 - 0.95);
+            recordTable[engine->getAbsLayer(chunk)] = recordFound->second * 0.95 + exeTime * (1.0 - 0.95);
         }
     }
     timeoutMtx.unlock();
@@ -109,7 +109,7 @@ void LambdaComm::asyncRelaunchLoop() {
     while (!halt) {
         unsigned currTS = timestamp_ms();
         for (auto &kv : timeoutTable) {
-            auto found = recordTable.find(getAbsLayer(kv.first, 2));
+            auto found = recordTable.find(engine->getAbsLayer(kv.first));
             if (found == recordTable.end()) {
                 continue; // No lambda finished.
             }

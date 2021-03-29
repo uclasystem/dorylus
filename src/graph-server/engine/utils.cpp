@@ -655,3 +655,50 @@ void Engine::loadChunksGCN() {
 
     finishedChunks = 0;
 }
+
+unsigned Engine::getAbsLayer(const Chunk &chunk) {
+    return chunk.dir == PROP_TYPE::FORWARD
+            ? (chunk.layer)
+            : (2 * numLayers - 1 - chunk.layer);
+}
+
+Chunk Engine::incLayerGCN(const Chunk &chunk) {
+    Chunk nChunk = chunk;
+    if (nChunk.dir == PROP_TYPE::FORWARD) { // Forward pass
+        nChunk.layer++;
+        if (nChunk.layer == numLayers) { // Forward: last layer
+            nChunk.dir = PROP_TYPE::BACKWARD; // Switch dir
+            // Merge the forward and backward pass of the last layer
+            nChunk.layer--;
+        }
+    } else { // Backward pass
+        if (nChunk.layer == 0) { // Epoch ends. Switch dir and inc epoch
+            nChunk.dir = PROP_TYPE::FORWARD;
+            nChunk.epoch++;
+        } else {
+            nChunk.layer--;
+        }
+    }
+    return nChunk;
+}
+
+Chunk Engine::incLayerGAT(const Chunk &chunk) {
+    Chunk nChunk = chunk;
+    if (nChunk.dir == PROP_TYPE::FORWARD) { // Forward
+        nChunk.layer++;
+    } else { // Backward
+        if (nChunk.layer == 0) { // Epoch ends. Switch dir and inc epoch
+            nChunk.dir = PROP_TYPE::FORWARD;
+            nChunk.vertex = true; // reset for a new epoch
+            nChunk.epoch++;
+        } else {
+            nChunk.layer--;
+        }
+    }
+    return nChunk;
+}
+
+bool Engine::isLastLayer(const Chunk &chunk) {
+    return chunk.dir == PROP_TYPE::BACKWARD &&
+           chunk.layer == 0 && chunk.vertex;
+}

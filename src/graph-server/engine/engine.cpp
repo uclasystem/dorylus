@@ -1,4 +1,5 @@
 #include "engine.hpp"
+#include "../utils/utils.hpp"
 
 #include <omp.h>
 
@@ -711,11 +712,11 @@ void Engine::aggregateGCN(Chunk &c) {
         inputTensor = savedEdgeTensors[c.layer]["fedge"];  // input edgeFeatsTensor
         outputTensor = savedNNTensors[c.layer]["ah"].getData(); // output aggregatedTensor
     } else { // backward
-        featDim = getFeatDim(c.layer + 1);
-        featTensor = getVtxFeat(savedNNTensors[c.layer + 1]["grad"].getData(),
+        featDim = getFeatDim(c.layer);
+        featTensor = getVtxFeat(savedNNTensors[c.layer]["grad"].getData(),
                                 start, featDim);
-        inputTensor = savedEdgeTensors[c.layer]["bedge"];
-        outputTensor = savedNNTensors[c.layer]["aTg"].getData();
+        inputTensor = savedEdgeTensors[c.layer - 1]["bedge"];
+        outputTensor = savedNNTensors[c.layer - 1]["aTg"].getData();
     }
     FeatType *chunkPtr = getVtxFeat(outputTensor, start, featDim);
     std::memcpy(chunkPtr, featTensor,
@@ -756,19 +757,22 @@ void Engine::aggregateGCN(Chunk &c) {
 }
 
 void Engine::applyVertexGCN(Chunk &c) {
-    resComm->NNCompute(c);
+    c.vertex = true;
+    if (c.dir == PROP_TYPE::FORWARD) { // Forward pass
+        resComm->NNCompute(c);
+    } else { // Backward pass, inc layer first to align up the layer id
+        Chunk nextC = incLayerGCN(c);
+        resComm->NNCompute(nextC);
+    }
 }
 
 void Engine::scatterGCN(Chunk &c) {
     unsigned outputLayer = c.layer;
-    unsigned featLayer = c.layer;
     std::string tensorName;
     if (c.dir == PROP_TYPE::FORWARD) {
         outputLayer -= 1;
         tensorName = "h";
     } else {
-        outputLayer += 1;
-        featLayer += 1;
         tensorName = "grad";
     }
     FeatType *scatterTensor =
@@ -776,7 +780,7 @@ void Engine::scatterGCN(Chunk &c) {
 
     unsigned startId = c.lowBound;
     unsigned endId = c.upBound;
-    unsigned featDim = getFeatDim(featLayer);
+    unsigned featDim = getFeatDim(c.layer);
 
     std::map<unsigned, std::vector<unsigned>> &ghostMap =
         c.dir == PROP_TYPE::FORWARD ? graph.forwardGhostMap
@@ -839,6 +843,15 @@ void Engine::gatherWorkFunc(unsigned tid) {
             aggregateGCN(c);
             // applyVertexGCN(c);
             AVQueue.push_atomic(c);
+        } else if (gnn_type == GNN::GAT) {
+            aggregateGAT(c);
+            if (c.dir == PROP_TYPE::FORWARD &&
+                c.layer == numLayers) { // forward of last layer
+                c.dir = PROP_TYPE::BACKWARD; // switch direction
+                SCQueue.push_atomic(c);
+            } else {
+                AVQueue.push_atomic(c);
+            }
         } else {
             abort();
         }
@@ -864,11 +877,10 @@ void Engine::applyVertexWorkFunc(unsigned tid) {
         AVQueue.pop();
         AVQueue.unlock();
 
-        if (gnn_type == GNN::GCN) {
+        if (gnn_type == GNN::GCN)
             applyVertexGCN(c);
-        } else {
-            abort();
-        }
+        else
+            applyVertexGAT(c);
 
         bs.reset();
     }
@@ -929,7 +941,7 @@ void Engine::scatterWorkFunc(unsigned tid) {
 
         Chunk c = SCQueue.top();
         // printLog(nodeId, "SC: Got %s", c.str().c_str());
-        unsigned absLayer = getAbsLayer(c, numLayers);
+        unsigned absLayer = getAbsLayer(c);
         if (absLayer != layer) {
             layer = absLayer;
             currDir = c.dir;
@@ -939,6 +951,8 @@ void Engine::scatterWorkFunc(unsigned tid) {
 
         if (gnn_type == GNN::GCN) {
             scatterGCN(c);
+        } else if (gnn_type == GNN::GAT) {
+            scatterGAT(c);
         } else {
             abort();
         }
@@ -975,6 +989,11 @@ void Engine::applyEdgeWorkFunc(unsigned tid) {
         if (gnn_type == GNN::GCN) {
             applyEdgeGCN(c); // do nothing
             GAQueue.push_atomic(c);
+        } else if (gnn_type == GNN::GAT) {
+            applyEdgeGAT(c);
+            GAQueue.push_atomic(c);
+        } else {
+            abort();
         }
 
         bs.reset();

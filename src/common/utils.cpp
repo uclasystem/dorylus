@@ -33,32 +33,3 @@ void matrixToFile(std::string name, FeatType* fptr, unsigned start, unsigned end
     mFileMutex.unlock();
     matrixFile.close();
 }
-
-unsigned getAbsLayer(const Chunk &chunk, unsigned numLayers) {
-    // YIFAN: I set the "numLayers" to 10 here to avoid any conflicts
-    return chunk.dir == PROP_TYPE::FORWARD ? (chunk.layer) : (2 * numLayers - 1 - chunk.layer);
-}
-
-Chunk incLayer(const Chunk &chunk, unsigned numLayers) {
-    Chunk nextChunk = chunk;
-    if (chunk.dir == PROP_TYPE::FORWARD && chunk.layer < numLayers - 1) {
-        // Keep dir as FORWARD and inc layer
-        nextChunk.layer++;
-    } else if (chunk.dir == PROP_TYPE::FORWARD && chunk.layer == numLayers - 1) {
-        // Change dir to BACKWARD and dec layer (the final layer backawrd lambda is merged into the forward lambda)
-        nextChunk.dir = PROP_TYPE::BACKWARD;
-        nextChunk.layer--;
-    } else if (chunk.dir == PROP_TYPE::BACKWARD && chunk.layer > 0) {
-        // Keep dir as BACKWARD and dec layer
-        nextChunk.layer--;
-    } else if (chunk.dir == PROP_TYPE::BACKWARD && chunk.layer == 0) {
-        // Change dir to FORWARD and inc epoch
-        nextChunk.dir = PROP_TYPE::FORWARD;
-        nextChunk.epoch++;
-    }
-    return nextChunk;
-}
-
-bool isLastLayer(const Chunk &chunk) {
-    return chunk.dir == PROP_TYPE::BACKWARD && chunk.layer == 0 && chunk.vertex;
-}

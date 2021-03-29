@@ -124,7 +124,8 @@ void LambdaWorker::sendTensors(zmq::message_t& client_id, Chunk &chunk) {
             std::string name = parseName((char*)tensorHeader.data());
             auto found = tensorMap.find(name);
             if (found == tensorMap.end()) {
-                printLog(manager->nodeId, "Requested tensor '%s' not found for layer %u", name.c_str(), chunk.layer);
+                printLog(manager->nodeId, "Requested tensor '%s' not found for layer %u",
+                         name.c_str(), chunk.layer);
                 zmq::message_t errorHeader(TENSOR_HDR_SIZE);
                 populateHeader(errorHeader.data(), ERR_HEADER_FIELD, name.c_str());
                 workersocket.send(client_id, ZMQ_SNDMORE);
@@ -335,7 +336,7 @@ void LambdaWorker::sendEdgeTensor(zmq::message_t& client_id, Chunk& chunk) {
     bool exist = manager->timeoutTable.find(chunk) != manager->timeoutTable.end();
     manager->timeoutMtx.unlock();
 
-    // printLog(manager->nodeId, "CHecking exit");
+    // printLog(manager->nodeId, "Checking exit");
     if (exist) {
         TensorMap& tMap = manager->savedNNTensors[chunk.layer];
         zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
@@ -357,7 +358,7 @@ void LambdaWorker::sendEdgeTensor(zmq::message_t& client_id, Chunk& chunk) {
             sendEdgeTensorChunk(found->second, chunk);
         }
     } else {
-        printLog(manager->nodeId, "Chunk %u DNE", chunk.localId);
+        printLog(manager->nodeId, "Chunk %u DONE", chunk.localId);
         workersocket.send(client_id, ZMQ_SNDMORE);
         zmq::message_t header(TENSOR_HDR_SIZE);
         populateHeader((char*) header.data(), CHUNK_DNE_ERR, CHUNK_DNE_ERR);
@@ -426,8 +427,8 @@ int LambdaWorker::recvTensor(Chunk &chunk) {
     TensorMap& tensorMap = manager->savedNNTensors[chunk.layer];
     auto found = tensorMap.find(name);
     if (found == tensorMap.end()) {
-        printLog(manager->nodeId, "Lambda %s returned unknown tensor '%s'. Make sure to allocate it before running lambdas!",
-                 chunk.str().c_str(), name.c_str());
+        printLog(manager->nodeId, "Lambda %s returned unknown tensor %u:'%s'. Make sure to allocate it before running lambdas!",
+                 chunk.str().c_str(), chunk.layer, name.c_str());
         return 1;
      }
 
@@ -458,38 +459,4 @@ int LambdaWorker::recvETensor(Chunk& chunk) {
     std::memcpy(eDptr, tensorData.data(), tensorData.size());
 
     return 0;
-}
-
-// TODO: (YIFAN) This is outdated.
-void LambdaWorker::sendRefChunk(Matrix &srcMat, zmq::message_t& client_id, unsigned partId, bool forward) {
-    // // Reject a send request if the partition id is invalid.
-    // unsigned numLambdas = manager->numLambdasForward;
-    //     workersocket.send(client_id, ZMQ_SNDMORE);
-    //     zmq::message_t header(HEADER_SIZE);
-    //     populateHeader((char *) header.data(), ERR_HEADER_FIELD, ERR_HEADER_FIELD, ERR_HEADER_FIELD, ERR_HEADER_FIELD);
-    //     workersocket.send(header);
-
-    //     printLog(manager->nodeId, "[ERROR] Got a request for partition %u, but number of lambdas is %u", partId, numLambdas);
-    // // Partition id is valid, so send the matrix segment.
-    // } else {
-    //     workersocket.send(client_id, ZMQ_SNDMORE);
-
-    //     // Check to make sure that the bounds of this partition do not exceed the bounds of the data array.
-    //     // If they do, set partition end to the end of the array.
-    //     unsigned partRows = (srcMat.getRows() + numLambdas - 1) / numLambdas;
-    //     unsigned thisPartRows = std::min(partRows, srcMat.getRows() - partId * partRows);
-    //     unsigned featDim = srcMat.getCols();
-    //     FeatType **chunk = (FeatType **)srcMat.getData() + partId * partRows;
-
-    //     zmq::message_t header(HEADER_SIZE);
-    //     populateHeader((char *) header.data(), OP::RESP, 0, thisPartRows, featDim);
-    //     workersocket.send(header, ZMQ_SNDMORE);
-
-    //     zmq::message_t chunkMsg(thisPartRows * featDim * sizeof(FeatType));
-    //     for (unsigned i = 0; i < thisPartRows; ++i) {
-    //         memcpy((FeatType *)chunkMsg.data() + i * featDim, chunk[i], sizeof(FeatType) * featDim);
-    //     }
-
-    //     workersocket.send(chunkMsg);
-    // }
 }

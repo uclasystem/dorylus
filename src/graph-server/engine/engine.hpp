@@ -97,6 +97,11 @@ public:
     void applyVertexGCN(Chunk &chunk);
     void scatterGCN(Chunk &chunk);
     void applyEdgeGCN(Chunk &chunk) {}
+
+    void aggregateGAT(Chunk &chunk);
+    void applyVertexGAT(Chunk &chunk);
+    void scatterGAT(Chunk &chunk);
+    void applyEdgeGAT(Chunk &chunk);
     LockChunkQueue schQueue;
     LockChunkQueue GAQueue;
     LockChunkQueue AVQueue;
@@ -112,6 +117,11 @@ public:
     PROP_TYPE currDir;
     bool pipelineHalt = false;
     bool async = false;
+
+    unsigned getAbsLayer(const Chunk &c);
+    Chunk incLayerGCN(const Chunk &c);
+    Chunk incLayerGAT(const Chunk &c);
+    bool isLastLayer(const Chunk &c);
 
     FeatType* aggregate(FeatType **eVFeatsTensor, unsigned edgsCnt,
                         unsigned featDim, AGGREGATOR aggregator);

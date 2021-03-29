@@ -131,9 +131,4 @@ public:
     void stopRelaunchThd();
 };
 
-
-unsigned getAbsLayer(const Chunk &chunk, unsigned numLayers);
-Chunk incLayer(const Chunk &chunk, unsigned numLayers);
-bool isLastLayer(const Chunk &chunk);
-
 #endif // LAMBDA_COMM_HPP
