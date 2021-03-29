@@ -89,6 +89,9 @@ public:
     std::string str();
     std::string signature();
 
+    void toFile(std::string filename);
+    void fromFile(std::string filename);
+
 private:
     std::string tensorName;
     unsigned rows;

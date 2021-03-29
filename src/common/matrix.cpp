@@ -342,7 +342,7 @@ std::string Matrix::shape() { return "(" + std::to_string(rows) + ", " + std::to
 
 std::string Matrix::str() {
     std::stringstream output;
-    output << "Matrix " << tensorName << "\n";
+    output << "Sum: " << sum() << "\n";
     output << "Dims: " << shape() << "\n";
     unsigned row_part1 = std::min(rows, 3u);
     unsigned row_part2 = std::max(row_part1 + 3, rows) - 3;
@@ -384,4 +384,29 @@ std::string Matrix::signature() {
     output << "Sum: " << sum() << "\n";
 
     return output.str();
+}
+
+
+void Matrix::toFile(std::string filename) {
+    std::cerr << "Writing to file " << filename << std::endl;
+    std::ofstream output(filename);
+    output << rows << "\t" << cols << std::endl;
+    unsigned numElemts = getNumElemts();
+    std::cerr << "Number of elements " << numElemts << std::endl;
+    for (unsigned u = 0; u < numElemts; ++u) {
+        output << std::fixed << std::setprecision(7)
+            << data[u] << " ";
+    }
+}
+
+void Matrix::fromFile(std::string filename) {
+    std::ifstream input(filename);
+    input >> rows;
+    input >> cols;
+    FeatType value;
+    data = new FeatType[cols * rows];
+    unsigned u = 0;
+    while (input >> value) {
+        data[u++] = value;
+    }
 }
