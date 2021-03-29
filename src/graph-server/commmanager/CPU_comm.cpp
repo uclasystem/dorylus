@@ -28,6 +28,7 @@ void CPUComm::NNCompute(Chunk &chunk) {
             vtxNNForward(currLayer, currLayer == (totalLayers - 1));
         } else {
             // printLog(nodeId, "CPU FORWARD edg NN started");
+            currLayer--; // YIFAN: chunk layer for AE has been changed. Fix this
             edgNNForward(currLayer, currLayer == (totalLayers - 1));
         }
     }
@@ -37,11 +38,12 @@ void CPUComm::NNCompute(Chunk &chunk) {
             vtxNNBackward(currLayer);
         } else {
             // printLog(nodeId, "CPU BACKWARD edg NN started");
+            currLayer--;
             edgNNBackward(currLayer);
         }
     }
     // printLog(nodeId, "CPU NN Done");
-    NNRecvCallback(engine, false, chunk);
+    NNRecvCallback(engine, chunk);
 }
 
 void CPUComm::vtxNNForward(unsigned layer, bool lastLayer) {
