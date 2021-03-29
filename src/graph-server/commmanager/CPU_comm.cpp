@@ -100,7 +100,7 @@ void CPUComm::edgNNBackward(unsigned layer) {
 
 void CPUComm::vtxNNForwardGCN(unsigned layer, bool lastLayer) {
     Matrix feats = savedNNTensors[layer]["ah"];
-    Matrix weight = msgService.getWeightMatrix(currLayer);
+    Matrix weight = msgService.getWeightMatrix(layer);
     Matrix z = feats.dot(weight);
     if (!lastLayer) {
         memcpy(savedNNTensors[layer]["z"].getData(), z.getData(), z.getDataSize());

@@ -6,7 +6,6 @@ static inline void populateHeader(void *header, unsigned op, Chunk &chunk) {
 }
 static void doNotFreeBuffer(void *data, void *hint) {}
 
-//-------------These are copied from yifan gcn------------
 //-------------Search"MessageService" to Jump-------------
 static void deleteMatrix(Matrix &mat) {
     if (!mat.empty()) {
@@ -114,8 +113,13 @@ void sendTensors(zmq::socket_t &socket, Chunk &chunk,
 
 //-----------------------Finish Copy------------------------
 MessageService::MessageService(unsigned wPort_, unsigned nodeId_)
-    : wctx(1), nodeId(nodeId_), wPort(wPort_), wsocktReady(0), confirm(5), epoch(-1) {
-    weightSocket = new zmq::socket_t(wctx, ZMQ_DEALER);
+    : wctx(1), nodeId(nodeId_), wPort(wPort_), wsocket(wctx, ZMQ_DEALER),
+      wsocktReady(0), confirm(5), epoch(-1) {
+
+    for (int layer = 0; layer < 2; layer++) {
+        weights.push_back(Matrix());
+        as.push_back(Matrix());
+    }
 }
 
 void MessageService::sendWeightUpdate(Matrix &matrix, unsigned layer) {
@@ -136,8 +140,8 @@ void MessageService::sendWeightUpdate(Matrix &matrix, unsigned layer) {
             c.epoch = epoch;
             c.globalId = nodeId;
             c.localId = nodeId;
-            sendTensors(*weightSocket, c, weightUpdates);
-            // delete[] matrix.getData();
+            sendTensors(wsocket, c, weightUpdates);
+            delete[] matrix.getData();
         },
         matrix, layer);
 }
@@ -150,11 +154,11 @@ void MessageService::setUpWeightSocket(char *addr) {
     char identity[identity_len];
     memcpy(identity, (char *)&nodeId, sizeof(unsigned));
     memcpy(identity + sizeof(unsigned), ipc_addr, ipc_addr_len);
-    weightSocket->setsockopt(ZMQ_IDENTITY, identity, identity_len);
+    wsocket.setsockopt(ZMQ_IDENTITY, identity, identity_len);
     char whost_port[50];
     sprintf(whost_port, "tcp://%s:%u", addr, wPort);
     // printf("connect to %s\n", whost_port);
-    weightSocket->connect(whost_port);
+    wsocket.connect(whost_port);
 }
 
 // This retrieve all weights at the beginning
@@ -168,15 +172,12 @@ void MessageService::prefetchWeightsMatrix(unsigned totalLayers) {
     }
 
     epoch++;
-    weights = std::vector<Matrix *>(totalLayers, 0);
     wReqThread = std::thread([&, totalLayers]() {
         if (wSndThread.joinable()) wSndThread.join();
 
         for (unsigned i = 0; i < weights.size(); ++i) {
-            if (weights[i]) {
-                delete[] weights[i]->getData();
-                delete weights[i];
-            }
+            deleteMatrix(weights[i]);
+            // deleteMatrix(as[i]);
         }
         for (unsigned j = 0; j < totalLayers; ++j) {
             Chunk c = { 0 };
@@ -186,8 +187,10 @@ void MessageService::prefetchWeightsMatrix(unsigned totalLayers) {
             c.globalId=nodeId;
             c.localId=nodeId;
             std::vector<std::string> weightRequests{"w"};
-            Matrix m = reqTensors(*weightSocket, c, weightRequests)[0];
-            weights[j] = new Matrix(m.getRows(), m.getCols(), m.getData());
+            // std::vector<std::string> weightRequests{"w", "a_i"};
+            std::vector<Matrix> wa = reqTensors(wsocket, c, weightRequests);
+            weights[j] = wa[0];
+            // as[j] = wa[1];
         }
     });
 }
@@ -195,7 +198,7 @@ void MessageService::prefetchWeightsMatrix(unsigned totalLayers) {
 Matrix MessageService::getWeightMatrix(unsigned layer) {
     if (wSndThread.joinable()) wSndThread.join();
     if (wReqThread.joinable()) wReqThread.join();
-    return *weights.at(layer);
+    return weights.at(layer);
 }
 
 void MessageService::sendAccloss(float acc, float loss, unsigned vtcsCnt) {
@@ -213,6 +216,6 @@ void MessageService::sendAccloss(float acc, float loss, unsigned vtcsCnt) {
     bufPtr += sizeof(float);
     memcpy(bufPtr, &loss, sizeof(float));
 
-    weightSocket->send(header, ZMQ_SNDMORE);
-    weightSocket->send(payload);
+    wsocket.send(header, ZMQ_SNDMORE);
+    wsocket.send(payload);
 }

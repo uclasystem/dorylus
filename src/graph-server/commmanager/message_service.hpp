@@ -21,23 +21,21 @@ class MessageService {
 
     void sendWeightUpdate(Matrix &matrix, unsigned layer);
     void sendAccloss(float acc, float loss, unsigned vtcsCnt);
-    // void terminateWeightServers(std::vector<char *> &weightServerAddrs);
-    // void sendShutdownMessage(zmq::socket_t &weightsocket);
 
     Matrix getWeightMatrix(unsigned layer);
 
    private:
     static char weightAddr[50];
     zmq::context_t wctx;
-    zmq::socket_t *dataSocket;
-    zmq::socket_t *weightSocket;
+    zmq::socket_t wsocket;
     zmq::message_t confirm;
     unsigned nodeId;
     unsigned wPort;
     bool wsocktReady;
 
     unsigned epoch;
-    std::vector<Matrix *> weights;
+    std::vector<Matrix> weights;
+    std::vector<Matrix> as;
     std::thread wReqThread;
     std::thread wSndThread;
 };
