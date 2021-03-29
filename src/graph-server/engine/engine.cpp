@@ -166,9 +166,6 @@ void Engine::init(int argc, char *argv[]) {
     timeForwardProcess = 0.0;
     timeInit += getTimer();
     printLog(nodeId, "Engine initialization complete.");
-
-    preallocate_tensors(gnn_type);
-    start_time = getCurrentTime();
 }
 
 /**
@@ -392,19 +389,20 @@ void Engine::preallocateGCN() {
 
 
 void Engine::run() {
+    preallocate_tensors(gnn_type);
+    start_time = getCurrentTime();
     switch (gnn_type) {
         case GNN::GCN:
-            runGCN();
-            break;
         case GNN::GAT:
-            runGCN(); // GAT and GCN share the same pipeline
+            runPipeline();  // GAT and GCN share the same pipeline
             break;
         default:
             printLog(nodeId, "Unsupported GNN type");
     }
+    end_time = getCurrentTime();
 }
 
-void Engine::runGCN() {
+void Engine::runPipeline() {
     using ThreadVector = std::vector<std::thread>;
     commHalt = false;
     pipelineHalt = false;
@@ -1179,7 +1177,7 @@ void Engine::scheduleAsyncFunc(unsigned tid) {
                 bs.sleep();
                 continue;
             }
-            if (currEpoch == 0) { // Epoch 0. Training begining
+            if (currEpoch == START_EPOCH) { // Epoch 0. Training begining
                 layer = 0;
                 maxEpoch = 0;
                 async = false;
@@ -1194,7 +1192,7 @@ void Engine::scheduleAsyncFunc(unsigned tid) {
                     currEpoch, epochTime);
                 syncStt = syncEnd;
             }
-            if (currEpoch == 1) { // Async pipeline starts from epoch 1
+            if (currEpoch == START_EPOCH + 1) { // Async pipeline starts from epoch 1
                 ++minEpoch; // assert(minEpoch == 1)
                 async = mode == LAMBDA &&
                         pipeline &&

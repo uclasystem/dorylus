@@ -82,8 +82,8 @@ public:
     void runBackwardGCN(FeatType *backwardInitData);
 
     void run();
-    void runGCN();
-    void runAsyncPipelineGCN();
+    void runPipeline();
+    void runAsyncPipelineGCN(); // deprecated
 
     void runForwardSyncPipelineGCN(unsigned epoch);
     void runBackwardSyncPipelineGCN();
@@ -273,7 +273,8 @@ public:
     bool undirected = false;
 
     unsigned layer = 0;
-    unsigned currEpoch = -1u;
+    const unsigned START_EPOCH = 0;
+    unsigned currEpoch = START_EPOCH;
 
     // Timing stuff.
     double timeInit = 0.0;
