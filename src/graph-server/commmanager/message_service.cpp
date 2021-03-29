@@ -112,38 +112,16 @@ void sendTensors(zmq::socket_t &socket, Chunk &chunk,
 }
 
 //-----------------------Finish Copy------------------------
-MessageService::MessageService(unsigned wPort_, unsigned nodeId_)
+MessageService::MessageService(unsigned wPort_, unsigned nodeId_,
+                               unsigned numLayers_, GNN gnn_type_)
     : wctx(1), nodeId(nodeId_), wPort(wPort_), wsocket(wctx, ZMQ_DEALER),
-      wsocktReady(0), confirm(5), epoch(-1) {
+      wsocktReady(0), confirm(5),
+      gnn_type(gnn_type_), numLayers(numLayers_), epoch(-1) {
 
     for (int layer = 0; layer < 2; layer++) {
         weights.push_back(Matrix());
         as.push_back(Matrix());
     }
-}
-
-void MessageService::sendWeightUpdate(Matrix &matrix, unsigned layer) {
-    if (wSndThread.joinable()) {
-        wSndThread.join();
-    }
-    if (wReqThread.joinable()) {
-        wReqThread.join();
-    }
-
-    wSndThread = std::thread(
-        [&](Matrix matrix, unsigned layer) {
-            matrix.setName("w");
-            std::vector<Matrix> weightUpdates{ matrix };
-            Chunk c = { 0 };
-            c.vertex = true;
-            c.layer = layer;
-            c.epoch = epoch;
-            c.globalId = nodeId;
-            c.localId = nodeId;
-            sendTensors(wsocket, c, weightUpdates);
-            delete[] matrix.getData();
-        },
-        matrix, layer);
 }
 
 void MessageService::setUpWeightSocket(char *addr) {
@@ -161,45 +139,88 @@ void MessageService::setUpWeightSocket(char *addr) {
     wsocket.connect(whost_port);
 }
 
-// This retrieve all weights at the beginning
-// TODO: This can be improved by making it layer-wise prefectching
-void MessageService::prefetchWeightsMatrix(unsigned totalLayers) {
-    if (wSndThread.joinable()) {
-        wSndThread.join();
-    }
-    if (wReqThread.joinable()) {
-        wReqThread.join();
-    }
-
-    epoch++;
-    wReqThread = std::thread([&, totalLayers]() {
-        if (wSndThread.joinable()) wSndThread.join();
-
-        for (unsigned i = 0; i < weights.size(); ++i) {
-            deleteMatrix(weights[i]);
-            // deleteMatrix(as[i]);
-        }
-        for (unsigned j = 0; j < totalLayers; ++j) {
-            Chunk c = { 0 };
-            c.vertex = true;
-            c.layer = j;
-            c.epoch = epoch;
-            c.globalId=nodeId;
-            c.localId=nodeId;
-            std::vector<std::string> weightRequests{"w"};
-            // std::vector<std::string> weightRequests{"w", "a_i"};
-            std::vector<Matrix> wa = reqTensors(wsocket, c, weightRequests);
-            weights[j] = wa[0];
-            // as[j] = wa[1];
-        }
-    });
-}
-
 Matrix MessageService::getWeightMatrix(unsigned layer) {
     if (wSndThread.joinable()) wSndThread.join();
     if (wReqThread.joinable()) wReqThread.join();
     return weights.at(layer);
 }
+
+void MessageService::sendWeightUpdate(Matrix &matrix, unsigned layer) {
+    if (wSndThread.joinable()) wSndThread.join();
+    if (wReqThread.joinable()) wReqThread.join();
+
+    wSndThread = std::thread(
+        [&](Matrix matrix, unsigned layer) {
+            matrix.setName("w");
+            std::vector<Matrix> weightUpdates{ matrix };
+            Chunk c = { 0, nodeId, 0, 0, layer,
+                        PROP_TYPE::BACKWARD, epoch, true };
+            sendTensors(wsocket, c, weightUpdates);
+            deleteMatrix(matrix);
+        },
+        matrix, layer);
+}
+
+Matrix MessageService::getaMatrix(unsigned layer) {
+    if (wSndThread.joinable()) wSndThread.join();
+    if (wReqThread.joinable()) wReqThread.join();
+    return as.at(layer);
+}
+
+void MessageService::sendaUpdate(Matrix &matrix, unsigned layer) {
+    if (wSndThread.joinable()) wSndThread.join();
+    if (wReqThread.joinable()) wReqThread.join();
+
+    wSndThread = std::thread(
+        [&](Matrix matrix, unsigned layer) {
+            matrix.setName("a_i");
+            std::vector<Matrix> weightUpdates{ matrix };
+            Chunk c = { 0, nodeId, 0 ,0, layer,
+                        PROP_TYPE::BACKWARD, epoch, true }; // YIFAN: fix this
+            sendTensors(wsocket, c, weightUpdates);
+            deleteMatrix(matrix);
+        },
+        matrix, layer);
+}
+
+// This retrieve all weights at the beginning
+// TODO: This can be improved by making it layer-wise prefectching
+void MessageService::prefetchWeightsMatrix() {
+    if (wSndThread.joinable()) wSndThread.join();
+    if (wReqThread.joinable()) wReqThread.join();
+
+    epoch++;
+    wReqThread = std::thread([&]() {
+        if (wSndThread.joinable()) wSndThread.join();
+
+        if (gnn_type == GNN::GCN) {
+            for (unsigned i = 0; i < weights.size(); ++i) {
+                deleteMatrix(weights[i]);
+            }
+            Chunk c = { 0, nodeId, 0, 0, 0, PROP_TYPE::FORWARD, epoch, true };
+            for (unsigned j = 0; j < numLayers; ++j) {
+                c.layer = j;
+                std::vector<std::string> weightRequests { "w" };
+                std::vector<Matrix> wa = reqTensors(wsocket, c, weightRequests);
+                weights[j] = wa[0];
+            }
+        } else if (gnn_type == GNN::GAT) {
+            for (unsigned i = 0; i < weights.size(); ++i) {
+                deleteMatrix(weights[i]);
+                deleteMatrix(as[i]);
+            }
+            Chunk c = { 0, nodeId, 0, 0, 0, PROP_TYPE::FORWARD, epoch, true };
+            for (unsigned j = 0; j < numLayers; ++j) {
+                c.layer = j;
+                std::vector<std::string> weightRequests{ "w", "a_i" };
+                std::vector<Matrix> wa = reqTensors(wsocket, c, weightRequests);
+                weights[j] = wa[0];
+                as[j] = wa[1];
+            }
+        }
+    });
+}
+
 
 void MessageService::sendAccloss(float acc, float loss, unsigned vtcsCnt) {
     if (wSndThread.joinable()) {

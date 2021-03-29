@@ -20,17 +20,16 @@
 #include "resource_comm.hpp"
 
 class CPUComm : public ResourceComm {
-   public:
+public:
     CPUComm(Engine *engine_);
 
     void setAsync(bool _async, unsigned currEpoch){};  // GPU always run synchronously
     unsigned getRelaunchCnt() { return 0u; };
     void NNCompute(Chunk &chunk);
     void NNSync(){};
-    void prefetchWeights() { msgService.prefetchWeightsMatrix(totalLayers); };
+    void prefetchWeights() { msgService.prefetchWeightsMatrix(); };
 
-    // void sendShutdownMessage();
-
+private:
     // compute related
     void vtxNNForward(unsigned layer, bool lastLayer);
     void vtxNNBackward(unsigned layer);
@@ -40,13 +39,10 @@ class CPUComm : public ResourceComm {
     void getTrainStat(Matrix &preds, Matrix &labels, float &acc,
                            float &loss);
     void maskout(Matrix &preds, Matrix &labels);
-   private:
     unsigned totalLayers;
     unsigned nodeId;
     unsigned numNodes;
     unsigned numLocalVertices;
-
-    unsigned currLayer;
 
     std::string wServersFile;
 
@@ -69,10 +65,10 @@ class CPUComm : public ResourceComm {
     void edgNNForwardGCN(unsigned layer, bool lastLayer) {}
     void edgNNBackwardGCN(unsigned layer) {}
     // GAT specific
-    void vtxNNForwardGAT(unsigned layer, bool lastLayer) {}
-    void vtxNNBackwardGAT(unsigned layer) {}
-    void edgNNForwardGAT(unsigned layer, bool lastLayer) {}
-    void edgNNBackwardGAT(unsigned layer) {}
+    void vtxNNForwardGAT(unsigned layer, bool lastLayer);
+    void vtxNNBackwardGAT(unsigned layer);
+    void edgNNForwardGAT(unsigned layer, bool lastLayer);
+    void edgNNBackwardGAT(unsigned layer);
 };
 
 Matrix activateDerivative(Matrix &mat);

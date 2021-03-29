@@ -5,14 +5,14 @@ using namespace std;
 CPUComm::CPUComm(Engine *engine_)
     : engine(engine_), nodeId(engine_->nodeId), totalLayers(engine_->numLayers),
     wServersFile(engine_->weightserverIPFile), wPort(engine_->weightserverPort),
-    numNodes(engine_->numNodes), currLayer(0), savedNNTensors(engine_->savedNNTensors),
-    msgService(wPort, nodeId)
+    numNodes(engine_->numNodes), savedNNTensors(engine_->savedNNTensors),
+    msgService(wPort, nodeId, totalLayers, engine_->gnn_type)
 {
     loadWeightServers(weightServerAddrs, wServersFile);
     msgService.setUpWeightSocket(
         weightServerAddrs.at(nodeId % weightServerAddrs.size()));
 
-    msgService.prefetchWeightsMatrix(totalLayers);
+    msgService.prefetchWeightsMatrix();
     for (char *addr : weightServerAddrs) {
         free(addr);
     }
@@ -20,7 +20,7 @@ CPUComm::CPUComm(Engine *engine_)
 
 void CPUComm::NNCompute(Chunk &chunk) {
     c = chunk;
-    currLayer = chunk.layer;
+    unsigned currLayer = chunk.layer;
 
     if (chunk.dir == PROP_TYPE::FORWARD) {
         if (chunk.vertex) {
@@ -28,8 +28,8 @@ void CPUComm::NNCompute(Chunk &chunk) {
             vtxNNForward(currLayer, currLayer == (totalLayers - 1));
         } else {
             // printLog(nodeId, "CPU FORWARD edg NN started");
-            currLayer--; // YIFAN: chunk layer for AE has been changed. Fix this
-            edgNNForward(currLayer, currLayer == (totalLayers - 1));
+            currLayer--; // YIFAN: fix this
+            edgNNForward(currLayer, currLayer == totalLayers);
         }
     }
     if (chunk.dir == PROP_TYPE::BACKWARD) {
@@ -158,7 +158,90 @@ void CPUComm::vtxNNBackwardGCN(unsigned layer) {
     delete[] actDeriv.getData();
     delete[] interGrad.getData();
 
-    if (layer == 0) msgService.prefetchWeightsMatrix(totalLayers);
+    if (layer == 0) msgService.prefetchWeightsMatrix();
+}
+
+void CPUComm::vtxNNForwardGAT(unsigned layer, bool lastLayer) {
+    Matrix feats = layer == 0
+                 ? savedNNTensors[layer]["h"]
+                 : savedNNTensors[layer - 1]["ah"];
+    Matrix weight = msgService.getWeightMatrix(layer);
+    Matrix z = feats.dot(weight);
+    memcpy(savedNNTensors[layer]["z"].getData(), z.getData(), z.getDataSize());
+    deleteMatrix(z);
+}
+
+void CPUComm::vtxNNBackwardGAT(unsigned layer) {
+    Matrix weight = msgService.getWeightMatrix(layer);
+    Matrix grad = savedNNTensors[layer]["aTg"];
+    Matrix h = layer == 0
+             ? savedNNTensors[layer]["h"]
+             : savedNNTensors[layer - 1]["ah"];
+
+    Matrix weightUpdates = h.dot(grad, true, false);
+    msgService.sendWeightUpdate(weightUpdates, layer);
+
+    if (layer != 0) {
+        Matrix resultGrad = grad.dot(weight, false, true);
+        memcpy(savedNNTensors[layer - 1]["grad"].getData(), resultGrad.getData(),
+               resultGrad.getDataSize());
+        resultGrad.free();
+    }
+    if (layer == 0) msgService.prefetchWeightsMatrix();
+}
+
+void CPUComm::edgNNForwardGAT(unsigned layer, bool lastLayer) {
+    Matrix a = msgService.getaMatrix(layer); // YIFAN: fix this
+    unsigned featLayer = layer; // YIFAN: fix this
+    Matrix z = savedNNTensors[featLayer]["z"];
+
+    // expand and dot
+    Matrix zaTensor = expandDot(z, a, engine->graph.forwardAdj);
+    memcpy(savedNNTensors[featLayer]["az"].getData(), zaTensor.getData(), zaTensor.getDataSize());
+    Matrix outputTensor = leakyRelu(zaTensor);
+    zaTensor.free();
+
+    memcpy(savedNNTensors[featLayer]["A"].getData(), outputTensor.getData(), outputTensor.getDataSize());
+    outputTensor.free();
+}
+
+void CPUComm::edgNNBackwardGAT(unsigned layer) {
+    Matrix a = msgService.getaMatrix(layer);
+    unsigned featLayer = layer;
+    Matrix gradTensor = savedNNTensors[featLayer]["grad"];
+    Matrix zaTensor = savedNNTensors[featLayer]["az"];
+    Matrix localZTensor = savedNNTensors[featLayer]["z"]; // serve as Z_dst, and part of Z_src
+    // Matrix ghostZTensor = savedNNTensors[featLayer]["fg_z"]; // serve as part of Z_src
+    // FeatType **fedge = engine->savedEdgeTensors[featLayer]["fedge"]; // This serves the purpose of Z_src and Z_dst
+    // unsigned edgCnt = engine->graph.forwardAdj.nnz;
+    // unsigned featDim = gradTensor.getCols();
+
+    // gradient of LeakyRelu
+    Matrix dLRelu = leakyReluBackward(zaTensor);
+    // expand dP to (|E|, featDim) and element-wise multiply dLRelu
+    // Shape of dAct is (|E|, featDim)
+    Matrix dAct = expandHadamardMul(gradTensor, dLRelu, engine->graph.forwardAdj);
+    dLRelu.free();
+
+    // Shape of dA: (|E|, 1), serve as gradient of each edge for backward agg
+    Matrix dA = dAct.dot(a);
+    memcpy(savedNNTensors[featLayer]["dA"].getData(), dA.getData(), dA.getDataSize());
+    dA.free();
+
+    // reduce dAct(|E|, featDim) to (1, featDim)
+    // Do this first to optmize computation and save memory
+    Matrix dAct_reduce = reduce(dAct);
+    dAct.free();
+    // // Expand Z_src and Z_dst (both have shape (|V|, featDim)) to (|E|, featDim)
+    // // And then do Z_dst^T \dot Z_src -> zz (featDim, featDim)
+    // Matrix zz = expandMulZZ(fedge, edgCnt, featDim);
+    Matrix zz = localZTensor.dot(localZTensor, true, false);
+    // (1, featDim) \dot (featDim, featDim) -> (1, featDim), which is da's shape
+    Matrix da = zz.dot(dAct_reduce, false, true);
+    dAct_reduce.free();
+    zz.free();
+    msgService.sendaUpdate(da, layer);
+    // da.free();
 }
 
 void loadWeightServers(std::vector<char *> &addresses,
