@@ -20,203 +20,153 @@
 #include <thread>
 #include <unordered_set>
 
-void Engine::preallocateGAT() {
+void Engine::preallocateGCN() {
     unsigned vtxCnt = graph.localVtxCnt;
 
     // Store input tesnors
-    savedNNTensors[0]["h"] =
+    savedNNTensors[0]["x"] =
         Matrix(vtxCnt, getFeatDim(0), forwardVerticesInitData);
-
-    // savedNNTensors[0]["fg"] =
-    //     Matrix(graph.srcGhostCnt, getFeatDim(0), forwardGhostInitData);
+    savedNNTensors[0]["fg"] =
+        Matrix(graph.srcGhostCnt, getFeatDim(0), forwardGhostInitData);
     savedNNTensors[numLayers - 1]["lab"] =
         Matrix(vtxCnt, getFeatDim(numLayers), localVerticesLabels);
 
+    FeatType **eVFeatsTensor = srcVFeats2eFeats(
+        forwardVerticesInitData, forwardGhostInitData, vtxCnt, getFeatDim(0));
+    savedEdgeTensors[0]["fedge"] = eVFeatsTensor;
+
     // forward tensor allocation
     for (int layer = 0; layer < numLayers; ++layer) {
-        //unsigned featDim = getFeatDim(layer);
+        unsigned featDim = getFeatDim(layer);
         unsigned nextFeatDim = getFeatDim(layer + 1);
 
-        FeatType *zTensor = new FeatType[vtxCnt * nextFeatDim];
-        std::memset(zTensor, 0, sizeof(FeatType) * vtxCnt * nextFeatDim);
-        savedNNTensors[layer]["z"] = Matrix(vtxCnt, nextFeatDim, zTensor);
+        // GATHER TENSORS
+        FeatType *ahTensor = new FeatType[vtxCnt * featDim];
+        savedNNTensors[layer]["ah"] = Matrix("ah", vtxCnt, featDim, ahTensor);
 
-        // Technically not e_i because needs LeakyReLU
-        FeatType* azTensor = new FeatType[graph.forwardAdj.nnz * 1];
-        std::memset(azTensor, 0, sizeof(FeatType) * graph.forwardAdj.nnz * 1);
-        savedNNTensors[layer]["az"] = Matrix(graph.forwardAdj.nnz, 1, azTensor);
-
-        FeatType *ghostZTensor =
-            new FeatType[graph.srcGhostCnt * nextFeatDim];
-        std::memset(ghostZTensor, 0, sizeof(FeatType) * graph.srcGhostCnt * nextFeatDim);
-        savedNNTensors[layer]["fg_z"] =
-            Matrix(graph.srcGhostCnt, nextFeatDim, ghostZTensor);
-
-        // Just storing these as matrices for easy access
-        // Actually they are just edge values to be used with CSC/CSR
-        FeatType* ATensor = graph.forwardAdj.values;
-        std::memset(ATensor, 0, sizeof(FeatType) * graph.forwardAdj.nnz * 1);
-        savedNNTensors[layer]["A"] =
-            Matrix(graph.forwardAdj.nnz, 1, ATensor);
-
-        // Attention scores stored in CSCMatrix<>::values
-
-        FeatType **eVFeatsTensor = srcVFeats2eFeats(
-            zTensor, ghostZTensor, vtxCnt, nextFeatDim);
-        savedEdgeTensors[layer]["fedge"] = eVFeatsTensor;
-
-        FeatType *ahTensor = new FeatType[vtxCnt * nextFeatDim];
-        std::memset(ahTensor, 0, sizeof(FeatType) * vtxCnt * nextFeatDim);
-        savedNNTensors[layer]["ah"] = Matrix("ah", vtxCnt, nextFeatDim, ahTensor);
-
+        // APPLY TENSORS
         if (layer < numLayers - 1) {
+            FeatType *zTensor = new FeatType[vtxCnt * nextFeatDim];
             FeatType *hTensor = new FeatType[vtxCnt * nextFeatDim];
-            std::memset(hTensor, 0, sizeof(FeatType) * vtxCnt * nextFeatDim);
-            savedNNTensors[layer + 1]["h"] = Matrix(vtxCnt, nextFeatDim, hTensor);
+
+            savedNNTensors[layer]["z"] = Matrix(vtxCnt, nextFeatDim, zTensor);
+            savedNNTensors[layer]["h"] = Matrix(vtxCnt, nextFeatDim, hTensor);
+
+            // SCATTER TENSORS
+            FeatType *ghostTensor =
+                new FeatType[graph.srcGhostCnt * nextFeatDim];
+            savedNNTensors[layer + 1]["fg"] =
+                Matrix(graph.srcGhostCnt, nextFeatDim, ghostTensor);
+
+            FeatType **edgeTensor =
+                srcVFeats2eFeats(hTensor, ghostTensor, vtxCnt, nextFeatDim);
+            savedEdgeTensors[layer + 1]["fedge"] = edgeTensor;
         }
-        // FeatType **edgeTensor =
-        //     srcVFeats2eFeats(hTensor, ghostTensor, vtxCnt, featDim);
-        // savedEdgeTensors[layer + 1]["fedge"] = edgeTensor;
     }
 
     // backward tensor allocation
-    for (int layer = numLayers - 1; layer >= 0; --layer) {
-        unsigned featDim = getFeatDim(layer + 1);
+    for (int layer = numLayers - 1; layer > 0; --layer) {
+        unsigned featDim = getFeatDim(layer);
 
-        // LOSS GRAD TENSORS
+        // APPLY TENSORS
         FeatType *gradTensor = new FeatType[vtxCnt * featDim];
         savedNNTensors[layer]["grad"] =
             Matrix("grad", vtxCnt, featDim, gradTensor);
 
-        // APPLY EDGE TENSORS
-        FeatType* gradATensor =
-            new FeatType[graph.forwardAdj.nnz * 1];
-        std::memset(gradATensor, 0, sizeof(FeatType) * graph.forwardAdj.nnz * 1);
-        savedNNTensors[layer]["dA"] =
-            Matrix(graph.forwardAdj.nnz, 1, gradATensor);
+        // SCATTER TENSORS
+        FeatType *ghostTensor = new FeatType[graph.dstGhostCnt * featDim];
+        savedNNTensors[layer - 1]["bg"] =
+            Matrix(graph.dstGhostCnt, featDim, ghostTensor);
+
+        FeatType **eFeats =
+            dstVFeats2eFeats(gradTensor, ghostTensor, vtxCnt, featDim);
+        savedEdgeTensors[layer - 1]["bedge"] = eFeats;
 
         // GATHER TENSORS
         FeatType *aTgTensor = new FeatType[vtxCnt * featDim];
-        savedNNTensors[layer]["aTg"] = Matrix(vtxCnt, featDim, aTgTensor);
-
-        // SCATTER TENSORS
-        FeatType *ghostTensor = new FeatType[graph.dstGhostCnt * featDim];
-        savedNNTensors[layer]["bg_d"] =
-            Matrix(graph.dstGhostCnt, featDim, ghostTensor);
-
-        FeatType **eGrad =
-            dstVFeats2eFeats(gradTensor, ghostTensor, vtxCnt, featDim);
-        savedEdgeTensors[layer]["bedge"] = eGrad;
+        savedNNTensors[layer - 1]["aTg"] = Matrix(vtxCnt, featDim, aTgTensor);
     }
 }
 
-void Engine::aggregateGAT(Chunk &c) {
+void Engine::aggregateGCN(Chunk &c) {
     unsigned start = c.lowBound;
     unsigned end = c.upBound;
     PROP_TYPE dir = c.dir;
 
     unsigned featDim;
-    FeatType **inputFTensor = NULL; // forward edge activations
-    FeatType **inputBTensor = NULL; // backward edge gradients
-    FeatType *outputTensor = NULL;
-    // Forward specific
     FeatType *featTensor = NULL;
-    // Backward specific
-    FeatType *dA = NULL;
-
+    FeatType **inputTensor = NULL;
+    FeatType *outputTensor = NULL;
     if (dir == PROP_TYPE::FORWARD) { // forward
         featDim = getFeatDim(c.layer);
-        featTensor = getVtxFeat(savedNNTensors[c.layer - 1]["z"].getData(),
+        featTensor = c.layer == 0
+                   ? getVtxFeat(savedNNTensors[c.layer]["x"].getData(),
+                                start, featDim)
+                   : getVtxFeat(savedNNTensors[c.layer - 1]["h"].getData(),
                                 start, featDim);
-        inputFTensor = savedEdgeTensors[c.layer - 1]["fedge"];
-        outputTensor = savedNNTensors[c.layer - 1]["ah"].getData();
+        inputTensor = savedEdgeTensors[c.layer]["fedge"];  // input edgeFeatsTensor
+        outputTensor = savedNNTensors[c.layer]["ah"].getData(); // output aggregatedTensor
     } else { // backward
         featDim = getFeatDim(c.layer);
-        inputFTensor = savedEdgeTensors[c.layer - 1]["fedge"];
-        inputBTensor = savedEdgeTensors[c.layer - 1]["bedge"];
+        featTensor = getVtxFeat(savedNNTensors[c.layer]["grad"].getData(),
+                                start, featDim);
+        inputTensor = savedEdgeTensors[c.layer - 1]["bedge"];
         outputTensor = savedNNTensors[c.layer - 1]["aTg"].getData();
-        dA = savedNNTensors[c.layer - 1]["dA"].getData();
     }
+    FeatType *chunkPtr = getVtxFeat(outputTensor, start, featDim);
+    std::memcpy(chunkPtr, featTensor,
+                sizeof(FeatType) * (end - start) * featDim);
 
-    if (dir == PROP_TYPE::FORWARD) {
-        FeatType *chunkPtr = getVtxFeat(outputTensor, start, featDim);
-        std::memcpy(chunkPtr, featTensor,
-                    sizeof(FeatType) * (end - start) * featDim);
-    }
 #ifdef _CPU_ENABLED_
 #pragma omp parallel for
 #endif
     for (unsigned lvid = start; lvid < end; lvid++) {
         // Read out data of the current layer of given vertex.
         FeatType *currDataDst = getVtxFeat(outputTensor, lvid, featDim);
-        if (dir == PROP_TYPE::FORWARD) {
-            // Aggregate activations from incoming neighbors.
+        // Apply normalization factor on the current data.
+        {
+            const EdgeType normFactor = graph.vtxDataVec[lvid];
+            for (unsigned i = 0; i < featDim; ++i) {
+                currDataDst[i] *= normFactor;
+            }
+        }
+        // Aggregate from incoming neighbors.
+        if (dir == PROP_TYPE::FORWARD) { // using forward adj mat
             for (uint64_t eid = graph.forwardAdj.columnPtrs[lvid];
                 eid < graph.forwardAdj.columnPtrs[lvid + 1]; ++eid) {
-                EdgeType edgeWeight = graph.forwardAdj.values[eid];
+                EdgeType normFactor = graph.forwardAdj.values[eid];
                 for (unsigned j = 0; j < featDim; ++j) {
-                    currDataDst[j] += inputFTensor[eid][j] * edgeWeight;
+                    currDataDst[j] += inputTensor[eid][j] * normFactor;
                 }
             }
-        } else {
-            // Aggregate gradients from outgoing neighbors.
+        } else { // using backward adj mat
             for (uint64_t eid = graph.backwardAdj.rowPtrs[lvid];
                 eid < graph.backwardAdj.rowPtrs[lvid + 1]; ++eid) {
-                EdgeType edgeWeight = graph.backwardAdj.values[eid];
+                EdgeType normFactor = graph.backwardAdj.values[eid];
                 for (unsigned j = 0; j < featDim; ++j) {
-                    currDataDst[j] += inputBTensor[eid][j] * edgeWeight;
-                }
-            }
-            // Aggregate activations from incoming neighbors.
-            for (uint64_t eid = graph.forwardAdj.columnPtrs[lvid];
-                eid < graph.forwardAdj.columnPtrs[lvid + 1]; ++eid) {
-                // Note the edgeGrad here is different from other for loops
-                EdgeType edgeGrad = dA[eid];
-                for (unsigned j = 0; j < featDim; ++j) {
-                    currDataDst[j] += inputFTensor[eid][j] * edgeGrad;
+                    currDataDst[j] += inputTensor[eid][j] * normFactor;
                 }
             }
         }
     }
 }
 
-// Get prediction after last forward layer of GAT
-void Engine::predictGAT(Chunk &c) {
-    unsigned featLayer = c.layer - 1;
-    Matrix& labels = savedNNTensors[featLayer]["lab"];
-    FeatType* labelPtr = labels.get(c.lowBound);
-    FeatType* outputDeriv = savedNNTensors[featLayer]["grad"].get(c.lowBound);
-    FeatType* agg = savedNNTensors[featLayer]["az"].get(c.lowBound);
-
-
-    unsigned rows = c.upBound - c.lowBound;
-    unsigned cols = labels.getCols();
-    softmax(agg, outputDeriv, rows, cols);
-
-#if defined(_CPU_ENABLED_) || defined(_GPU_ENABLED_)
-#pragma omp parallel
-#endif
-    for (unsigned i = 0; i < rows * cols; ++i) {
-        outputDeriv[i] -= labelPtr[i];
-    }
-}
-
-void Engine::applyVertexGAT(Chunk &c) {
+void Engine::applyVertexGCN(Chunk &c) {
     c.vertex = true;
-    if (c.dir == PROP_TYPE::FORWARD) {
+    if (c.dir == PROP_TYPE::FORWARD) { // Forward pass
         resComm->NNCompute(c);
-    } else { // Backward, inc layer first before AVB
-        Chunk nextChunk = incLayerGAT(c);
-        resComm->NNCompute(nextChunk);
+    } else { // Backward pass, inc layer first to align up the layer id
+        Chunk nextC = incLayerGCN(c);
+        resComm->NNCompute(nextC);
     }
 }
 
-void Engine::scatterGAT(Chunk &c) {
-    unsigned outputLayer = c.layer - 1;
-    unsigned featLayer = c.layer;
+void Engine::scatterGCN(Chunk &c) {
+    unsigned outputLayer = c.layer;
     std::string tensorName;
     if (c.dir == PROP_TYPE::FORWARD) {
-        tensorName = "z";
+        outputLayer -= 1;
+        tensorName = "h";
     } else {
         tensorName = "grad";
     }
@@ -225,7 +175,7 @@ void Engine::scatterGAT(Chunk &c) {
 
     unsigned startId = c.lowBound;
     unsigned endId = c.upBound;
-    unsigned featDim = getFeatDim(featLayer);
+    unsigned featDim = getFeatDim(c.layer);
 
     std::map<unsigned, std::vector<unsigned>> &ghostMap =
         c.dir == PROP_TYPE::FORWARD ? graph.forwardGhostMap
@@ -269,7 +219,7 @@ void Engine::scatterGAT(Chunk &c) {
     delete[] batchedIds;
 }
 
-void Engine::ghostReceiverGAT(unsigned tid) {
+void Engine::ghostReceiverGCN(unsigned tid) {
     // printLog(nodeId, "RECEIVER: Starting");
     BackoffSleeper bs;
     unsigned sender, topic;
@@ -301,7 +251,7 @@ void Engine::ghostReceiverGAT(unsigned tid) {
                 bufPtr += sizeof(unsigned);
                 // Get proper variables depending on forward or backward
                 std::string tensorName = dir == PROP_TYPE::FORWARD
-                                       ? "fg_z" : "bg_d";
+                                       ? "fg" : "bg";
                 std::map<unsigned, unsigned> &globalToGhostVtcs =
                     dir == PROP_TYPE::FORWARD ? graph.srcGhostVtcs
                                               : graph.dstGhostVtcs;
@@ -371,7 +321,6 @@ void Engine::ghostReceiverGAT(unsigned tid) {
     delete[] msgBuf;
 }
 
-void Engine::applyEdgeGAT(Chunk &c) {
-    c.vertex = false;
-    resComm->NNCompute(c);
+void Engine::applyEdgeGCN(Chunk &chunk) {
+    GAQueue.push_atomic(chunk);
 }

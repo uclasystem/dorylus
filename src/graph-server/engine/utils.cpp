@@ -495,6 +495,7 @@ Engine::parseArgs(int argc, char *argv[]) {
              myPrIpFile.c_str(), undirected ? "true" : "false", data_port, ctrl_port, node_port);
 }
 
+/******************************** File utils ********************************/
 /**
  *
  * Read in the layer configuration file.
@@ -638,7 +639,7 @@ void Engine::readLabelsFile(std::string &labelsFileName) {
     assert(gvid == graph.globalVtxCnt);
 }
 
-void Engine::loadChunksGCN() {
+void Engine::loadChunks() {
     unsigned vtcsCnt = graph.localVtxCnt;
     for (unsigned cid = 0; cid < numLambdasForward; ++cid) {
         unsigned chunkSize =
@@ -662,12 +663,102 @@ void Engine::loadChunksGCN() {
     finishedChunks = 0;
 }
 
+/********************************* SC utils *********************************/
+void Engine::verticesPushOut(unsigned receiver, unsigned totCnt,
+                             unsigned *lvids, FeatType *inputTensor,
+                             unsigned featDim, Chunk &c) {
+    zmq::message_t msg(DATA_HEADER_SIZE +
+                       (sizeof(unsigned) + sizeof(FeatType) * featDim) *
+                           totCnt);
+    char *msgPtr = (char *)(msg.data());
+    sprintf(msgPtr, NODE_ID_HEADER, receiver);
+    msgPtr += NODE_ID_DIGITS;
+    unsigned featLayer;
+    if (gnn_type == GNN::GCN) { // YIFAN: fix this
+        featLayer = c.dir == PROP_TYPE::FORWARD
+                  ? c.layer : c.layer - 1;
+    } else if (gnn_type == GNN::GAT) {
+        featLayer = c.layer - 1;
+    }
+    populateHeader(msgPtr, nodeId, totCnt, featDim, featLayer, c.dir);
+    msgPtr += sizeof(unsigned) * 5;
+
+    for (unsigned i = 0; i < totCnt; ++i) {
+        *(unsigned *)msgPtr = graph.localToGlobalId[lvids[i]];
+        msgPtr += sizeof(unsigned);
+        FeatType *dataPtr = getVtxFeat(inputTensor, lvids[i], featDim);
+        memcpy(msgPtr, dataPtr, sizeof(FeatType) * featDim);
+        msgPtr += sizeof(FeatType) * featDim;
+    }
+    commManager.rawMsgPushOut(msg);
+}
+/********************************* AE utils *********************************/
+// reshape vtcs tensor to edgs tensor. Each element in edgsTensor is a reference
+// to a vertex feature. Both src vtx features and dst vtx features included in
+// edgsTensor. [srcV Feats (local inEdge cnt); dstV Feats (local inEdge cnt)]
+FeatType **Engine::srcVFeats2eFeats(FeatType *vtcsTensor, FeatType *ghostTensor,
+                                    unsigned vtcsCnt, unsigned featDim) {
+    underlyingVtcsTensorBuf = vtcsTensor;
+
+    FeatType **eVtxFeatsBuf = new FeatType *[2 * graph.localInEdgeCnt];
+    FeatType **eSrcVtxFeats = eVtxFeatsBuf;
+    FeatType **eDstVtxFeats = eSrcVtxFeats + graph.localInEdgeCnt;
+
+    unsigned long long edgeItr = 0;
+    for (unsigned lvid = 0; lvid < graph.localVtxCnt; ++lvid) {
+        for (unsigned long long eid = graph.forwardAdj.columnPtrs[lvid];
+             eid < graph.forwardAdj.columnPtrs[lvid + 1]; ++eid) {
+            unsigned srcVid = graph.forwardAdj.rowIdxs[eid];
+            if (srcVid < graph.localVtxCnt) {
+                eSrcVtxFeats[edgeItr] = getVtxFeat(vtcsTensor, srcVid, featDim);
+            } else {
+                eSrcVtxFeats[edgeItr] = getVtxFeat(
+                    ghostTensor, srcVid - graph.localVtxCnt, featDim);
+            }
+            eDstVtxFeats[edgeItr] = getVtxFeat(vtcsTensor, lvid, featDim);
+            ++edgeItr;
+        }
+    }
+
+    return eVtxFeatsBuf;
+}
+
+// similar to srcVFeats2eFeats, but based on outEdges of local vertices.
+// [dstV Feats (local outEdge cnt); srcV Feats (local outEdge cnt)]
+FeatType **Engine::dstVFeats2eFeats(FeatType *vtcsTensor, FeatType *ghostTensor,
+                                    unsigned vtcsCnt, unsigned featDim) {
+    underlyingVtcsTensorBuf = vtcsTensor;
+
+    FeatType **eVtxFeatsBuf = new FeatType *[2 * graph.localOutEdgeCnt];
+    FeatType **eSrcVtxFeats = eVtxFeatsBuf;
+    FeatType **eDstVtxFeats = eSrcVtxFeats + graph.localOutEdgeCnt;
+
+    unsigned long long edgeItr = 0;
+    for (unsigned lvid = 0; lvid < graph.localVtxCnt; ++lvid) {
+        for (unsigned long long eid = graph.backwardAdj.rowPtrs[lvid];
+             eid < graph.backwardAdj.rowPtrs[lvid + 1]; ++eid) {
+            unsigned srcVid = graph.backwardAdj.columnIdxs[eid];
+            if (srcVid < graph.localVtxCnt) {
+                eSrcVtxFeats[edgeItr] = getVtxFeat(vtcsTensor, srcVid, featDim);
+            } else {
+                eSrcVtxFeats[edgeItr] = getVtxFeat(
+                    ghostTensor, srcVid - graph.localVtxCnt, featDim);
+            }
+            eDstVtxFeats[edgeItr] = getVtxFeat(vtcsTensor, lvid, featDim);
+            ++edgeItr;
+        }
+    }
+
+    return eVtxFeatsBuf;
+}
+
 unsigned Engine::getAbsLayer(const Chunk &chunk) {
     return chunk.dir == PROP_TYPE::FORWARD
             ? (chunk.layer)
             : (2 * numLayers - 1 - chunk.layer);
 }
 
+/******************************** Layer utils ********************************/
 Chunk Engine::incLayerGCN(const Chunk &chunk) {
     Chunk nChunk = chunk;
     if (nChunk.dir == PROP_TYPE::FORWARD) { // Forward pass

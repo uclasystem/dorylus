@@ -111,6 +111,9 @@ public:
     void gatherWorkFunc(unsigned tid);
     void applyVertexWorkFunc(unsigned tid);
     void scatterWorkFunc(unsigned tid);
+    void ghostReceiverFunc(unsigned tid);
+    void ghostReceiverGCN(unsigned tid);
+    void ghostReceiverGAT(unsigned tid);
     void applyEdgeWorkFunc(unsigned tid);
     void scheduleFunc(unsigned tid);
     void scheduleAsyncFunc(unsigned tid);
@@ -123,6 +126,8 @@ public:
     Chunk incLayerGCN(const Chunk &c);
     Chunk incLayerGAT(const Chunk &c);
     bool isLastLayer(const Chunk &c);
+
+    void loadChunks();
 
     FeatType* aggregate(FeatType **eVFeatsTensor, unsigned edgsCnt,
                         unsigned featDim, AGGREGATOR aggregator);
@@ -303,9 +308,6 @@ public:
 
     void aggregator(unsigned tid);
     void scatterWorker(unsigned tid);
-    void ghostReceiver(unsigned tid);
-    void ghostReceiverGCN(unsigned tid);
-    void ghostReceiverGAT(unsigned tid);
 
     void gasAgger(unsigned tid);
     void gasScter(unsigned tid);
@@ -344,7 +346,6 @@ public:
     void sendBackwardGhostGradients(FeatType *gradTensor, unsigned featDim, unsigned tid, unsigned thdCnt);
 
     // All pipeline related functions/members
-    void loadChunksGCN();
 
     void pipelineForwardGhostUpdates(unsigned tid);
     void pipelineBackwardGhostGradients(FeatType* inputTensor, unsigned featDim);
