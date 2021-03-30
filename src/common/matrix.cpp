@@ -388,25 +388,33 @@ std::string Matrix::signature() {
 
 
 void Matrix::toFile(std::string filename) {
-    std::cerr << "Writing to file " << filename << std::endl;
-    std::ofstream output(filename);
-    output << rows << "\t" << cols << std::endl;
-    unsigned numElemts = getNumElemts();
-    std::cerr << "Number of elements " << numElemts << std::endl;
-    for (unsigned u = 0; u < numElemts; ++u) {
-        output << std::fixed << std::setprecision(7)
-            << data[u] << " ";
-    }
+    std::ofstream output(filename, std::ios::out | std::ios::binary);
+    output.write((char*)&rows, sizeof(rows));
+    output.write((char*)&cols, sizeof(cols));
+    output.write((char*)data, getDataSize());
+//    std::cerr << "Writing to file " << filename << std::endl;
+//    std::ofstream output(filename);
+//    output << rows << "\t" << cols << std::endl;
+//    unsigned numElemts = getNumElemts();
+//    std::cerr << "Number of elements " << numElemts << std::endl;
+//    for (unsigned u = 0; u < numElemts; ++u) {
+//        output << std::fixed << std::setprecision(7)
+//            << data[u] << " ";
+//    }
 }
 
 void Matrix::fromFile(std::string filename) {
-    std::ifstream input(filename);
-    input >> rows;
-    input >> cols;
-    FeatType value;
-    data = new FeatType[cols * rows];
-    unsigned u = 0;
-    while (input >> value) {
-        data[u++] = value;
-    }
+    std::ifstream input(filename, std::ios::in | std::ios::binary);
+    input.read((char*)&rows, sizeof(rows));
+    input.read((char*)&cols, sizeof(cols));
+    data = new FeatType[rows * cols];
+    input.read((char*)data, rows * cols * sizeof(FeatType));
+//    input >> rows;
+//    input >> cols;
+//    FeatType value;
+//    data = new FeatType[cols * rows];
+//    unsigned u = 0;
+//    while (input >> value) {
+//        data[u++] = value;
+//    }
 }
