@@ -5,41 +5,38 @@ using namespace std;
 CPUComm::CPUComm(Engine *engine_)
     : engine(engine_), nodeId(engine_->nodeId), totalLayers(engine_->numLayers),
     wServersFile(engine_->weightserverIPFile), wPort(engine_->weightserverPort),
-    numNodes(engine_->numNodes), savedNNTensors(engine_->savedNNTensors),
-    msgService(wPort, nodeId, totalLayers, engine_->gnn_type)
+    numNodes(engine_->numNodes),  gnn_type(engine_->gnn_type),
+    savedNNTensors(engine_->savedNNTensors),
+    msgService(wPort, nodeId, totalLayers, gnn_type)
 {
     loadWeightServers(weightServerAddrs, wServersFile);
     msgService.setUpWeightSocket(
         weightServerAddrs.at(nodeId % weightServerAddrs.size()));
-
-    msgService.prefetchWeightsMatrix();
     for (char *addr : weightServerAddrs) {
         free(addr);
     }
+
+    msgService.prefetchWeightsMatrix();
 }
 
 void CPUComm::NNCompute(Chunk &chunk) {
-    c = chunk;
-    unsigned currLayer = chunk.layer;
-
-    if (chunk.dir == PROP_TYPE::FORWARD) {
-        if (chunk.vertex) {
+    unsigned layer = chunk.layer;
+    if (chunk.vertex) {
+        if (chunk.dir == PROP_TYPE::FORWARD) {
             // printLog(nodeId, "CPU FORWARD vtx NN started");
-            vtxNNForward(currLayer, currLayer == (totalLayers - 1));
+            vtxNNForward(layer, layer == (totalLayers - 1));
         } else {
-            // printLog(nodeId, "CPU FORWARD edg NN started");
-            currLayer--; // YIFAN: fix this
-            edgNNForward(currLayer, currLayer == totalLayers);
-        }
-    }
-    if (chunk.dir == PROP_TYPE::BACKWARD) {
-        if (chunk.vertex) {
             // printLog(nodeId, "CPU BACKWARD vtx NN started");
-            vtxNNBackward(currLayer);
+            vtxNNBackward(layer);
+        }
+    } else {
+        layer--; // YIFAN: fix this
+        if (chunk.dir == PROP_TYPE::FORWARD) {
+            // printLog(nodeId, "CPU FORWARD edg NN started");
+            edgNNForward(layer, layer == (totalLayers - 1));
         } else {
             // printLog(nodeId, "CPU BACKWARD edg NN started");
-            currLayer--;
-            edgNNBackward(currLayer);
+            edgNNBackward(layer);
         }
     }
     // printLog(nodeId, "CPU NN Done");
@@ -47,7 +44,7 @@ void CPUComm::NNCompute(Chunk &chunk) {
 }
 
 void CPUComm::vtxNNForward(unsigned layer, bool lastLayer) {
-    switch (engine->gnn_type) {
+    switch (gnn_type) {
         case GNN::GCN:
             vtxNNForwardGCN(layer, lastLayer);
             break;
@@ -55,12 +52,12 @@ void CPUComm::vtxNNForward(unsigned layer, bool lastLayer) {
             vtxNNForwardGAT(layer, lastLayer);
             break;
         default:
-            exit(-1);
+            abort();
     }
 }
 
 void CPUComm::vtxNNBackward(unsigned layer) {
-    switch (engine->gnn_type) {
+    switch (gnn_type) {
         case GNN::GCN:
             vtxNNBackwardGCN(layer);
             break;
@@ -68,12 +65,12 @@ void CPUComm::vtxNNBackward(unsigned layer) {
             vtxNNBackwardGAT(layer);
             break;
         default:
-            exit(-1);
+            abort();
     }
 }
 
 void CPUComm::edgNNForward(unsigned layer, bool lastLayer) {
-    switch (engine->gnn_type) {
+    switch (gnn_type) {
         case GNN::GCN:
             edgNNForwardGCN(layer, lastLayer);
             break;
@@ -81,12 +78,12 @@ void CPUComm::edgNNForward(unsigned layer, bool lastLayer) {
             edgNNForwardGAT(layer, lastLayer);
             break;
         default:
-            exit(-1);
+            abort();
     }
 }
 
 void CPUComm::edgNNBackward(unsigned layer) {
-    switch (engine->gnn_type) {
+    switch (gnn_type) {
         case GNN::GCN:
             edgNNBackwardGCN(layer);
             break;
@@ -94,7 +91,7 @@ void CPUComm::edgNNBackward(unsigned layer) {
             edgNNBackwardGAT(layer);
             break;
         default:
-            exit(-1);
+            abort();
     }
 }
 
@@ -107,7 +104,7 @@ void CPUComm::vtxNNForwardGCN(unsigned layer, bool lastLayer) {
         Matrix act_z = activate(z);  // z data get activated ...
         memcpy(savedNNTensors[layer]["h"].getData(), act_z.getData(),
                act_z.getDataSize());
-        delete[] act_z.getData();
+        deleteMatrix(act_z);
     } else {
         Matrix predictions = softmax(z);
         Matrix labels = savedNNTensors[layer]["lab"];
@@ -130,11 +127,11 @@ void CPUComm::vtxNNForwardGCN(unsigned layer, bool lastLayer) {
         Matrix ah = savedNNTensors[layer]["ah"];
         Matrix weightUpdates = ah.dot(d_output, true, false);
         msgService.sendWeightUpdate(weightUpdates, layer);
-        delete[] interGrad.getData();
-        delete[] d_output.getData();
-        delete[] predictions.getData();
+        deleteMatrix(interGrad);
+        deleteMatrix(d_output);
+        deleteMatrix(predictions);
     }
-    delete[] z.getData();
+    deleteMatrix(z);
 }
 
 void CPUComm::vtxNNBackwardGCN(unsigned layer) {
@@ -152,11 +149,11 @@ void CPUComm::vtxNNBackwardGCN(unsigned layer) {
         Matrix resultGrad = interGrad.dot(weight, false, true);
         memcpy(savedNNTensors[layer]["grad"].getData(), resultGrad.getData(),
                resultGrad.getDataSize());
-        delete[] resultGrad.getData();
+        deleteMatrix(resultGrad);
     }
 
-    delete[] actDeriv.getData();
-    delete[] interGrad.getData();
+    deleteMatrix(actDeriv);
+    deleteMatrix(interGrad);
 
     if (layer == 0) msgService.prefetchWeightsMatrix();
 }

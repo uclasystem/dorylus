@@ -44,20 +44,17 @@ private:
     unsigned numNodes;
     unsigned numLocalVertices;
 
-    std::string wServersFile;
+    std::vector<TensorMap> &savedNNTensors;
+
+    Engine *engine;
+    GNN gnn_type;
 
     // ntw related objs
     unsigned dPort;
     unsigned wPort;
-
-    std::vector<TensorMap> &savedNNTensors;
-
-    Engine *engine;
-
+    std::string wServersFile;
     std::vector<char *> weightServerAddrs;
     MessageService msgService;
-
-    Chunk c;
 
     // GCN specific
     void vtxNNForwardGCN(unsigned layer, bool lastLayer);
