@@ -79,10 +79,12 @@ void ComputingServer::gradLayer(unsigned layer) {
     CuMatrix cuGrad = cu.wrapMatrix(grad);
     Matrix z = (*gpuComm->tensorMap)["z"];
     CuMatrix cuZ = cu.wrapMatrix(z);
+    Matrix h = (*gpuComm->tensorMap)["h"];
+    CuMatrix cuH = cu.wrapMatrix(h);
     Matrix ah = (*gpuComm->tensorMap)["ah"];
     CuMatrix cuAh = cu.wrapMatrix(ah);
 
-    CuMatrix interGrad = cu.activateBackward(cuAh, cuZ, cuGrad);
+    CuMatrix interGrad = cu.activateBackward(cuZ, cuH, cuGrad);
     CuMatrix cuWeightUpdates = cuAh.dot(interGrad, true, false);
 
     Matrix weightUpdates = cuWeightUpdates.getMatrix();
