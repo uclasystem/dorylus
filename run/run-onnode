@@ -40,8 +40,7 @@ case $1 in
         NODEPORT=$( < ../nodeport )
         WSERVERIP=$HOME/wserverip
 
-        NUM_LAMBDAS_FORWARD=$( < ../numlambdasforward )
-        NUM_LAMBDAS_BACKWARD=$( < ../numlambdasbackward )
+        NUM_LAMBDAS=$( < ../numlambdasforward )
 
         # Minor options.
         UNDIRECTED=0           # Currently are all directed graphs.
@@ -63,13 +62,11 @@ case $1 in
         do
             if [ $var = "GPU" ] || [ $var = "gpu" ]; then
                 let MODE=1;
-                NUM_LAMBDAS_FORWARD=1
-                NUM_LAMBDAS_BACKWARD=1
+                NUM_LAMBDAS=1
                 COMP_THREADS=1
             elif [ $var = "CPU" ] || [ $var = "cpu" ]; then
                 let MODE=2;
-                NUM_LAMBDAS_FORWARD=1
-                NUM_LAMBDAS_BACKWARD=1
+                NUM_LAMBDAS=1
             fi
 
             if [ $var = "--u" ] || [ $var = "--undirected" ]; then
@@ -82,8 +79,6 @@ case $1 in
 
             if [[ $var = --l=* ]] || [[ $var = --lambdas=* ]]; then
                 NUM_LAMBDAS="${var#*=}"
-                NUM_LAMBDAS_FORWARD=${NUM_LAMBDAS}
-                NUM_LAMBDAS_BACKWARD=${NUM_LAMBDAS}
             fi
 
             if [[ $var = --e=* ]] || [[ $var = --epochs=* ]]; then
@@ -173,8 +168,7 @@ case $1 in
             --dataport ${DATAPORT} \
             --ctrlport ${CTRLPORT} \
             --nodeport ${NODEPORT} \
-            --numlambdasforward ${NUM_LAMBDAS_FORWARD} \
-            --numlambdasbackward ${NUM_LAMBDAS_BACKWARD} \
+            --numlambdas ${NUM_LAMBDAS} \
             --numEpoch ${NUM_EPOCHS} \
             --validationFrequency 1 \
             --MODE ${MODE} \
