@@ -15,10 +15,8 @@
 #include "../commmanager/weight_comm.hpp"
 #include "../commmanager/resource_comm.hpp"
 #include "../nodemanager/nodemanager.hpp"
-#include "../parallel/threadpool.hpp"
 #include "../parallel/lock.hpp"
 #include "../parallel/cond.hpp"
-#include "../parallel/barrier.hpp"
 #include "../utils/utils.hpp"
 #include "../../common/matrix.hpp"
 
@@ -27,8 +25,6 @@
 #define NODE_ID_DIGITS 8 // Digits num of node id.
 #define NODE_ID_HEADER "%8X" // Header for node id. For communication.
 #define DATA_HEADER_SIZE (NODE_ID_DIGITS + sizeof(unsigned) * 5)
-
-
 
 /** Binary features file header struct. */
 struct FeaturesHeaderType {
@@ -40,29 +36,28 @@ struct LabelsHeaderType {
     unsigned labelKinds;
 };
 
-
 class LockChunkQueue {
 public:
-  void lock() { lk.lock(); }
-  void unlock() { lk.unlock(); }
+    void lock() { lk.lock(); }
+    void unlock() { lk.unlock(); }
 
-  bool empty() const { return cq.empty(); }
-  size_t size() const { return cq.size(); }
-  const Chunk &top() const { return cq.top(); }
-  void push(const Chunk &chunk) { cq.push(chunk); }
-  void push_atomic(const Chunk &chunk) {
-    lk.lock();
-    cq.push(chunk);
-    lk.unlock();
-  }
-  void pop() { cq.pop(); }
-  void clear() {
-    while (!cq.empty())
-      cq.pop();
-  }
+    bool empty() const { return cq.empty(); }
+    size_t size() const { return cq.size(); }
+    const Chunk &top() const { return cq.top(); }
+    void push(const Chunk &chunk) { cq.push(chunk); }
+    void push_atomic(const Chunk &chunk) {
+        lk.lock();
+        cq.push(chunk);
+        lk.unlock();
+    }
+    void pop() { cq.pop(); }
+    void clear() {
+        while (!cq.empty())
+            cq.pop();
+    }
 private:
-  Lock lk;
-  ChunkQueue cq;
+    Lock lk;
+    ChunkQueue cq;
 };
 
 /**
@@ -78,15 +73,9 @@ public:
     void preallocateGCN();
     void preallocateGAT();
 
-    FeatType *runForwardGCN(unsigned epoch);
-    void runBackwardGCN(FeatType *backwardInitData);
-
     void run();
     void runPipeline();
     void runAsyncPipelineGCN(); // deprecated
-
-    void runForwardSyncPipelineGCN(unsigned epoch);
-    void runBackwardSyncPipelineGCN();
 
     void output();
     void destroy();
@@ -129,38 +118,8 @@ public:
 
     void loadChunks();
 
-    FeatType* aggregate(FeatType **eVFeatsTensor, unsigned edgsCnt,
-                        unsigned featDim, AGGREGATOR aggregator);
-    FeatType* applyVertex(FeatType *vtcsTensor, unsigned vtcsCnt,
-                        unsigned inFeatDim, unsigned outFeatDim, bool lastLayer);
-    FeatType** scatter(FeatType *vtcsTensor, unsigned vtcsCnt, unsigned featDim);
-    FeatType** applyEdge(EdgeType *edgsTensor, unsigned edgsCnt, unsigned eFeatDim,
-                        FeatType **eSrcVFeatsTensor, FeatType **eDstVFeatsTensor,
-                        unsigned inFeatDim, unsigned outFeatDim);
-
-    FeatType* fusedGatherApply(FeatType **eVFeatsTensor, unsigned edgsCnt,
-                        unsigned inFeatDim, unsigned outFeatDim, AGGREGATOR aggregator);
-    void fusedGAS();
-
-    FeatType* aggregateBackward(FeatType **eVFeatsTensor, unsigned edgsCnt,
-                        unsigned featDim, AGGREGATOR aggregator);
-    FeatType* applyVertexBackward(FeatType *gradTensor, unsigned vtcsCnt,
-                        unsigned inFeatDim, unsigned outFeatDim);
-    FeatType** scatterBackward(FeatType *gradTensor, unsigned vtcsCnt,
-                               unsigned featDim);
-    FeatType** applyEdgeBackward(EdgeType *edgsTensor, unsigned edgsCnt, unsigned eFeatDim,
-                        FeatType **eSrcVGradTensor, FeatType **eDstVGradTensor,
-                        unsigned inFeatDim, unsigned outFeatDim);
-
-    FeatType* fusedGatherApplyBackward(FeatType **eVFeatsTensor, unsigned edgsCnt,
-                        unsigned inFeatDim, unsigned outFeatDim, AGGREGATOR aggregator);
-    FeatType* fusedGASBackward(FeatType* gradTensor, unsigned vtcsCnt,
-                        unsigned inFeatDim, unsigned outFeatDim,
-                        bool aggregate, bool scatter);
-
     // TENSOR OPS
-    // NOTE: Implementing in engine for now but need to move
-    //  later
+    // NOTE: Implementing in engine for now but need to move later
     FeatType* softmax(FeatType* inputTensor, FeatType* result, unsigned rows, unsigned cols);
     Matrix softmax_prime(FeatType* valuesTensor, FeatType* softmaxOutput, unsigned size);
     Matrix sparse_dense_elemtwise_mult(CSCMatrix<EdgeType>& csc,
@@ -174,7 +133,6 @@ public:
     unsigned getValFreq();
     unsigned getNodeId();
 
-    void setPipeline(bool _pipeline);
     void addEpochTime(double epochTime);
 
 // private:
@@ -184,10 +142,7 @@ public:
     Graph graph;
 
     unsigned dThreads;
-    ThreadPool *dataPool = NULL;
-
     unsigned cThreads;
-    ThreadPool *computePool = NULL;
 
     GNN gnn_type;
 
@@ -195,48 +150,26 @@ public:
     std::vector<unsigned> layerConfig;
     unsigned numLayers = 0;
 
-    std::vector<Matrix> *vtxNNSavedTensors; // intermediate data for vertex NN backward computation.
-    std::vector<Matrix> *edgNNSavedTensors; // intermediate data for edge NN backward computation.
+    // intermediate data for vertex/edge NN backward computation.
+    std::vector<Matrix> *vtxNNSavedTensors;
+    std::vector<Matrix> *edgNNSavedTensors;
 
     std::vector< TensorMap > savedNNTensors;
     std::vector< ETensorMap > savedEdgeTensors;
 
-    // intermediate data for backward computation.
-    std::vector<Matrix> *savedTensors;
-    TensorMap savedVtxTensors;
-
     // Persistent pointers to original input data
     FeatType *forwardVerticesInitData;
     FeatType *forwardGhostInitData;
-
-    FeatType *forwardGhostVerticesDataIn;
-    FeatType *forwardGhostVerticesDataOut;
-    FeatType *backwardGhostVerticesDataIn;
-    FeatType *backwardGhostVerticesDataOut;
-
-    struct AggOPArgs {
-        FeatType *outputTensor;
-        FeatType **inputTensor;
-        unsigned vtcsCnt;
-        unsigned edgsCnt;
-        unsigned featDim;
-    };
-
     // Labels one-hot storage array.
     FeatType *localVerticesLabels = NULL;
 
-    // YIFAN: this is used together with edgsTensor. edgsTensor are arrays of pointers to this underlying vtcs tensors buf.
-    // TODO: (YIFAN) This is not elegant. Think a way to get rid of this.
-    FeatType *underlyingVtcsTensorBuf;
-
-    unsigned currId = 0;
-
+    // For pipeline scatter sync
     int recvCnt = 0;
     Lock recvCntLock;
     Cond recvCntCond;
-    // YIFAN: for now this is for pipeline GAS only
     int ghostVtcsRecvd;
 
+    // Read-in files
     std::string datasetDir;
     std::string outFile;
     std::string featuresFile;
@@ -256,12 +189,10 @@ public:
     std::string weightserverIPFile;
 
     unsigned numLambdasForward = 0;
-    unsigned numLambdasBackward = 0;
     unsigned numEpochs = 0;
     unsigned numSyncEpochs = 0;
     unsigned numAsyncEpochs = 0;
     unsigned valFreq = 0;
-
     float accuracy = 0.0;
 
     //0: Lambda, 1: GPU, 2: CPU
@@ -271,9 +202,6 @@ public:
     ResourceComm *resComm;
     unsigned nodeId;
     unsigned numNodes;
-
-    bool commHalt = false;
-    bool aggHalt = false;
 
     bool undirected = false;
 
@@ -294,38 +222,13 @@ public:
     std::vector<double> epochTimes;
     double asyncAvgEpochTime;
 
-    std::vector<unsigned> epochMs;
-
-    Barrier barComp;
-
-
     void calcAcc(FeatType *predicts, FeatType *labels, unsigned vtcsCnt,
                  unsigned featDim);
 
     // Worker and communicator thread function.
-    void forwardGhostReceiver(unsigned tid);
-    void backwardGhostReceiver(unsigned tid);
-
-    void aggregator(unsigned tid);
-    void scatterWorker(unsigned tid);
-
-    void gasAgger(unsigned tid);
-    void gasScter(unsigned tid);
-    void gasRcver(unsigned tid);
-
-
     void verticesPushOut(unsigned receiver, unsigned totCnt, unsigned *lvids,
       FeatType *inputTensor, unsigned featDim, Chunk& c);
     void sendEpochUpdate(unsigned currEpoch);
-
-    void aggregateCompute(unsigned tid, void *args);
-    void aggregateBPCompute(unsigned tid, void *args);
-
-    void aggregateChunk(Chunk& c);
-    void aggregateBPChunk(Chunk& c);
-
-    void gatherApplyCompute(unsigned tid, void *args);
-    void gatherApplyBPCompute(unsigned tid, void *args);
 
     // transform from vtxFeats/edgFeats to edgFeats/vtxFeats
     FeatType** srcVFeats2eFeats(FeatType *vtcsTensor, FeatType* ghostTensor, unsigned vtcsCnt, unsigned featDim);
@@ -341,29 +244,6 @@ public:
     inline FeatType *localVertexLabelsPtr(unsigned lvid) {
         return localVerticesLabels + lvid * getFeatDim(numLayers);
     }
-
-    void sendForwardGhostUpdates(FeatType *inputTensor, unsigned featDim, unsigned tid, unsigned thdCnt);
-    void sendBackwardGhostGradients(FeatType *gradTensor, unsigned featDim, unsigned tid, unsigned thdCnt);
-
-    // All pipeline related functions/members
-
-    void pipelineForwardGhostUpdates(unsigned tid);
-    void pipelineBackwardGhostGradients(FeatType* inputTensor, unsigned featDim);
-
-    void pipelineGhostReceiver(unsigned tid);
-
-    // fusedGASBackward phases
-    FeatType* applyScatterPhase(FeatType* gradTensor, unsigned vtcsCnt,
-      unsigned inFeatDim, unsigned outFeatDim, bool scatter);
-    FeatType* aggregateApplyScatterPhase(FeatType* gradTensor, unsigned vtcsCnt,
-      unsigned inFeatDim, unsigned outFeatDim, bool scatter);
-    FeatType* aggregateApplyPhase(FeatType* gradTensor, unsigned vtcsCnt,
-      unsigned inFeatDim, unsigned outFeatDim, bool scatter);
-
-    ChunkQueue aggregateQueue;
-    Lock aggQueueLock;
-    ChunkQueue scatterQueue;
-    Lock scatQueueLock;
 
     unsigned timeoutRatio;
     unsigned staleness;
@@ -383,33 +263,6 @@ public:
     bool pipeline = false;
     // END Pipeline related functions/members
 
-    // Ghost update operation, send vertices to other nodes
-    void forwardVerticesPushOut(unsigned receiver, unsigned totCnt,
-                                unsigned *lvids, FeatType *inputTensor,
-                                unsigned featDim);
-    void backwardVerticesPushOut(unsigned receiver, unsigned totCnt,
-                                 unsigned *lvids, FeatType *gradTensor,
-                                 unsigned featDim);
-
-    // Both data push out funcs have same logic. Plan to replace
-    // them with this one
-    void verticesDataPushOut(unsigned receiver, unsigned totCtn,
-                              unsigned *lvids, FeatType* tensor,
-                              unsigned featDim);
-
-    // Aggregation operation (along with normalization).
-    void forwardAggregateFromNeighbors(unsigned lvid, FeatType *outputTensor,
-                                    FeatType **inputTensor, unsigned featDim);
-    void backwardAggregateFromNeighbors(unsigned lvid, FeatType *nextGradTensor,
-                                    FeatType **gradTensor, unsigned featDim);
-
-    void saveTensor(std::string& name, unsigned rows, unsigned cols, FeatType *dptr);
-    void saveTensor(const char* name, unsigned rows, unsigned cols, FeatType *dptr);
-    void saveTensor(Matrix& mat);
-
-    void saveTensor(const char* name, unsigned layer, unsigned rows, unsigned cols, FeatType *dptr);
-    void saveTensor(const char* name, unsigned layer, Matrix& mat);
-
     // For initialization.
     void parseArgs(int argc, char* argv[]);
     void readLayerConfigFile(std::string& layerConfigFileName);
@@ -424,7 +277,6 @@ public:
 // Fetch vertex feature from vtx feats array
 #define getVtxFeat(dataBuf, lvid, featDim) ((dataBuf) + (lvid) * (featDim))
 
-// Every one includes this file can access the static engine object now
 extern Engine engine;
 
 #endif //__ENGINE_HPP__

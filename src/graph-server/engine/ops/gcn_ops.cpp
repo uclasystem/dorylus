@@ -270,7 +270,7 @@ void Engine::ghostReceiverGCN(unsigned tid) {
         // No message in queue.
         if (!commManager.dataPullIn(&sender, &topic, msgBuf, MAX_MSG_SIZE)) {
             bs.sleep();
-            if (commHalt) {
+            if (pipelineHalt) {
                 break;
             }
             // Pull in the next message, and process this message.

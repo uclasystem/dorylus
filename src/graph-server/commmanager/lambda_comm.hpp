@@ -55,23 +55,19 @@ public:
     LambdaComm(Engine *engine);
     ~LambdaComm();
 
-    void setAsync(bool _async, unsigned currEpoch);
     void NNCompute(Chunk &chunk);
-    void NNSync();
     bool NNRecv(Chunk &chunk);
 
     unsigned getRelaunchCnt() { return relaunchCnt; };
 
     bool halt;
-    bool async;
-    int outdateEpoch;
     std::vector<TensorMap>& savedNNTensors;
     std::vector<ETensorMap>& savedETensors;
 
     std::thread *relaunchThd;
-    int timeoutRatio;
     void asyncRelaunchLoop();
     void relaunchLambda(const Chunk &chunk);
+    int timeoutRatio;
     unsigned relaunchCnt;
     std::mutex timeoutMtx;
     std::map<Chunk, unsigned> timeoutTable;

@@ -23,10 +23,7 @@ class CPUComm : public ResourceComm {
 public:
     CPUComm(Engine *engine_);
 
-    void setAsync(bool _async, unsigned currEpoch){};  // GPU always run synchronously
-    unsigned getRelaunchCnt() { return 0u; };
     void NNCompute(Chunk &chunk);
-    void NNSync(){};
     void prefetchWeights() { msgService.prefetchWeightsMatrix(); };
 
 private:

@@ -100,45 +100,6 @@ inline void Engine::calcAcc(FeatType *predicts, FeatType *labels,
     accuracy = acc;
 }
 
-void Engine::saveTensor(std::string &name, unsigned rows, unsigned cols,
-                        FeatType *dptr) {
-    auto iter = savedVtxTensors.find(name);
-    if (iter != savedVtxTensors.end()) {
-        delete[](iter->second).getData();
-        savedVtxTensors.erase(iter);
-    }
-    savedVtxTensors[name] = Matrix(name.c_str(), rows, cols, dptr);
-}
-
-void Engine::saveTensor(const char *name, unsigned rows, unsigned cols,
-                        FeatType *dptr) {
-    auto iter = savedVtxTensors.find(name);
-    if (iter != savedVtxTensors.end()) {
-        delete[](iter->second).getData();
-        savedVtxTensors.erase(iter);
-    }
-    savedVtxTensors[std::string(name)] = Matrix(name, rows, cols, dptr);
-}
-
-void Engine::saveTensor(Matrix &mat) {
-    auto iter = savedVtxTensors.find(mat.name());
-    if (iter != savedVtxTensors.end()) {
-        delete[](iter->second).getData();
-        savedVtxTensors.erase(iter);
-    }
-    savedVtxTensors[mat.name()] = mat;
-}
-
-void Engine::saveTensor(const char *name, unsigned layer, unsigned rows,
-                        unsigned cols, FeatType *dptr) {
-    savedNNTensors[layer][std::string(name)] = Matrix(rows, cols, dptr);
-}
-
-void Engine::saveTensor(const char *name, unsigned layer, Matrix &mat) {
-    savedNNTensors[layer][std::string(name)] = mat;
-}
-
-
 /**
  *
  * Write output stuff to the tmp directory for every local vertex.
@@ -181,8 +142,7 @@ void Engine::output() {
     sprintf(outBuf, "<EM>: Run end time: ");
     outStream << outBuf << std::ctime(&end_time);
 
-    sprintf(outBuf, "<EM>: Using %u forward lambdas and %u backward lambdas",
-            numLambdasForward, numLambdasBackward);
+    sprintf(outBuf, "<EM>: Using %u lambdas", numLambdasForward);
     outStream << outBuf << std::endl;
 
     sprintf(outBuf, "<EM>: Initialization takes %.3lf ms", timeInit);
@@ -277,8 +237,7 @@ void Engine::printEngineMetrics() {
         printLog(nodeId, "<EM>: staleness: %u", staleness);
         printLog(nodeId, "<EM>: %u sync epochs and %u async epochs",
                 numSyncEpochs, numAsyncEpochs);
-        printLog(nodeId, "<EM>: Using %u forward lambdas and %u bacward lambdas",
-                numLambdasForward, numLambdasBackward);
+        printLog(nodeId, "<EM>: Using %u lambdas", numLambdasForward);
         printLog(nodeId, "<EM>: Initialization takes %.3lf ms", timeInit);
 
         if (false) {
@@ -380,8 +339,7 @@ Engine::parseArgs(int argc, char *argv[]) {
     ("ctrlport", boost::program_options::value<unsigned>(), "Port start for control communication")
     ("nodeport", boost::program_options::value<unsigned>(), "Port for node manager")
 
-    ("numlambdasforward", boost::program_options::value<unsigned>()->default_value(unsigned(1), "5"), "Number of lambdas to request at forward")
-    ("numlambdasbackward", boost::program_options::value<unsigned>()->default_value(unsigned(1), "20"), "Number of lambdas to request at backward")
+    ("numlambdas", boost::program_options::value<unsigned>()->default_value(unsigned(1), "5"), "Number of lambdas to request at forward")
     ("numEpochs", boost::program_options::value<unsigned>(), "Number of epochs to run")
     ("validationFrequency", boost::program_options::value<unsigned>(), "Number of epochs to run before validation")
 
@@ -454,11 +412,8 @@ Engine::parseArgs(int argc, char *argv[]) {
     unsigned node_port = vm["nodeport"].as<unsigned>();
     nodeManager.setNodePort(node_port);
 
-    assert(vm.count("numlambdasforward"));
-    numLambdasForward = vm["numlambdasforward"].as<unsigned>();
-
-    assert(vm.count("numlambdasbackward"));
-    numLambdasBackward = vm["numlambdasbackward"].as<unsigned>();
+    assert(vm.count("numlambdas"));
+    numLambdasForward = vm["numlambdas"].as<unsigned>();
 
     assert(vm.count("numEpochs"));
     numEpochs = vm["numEpochs"].as<unsigned>();
@@ -698,8 +653,6 @@ void Engine::verticesPushOut(unsigned receiver, unsigned totCnt,
 // edgsTensor. [srcV Feats (local inEdge cnt); dstV Feats (local inEdge cnt)]
 FeatType **Engine::srcVFeats2eFeats(FeatType *vtcsTensor, FeatType *ghostTensor,
                                     unsigned vtcsCnt, unsigned featDim) {
-    underlyingVtcsTensorBuf = vtcsTensor;
-
     FeatType **eVtxFeatsBuf = new FeatType *[2 * graph.localInEdgeCnt];
     FeatType **eSrcVtxFeats = eVtxFeatsBuf;
     FeatType **eDstVtxFeats = eSrcVtxFeats + graph.localInEdgeCnt;
@@ -727,8 +680,6 @@ FeatType **Engine::srcVFeats2eFeats(FeatType *vtcsTensor, FeatType *ghostTensor,
 // [dstV Feats (local outEdge cnt); srcV Feats (local outEdge cnt)]
 FeatType **Engine::dstVFeats2eFeats(FeatType *vtcsTensor, FeatType *ghostTensor,
                                     unsigned vtcsCnt, unsigned featDim) {
-    underlyingVtcsTensorBuf = vtcsTensor;
-
     FeatType **eVtxFeatsBuf = new FeatType *[2 * graph.localOutEdgeCnt];
     FeatType **eSrcVtxFeats = eVtxFeatsBuf;
     FeatType **eDstVtxFeats = eSrcVtxFeats + graph.localOutEdgeCnt;

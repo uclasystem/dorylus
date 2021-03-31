@@ -9,11 +9,9 @@ unsigned LambdaComm::nodeId;
  *
  */
 LambdaComm::LambdaComm(Engine *_engine) :
-        halt(false), async(false), outdateEpoch(-1),
         nodeIp(_engine->nodeManager.getNode(_engine->nodeId).prip),
-        numNodes(_engine->numNodes),
-        numChunk(_engine->numLambdasForward),
-        relaunchCnt(0),
+        numNodes(_engine->numNodes), numChunk(_engine->numLambdasForward),
+        halt(false), relaunchCnt(0),
         dport(_engine->dataserverPort), wport(_engine->weightserverPort),
         savedNNTensors(_engine->savedNNTensors), savedETensors(_engine->savedEdgeTensors),
         timeoutRatio(_engine->timeoutRatio),
@@ -48,11 +46,6 @@ LambdaComm::~LambdaComm() {
     ctx.close();
 }
 
-void LambdaComm::setAsync(bool _async, unsigned currEpoch) {
-    async = _async;
-    outdateEpoch = (int)currEpoch;
-}
-
 void LambdaComm::NNCompute(Chunk &chunk) {
     // printLog(nodeId, "NNComp: chunk %s", chunk.str().c_str());
     timeoutMtx.lock();
@@ -63,12 +56,6 @@ void LambdaComm::NNCompute(Chunk &chunk) {
         invokeLambda(chunk);
     }
     timeoutMtx.unlock();
-}
-
-void LambdaComm::NNSync() {
-    // while (resQueue.size() != engine->numLambdasForward) {
-    //     usleep(20*1000);
-    // }
 }
 
 bool LambdaComm::NNRecv(Chunk &chunk) {

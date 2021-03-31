@@ -29,10 +29,7 @@ public:
     GPUComm(Engine *engine_);
     ~GPUComm();
 
-    void setAsync(bool _async, unsigned currEpoch){};//GPU always run synchronously
-    unsigned getRelaunchCnt() { return 0u; };
     void NNCompute(Chunk &chunk);
-    void NNSync() {};
     friend class ComputingServer;
 private:
     unsigned totalLayers;

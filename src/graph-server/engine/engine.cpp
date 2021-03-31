@@ -81,7 +81,6 @@ void Engine::init(int argc, char *argv[]) {
     }
 
     // Save intermediate tensors during forward phase for backward computation.
-    savedTensors = new std::vector<Matrix>[numLayers]; // YIFAN: remove this
     savedNNTensors.resize(numLayers + 1);
     savedEdgeTensors.resize(numLayers + 1);
 
@@ -129,20 +128,6 @@ void Engine::init(int argc, char *argv[]) {
     recvCntLock.init();
     recvCntCond.init(recvCntLock);
 
-    aggQueueLock.init();
-    scatQueueLock.init();
-
-    // Initialize computation thread barrier.
-    barComp.init(cThreads);
-    // Create computation workers thread pool.
-    computePool = new ThreadPool(cThreads);
-    computePool->createPool();
-    printLog(nodeId, "Created %u computation threads.", cThreads);
-    // Create data communicators thread pool.
-    dataPool = new ThreadPool(dThreads);
-    dataPool->createPool();
-    printLog(nodeId, "Created %u data communicator threads.", dThreads);
-
     if (nodeId == 0) {
         weightComm = new WeightComm(weightserverIPFile, weightserverPort);
         weightComm->updateChunkCnt(
@@ -157,20 +142,17 @@ void Engine::init(int argc, char *argv[]) {
         resComm = new LambdaComm(this);
     }
 #endif
-
 #ifdef _CPU_ENABLED_
     if (mode == CPU) {  // CPU
         resComm = new CPUComm(this);
     }
 #endif
-
 #ifdef _GPU_ENABLED_
     if (mode == GPU) {  // GPU
         resComm = new GPUComm(this);
     }
 #endif
 
-    timeForwardProcess = 0.0;
     timeInit += getTimer();
     printLog(nodeId, "Engine initialization complete.");
 }
@@ -185,8 +167,6 @@ void Engine::destroy() {
 
     nodeManager.destroy();
     commManager.destroy();
-    computePool->destroyPool();
-    dataPool->destroyPool();
 
     recvCntLock.destroy();
     recvCntCond.destroy();
@@ -195,29 +175,23 @@ void Engine::destroy() {
         weightComm->shutdown();
         delete weightComm;
     }
-
     delete resComm;
 
-    if (gnn_type == GNN::GCN) {
-        delete[] forwardVerticesInitData;
-        delete[] forwardGhostInitData;
-
-        delete[] localVerticesLabels;
-    } else if (gnn_type == GNN::GAT) {
-        delete[] forwardGhostInitData;
-        for (int i = 0; i < numLayers; i++) {
-            auto &kkv = savedNNTensors[i];
-            for (auto &kv : kkv) {
-                if (kv.first == "A") {
-                    continue;
-                }
-                kv.second.free();
+    // delete[] forwardVerticesInitData;
+    // delete[] forwardGhostInitData;
+    // delete[] localVerticesLabels;
+    for (int i = 0; i < numLayers; i++) {
+        auto &kkv = savedNNTensors[i];
+        for (auto &kv : kkv) {
+            if (kv.first == "A") {
+                continue;
             }
+            kv.second.free();
         }
-        for (auto &kkv : savedEdgeTensors) {
-            for (auto &kv : kkv) {
-                delete[] kv.second;
-            }
+    }
+    for (auto &kkv : savedEdgeTensors) {
+        for (auto &kv : kkv) {
+            delete[] kv.second;
         }
     }
 }
@@ -253,7 +227,6 @@ void Engine::run() {
 
 void Engine::runPipeline() {
     using ThreadVector = std::vector<std::thread>;
-    commHalt = false;
     pipelineHalt = false;
     unsigned commThdCnt = std::max(2u, cThreads / 4);
     // unsigned commThdCnt = cThreads;
@@ -306,7 +279,6 @@ void Engine::runPipeline() {
     }
     // Wait for all nodes to finish
     nodeManager.barrier();
-    commHalt = true;
     for (unsigned tid = 0; tid < cThreads; ++tid) {
         gaWrkrThds[tid].join();
     }
