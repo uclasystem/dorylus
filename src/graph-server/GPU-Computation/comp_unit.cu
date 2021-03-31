@@ -210,12 +210,9 @@ CuMatrix ComputingUnit::softmaxRows(CuMatrix &mat) {
 
 CuMatrix ComputingUnit::activateBackward(CuMatrix &x, CuMatrix &y,
                                          CuMatrix &dy) {
-    FeatType *x_d = new FeatType[y.getNumElemts()];
     FeatType *dx_d = new FeatType[y.getNumElemts()];
     memset(dx_d, 0, y.getDataSize());
-    memset(x_d, 0, y.getDataSize());
     CuMatrix dx(Matrix(y.getRows(), y.getCols(), dx_d), handle);
-    CuMatrix x_(Matrix(y.getRows(), y.getCols(), x_d), handle);
 
     cudnnActivationDescriptor_t actDesc;
     cudnnCreateActivationDescriptor(&actDesc);
@@ -227,9 +224,8 @@ CuMatrix ComputingUnit::activateBackward(CuMatrix &x, CuMatrix &y,
                                y.getRows(), 1, 1, y.getCols());
     auto error = cudnnActivationBackward(cudnnHandle, actDesc, &alpha, yDesc,
                                          y.devPtr, yDesc, dy.devPtr, yDesc,
-                                         x_.devPtr, &beta, yDesc, dx.devPtr);
+                                         x.devPtr, &beta, yDesc, dx.devPtr);
     assert(CUDNN_STATUS_SUCCESS == error);
-    delete[] x_d;
     delete[] dx_d;
 
     return dx;

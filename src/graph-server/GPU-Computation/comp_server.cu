@@ -180,10 +180,12 @@ void ComputingServer::vtxNNBackwardGCN(unsigned layer) {
     CuMatrix cuGrad = cu.wrapMatrix(grad);
     Matrix z = savedNNTensors[layer]["z"];
     CuMatrix cuZ = cu.wrapMatrix(z);
+    Matrix h = savedNNTensors[layer]["h"];
+    CuMatrix cuH = cu.wrapMatrix(h);
     Matrix ah = savedNNTensors[layer]["ah"];
     CuMatrix cuAh = cu.wrapMatrix(ah);
 
-    CuMatrix interGrad = cu.activateBackward(cuAh, cuZ, cuGrad);
+    CuMatrix interGrad = cu.activateBackward(cuZ, cuH, cuGrad);
     CuMatrix cuWeightUpdates = cuAh.dot(interGrad, true, false);
 
     Matrix weightUpdates = cuWeightUpdates.getMatrix();

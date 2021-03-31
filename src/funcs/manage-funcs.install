@@ -10,16 +10,17 @@ cd ${HOME}/dorylus/gnnman/helpers/
 source basic.install
 
 
-# ZeroMQ stuff.
+# ZeroMQ
 cd ${HOME}/dorylus/gnnman/helpers/
 source zmq.install
 
 
-# AWS API stuff.
+# AWS Dependencies
 cd ${HOME}/dorylus/gnnman/helpers/
-source aws.install
+source aws-cpp-sdk.install
+source aws-lambda-runtime.install
 
 
-# BLAS stuff.
+# BLAS
 cd ${HOME}/dorylus/gnnman/helpers/
 source blas.install

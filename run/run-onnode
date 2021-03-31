@@ -2,13 +2,22 @@
 
 ##
 ## Run the system on the given context. TO be invoked on only MASTER node.
-## Must be invoked after a proper `setuup-cluster` & `bld-system`!!!
+## Must be invoked after a proper `setuup-cluster` & `builld-system`!!!
 ##
-## Usage: $ ./gnnman/run-onnode <Context> [Dataset] [#Lambdas]
+## Usage: $ ./run/run-onnode <Context> <Dataset> [--l=#lambdas] [--lr=learning_rate] [--p] [--e=#epochs] [--s=staleness_bound] [--t=target_accuracy]
 ##
 ## Arguments:
-##      Context: Run which part of the system.
-##      Dataset: Only needed for graphservers.
+##      Context: Which part of the system to run [graph|weight]
+##      Dataset: Name of the dataset (found at /filepool/<dataset-name>/)
+##
+##	--l|-lambdas:		Set the number of lambdas
+##	--lr|-learning_rate:	Set the learning rate
+##	--p|-pipeline:		Enable pipeline version of Dorylus
+##	--e|-epochs:		Set the number of epochs
+##	--s|-staleness:		Set the staleness bound for asynchrony
+##	--tr|-timeout_ratio:	Tune how long the system waits for lambdas before relaunch
+##	--t|-targetacc:		Set a target accuracy for Dorylus (for early stop)
+##	cpu|gpu:		Enable cpu or gpu version (must rebuild source code to change)
 ##
 
 cd ${HOME}/dorylus/
