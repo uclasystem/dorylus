@@ -18,7 +18,8 @@ class CuMatrix : public Matrix {
   public:
     //for simple memory management
     static std::set<FeatType *> MemoryPool;
-    static void freeGPU();
+    static void freeGPU(); //should rename it to collect()
+    void explicitFree();   //should rename it to gpuFree
 
     CuMatrix() {setData(NULL);};
     CuMatrix(Matrix M, const cublasHandle_t &handle_);
@@ -53,8 +54,9 @@ class CuMatrix : public Matrix {
     //the memory will live throughout the lifespan of the program (I don't release them)
     unsigned long long nnz;
     EdgeType *csrVal;
-    unsigned *csrColInd;
-    unsigned *csrRowPtr;
+    int *csrColInd;
+    int *csrRowInd;
+    int *csrRowPtr;
 };
 
 #endif

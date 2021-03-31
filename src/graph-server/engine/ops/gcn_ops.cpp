@@ -1,6 +1,3 @@
-#include "../engine.hpp"
-#include "../../utils/utils.hpp"
-
 #include <omp.h>
 
 #include <algorithm>
@@ -19,6 +16,13 @@
 #include <string>
 #include <thread>
 #include <unordered_set>
+
+#include "../engine.hpp"
+#include "../../utils/utils.hpp"
+
+#ifdef _GPU_ENABLED_
+#include "../../GPU-Computation/comp_unit.cuh"
+#endif
 
 void Engine::preallocateGCN() {
     unsigned vtxCnt = graph.localVtxCnt;
@@ -88,6 +92,41 @@ void Engine::preallocateGCN() {
     }
 }
 
+#ifdef _GPU_ENABLED_
+void Engine::aggregateGCN(Chunk &c) {
+    PROP_TYPE dir = c.dir;
+
+    // No edge feat tensor support for GPU. use featTensor + ghostTensor instead
+    Matrix featTensor;
+    Matrix ghostTensor;
+    Matrix outputTensor;
+    if (dir == PROP_TYPE::FORWARD) { // forward
+        featTensor = c.layer == 0
+                   ? savedNNTensors[c.layer]["x"]
+                   : savedNNTensors[c.layer - 1]["h"];
+        ghostTensor = savedNNTensors[c.layer]["fg"];
+        outputTensor = savedNNTensors[c.layer]["ah"]; // output aggregatedTensor
+    } else { // backward
+        featTensor = savedNNTensors[c.layer]["grad"];
+        ghostTensor = savedNNTensors[c.layer - 1]["bg"];
+        outputTensor = savedNNTensors[c.layer - 1]["aTg"];
+    }
+    CuMatrix feat;
+    feat.loadSpDense(featTensor.getData(), ghostTensor.getData(),
+                     featTensor.getRows(), ghostTensor.getRows(),
+                     featTensor.getCols());
+    CuMatrix out;
+    if (dir == PROP_TYPE::FORWARD) {
+        out = cu.aggregate(*NormAdjMatrixIn, feat, *OneNorms);
+    } else {
+        out = cu.aggregate(*NormAdjMatrixOut, feat, *OneNorms);
+    }
+    out.setData(outputTensor.getData());
+    out.updateMatrixFromGPU();
+    cudaDeviceSynchronize();
+    CuMatrix::freeGPU();
+}
+#else // !defined(_GPU_ENABLED_)
 void Engine::aggregateGCN(Chunk &c) {
     unsigned start = c.lowBound;
     unsigned end = c.upBound;
@@ -150,6 +189,7 @@ void Engine::aggregateGCN(Chunk &c) {
         }
     }
 }
+#endif // _GPU_ENABLED
 
 void Engine::applyVertexGCN(Chunk &c) {
     c.vertex = true;
@@ -198,7 +238,7 @@ void Engine::scatterGCN(Chunk &c) {
         if (nid == nodeId)
             continue;
         unsigned ghostVCnt = batchedIds[nid].size();
-#if false || defined(_CPU_ENABLED_) || defined(_GPU_ENABLED_)
+#if false && (defined(_CPU_ENABLED_) || defined(_GPU_ENABLED_))
 #pragma omp parallel for
 #endif
         for (unsigned ib = 0; ib < ghostVCnt; ib += BATCH_SIZE) {

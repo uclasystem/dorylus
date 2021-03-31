@@ -44,7 +44,7 @@ void ResourceComm::NNRecvCallbackGCN(Engine *engine, Chunk &chunk) {
         if (chunk.dir == PROP_TYPE::FORWARD) { // Forward, inc layer after AV computation
             Chunk nextChunk = engine->incLayerGCN(chunk);
             engine->SCQueue.push_atomic(nextChunk);
-        } else { // Backward, inc layer has been done in the begining of AVB
+        } else { // Backward, inc layer has been done in the beginning of AVB
             engine->SCQueue.push_atomic(chunk);
         }
     }
@@ -83,7 +83,7 @@ void ResourceComm::NNRecvCallbackGAT(Engine *engine, Chunk &chunk) {
         if (chunk.dir == PROP_TYPE::FORWARD) { // Forward, inc layer after AV computation
             Chunk nextChunk = engine->incLayerGAT(chunk);
             engine->SCQueue.push_atomic(nextChunk);
-        } else { // Backward, inc layer has been done in the begining of AVB
+        } else { // Backward, inc layer has been done in the beginning of AVB
             engine->SCQueue.push_atomic(chunk);
         }
     }

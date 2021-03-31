@@ -24,10 +24,6 @@
 
 #ifdef _GPU_ENABLED_
 #include "../commmanager/GPU_comm.hpp"
-extern CuMatrix *NormAdjMatrixIn;
-extern CuMatrix *NormAdjMatrixOut;
-extern CuMatrix *Norms;
-extern ComputingUnit cu;
 #endif
 #ifdef _CPU_ENABLED_
 #include "../commmanager/CPU_comm.hpp"
@@ -110,9 +106,20 @@ void Engine::init(int argc, char *argv[]) {
     printLog(nodeId, "Loading SparseMatrices for GPU");
     NormAdjMatrixIn = new CuMatrix();
     NormAdjMatrixOut = new CuMatrix();
-    Matrix norms(graph.localVtxCnt, 1, graph.vtxDataVec.data());
-    Norms = new CuMatrix(norms, cu.handle);
-    CuMatrix::MemoryPool.erase(Norms->devPtr);
+    {
+        Matrix onenorms(graph.localVtxCnt, 1, graph.vtxDataVec.data());
+        OneNorms = new CuMatrix(onenorms, cu.handle);
+        CuMatrix::MemoryPool.erase(OneNorms->devPtr); // don't free
+    }
+    {
+        FeatType *zerobuf = new FeatType[graph.localVtxCnt];
+        for (unsigned i = 0; i < graph.localVtxCnt; i++)
+            zerobuf[i] = 0;
+        Matrix zeronorms(graph.localVtxCnt, 1, zerobuf);
+        ZeroNorms = new CuMatrix(zeronorms, cu.handle);
+        CuMatrix::MemoryPool.erase(ZeroNorms->devPtr); // don't free
+        delete[] zerobuf;
+    }
     NormAdjMatrixIn->loadSpCSC(cu.spHandle, graph);
     NormAdjMatrixOut->loadSpCSR(cu.spHandle, graph);
 #endif

@@ -1,6 +1,3 @@
-#include "../engine.hpp"
-#include "../../utils/utils.hpp"
-
 #include <omp.h>
 
 #include <algorithm>
@@ -19,6 +16,13 @@
 #include <string>
 #include <thread>
 #include <unordered_set>
+
+#include "../engine.hpp"
+#include "../../utils/utils.hpp"
+
+#ifdef _GPU_ENABLED_
+#include "../../GPU-Computation/comp_unit.cuh"
+#endif
 
 void Engine::preallocateGAT() {
     unsigned vtxCnt = graph.localVtxCnt;
@@ -110,6 +114,62 @@ void Engine::preallocateGAT() {
     }
 }
 
+#ifdef _GPU_ENABLED_
+void Engine::aggregateGAT(Chunk &c) {
+    if (c.dir == PROP_TYPE::FORWARD) { // forward
+        Matrix &featTensor = savedNNTensors[c.layer - 1]["z"];
+        Matrix &ghostTensor = savedNNTensors[c.layer - 1]["fg_z"];
+        Matrix &outputTensor = savedNNTensors[c.layer - 1]["ah"];
+        Matrix &A = savedNNTensors[c.layer - 1]["A"];
+
+        CuMatrix feat;
+        feat.loadSpDense(featTensor.getData(), ghostTensor.getData(),
+                         featTensor.getRows(), ghostTensor.getRows(),
+                         featTensor.getCols());
+        CuMatrix dummy_e = cu.wrapMatrix(A); // getting A into VRAM
+        CuMatrix e = *NormAdjMatrixIn;
+        // YIFAN: VRAM won't leak since dummy_e will be freed by CuMatrix::freeGPU
+        e.csrVal = dummy_e.devPtr;
+        CuMatrix out = cu.aggregate(e, feat, *OneNorms);
+        // printLog(nodeId, "Out shape: %s", out.shape().c_str());
+        out.setData(outputTensor.getData());
+        out.updateMatrixFromGPU();
+        cudaDeviceSynchronize();
+        CuMatrix::freeGPU();
+    } else { // backward
+        Matrix &fFeatTensor = savedNNTensors[c.layer - 1]["z"];
+        Matrix &fGhostTensor = savedNNTensors[c.layer - 1]["fg_z"];
+        Matrix &bFeatTensor = savedNNTensors[c.layer - 1]["grad"];
+        Matrix &bGhostTensor = savedNNTensors[c.layer - 1]["bg_d"];
+        Matrix &outputTensor = savedNNTensors[c.layer - 1]["aTg"];
+        Matrix &dmdA = savedNNTensors[c.layer - 1]["dA"]; // for dummydA
+
+        CuMatrix z;
+        z.loadSpDense(fFeatTensor.getData(), fGhostTensor.getData(),
+                      fFeatTensor.getRows(), fGhostTensor.getRows(),
+                      fFeatTensor.getCols());
+        // (1) dA.dot(Z)
+        CuMatrix dummydA = cu.wrapMatrix(dmdA); // getting dA into VRAM
+        CuMatrix dA = *NormAdjMatrixIn;
+        dA.csrVal = dummydA.devPtr;
+        CuMatrix dAZ = cu.aggregate(dA, z, *ZeroNorms);
+        // (2) A.transpose().dot(dP)
+        CuMatrix dP;
+        dP.loadSpDense(bFeatTensor.getData(), bGhostTensor.getData(),
+                       bFeatTensor.getRows(), bGhostTensor.getRows(),
+                       bFeatTensor.getCols());
+        CuMatrix A = *NormAdjMatrixOut;
+        CuMatrix AdP = cu.aggregate(A, dP, *ZeroNorms);
+        cu.hadamardAdd(AdP, dAZ);
+        CuMatrix res = AdP;
+        // printLog(nodeId, "Out shape: %s", res.shape().c_str());
+        res.setData(outputTensor.getData());
+        res.updateMatrixFromGPU();
+        cudaDeviceSynchronize();
+        CuMatrix::freeGPU();
+    }
+}
+#else // !defined(_GPU_ENABLED_)
 void Engine::aggregateGAT(Chunk &c) {
     unsigned start = c.lowBound;
     unsigned end = c.upBound;
@@ -159,6 +219,7 @@ void Engine::aggregateGAT(Chunk &c) {
                 }
             }
         } else {
+            // A.transpose().dot(dPred)
             // Aggregate gradients from outgoing neighbors.
             for (uint64_t eid = graph.backwardAdj.rowPtrs[lvid];
                 eid < graph.backwardAdj.rowPtrs[lvid + 1]; ++eid) {
@@ -167,6 +228,7 @@ void Engine::aggregateGAT(Chunk &c) {
                     currDataDst[j] += inputBTensor[eid][j] * edgeWeight;
                 }
             }
+            // dA.dot(Z)
             // Aggregate activations from incoming neighbors.
             for (uint64_t eid = graph.forwardAdj.columnPtrs[lvid];
                 eid < graph.forwardAdj.columnPtrs[lvid + 1]; ++eid) {
@@ -179,6 +241,7 @@ void Engine::aggregateGAT(Chunk &c) {
         }
     }
 }
+#endif // _GPU_ENABLED_
 
 // Get prediction after last forward layer of GAT
 void Engine::predictGAT(Chunk &c) {
@@ -248,7 +311,7 @@ void Engine::scatterGAT(Chunk &c) {
         if (nid == nodeId)
             continue;
         unsigned ghostVCnt = batchedIds[nid].size();
-#if false || defined(_CPU_ENABLED_) || defined(_GPU_ENABLED_)
+#if false && (defined(_CPU_ENABLED_) || defined(_GPU_ENABLED_))
 #pragma omp parallel for
 #endif
         for (unsigned ib = 0; ib < ghostVCnt; ib += BATCH_SIZE) {

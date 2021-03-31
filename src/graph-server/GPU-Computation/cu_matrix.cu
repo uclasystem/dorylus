@@ -8,9 +8,15 @@ CuMatrix::CuMatrix(Matrix M, const cublasHandle_t &handle_)
     nnz = 0;
     csrVal = NULL;
     csrColInd = NULL;
+    csrRowInd = NULL;
     isSparse = 0;
     deviceMalloc();
     if (getData() != NULL) deviceSetMatrix();
+}
+
+void CuMatrix::explicitFree() {
+    CuMatrix::MemoryPool.erase(devPtr);
+    cudaFree(devPtr);
 }
 
 Matrix CuMatrix::getMatrix() {
@@ -34,6 +40,8 @@ void CuMatrix::loadSpCSR(cusparseHandle_t &handle, Graph &graph) {
     cudaStat = cudaMalloc((void **)&csrVal, nnz * sizeof(EdgeType));
     assert(cudaStat == cudaSuccess);
     cudaStat = cudaMalloc((void **)&csrColInd, nnz * sizeof(unsigned));
+    assert(cudaStat == cudaSuccess);
+    cudaStat = cudaMalloc((void **)&csrRowInd, nnz * sizeof(unsigned));
     assert(cudaStat == cudaSuccess);
     cudaStat = cudaMalloc((void **)&csrRowPtr,
                           (graph.localVtxCnt + 1) * sizeof(unsigned));
@@ -65,6 +73,8 @@ void CuMatrix::loadSpCSC(cusparseHandle_t &handle, Graph &graph) {
     cudaStat = cudaMalloc((void **)&csrVal, nnz * sizeof(EdgeType));
     assert(cudaStat == cudaSuccess);
     cudaStat = cudaMalloc((void **)&csrColInd, nnz * sizeof(unsigned));
+    assert(cudaStat == cudaSuccess);
+    cudaStat = cudaMalloc((void **)&csrRowInd, nnz * sizeof(unsigned));
     assert(cudaStat == cudaSuccess);
     cudaStat = cudaMalloc((void **)&csrRowPtr,
                           (graph.localVtxCnt + 1) * sizeof(unsigned));
@@ -106,7 +116,7 @@ void CuMatrix::loadSpDense(FeatType *vtcsTensor, FeatType *ghostTensor,
     assert(cudaStat == cudaSuccess);
     setRows(totalVertices);
     setCols(numFeat);
-    // MemoryPool.insert(devPtr);
+    MemoryPool.insert(devPtr);
 }
 
 CuMatrix CuMatrix::extractRow(unsigned row) {
