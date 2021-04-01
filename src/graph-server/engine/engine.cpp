@@ -52,7 +52,7 @@ void Engine::init(int argc, char *argv[]) {
     assert(numNodes <= 256);  // Cluster size limitation.
     outFile += std::to_string(nodeId);
     // Init data ctx with `dThreads` threads for scatter
-    commManager.init(nodeManager, dThreads);
+    commManager.init(nodeManager, mode == LAMBDA ? dThreads : 1);
 
     // Set number of layers and number of features in each layer. Also store the
     // prefix sum of config for offset querying use.
