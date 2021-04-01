@@ -8,17 +8,19 @@
  *
  */
 void
-CommManager::init(NodeManager& nodeManager) {
+CommManager::init(NodeManager& nodeManager, unsigned ctxThds) {
     printLog(nodeId, "CommManager starts initialization...");
     numNodes = nodeManager.getNumNodes();
     nodeId = nodeManager.getMyNodeId();
     Node me = nodeManager.getNode(nodeId);
 
-    if(nodeManager.standAloneMode()==true){
+    if (nodeManager.standAloneMode() == true) {
         printLog(nodeId, "CommManager initialization complete.");
         return;
     }
-        
+
+    // Set data context threads for high scatter bandwidth
+    zmq_ctx_set((void *)dataContext, ZMQ_IO_THREADS, ctxThds);
 
     // Data publisher & subscriber.
     dataPublisher = new zmq::socket_t(dataContext, ZMQ_PUB);
@@ -173,7 +175,7 @@ CommManager::init(NodeManager& nodeManager) {
  */
 void
 CommManager::destroy() {
-    
+
     if (numNodes == 0) return;
 
     flushControl();
@@ -212,7 +214,7 @@ CommManager::destroy() {
 void
 CommManager::rawMsgPushOut(zmq::message_t &msg) {
     if (numNodes == 0) return;
-    
+
     lockDataPublisher.lock();
     dataPublisher->ksend(msg, ZMQ_DONTWAIT);
     lockDataPublisher.unlock();
@@ -226,7 +228,7 @@ CommManager::rawMsgPushOut(zmq::message_t &msg) {
 void
 CommManager::dataPushOut(unsigned receiver, unsigned sender, unsigned topic, void *value, unsigned valSize) {
     if (numNodes == 0) return;
-    
+
     zmq::message_t outMsg(sizeof(char) * 8 + sizeof(unsigned) + sizeof(unsigned) + valSize);
     char *msgPtr = (char *)outMsg.data();
     sprintf(msgPtr, "%8X", receiver);

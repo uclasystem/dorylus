@@ -93,8 +93,8 @@ void Engine::scheduleAsyncFunc(unsigned tid) {
             }
             // (3) Bounded-staleness
             if (async && c.epoch > minEpoch + staleness) {
-                nodeManager.readEpochUpdates();
                 schQueue.unlock();
+                nodeManager.readEpochUpdates();
                 // block until minEpoch being updated
                 if (c.epoch > minEpoch + staleness)
                     bs.sleep();

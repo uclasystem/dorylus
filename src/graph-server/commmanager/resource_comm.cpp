@@ -25,8 +25,8 @@ void ResourceComm::NNRecvCallbackGCN(Engine *engine, Chunk &chunk) {
                 engine->numFinishedEpoch[ind] = 0;
                 engine->finishedChunkLock.unlock();
 
-                engine->sendEpochUpdate(chunk.epoch);
                 engine->nodeManager.readEpochUpdates();
+                engine->sendEpochUpdate(chunk.epoch);
                 // 0: all nodes finish the epoch and the counter has been reset
                 unsigned finshedNodes = engine->nodesFinishedEpoch[ind] == 0
                                       ? engine->numNodes
@@ -64,8 +64,8 @@ void ResourceComm::NNRecvCallbackGAT(Engine *engine, Chunk &chunk) {
                 engine->numFinishedEpoch[ind] = 0;
                 engine->finishedChunkLock.unlock();
 
-                engine->sendEpochUpdate(chunk.epoch);
                 engine->nodeManager.readEpochUpdates();
+                engine->sendEpochUpdate(chunk.epoch);
                 // 0: all nodes finish the epoch and the counter has been reset
                 unsigned finshedNodes = engine->nodesFinishedEpoch[ind] == 0
                                       ? engine->numNodes

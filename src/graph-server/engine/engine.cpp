@@ -51,7 +51,8 @@ void Engine::init(int argc, char *argv[]) {
     numNodes = nodeManager.getNumNodes();
     assert(numNodes <= 256);  // Cluster size limitation.
     outFile += std::to_string(nodeId);
-    commManager.init(nodeManager);
+    // Init data ctx with `dThreads` threads for scatter
+    commManager.init(nodeManager, dThreads);
 
     // Set number of layers and number of features in each layer. Also store the
     // prefix sum of config for offset querying use.
@@ -228,9 +229,8 @@ void Engine::run() {
 void Engine::runPipeline() {
     using ThreadVector = std::vector<std::thread>;
     pipelineHalt = false;
-    unsigned commThdCnt = std::max(2u, cThreads / 4);
-    // unsigned commThdCnt = cThreads;
-    // unsigned commThdCnt = 1;
+    unsigned commThdCnt = dThreads;
+    // unsigned commThdCnt = std::max(2u, cThreads / 4);
 
     auto gaWrkrFunc =
         std::bind(&Engine::gatherWorkFunc, this, std::placeholders::_1);

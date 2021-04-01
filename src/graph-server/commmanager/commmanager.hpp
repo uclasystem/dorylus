@@ -35,8 +35,7 @@ typedef struct controlMessage {
 class CommManager {
 
 public:
-
-    void init(NodeManager& nodeManager);
+    void init(NodeManager& nodeManager, unsigned ctxThds = 2);
     void destroy();
 
     void rawMsgPushOut(zmq::message_t &msg);

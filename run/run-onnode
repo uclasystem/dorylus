@@ -45,11 +45,10 @@ case $1 in
         # Minor options.
         UNDIRECTED=0           # Currently are all directed graphs.
         COMP_THREADS=$(nproc)  # Default values.
-        COMM_THREADS=$[$(nproc) / 2]
-        if [ $COMM_THREADS = 0 ]; then
-            $COMM_THREADS=1
+        COMM_THREADS=$[$(nproc) / 4]
+        if [ $COMM_THREADS -lt 2 ]; then
+            $COMM_THREADS=2 # at least use two comm threads
         fi
-        COMM_THREADS=4
         GNN_TYPE="GCN"
 
         let MODE=0
