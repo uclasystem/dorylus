@@ -141,9 +141,9 @@ void Engine::init(int argc, char *argv[]) {
 #ifdef _LAMBDA_ENABLED_
     if (mode == LAMBDA) {  // Lambda
         if (gnn_type == GNN::GCN) {
-            lambdaName = "yifan-gcn";
+            lambdaName = "gcn";
         } else if (gnn_type == GNN::GAT) {
-            lambdaName = "yifan-gat";
+            lambdaName = "gat";
         } else {
             lambdaName = "invalid_lambda_name";
         }
