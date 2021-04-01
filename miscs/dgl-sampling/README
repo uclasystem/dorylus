@@ -10,7 +10,7 @@ Sampling and training with GraphSAGE model.
 * pyinstrument
 
 ## Structure
-This `\dgl-sampling` folder is essentially the `\dgl_code` directory (refer to [DGL Distributed Training](https://github.com/dmlc/dgl/blob/master/examples/pytorch/graphsage/experimental/README.md) or Section Run, step 2).
+This `/dgl-sampling` folder is essentially the `/dgl_code` directory (refer to [DGL Distributed Training](https://github.com/dmlc/dgl/blob/master/examples/pytorch/graphsage/experimental/README.md) or Section Run, step 2).
 
 * `load_{amazon, reddit_large}.py`: load our large graphs (Amazon, Reddit-large).
 * `train_dist.py`: code for GraphSAGE distributed training.
