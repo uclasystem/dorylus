@@ -1,0 +1,8 @@
+#!/bin/bash
+
+## TODO:
+## Make this script parse all the runs after getting the required results
+## and generate a table similar to fig 5
+
+cd $( dirname $0 )/../
+EC2MAN_CMD='python3 -m ec2man'

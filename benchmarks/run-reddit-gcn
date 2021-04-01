@@ -9,11 +9,65 @@
 cd $( dirname $0 )/../
 EC2MAN_CMD='python3 -m ec2man'
 
+PARAMS=''
+MODE=
+NUM_LAMBDA=40
+STALENESS=4294967295
+EPOCHS=10
+TARGET_ACC=0.9
+
+while (( "$#" )); do
+	case $1 in
+		--m|-mode)
+			MODE="$2"
+			shift
+			shift
+			;;
+		--l|-lambdas)
+			NUM_LAMBDA="$2"
+			shift
+			shift
+			;;
+		--s|staleness)
+			STALENESS="$2"
+			shift
+			shift
+			;;
+		--e|-epochs)
+			EPOCHS="$2"
+			shift
+			shift
+			;;
+		--t|-target)
+			TARGET_ACC="$2"
+			shift
+			shift
+			;;
+		-*|--*)
+			echo "Unrecognized flag $1"
+			exit 1
+			;;
+		*)
+			PARAMS+=' '"\"$1\""
+			shift
+			;;
+	esac
+done
+eval set -- "$PARAMS"
+
 rm ec2man/machines
 rm ec2man/contexts/*
 
-$EC2MAN_CMD allocate --ami ami-00d9394087122c2c6 --type c5.2xlarge --cnt 2 --ctx graph
-$EC2MAN_CMD allocate --ami ami-00d9394087122c2c6 --type c5.xlarge --cnt 2 --ctx weight
+GRAPH_AMI='ami-00d9394087122c2c6'
+GRAPH_TYPE='c5.2xlarge'
+WEIGHT_AMI='ami-00d9394087122c2c6'
+if [[ $MODE == 'gpu' ]]; then
+	GRAPH_AMI='ami-0a03809b8693a4532'
+	GRAPH_TYPE='p3.2xlarge'
+fi
+
+$EC2MAN_CMD allocate --ami $GRAPH_AMI --type $GRAPH_TYPE --cnt 2 --ctx graph
+$EC2MAN_CMD allocate --ami $WEIGHT_AMI --type c5.xlarge --cnt 2 --ctx weight
 $EC2MAN_CMD add nfs i-098eda4a36fda9788
 
 $EC2MAN_CMD setup
@@ -26,9 +80,13 @@ $EC2MAN_CMD setup
 
 ./gnnman/send-source --force
 
-./gnnman/build-system
+./gnnman/build-system $MODE
 
-./run/run-dorylus reddit --l=80
+STALENESS_FLAGS=
+if [[ $STALENESS != 4294967295 ]]; then
+	STALENESS_FLAGS="--p --s=$STALENESS"
+fi
+./run/run-dorylus reddit --l=$NUM_LAMBDA --e=$EPOCHS $STALENESS_FLAGS $MODE --t=$TARGET_ACC
 
 
 for ctx in weight graph; do
