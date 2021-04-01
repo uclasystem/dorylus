@@ -238,7 +238,7 @@ void Engine::scatterGCN(Chunk &c) {
         if (nid == nodeId)
             continue;
         unsigned ghostVCnt = batchedIds[nid].size();
-#if false && (defined(_CPU_ENABLED_) || defined(_GPU_ENABLED_))
+#if defined(_GPU_ENABLED_)
 #pragma omp parallel for
 #endif
         for (unsigned ib = 0; ib < ghostVCnt; ib += BATCH_SIZE) {

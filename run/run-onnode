@@ -47,7 +47,7 @@ case $1 in
         COMP_THREADS=$(nproc)  # Default values.
         COMM_THREADS=$[$(nproc) / 4]
         if [ $COMM_THREADS -lt 2 ]; then
-            $COMM_THREADS=2 # at least use two comm threads
+            COMM_THREADS=2 # at least use two comm threads
         fi
         GNN_TYPE="GCN"
 
@@ -56,13 +56,14 @@ case $1 in
         let NUM_EPOCHS=10
         let STALE_BOUND=4294967295
         let PREPROCESS=0
-        let TO_RATIO=3
+        let TO_RATIO=5
         for var in "$@"
         do
             if [ $var = "GPU" ] || [ $var = "gpu" ]; then
                 let MODE=1;
                 NUM_LAMBDAS=1
-                COMP_THREADS=1
+                COMP_THREADS=$(nproc)
+                COMM_THREADS=$(nproc)
             elif [ $var = "CPU" ] || [ $var = "cpu" ]; then
                 let MODE=2;
                 NUM_LAMBDAS=1
@@ -218,7 +219,7 @@ case $1 in
 
         # Minor options.
         SYNC=1
-        TARGET_ACC="0.9"
+        TARGET_ACC="1"
         BLOCK=0
         GNN_TYPE="GCN"
         LEARNING_RATE="0.01"
