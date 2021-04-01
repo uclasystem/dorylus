@@ -28,6 +28,11 @@ while (( "$#" )); do
 			shift
 			shift
 			;;
+		--st|-switch-threshold)
+			SWITCH_THRESHOLD="$2"
+			shift
+			shift
+			;;
 		--s|staleness)
 			STALENESS="$2"
 			shift
