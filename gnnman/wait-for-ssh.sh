@@ -8,8 +8,11 @@ $EC2MAN_CMD setup
 USER=$( $EC2MAN_CMD graph user )
 KEY=$( $EC2MAN_CMD graph key )
 
+print("Waiting for all 'graph' and 'weight' instances to be ready for SSH")
+
 ## Wait for all instances to be in state 'running' so
 ## that a PublicIpAddress will be allocated
+print("Making sure that all the instances are in state 'running'")
 for ctx in weight graph; do
 	len=$( $EC2MAN_CMD $ctx all id | wc -l )
 	for i in $(seq 0 $((len-1))); do
@@ -33,6 +36,7 @@ for ctx in weight graph; do
 	$EC2MAN_CMD $ctx info
 done
 
+print("Waiting for SSH to become available")
 for ctx in weight graph; do
 	IPS=$( $EC2MAN_CMD $ctx all pubip )
 	echo $IPS
