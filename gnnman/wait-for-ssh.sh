@@ -41,10 +41,10 @@ for ctx in weight graph; do
 	IPS=$( $EC2MAN_CMD $ctx all pubip )
 	echo $IPS
 	for IP in $IPS; do
-		ssh -i $KEY $USER@$IP ls
+		ssh -i $KEY $USER@$IP exit
 		while [[ $? -ne 0 ]]; do
 			sleep 5
-			ssh -i $KEY $USER@$IP ls
+			ssh -i $KEY $USER@$IP exit
 		done
 		echo "Ready for SSH"
 	done
