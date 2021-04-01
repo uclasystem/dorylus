@@ -1,0 +1,39 @@
+#!/bin/bash
+
+##
+## Running the reddit GCN benchmark
+##
+## Cluster configuration: c5.2xlarge (2), c5.xlarge (2)
+##
+
+cd $( dirname $0 )/../
+EC2MAN_CMD='python3 -m ec2man'
+
+rm ec2man/machines
+rm ec2man/contexts/*
+
+$EC2MAN_CMD allocate --ami ami-00d9394087122c2c6 --type c5.2xlarge --cnt 2 --ctx graph
+$EC2MAN_CMD allocate --ami ami-00d9394087122c2c6 --type c5.xlarge --cnt 2 --ctx weight
+$EC2MAN_CMD add nfs i-098eda4a36fda9788
+
+$EC2MAN_CMD setup
+
+./gnnman/wait-for-ssh.sh
+
+./gnnman/setup-cluster
+
+./gnnman/mount-nfs-server
+
+./gnnman/send-source --force
+
+./gnnman/build-system
+
+./run/run-dorylus reddit --l=80
+
+
+for ctx in weight graph; do
+	$EC2MAN_CMD $ctx all terminate -f
+done
+
+rm ec2man/contexts/*
+rm ec2man/machines
