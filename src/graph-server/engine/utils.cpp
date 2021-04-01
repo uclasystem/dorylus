@@ -225,7 +225,8 @@ void Engine::printEngineMetrics() {
 
         fprintf(stderr, "[ Node %3u ]  <EM>: Run start time: %s", nodeId, std::ctime(&start_time));
         fprintf(stderr, "[ Node %3u ]  <EM>: Run end time: %s", nodeId, std::ctime(&end_time));
-        printLog(nodeId, "<EM>: Backend %s", mode == LAMBDA ? "LAMBDA" : (mode == CPU ? "CPU" : "GPU"));
+        printLog(nodeId, "<EM>: Backend %s%s", mode == LAMBDA ? "LAMBDA" : (mode == CPU ? "CPU" : "GPU"),
+            (mode == LAMBDA ? std::string(":" + lambdaName).c_str() : ""));
         {
             std::string dataset = std::string("<EM>: Dataset: ") + datasetDir + " (";
             for (int i = 0; i < numLayers; i++) {

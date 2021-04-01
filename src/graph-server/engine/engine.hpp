@@ -188,6 +188,7 @@ public:
     unsigned weightserverPort;
     std::string weightserverIPFile;
 
+    std::string lambdaName;
     unsigned numLambdasForward = 0;
     unsigned numEpochs = 0;
     unsigned numSyncEpochs = 0;

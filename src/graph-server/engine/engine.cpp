@@ -140,6 +140,14 @@ void Engine::init(int argc, char *argv[]) {
 
 #ifdef _LAMBDA_ENABLED_
     if (mode == LAMBDA) {  // Lambda
+        if (gnn_type == GNN::GCN) {
+            lambdaName = "yifan-gcn";
+        } else if (gnn_type == GNN::GAT) {
+            lambdaName = "yifan-gat";
+        } else {
+            lambdaName = "invalid_lambda_name";
+        }
+
         resComm = new LambdaComm(this);
     }
 #endif

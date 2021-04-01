@@ -14,17 +14,17 @@ LambdaComm::LambdaComm(Engine *_engine) :
         halt(false), relaunchCnt(0),
         dport(_engine->dataserverPort), wport(_engine->weightserverPort),
         savedNNTensors(_engine->savedNNTensors), savedETensors(_engine->savedEdgeTensors),
-        timeoutRatio(_engine->timeoutRatio),
+        timeoutRatio(_engine->timeoutRatio), LAMBDA_NAME(_engine->lambdaName),
         ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
         numListeners(4), engine(_engine) { // TODO: Decide numListeners.
     nodeId = _engine->nodeId;
-    if (engine->gnn_type == GNN::GCN) {
-        LAMBDA_NAME = "yifan-gcn";
-    } else if (engine->gnn_type == GNN::GAT) {
-        LAMBDA_NAME = "yifan-gat";
-    } else {
-        LAMBDA_NAME = "invalid_lambda_name";
-    }
+//    if (engine->gnn_type == GNN::GCN) {
+//        LAMBDA_NAME = "yifan-gcn";
+//    } else if (engine->gnn_type == GNN::GAT) {
+//        LAMBDA_NAME = "yifan-gat";
+//    } else {
+//        LAMBDA_NAME = "invalid_lambda_name";
+//    }
 
     loadWServerIps(_engine->weightserverIPFile);
     setupAwsClient();
