@@ -564,10 +564,10 @@ WeightServer::initWeightsMasterGAT() {
  */
 Matrix
 WeightServer::xavierInitializer(unsigned dim1, unsigned dim2) {
-    std::random_device rd;
-    std::mt19937 generator(rd());
-    unsigned rand_seed = generator();
-    std::default_random_engine dre(rand_seed);
+//    std::random_device rd;
+//    std::mt19937 generator(rd());
+//    unsigned rand_seed = generator();
+    std::default_random_engine dre(8888);
     std::uniform_real_distribution<float> dist(-1, 1);
 
     unsigned dataSize = dim1 * dim2;
@@ -590,10 +590,10 @@ WeightServer::xavierInitializer(unsigned dim1, unsigned dim2) {
  */
 Matrix
 WeightServer::kaimingInitializer(unsigned dim1, unsigned dim2) {
-    std::random_device rd;
-    std::mt19937 generator(rd());
-    unsigned rand_seed = generator();
-    std::default_random_engine dre(rand_seed);
+//    std::random_device rd;
+//    std::mt19937 generator(rd());
+//    unsigned rand_seed = generator();
+    std::default_random_engine dre(8888);
     std::normal_distribution<float> dist(0, 1);
 
     unsigned dataSize = dim1 * dim2;
@@ -618,10 +618,10 @@ Matrix
 WeightServer::randomInitializer(unsigned dim1, unsigned dim2,
                                    float lowerBound, float upperBound) {
     assert(lowerBound < upperBound);
-    std::random_device rd;
-    std::mt19937 generator(rd());
-    unsigned rand_seed = generator();
-    std::default_random_engine dre(rand_seed);
+//    std::random_device rd;
+//    std::mt19937 generator(rd());
+//    unsigned rand_seed = generator();
+    std::default_random_engine dre(8888);
     std::uniform_real_distribution<float> dist(lowerBound, upperBound);
 
     unsigned dataSize = dim1 * dim2;
