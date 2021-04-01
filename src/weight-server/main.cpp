@@ -23,6 +23,7 @@ main(int argc, char *argv[]) {
     bool block = (bool)(std::atoi(argv[11])); // for CPU/GPU
     std::string gnn_name = std::string(argv[12]);
     float learning_rate = std::atof(argv[13]);
+    float switch_threshold = std::atof(argv[14]);
 
     GNN gnn_type;
     if (gnn_name == "GCN") { // GCN or GAT
@@ -39,7 +40,7 @@ main(int argc, char *argv[]) {
                     configFile, tmpFile,
                     sync, targetAcc, block,
                     gnn_type,
-                    learning_rate);
+                    learning_rate, switch_threshold);
 
     // Run in a detached thread because so that we can wait
     // on a condition variable.

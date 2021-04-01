@@ -220,6 +220,7 @@ case $1 in
         # Minor options.
         SYNC=1
         TARGET_ACC="1"
+        SWITCH_THRESHOLD="0.02"
         BLOCK=0
         GNN_TYPE="GCN"
         LEARNING_RATE="0.01"
@@ -234,8 +235,13 @@ case $1 in
                 GNN_TYPE="${var#*=}"
             fi
 
-            if [[ $var = --lr=* ]] || [[ $var = -learning_rate=* ]]; then
+            if [[ $var = --lr=* ]] || [[ $var = --learning_rate=* ]]; then
                 LEARNING_RATE="${var#*=}"
+            fi
+
+            if [[ $var = --st=* ]] || [[ $var = --switch_threshold=* ]]; then
+                # set to 0 to disable the async-sync switch
+                SWITCH_THRESHOLD="${var#*=}"
             fi
 
             if [ $var = "GPU" ] || [ $var = "gpu" ] || [ $var = "CPU" ] || [ $var = "cpu" ]; then
@@ -279,7 +285,8 @@ case $1 in
             ${TARGET_ACC} \
             ${BLOCK} \
             ${GNN_TYPE} \
-            ${LEARNING_RATE}"
+            ${LEARNING_RATE} \
+            ${SWITCH_THRESHOLD}"
 
         echo ${DSH_COMMAND}
         dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/dorylus && ${DSH_COMMAND}"

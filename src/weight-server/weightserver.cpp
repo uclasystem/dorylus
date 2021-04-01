@@ -9,13 +9,14 @@
 WeightServer::WeightServer(std::string &wserverFile, std::string &myPrIpFile, std::string &gserverFile,
                            unsigned _listenerPort, unsigned _serverPort, unsigned _gport,
                            std::string &configFile, std::string &tmpFile,
-                           bool _sync, float _targetAcc, bool block, GNN _gnn_type, float _learning_rate)
+                           bool _sync, float _targetAcc, bool block, GNN _gnn_type,
+                           float _learning_rate, float _switch_threshold)
     : ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER), // gsocket(ctx, ZMQ_DEALER),
       listenerPort(_listenerPort), serverPort(_serverPort), gport(_gport),
       dataCtx(1), publisher(dataCtx, ZMQ_PUB), subscriber(dataCtx, ZMQ_SUB),
       numLambdas(0), term(false), adam(true), convergeState(CONVERGE_STATE::EARLY),
       sync(_sync), targetAcc(_targetAcc), BLOCK(block), gnn_type(_gnn_type),
-      learning_rate(_learning_rate) {
+      learning_rate(_learning_rate), switch_threshold(_switch_threshold) {
 
     std::vector<std::string> allNodeIps =
         parseNodeConfig(configFile, wserverFile, myPrIpFile, gserverFile);
@@ -271,7 +272,8 @@ void WeightServer::tryEarlyStop(AccLoss &accloss) {
 
     CONVERGE_STATE currState =
         (accloss.acc >= targetAcc)        ? CONVERGE_STATE::DONE : // early stop
-        (accloss.acc >= targetAcc - 0.02) ? CONVERGE_STATE::CLOSE: // switch to sync
+        (accloss.acc >=
+            targetAcc - switch_threshold) ? CONVERGE_STATE::CLOSE: // switch to sync
                                             CONVERGE_STATE::EARLY;
 
     // state transition can only be in order EARLY -> CLOSE -> DONE
