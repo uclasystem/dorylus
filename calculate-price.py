@@ -45,19 +45,19 @@ def get_logs(lambda_function):
 
     output = output.split('\n')
     output = [line.split() for line in output]
-    print(output)
     times = [0]
     for words in output:
-        index = words.index("Billed")
-        print(index)
-        if index != -1:
+        try:
+            index = words.index("Billed") + 2
             times.append(int(words[index]))
+        except:
+            continue
 
     return times
 
 times = get_logs(lambda_name)
 
 total_time = sum(times)
-print(total_time)
-print(lambda_function_price)
+print("Total time of lambdas for this run (ms):", total_time)
+print("Price of this lambda (based on memory):", lambda_function_price)
 print(total_time * lambda_function_price)
