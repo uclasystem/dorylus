@@ -19,11 +19,8 @@ cd $( dirname $0 )/..
 
 EC2MAN_CMD="python3 -m ec2man"
 
-
-# Start all machines...
-${EC2MAN_CMD} graph all start
-${EC2MAN_CMD} weight all start
-
+rm ec2man/contexts/*
+$EC2MAN_CMD setup
 
 # For graph servers.
 echo "Processing context 'graph'..."
