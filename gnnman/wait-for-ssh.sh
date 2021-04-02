@@ -39,7 +39,7 @@ for ctx in weight graph; do
 	$EC2MAN_CMD $ctx info
 done
 
-echo "Waiting for SSH to become available"
+echo "========> Waiting for SSH to become available <========"
 for ctx in weight graph; do
 	IPS=$( $EC2MAN_CMD $ctx all pubip )
 	echo $IPS
@@ -49,7 +49,7 @@ for ctx in weight graph; do
 			sleep 5
 			ssh -i $KEY $USER@$IP exit
 		done
-		echo "Ready for SSH"
+		echo "========> $IP is ready for SSH"
 	done
 done
 

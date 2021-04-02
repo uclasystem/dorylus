@@ -19,7 +19,6 @@ cd $( dirname $0 )/..
 
 EC2MAN_CMD="python3 -m ec2man"
 
-rm ec2man/contexts/*
 $EC2MAN_CMD setup
 
 # For graph servers.
