@@ -2,7 +2,7 @@
 
 cd $( dirname $0 )
 
-id=i-066a53311a02b0fa0
+id=i-098eda4a36fda9788
 
 case $1 in
     "id")
@@ -11,7 +11,7 @@ case $1 in
     "ssh")
         pubip=$( ./nfs-instance.sh pubip )
 
-        ssh -i /home/thorpedoes/.ssh/id_rsa jothor@${pubip}
+        ssh -i ${HOME}/.ssh/id_rsa ubuntu@${pubip}
         ;;
     "pubip")
         ip=$( aws ec2 describe-instances --filter Name=instance-id,Values=${id} --query Reservations[*].Instances[*].PublicIpAddress --output text )
