@@ -34,7 +34,7 @@ while (( "$#" )); do
 			shift
 			shift
 			;;
-		--s|staleness)
+		--s|-staleness)
 			STALENESS="$2"
 			shift
 			shift
@@ -64,13 +64,18 @@ eval set -- "$PARAMS"
 rm ec2man/machines
 rm ec2man/contexts/*
 
-GRAPH_AMI='ami-00d9394087122c2c6'
 GRAPH_TYPE='c5.2xlarge'
-WEIGHT_AMI='ami-00d9394087122c2c6'
-if [[ $MODE == 'gpu' ]]; then
-	GRAPH_AMI='ami-0a03809b8693a4532'
-	GRAPH_TYPE='p3.2xlarge'
-fi
+WEIGHT_AMI='ami-0901fc9a7bc310a8a'
+GRAPH_AMI='ami-07aec0eb32327b38d'
+case $MODE in
+	'gpu')
+		GRAPH_AMI='ami-01c390943eecea45c'
+		GRAPH_TYPE=p3.2xlarge
+		;;
+	'cpu')
+		GRAPH_AMI='ami-04934e5a63d144d88'
+		;;
+esac
 
 $EC2MAN_CMD allocate --ami $GRAPH_AMI --type $GRAPH_TYPE --cnt 2 --ctx graph
 $EC2MAN_CMD allocate --ami $WEIGHT_AMI --type c5.xlarge --cnt 2 --ctx weight
@@ -84,9 +89,9 @@ $EC2MAN_CMD setup
 
 ./gnnman/mount-nfs-server
 
-./gnnman/send-source --force
-
-./gnnman/build-system $MODE
+#./gnnman/send-source --force
+#
+#./gnnman/build-system $MODE
 
 STALENESS_FLAGS=
 if [[ $STALENESS != 4294967295 ]]; then
