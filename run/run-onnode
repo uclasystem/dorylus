@@ -2,13 +2,22 @@
 
 ##
 ## Run the system on the given context. TO be invoked on only MASTER node.
-## Must be invoked after a proper `setuup-cluster` & `bld-system`!!!
+## Must be invoked after a proper `setuup-cluster` & `builld-system`!!!
 ##
-## Usage: $ ./gnnman/run-onnode <Context> [Dataset] [#Lambdas]
+## Usage: $ ./run/run-onnode <Context> <Dataset> [--l=#lambdas] [--lr=learning_rate] [--p] [--e=#epochs] [--s=staleness_bound] [--t=target_accuracy]
 ##
 ## Arguments:
-##      Context: Run which part of the system.
-##      Dataset: Only needed for graphservers.
+##      Context: Which part of the system to run [graph|weight]
+##      Dataset: Name of the dataset (found at /filepool/<dataset-name>/)
+##
+##	--l|-lambdas:		Set the number of lambdas
+##	--lr|-learning_rate:	Set the learning rate
+##	--p|-pipeline:		Enable pipeline version of Dorylus
+##	--e|-epochs:		Set the number of epochs
+##	--s|-staleness:		Set the staleness bound for asynchrony
+##	--tr|-timeout_ratio:	Tune how long the system waits for lambdas before relaunch
+##	--t|-targetacc:		Set a target accuracy for Dorylus (for early stop)
+##	cpu|gpu:		Enable cpu or gpu version (must rebuild source code to change)
 ##
 
 cd ${HOME}/dorylus/
@@ -31,34 +40,33 @@ case $1 in
         NODEPORT=$( < ../nodeport )
         WSERVERIP=$HOME/wserverip
 
-        NUM_LAMBDAS_FORWARD=$( < ../numlambdasforward )
-        NUM_LAMBDAS_BACKWARD=$( < ../numlambdasbackward )
+        NUM_LAMBDAS=$( < ../numlambdasforward )
 
         # Minor options.
         UNDIRECTED=0           # Currently are all directed graphs.
         COMP_THREADS=$(nproc)  # Default values.
-        COMM_THREADS=$[$(nproc) / 2]
-        if [ $COMM_THREADS = 0 ]; then
-            $COMM_THREADS=1
+        COMM_THREADS=$[$(nproc) / 4]
+        if [ $COMM_THREADS -lt 2 ]; then
+            COMM_THREADS=2 # at least use two comm threads
         fi
-        COMM_THREADS=4
+        GNN_TYPE="GCN"
 
         let MODE=0
         let PIPELINE=0
         let NUM_EPOCHS=10
         let STALE_BOUND=4294967295
-        let TO_RATIO=3
+        let PREPROCESS=0
+        let TO_RATIO=5
         for var in "$@"
         do
             if [ $var = "GPU" ] || [ $var = "gpu" ]; then
                 let MODE=1;
-                NUM_LAMBDAS_FORWARD=1
-                NUM_LAMBDAS_BACKWARD=1
-                COMP_THREADS=1
+                NUM_LAMBDAS=1
+                COMP_THREADS=$(nproc)
+                COMM_THREADS=$(nproc)
             elif [ $var = "CPU" ] || [ $var = "cpu" ]; then
                 let MODE=2;
-                NUM_LAMBDAS_FORWARD=1
-                NUM_LAMBDAS_BACKWARD=1
+                NUM_LAMBDAS=1
             fi
 
             if [ $var = "--u" ] || [ $var = "--undirected" ]; then
@@ -71,8 +79,6 @@ case $1 in
 
             if [[ $var = --l=* ]] || [[ $var = --lambdas=* ]]; then
                 NUM_LAMBDAS="${var#*=}"
-                NUM_LAMBDAS_FORWARD=${NUM_LAMBDAS}
-                NUM_LAMBDAS_BACKWARD=${NUM_LAMBDAS}
             fi
 
             if [[ $var = --e=* ]] || [[ $var = --epochs=* ]]; then
@@ -83,6 +89,14 @@ case $1 in
                 STALE_BOUND="${var#*=}"
             fi
 
+            if [[ $var = --g=* ]] || [[ $var = --gnn=* ]]; then
+                GNN_TYPE="${var#*=}"
+            fi
+
+            if [[ $var = --preprocess ]]; then
+                PREPROCESS=1
+            fi
+
             if [[ $var = --tr=* ]] || [[ $var = --timeout_ratio=* ]]; then
                 TO_RATIO="${var#*=}"
             fi
@@ -90,7 +104,7 @@ case $1 in
 
         # After processing args, check to see if GPU enables
         # If so, disable pipelining
-        if [[ ($MODE -eq 1 || $MODE -eq 2)  &&  $PIPELINE -eq 1 ]]; then
+        if [[ ($MODE -eq 1 || $MODE -eq 2) && $PIPELINE -eq 1 ]]; then
             echo "GPU/CPU and pipeline cannot be used together. Disabling pipeline"
             PIPELINE=0
         fi
@@ -154,13 +168,14 @@ case $1 in
             --dataport ${DATAPORT} \
             --ctrlport ${CTRLPORT} \
             --nodeport ${NODEPORT} \
-            --numlambdasforward ${NUM_LAMBDAS_FORWARD} \
-            --numlambdasbackward ${NUM_LAMBDAS_BACKWARD} \
+            --numlambdas ${NUM_LAMBDAS} \
             --numEpoch ${NUM_EPOCHS} \
             --validationFrequency 1 \
             --MODE ${MODE} \
             --pipeline ${PIPELINE} \
             --staleness ${STALE_BOUND} \
+            --gnn ${GNN_TYPE} \
+            --preprocess ${PREPROCESS} \
             --timeout_ratio ${TO_RATIO}"
         echo ${DSH_COMMAND}
         dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/dorylus && ${DSH_COMMAND}" 2>&1 | tee ${LOGFILE}
@@ -180,6 +195,7 @@ case $1 in
           echo -e "\e[92;1mThis round of execution seems successful, congrats ;)\e[0m"
         else
           echo -e "\e[91;1mExecution fails (at least on this node), check the log file!\e[0m"
+          ~/kill-all
         fi
         ;;
 
@@ -203,8 +219,10 @@ case $1 in
 
         # Minor options.
         SYNC=1
-        TARGET_ACC="0.9"
+        TARGET_ACC="1"
+        SWITCH_THRESHOLD="0.02"
         BLOCK=0
+        GNN_TYPE="GCN"
         LEARNING_RATE="0.01"
         for var in "$@"
         do
@@ -213,10 +231,17 @@ case $1 in
                 SYNC=1
             elif [[ $var = --t=* ]] || [[ $var = --targetacc=* ]]; then
                 TARGET_ACC="${var#*=}"
+            elif [[ $var = --g=* ]] || [[ $var == --gnn=* ]]; then
+                GNN_TYPE="${var#*=}"
             fi
 
-            if [[ $var = --lr=* ]] || [[ $var = -learning_rate=* ]]; then
+            if [[ $var = --lr=* ]] || [[ $var = --learning_rate=* ]]; then
                 LEARNING_RATE="${var#*=}"
+            fi
+
+            if [[ $var = --st=* ]] || [[ $var = --switch_threshold=* ]]; then
+                # set to 0 to disable the async-sync switch
+                SWITCH_THRESHOLD="${var#*=}"
             fi
 
             if [ $var = "GPU" ] || [ $var = "gpu" ] || [ $var = "CPU" ] || [ $var = "cpu" ]; then
@@ -259,7 +284,10 @@ case $1 in
             ${SYNC} \
             ${TARGET_ACC} \
             ${BLOCK} \
-            ${LEARNING_RATE}"
+            ${GNN_TYPE} \
+            ${LEARNING_RATE} \
+            ${SWITCH_THRESHOLD}"
+
         echo ${DSH_COMMAND}
         dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/dorylus && ${DSH_COMMAND}"
 

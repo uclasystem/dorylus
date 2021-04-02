@@ -9,6 +9,22 @@
 
 #include "utils.hpp"
 
+struct EdgeTensor {
+    unsigned numLvids;
+    unsigned numRvids;
+    unsigned featDim;
+    unsigned numEdges;
+
+    unsigned* edgeMapping;
+    FeatType* chunkData;
+};
+
+struct EdgeInfo {
+    unsigned numLvids;
+    unsigned nChunkEdges;
+
+    unsigned long long* edgePtrs;
+};
 
 /**
  *
@@ -88,6 +104,9 @@ public:
     std::string shape();
     std::string str();
     std::string signature();
+
+    void toFile(std::string filename);
+    void fromFile(std::string filename);
 
 private:
     std::string tensorName;

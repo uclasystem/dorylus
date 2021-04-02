@@ -9,7 +9,7 @@ if(BACKEND STREQUAL gpu)
     FIND_PACKAGE(CUDA REQUIRED)
     include_directories(${CUDA_INCLUDE_DIRS})
     target_link_libraries(engine PRIVATE ComputingUnit graph commmanager weight_comm gpu_comm nodemanager threadpool utils
-                            PUBLIC  ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES})
+                            PUBLIC  ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES} ${OpenMP_CXX_FLAGS})
 endif()
 if(BACKEND STREQUAL lambda)
     target_link_libraries(engine PRIVATE graph commmanager weight_comm lambda_comm nodemanager threadpool utils

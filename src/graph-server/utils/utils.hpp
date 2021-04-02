@@ -24,7 +24,6 @@
                                 // From MAX_IDTYPE downto MAX_IDTYPE - numGlobalVertices are receive signals.
 
 typedef std::priority_queue< Chunk > ChunkQueue;
-typedef std::queue< std::pair<unsigned, unsigned> > PairQueue;
 
 
 /** Print to log file using this one. */

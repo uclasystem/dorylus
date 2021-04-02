@@ -21,31 +21,39 @@ unsigned nodeId;
 class GPUComm;
 
 class ComputingServer {
-   public:
+public:
     ComputingServer();
-    ComputingServer(GPUComm *gpu_comm);
+    ComputingServer(GPUComm *gpu_comm, GNN gnn_type_);
 
-    // For forward
-    void processForward(unsigned layer, bool lastLayer);
+    // compute related
+    void vtxNNForward(unsigned layer, bool lastLayer);
+    void vtxNNBackward(unsigned layer);
+    void edgNNForward(unsigned layer, bool lastLayer);
+    void edgNNBackward(unsigned layer);
 
-    // For validation
-    // void evaluateModel(Matrix& activations);
-
-    // For backward
-    void processBackward(unsigned layer);
-    void gradLayer(unsigned layer);
-    void gradLoss(unsigned layer, CuMatrix pred, bool report = true);
-
-    void prefetchWeights() { msgService.prefetchWeightsMatrix(totalLayers); };
-    void terminate();
-
-   private:
-    std::vector<char *> weightServerAddrs;
-    MessageService msgService;
-    ComputingUnit cu;
-    GPUComm *gpuComm;
+    void prefetchWeights() { msgService.prefetchWeightsMatrix(); };
+private:
+    GNN gnn_type;
+    unsigned nodeId;
     unsigned totalLayers;
-    CuMatrix *weights;  // Weight Matrices Array
+    std::vector<TensorMap> &savedNNTensors;
+
+    GPUComm *gpuComm;
+    ComputingUnit cu;
+
+    std::vector<char *> weightServerAddrs;
+    MessageService &msgService;
+
+    // GCN specific
+    void vtxNNForwardGCN(unsigned layer, bool lastLayer);
+    void vtxNNBackwardGCN(unsigned layer);
+    void edgNNForwardGCN(unsigned layer, bool lastLayer) {}
+    void edgNNBackwardGCN(unsigned layer) {}
+    // GAT specific
+    void vtxNNForwardGAT(unsigned layer, bool lastLayer);
+    void vtxNNBackwardGAT(unsigned layer);
+    void edgNNForwardGAT(unsigned layer, bool lastLayer);
+    void edgNNBackwardGAT(unsigned layer);
 };
 
 #endif

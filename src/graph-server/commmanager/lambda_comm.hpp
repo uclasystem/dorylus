@@ -41,7 +41,6 @@
 
 static const bool relaunching = true;
 
-#define LAMBDA_VTX_NN "gcn"
 #define ALLOCATION_TAG "LambdaComm"
 
 class LambdaWorker;
@@ -56,26 +55,19 @@ public:
     LambdaComm(Engine *engine);
     ~LambdaComm();
 
-    void setAsync(bool _async, unsigned currEpoch);
     void NNCompute(Chunk &chunk);
-    void NNSync();
     bool NNRecv(Chunk &chunk);
 
     unsigned getRelaunchCnt() { return relaunchCnt; };
 
     bool halt;
-    bool async;
-    int outdateEpoch;
     std::vector<TensorMap>& savedNNTensors;
-    Lock &resLock;
-    ChunkQueue& resQueue;
-    Lock &aggLock;
-    ChunkQueue& aggQueue;
+    std::vector<ETensorMap>& savedETensors;
 
     std::thread *relaunchThd;
-    int timeoutRatio;
     void asyncRelaunchLoop();
     void relaunchLambda(const Chunk &chunk);
+    int timeoutRatio;
     unsigned relaunchCnt;
     std::mutex timeoutMtx;
     std::map<Chunk, unsigned> timeoutTable;
@@ -92,6 +84,7 @@ public:
     std::map<unsigned, AccLoss> accLossTable; // epoch -> AccLoss
 
     // Invoke lambda function
+    std::string LAMBDA_NAME;
     void invokeLambda(const Chunk &chunk);
     static void callback(const Aws::Lambda::LambdaClient *client,
                          const Aws::Lambda::Model::InvokeRequest &invReq,
@@ -134,10 +127,5 @@ public:
     void startRelaunchThd();
     void stopRelaunchThd();
 };
-
-
-unsigned getAbsLayer(const Chunk &chunk, unsigned numLayers);
-Chunk incLayer(const Chunk &chunk, unsigned numLayers);
-bool isLastLayer(const Chunk &chunk);
 
 #endif // LAMBDA_COMM_HPP

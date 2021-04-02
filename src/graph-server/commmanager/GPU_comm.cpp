@@ -1,38 +1,37 @@
 #include "GPU_comm.hpp"
 
-GPUComm::GPUComm(Engine *engine_) : ResourceComm() {
-    engine = engine_;
-    nodeId = engine->nodeId;
-    totalLayers = engine->numLayers;
-    wServersFile = engine->weightserverIPFile;
-    wPort = engine->weightserverPort;
-    numNodes = engine->numNodes;
-    currLayer = 0;
-    comp_server = new ComputingServer(this);
-}
+GPUComm::GPUComm(Engine *engine_)
+    : engine(engine_), nodeId(engine_->nodeId), totalLayers(engine_->numLayers),
+    wServersFile(engine_->weightserverIPFile), wPort(engine_->weightserverPort),
+    numNodes(engine_->numNodes), savedNNTensors(engine_->savedNNTensors),
+    msgService(wPort, nodeId, totalLayers, engine_->gnn_type) {
+        comp_server = new ComputingServer(this, engine_->gnn_type);
+    }
 
 void GPUComm::NNCompute(Chunk &chunk) {
-    currLayer = chunk.layer;
-    tensorMap = &engine->savedNNTensors[chunk.layer];
-    if (chunk.dir == PROP_TYPE::FORWARD) {
-        // printLog(nodeId, "GPU FORWARD NN started");
-        comp_server->processForward(currLayer, currLayer == (totalLayers - 1));
-    }
-    if (chunk.dir == PROP_TYPE::BACKWARD) {
-        // printLog(nodeId, "GPU BACKWARD NN started");
-        comp_server->processBackward(currLayer);
+    unsigned layer = chunk.layer;
+    if (chunk.vertex) { // AV & AVB
+        if (chunk.dir == PROP_TYPE::FORWARD) {
+            // printLog(nodeId, "GPU FORWARD vtx NN started");
+            comp_server->vtxNNForward(layer, layer == (totalLayers - 1));
+        }
+        if (chunk.dir == PROP_TYPE::BACKWARD) {
+            // printLog(nodeId, "GPU BACKWARD vtx NN started");
+            comp_server->vtxNNBackward(layer);
+        }
+    } else { // AE & AEB
+        layer--; // YIFAN: fix this
+        if (chunk.dir == PROP_TYPE::FORWARD) {
+            // printLog(nodeId, "GPU FORWARD edg NN started");
+            comp_server->edgNNForward(layer, layer == (totalLayers - 1));
+        }
+        if (chunk.dir == PROP_TYPE::BACKWARD) {
+            // printLog(nodeId, "GPU BACKWARD edg NN started");
+            comp_server->edgNNBackward(layer);
+        }
     }
     // printLog(nodeId, "GPU NN Done");
+    NNRecvCallback(engine, chunk);
 }
-
-void GPUComm::prefetchWeights() {
-    comp_server->prefetchWeights();
-}
-
-// void GPUComm::sendShutdownMessage() {
-//     // printLog(nodeId, "Send Shutdown Message");
-//     // Send kill message.
-//     comp_server->terminate();
-// }
 
 GPUComm::~GPUComm() {}

@@ -326,3 +326,21 @@ std::string WeightTensor::tryApplyUpdate(AdamOptimizer *adamOpt, unsigned layer,
     }
     return checkInfo;
 }
+
+std::string WeightTensor::tryApplyUpdateFake(float lr, FeatType *updTensor) {
+    std::lock_guard<std::mutex> lgu(*umtx);
+    std::lock_guard<std::mutex> lgw(*wmtx);
+    localUpdCnt = 0;
+    ghostUpdCnt = 0;
+
+    return "Fake Apply Update";
+}
+
+std::string WeightTensor::tryApplyUpdateFake(AdamOptimizer *adamOpt, unsigned layer, FeatType *updTensor) {
+    std::lock_guard<std::mutex> lgu(*umtx);
+    std::lock_guard<std::mutex> lgw(*wmtx);
+    localUpdCnt = 0;
+    ghostUpdCnt = 0;
+
+    return "Fake Apply Update";
+}

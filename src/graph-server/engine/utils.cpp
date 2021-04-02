@@ -100,45 +100,6 @@ inline void Engine::calcAcc(FeatType *predicts, FeatType *labels,
     accuracy = acc;
 }
 
-void Engine::saveTensor(std::string &name, unsigned rows, unsigned cols,
-                        FeatType *dptr) {
-    auto iter = savedVtxTensors.find(name);
-    if (iter != savedVtxTensors.end()) {
-        delete[](iter->second).getData();
-        savedVtxTensors.erase(iter);
-    }
-    savedVtxTensors[name] = Matrix(name.c_str(), rows, cols, dptr);
-}
-
-void Engine::saveTensor(const char *name, unsigned rows, unsigned cols,
-                        FeatType *dptr) {
-    auto iter = savedVtxTensors.find(name);
-    if (iter != savedVtxTensors.end()) {
-        delete[](iter->second).getData();
-        savedVtxTensors.erase(iter);
-    }
-    savedVtxTensors[std::string(name)] = Matrix(name, rows, cols, dptr);
-}
-
-void Engine::saveTensor(Matrix &mat) {
-    auto iter = savedVtxTensors.find(mat.name());
-    if (iter != savedVtxTensors.end()) {
-        delete[](iter->second).getData();
-        savedVtxTensors.erase(iter);
-    }
-    savedVtxTensors[mat.name()] = mat;
-}
-
-void Engine::saveTensor(const char *name, unsigned layer, unsigned rows,
-                        unsigned cols, FeatType *dptr) {
-    savedNNTensors[layer][std::string(name)] = Matrix(rows, cols, dptr);
-}
-
-void Engine::saveTensor(const char *name, unsigned layer, Matrix &mat) {
-    savedNNTensors[layer][std::string(name)] = mat;
-}
-
-
 /**
  *
  * Write output stuff to the tmp directory for every local vertex.
@@ -181,8 +142,7 @@ void Engine::output() {
     sprintf(outBuf, "<EM>: Run end time: ");
     outStream << outBuf << std::ctime(&end_time);
 
-    sprintf(outBuf, "<EM>: Using %u forward lambdas and %u backward lambdas",
-            numLambdasForward, numLambdasBackward);
+    sprintf(outBuf, "<EM>: Using %u lambdas", numLambdasForward);
     outStream << outBuf << std::endl;
 
     sprintf(outBuf, "<EM>: Initialization takes %.3lf ms", timeInit);
@@ -258,14 +218,15 @@ void Engine::output() {
  */
 void Engine::printEngineMetrics() {
     nodeManager.barrier();
-    // if (master()) {
-for (unsigned i = 0; i < numNodes; i++) {
-    if (nodeId == i) {
+    if (master()) {
+// for (unsigned i = 0; i < numNodes; i++) {
+//     if (nodeId == 0) {
         gtimers.report();
 
         fprintf(stderr, "[ Node %3u ]  <EM>: Run start time: %s", nodeId, std::ctime(&start_time));
         fprintf(stderr, "[ Node %3u ]  <EM>: Run end time: %s", nodeId, std::ctime(&end_time));
-        printLog(nodeId, "<EM>: Backend %s", mode == LAMBDA ? "LAMBDA" : (mode == CPU ? "CPU" : "GPU"));
+        printLog(nodeId, "<EM>: Backend %s%s", mode == LAMBDA ? "LAMBDA" : (mode == CPU ? "CPU" : "GPU"),
+            (mode == LAMBDA ? std::string(":" + lambdaName).c_str() : ""));
         {
             std::string dataset = std::string("<EM>: Dataset: ") + datasetDir + " (";
             for (int i = 0; i < numLayers; i++) {
@@ -277,46 +238,47 @@ for (unsigned i = 0; i < numNodes; i++) {
         printLog(nodeId, "<EM>: staleness: %u", staleness);
         printLog(nodeId, "<EM>: %u sync epochs and %u async epochs",
                 numSyncEpochs, numAsyncEpochs);
-        printLog(nodeId, "<EM>: Using %u forward lambdas and %u bacward lambdas",
-                numLambdasForward, numLambdasBackward);
+        printLog(nodeId, "<EM>: Using %u lambdas", numLambdasForward);
         printLog(nodeId, "<EM>: Initialization takes %.3lf ms", timeInit);
 
-        float avgDenom = static_cast<float>(numSyncEpochs);
-        // if (pipeline) avgDenom = static_cast<float>(numSyncEpochs * numLambdasForward);
-        printLog(nodeId, "<EM>: Forward:  Time per stage:");
-        for (unsigned i = 0; i < numLayers; ++i) {
-            printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i,
-                    vecTimeAggregate[i] / (float)(avgDenom));
-            printLog(nodeId, "<EM>    ApplyVertex   %2u  %.3lf ms", i,
-                    vecTimeApplyVtx[i] / (float)avgDenom);
-            printLog(nodeId, "<EM>    Scatter       %2u  %.3lf ms", i,
-                    vecTimeScatter[i] / (float)avgDenom);
-            printLog(nodeId, "<EM>    ApplyEdge     %2u  %.3lf ms", i,
-                    vecTimeApplyEdg[i] / (float)avgDenom);
-        }
-        printLog(nodeId, "<EM>: Total forward-prop time %.3lf ms",
-                timeForwardProcess / (float)avgDenom);
+        if (false) {
+            float avgDenom = static_cast<float>(numSyncEpochs);
+            // if (pipeline) avgDenom = static_cast<float>(numSyncEpochs * numLambdasForward);
+            printLog(nodeId, "<EM>: Forward:  Time per stage:");
+            for (unsigned i = 0; i < numLayers; ++i) {
+                printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i,
+                        vecTimeAggregate[i] / (float)(avgDenom));
+                printLog(nodeId, "<EM>    ApplyVertex   %2u  %.3lf ms", i,
+                        vecTimeApplyVtx[i] / (float)avgDenom);
+                printLog(nodeId, "<EM>    Scatter       %2u  %.3lf ms", i,
+                        vecTimeScatter[i] / (float)avgDenom);
+                printLog(nodeId, "<EM>    ApplyEdge     %2u  %.3lf ms", i,
+                        vecTimeApplyEdg[i] / (float)avgDenom);
+            }
+            printLog(nodeId, "<EM>: Total forward-prop time %.3lf ms",
+                    timeForwardProcess / (float)avgDenom);
 
-        printLog(nodeId, "<EM>: Backward: Time per stage:");
-        for (unsigned i = numLayers; i < 2 * numLayers; i++) {
-            printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i,
-                    vecTimeAggregate[i] / (float)(avgDenom));
-            printLog(nodeId, "<EM>    ApplyVertex   %2u  %.3lf ms", i,
-                    vecTimeApplyVtx[i] / (float)avgDenom);
-            printLog(nodeId, "<EM>    Scatter       %2u  %.3lf ms", i,
-                    vecTimeScatter[i] / (float)avgDenom);
-            printLog(nodeId, "<EM>    ApplyEdge     %2u  %.3lf ms", i,
-                    vecTimeApplyEdg[i] / (float)avgDenom);
-        }
-        printLog(nodeId, "<EM>: Total backward-prop time %.3lf ms",
-                timeBackwardProcess / (float)avgDenom);
+            printLog(nodeId, "<EM>: Backward: Time per stage:");
+            for (unsigned i = numLayers; i < 2 * numLayers; i++) {
+                printLog(nodeId, "<EM>    Aggregation   %2u  %.3lf ms", i,
+                        vecTimeAggregate[i] / (float)(avgDenom));
+                printLog(nodeId, "<EM>    ApplyVertex   %2u  %.3lf ms", i,
+                        vecTimeApplyVtx[i] / (float)avgDenom);
+                printLog(nodeId, "<EM>    Scatter       %2u  %.3lf ms", i,
+                        vecTimeScatter[i] / (float)avgDenom);
+                printLog(nodeId, "<EM>    ApplyEdge     %2u  %.3lf ms", i,
+                        vecTimeApplyEdg[i] / (float)avgDenom);
+            }
+            printLog(nodeId, "<EM>: Total backward-prop time %.3lf ms",
+                    timeBackwardProcess / (float)avgDenom);
 
-        printLog(nodeId, "<EM>: Final accuracy %.3lf", accuracy);
+            printLog(nodeId, "<EM>: Final accuracy %.3lf", accuracy);
+        }
 
         printLog(nodeId, "Relaunched Lambda Cnt: %u", resComm->getRelaunchCnt());
     }
     nodeManager.barrier();
-}
+// }
 
     nodeManager.barrier();
     double sum = 0.0;
@@ -378,13 +340,13 @@ Engine::parseArgs(int argc, char *argv[]) {
     ("ctrlport", boost::program_options::value<unsigned>(), "Port start for control communication")
     ("nodeport", boost::program_options::value<unsigned>(), "Port for node manager")
 
-    ("numlambdasforward", boost::program_options::value<unsigned>()->default_value(unsigned(1), "5"), "Number of lambdas to request at forward")
-    ("numlambdasbackward", boost::program_options::value<unsigned>()->default_value(unsigned(1), "20"), "Number of lambdas to request at backward")
+    ("numlambdas", boost::program_options::value<unsigned>()->default_value(unsigned(1), "5"), "Number of lambdas to request at forward")
     ("numEpochs", boost::program_options::value<unsigned>(), "Number of epochs to run")
     ("validationFrequency", boost::program_options::value<unsigned>(), "Number of epochs to run before validation")
 
     ("MODE", boost::program_options::value<unsigned>(), "0: Lambda, 1: GPU, 2: CPU")
     ("pipeline", boost::program_options::value<bool>(), "0: Sequential, 1: Pipelined")
+    ("gnn", boost::program_options::value<std::string>(), "GNN type: [GCN | GAT]")
     ("staleness", boost::program_options::value<unsigned>()->default_value(unsigned(UINT_MAX)),
       "Bound on staleness")
     ("timeout_ratio", boost::program_options::value<unsigned>()->default_value(unsigned(1)),
@@ -451,11 +413,8 @@ Engine::parseArgs(int argc, char *argv[]) {
     unsigned node_port = vm["nodeport"].as<unsigned>();
     nodeManager.setNodePort(node_port);
 
-    assert(vm.count("numlambdasforward"));
-    numLambdasForward = vm["numlambdasforward"].as<unsigned>();
-
-    assert(vm.count("numlambdasbackward"));
-    numLambdasBackward = vm["numlambdasbackward"].as<unsigned>();
+    assert(vm.count("numlambdas"));
+    numLambdasForward = vm["numlambdas"].as<unsigned>();
 
     assert(vm.count("numEpochs"));
     numEpochs = vm["numEpochs"].as<unsigned>();
@@ -469,6 +428,17 @@ Engine::parseArgs(int argc, char *argv[]) {
     assert(vm.count("pipeline"));
     pipeline = vm["pipeline"].as<bool>();
 
+    assert(vm.count("gnn"));
+    std::string gnn_name = vm["gnn"].as<std::string>();
+    if (gnn_name == "GCN") {
+        gnn_type = GNN::GCN;
+    } else if (gnn_name == "GAT") {
+        gnn_type = GNN::GAT;
+    } else {
+        std::cerr << "Unsupported GNN type: " << gnn_name << std::endl;
+        exit(-1);
+    }
+
     assert(vm.count("staleness"));
     staleness = vm["staleness"].as<unsigned>();
 
@@ -481,6 +451,7 @@ Engine::parseArgs(int argc, char *argv[]) {
              myPrIpFile.c_str(), undirected ? "true" : "false", data_port, ctrl_port, node_port);
 }
 
+/******************************** File utils ********************************/
 /**
  *
  * Read in the layer configuration file.
@@ -632,19 +603,151 @@ void Engine::loadChunks() {
         unsigned lowBound = cid * chunkSize;
         unsigned upBound = std::min(lowBound + chunkSize, vtcsCnt);
 
-        aggregateQueue.push(Chunk{cid, nodeId * numLambdasForward + cid,
-                                  lowBound, upBound, 0, PROP_TYPE::FORWARD, 1,
-                                  true});
+        schQueue.push(Chunk { cid, nodeId * numLambdasForward + cid,
+                            lowBound, upBound, 0, PROP_TYPE::FORWARD,
+                            START_EPOCH + 1, true });
     }
 
-    currEpoch = 0;
-
+    currEpoch = START_EPOCH;
     // Set the initial bound chunk as epoch 1 layer 0
-    minEpoch = 1;
+    minEpoch = currEpoch + 1;
     memset(numFinishedEpoch.data(), 0,
            sizeof(unsigned) * numFinishedEpoch.size());
     memset(numFinishedEpoch.data(), 0,
            sizeof(unsigned) * nodesFinishedEpoch.size());
 
     finishedChunks = 0;
+}
+
+/********************************* SC utils *********************************/
+void Engine::verticesPushOut(unsigned receiver, unsigned totCnt,
+                             unsigned *lvids, FeatType *inputTensor,
+                             unsigned featDim, Chunk &c) {
+    zmq::message_t msg(DATA_HEADER_SIZE +
+                       (sizeof(unsigned) + sizeof(FeatType) * featDim) *
+                           totCnt);
+    char *msgPtr = (char *)(msg.data());
+    sprintf(msgPtr, NODE_ID_HEADER, receiver);
+    msgPtr += NODE_ID_DIGITS;
+    unsigned featLayer;
+    if (gnn_type == GNN::GCN) { // YIFAN: fix this
+        featLayer = c.dir == PROP_TYPE::FORWARD
+                  ? c.layer : c.layer - 1;
+    } else if (gnn_type == GNN::GAT) {
+        featLayer = c.layer - 1;
+    }
+    populateHeader(msgPtr, nodeId, totCnt, featDim, featLayer, c.dir);
+    msgPtr += sizeof(unsigned) * 5;
+
+    for (unsigned i = 0; i < totCnt; ++i) {
+        *(unsigned *)msgPtr = graph.localToGlobalId[lvids[i]];
+        msgPtr += sizeof(unsigned);
+        FeatType *dataPtr = getVtxFeat(inputTensor, lvids[i], featDim);
+        memcpy(msgPtr, dataPtr, sizeof(FeatType) * featDim);
+        msgPtr += sizeof(FeatType) * featDim;
+    }
+    commManager.rawMsgPushOut(msg);
+}
+/********************************* AE utils *********************************/
+// reshape vtcs tensor to edgs tensor. Each element in edgsTensor is a reference
+// to a vertex feature. Both src vtx features and dst vtx features included in
+// edgsTensor. [srcV Feats (local inEdge cnt); dstV Feats (local inEdge cnt)]
+FeatType **Engine::srcVFeats2eFeats(FeatType *vtcsTensor, FeatType *ghostTensor,
+                                    unsigned vtcsCnt, unsigned featDim) {
+    FeatType **eVtxFeatsBuf = new FeatType *[2 * graph.localInEdgeCnt];
+    FeatType **eSrcVtxFeats = eVtxFeatsBuf;
+    FeatType **eDstVtxFeats = eSrcVtxFeats + graph.localInEdgeCnt;
+
+    unsigned long long edgeItr = 0;
+    for (unsigned lvid = 0; lvid < graph.localVtxCnt; ++lvid) {
+        for (unsigned long long eid = graph.forwardAdj.columnPtrs[lvid];
+             eid < graph.forwardAdj.columnPtrs[lvid + 1]; ++eid) {
+            unsigned srcVid = graph.forwardAdj.rowIdxs[eid];
+            if (srcVid < graph.localVtxCnt) {
+                eSrcVtxFeats[edgeItr] = getVtxFeat(vtcsTensor, srcVid, featDim);
+            } else {
+                eSrcVtxFeats[edgeItr] = getVtxFeat(
+                    ghostTensor, srcVid - graph.localVtxCnt, featDim);
+            }
+            eDstVtxFeats[edgeItr] = getVtxFeat(vtcsTensor, lvid, featDim);
+            ++edgeItr;
+        }
+    }
+
+    return eVtxFeatsBuf;
+}
+
+// similar to srcVFeats2eFeats, but based on outEdges of local vertices.
+// [dstV Feats (local outEdge cnt); srcV Feats (local outEdge cnt)]
+FeatType **Engine::dstVFeats2eFeats(FeatType *vtcsTensor, FeatType *ghostTensor,
+                                    unsigned vtcsCnt, unsigned featDim) {
+    FeatType **eVtxFeatsBuf = new FeatType *[2 * graph.localOutEdgeCnt];
+    FeatType **eSrcVtxFeats = eVtxFeatsBuf;
+    FeatType **eDstVtxFeats = eSrcVtxFeats + graph.localOutEdgeCnt;
+
+    unsigned long long edgeItr = 0;
+    for (unsigned lvid = 0; lvid < graph.localVtxCnt; ++lvid) {
+        for (unsigned long long eid = graph.backwardAdj.rowPtrs[lvid];
+             eid < graph.backwardAdj.rowPtrs[lvid + 1]; ++eid) {
+            unsigned srcVid = graph.backwardAdj.columnIdxs[eid];
+            if (srcVid < graph.localVtxCnt) {
+                eSrcVtxFeats[edgeItr] = getVtxFeat(vtcsTensor, srcVid, featDim);
+            } else {
+                eSrcVtxFeats[edgeItr] = getVtxFeat(
+                    ghostTensor, srcVid - graph.localVtxCnt, featDim);
+            }
+            eDstVtxFeats[edgeItr] = getVtxFeat(vtcsTensor, lvid, featDim);
+            ++edgeItr;
+        }
+    }
+
+    return eVtxFeatsBuf;
+}
+
+unsigned Engine::getAbsLayer(const Chunk &chunk) {
+    return chunk.dir == PROP_TYPE::FORWARD
+            ? (chunk.layer)
+            : (2 * numLayers - 1 - chunk.layer);
+}
+
+/******************************** Layer utils ********************************/
+Chunk Engine::incLayerGCN(const Chunk &chunk) {
+    Chunk nChunk = chunk;
+    if (nChunk.dir == PROP_TYPE::FORWARD) { // Forward pass
+        nChunk.layer++;
+        if (nChunk.layer == numLayers) { // Forward: last layer
+            nChunk.dir = PROP_TYPE::BACKWARD; // Switch dir
+            // Merge the forward and backward pass of the last layer
+            nChunk.layer--;
+        }
+    } else { // Backward pass
+        if (nChunk.layer == 0) { // Epoch ends. Switch dir and inc epoch
+            nChunk.dir = PROP_TYPE::FORWARD;
+            nChunk.epoch++;
+        } else {
+            nChunk.layer--;
+        }
+    }
+    return nChunk;
+}
+
+Chunk Engine::incLayerGAT(const Chunk &chunk) {
+    Chunk nChunk = chunk;
+    if (nChunk.dir == PROP_TYPE::FORWARD) { // Forward
+        nChunk.layer++;
+    } else { // Backward
+        if (nChunk.layer == 0) { // Epoch ends. Switch dir and inc epoch
+            nChunk.dir = PROP_TYPE::FORWARD;
+            nChunk.vertex = true; // reset for a new epoch
+            nChunk.epoch++;
+        } else {
+            nChunk.layer--;
+        }
+    }
+    return nChunk;
+}
+
+bool Engine::isLastLayer(const Chunk &chunk) {
+    return chunk.dir == PROP_TYPE::BACKWARD &&
+           chunk.layer == 0 && chunk.vertex;
 }

@@ -6,7 +6,7 @@
 
 cd $( dirname $0 )/..
 
-contexts=$( cat ec2man/machines | awk '{print $2}' | uniq )
+contexts='weight graph'
 EC2MAN_CMD="python3 -m ec2man"
 
 for ctx in ${contexts[@]}; do

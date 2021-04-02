@@ -60,6 +60,9 @@ struct WeightTensor {
     // Async update will directly apply.
     std::string tryApplyUpdate(float lr, FeatType *updTensor = NULL);
     std::string tryApplyUpdate(AdamOptimizer *adamOpt, unsigned layer, FeatType *updTensor = NULL);
+    // Simulate weight update
+    std::string tryApplyUpdateFake(float lr, FeatType *updTensor = NULL);
+    std::string tryApplyUpdateFake(AdamOptimizer *adamOpt, unsigned layer, FeatType *updTensor = NULL);
 
     void setLocalUpdTot(unsigned lut) {
         std::lock_guard<std::mutex> lg(*umtx);

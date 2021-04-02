@@ -1,0 +1,103 @@
+#!/bin/bash
+
+##
+## Running the reddit GCN benchmark
+##
+## Cluster configuration: c5.2xlarge (10), c5.xlarge (4)
+##
+
+cd $( dirname $0 )/../
+EC2MAN_CMD='python3 -m ec2man'
+
+PARAMS=''
+MODE=
+NUM_LAMBDA=40
+STALENESS=4294967295
+EPOCHS=100
+TARGET_ACC=0.9
+
+while (( "$#" )); do
+	case $1 in
+		--m|-mode)
+			MODE="$2"
+			shift
+			shift
+			;;
+		--l|-lambdas)
+			NUM_LAMBDA="$2"
+			shift
+			shift
+			;;
+		--s|-staleness)
+			STALENESS="$2"
+			shift
+			shift
+			;;
+		--e|-epochs)
+			EPOCHS="$2"
+			shift
+			shift
+			;;
+		--t|-target)
+			TARGET_ACC="$2"
+			shift
+			shift
+			;;
+		-*|--*)
+			echo "Unrecognized flag $1"
+			exit 1
+			;;
+		*)
+			PARAMS+=' '"\"$1\""
+			shift
+			;;
+	esac
+done
+eval set -- "$PARAMS"
+
+rm ec2man/machines
+rm ec2man/contexts/*
+
+GRAPH_TYPE='c5.2xlarge'
+WEIGHT_AMI='ami-0901fc9a7bc310a8a'
+GRAPH_AMI='ami-07aec0eb32327b38d'
+case $MODE in
+	'gpu')
+		GRAPH_AMI='ami-01c390943eecea45c'
+		GRAPH_TYPE=p3.2xlarge
+		;;
+	'cpu')
+		GRAPH_AMI='ami-04934e5a63d144d88'
+		;;
+esac
+
+
+$EC2MAN_CMD allocate --ami $GRAPH_AMI --type $GRAPH_TYPE --cnt 10 --ctx graph
+$EC2MAN_CMD allocate --ami $WEIGHT_AMI --type c5.xlarge --cnt 4 --ctx weight
+$EC2MAN_CMD add nfs i-098eda4a36fda9788
+
+$EC2MAN_CMD setup
+
+./gnnman/wait-for-ssh.sh
+
+./gnnman/setup-cluster
+
+./gnnman/mount-nfs-server
+
+#./gnnman/send-source --force
+#
+#./gnnman/build-system $MODE
+
+STALENESS_FLAGS=
+if [[ $STALENESS != 4294967295 ]]; then
+	STALENESS_FLAGS="--p --s=$STALENESS"
+fi
+./run/run-dorylus reddit --l=$NUM_LAMBDA --e=$EPOCHS $STALENESS_FLAGS $MODE --t=$TARGET_ACC --g=GAT
+
+
+for ctx in weight graph; do
+	$EC2MAN_CMD $ctx all terminate -f
+done
+
+rm ec2man/contexts/*
+rm ec2man/machines

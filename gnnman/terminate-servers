@@ -1,0 +1,11 @@
+#!/bin/bash
+
+cd $( dirname $0 )/../
+EC2MAN_CMD='python3 -m ec2man'
+
+for ctx in graph weight; do
+	$EC2MAN_CMD $ctx all terminate -f
+done
+
+rm ec2man/machines
+rm ec2man/contexts/*

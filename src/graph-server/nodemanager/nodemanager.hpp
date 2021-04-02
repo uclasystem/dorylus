@@ -16,7 +16,8 @@ class Engine;
 
 /** Node message topic & contents. */
 #define NODE_MESSAGE_TOPIC 'N'
-enum NodeMessageType { NODENONE = -1, MASTERUP = -2, WORKERUP = -3, INITDONE = -4, BARRIER = -5, EPOCH = -6 };
+enum NodeMessageType { NODENONE = -1, MASTERUP = -2, WORKERUP = -3, INITDONE = -4, BARRIER = -5,
+                       MINEPOCH = -6, MAXEPOCH = -7 };
 
 
 /** Structure of a node managing message. */
@@ -24,8 +25,9 @@ typedef struct nodeMessage {
     char topic;
     NodeMessageType messageType;
     unsigned info;
-    nodeMessage(NodeMessageType mType, unsigned _info = 0)
-      : topic(NODE_MESSAGE_TOPIC), messageType(mType), info(_info) { }
+    unsigned id;
+    nodeMessage(NodeMessageType mType, unsigned _info = 0, unsigned _id = UINT_MAX)
+      : topic(NODE_MESSAGE_TOPIC), messageType(mType), info(_info), id(_id) { }
 } NodeMessage;
 
 
@@ -59,8 +61,10 @@ public:
     void barrier();
 
     // Bounded staleness methods
-    void sendEpochUpdate(unsigned currEpoch);
+    bool parseNodeMsg(NodeMessage &nMsg);
+    void sendEpochUpdate(unsigned epoch);
     void readEpochUpdates();
+    unsigned syncCurrEpoch(unsigned epoch);
 
     bool standAloneMode();
     Node& getNode(unsigned i);

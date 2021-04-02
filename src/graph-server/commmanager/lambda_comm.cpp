@@ -9,19 +9,22 @@ unsigned LambdaComm::nodeId;
  *
  */
 LambdaComm::LambdaComm(Engine *_engine) :
-        halt(false), async(false), outdateEpoch(-1),
         nodeIp(_engine->nodeManager.getNode(_engine->nodeId).prip),
-        numNodes(_engine->numNodes),
-        numChunk(_engine->numLambdasForward),
-        relaunchCnt(0),
+        numNodes(_engine->numNodes), numChunk(_engine->numLambdasForward),
+        halt(false), relaunchCnt(0),
         dport(_engine->dataserverPort), wport(_engine->weightserverPort),
-        savedNNTensors(_engine->savedNNTensors),
-        resLock(_engine->scatQueueLock), resQueue(_engine->scatterQueue),
-        aggLock(_engine->aggQueueLock), aggQueue(_engine->aggregateQueue),
-        timeoutRatio(_engine->timeoutRatio),
+        savedNNTensors(_engine->savedNNTensors), savedETensors(_engine->savedEdgeTensors),
+        timeoutRatio(_engine->timeoutRatio), LAMBDA_NAME(_engine->lambdaName),
         ctx(1), frontend(ctx, ZMQ_ROUTER), backend(ctx, ZMQ_DEALER),
         numListeners(4), engine(_engine) { // TODO: Decide numListeners.
     nodeId = _engine->nodeId;
+//    if (engine->gnn_type == GNN::GCN) {
+//        LAMBDA_NAME = "yifan-gcn";
+//    } else if (engine->gnn_type == GNN::GAT) {
+//        LAMBDA_NAME = "yifan-gat";
+//    } else {
+//        LAMBDA_NAME = "invalid_lambda_name";
+//    }
 
     loadWServerIps(_engine->weightserverIPFile);
     setupAwsClient();
@@ -43,14 +46,8 @@ LambdaComm::~LambdaComm() {
     ctx.close();
 }
 
-void LambdaComm::setAsync(bool _async, unsigned currEpoch) {
-    async = _async;
-    outdateEpoch = (int)currEpoch;
-}
-
 void LambdaComm::NNCompute(Chunk &chunk) {
-    // printLog(nodeId, "NNComp: %u:%u:%s", chunk.layer, chunk.localId,
-    //   chunk.dir == PROP_TYPE::FORWARD ? "F" : "B");
+    // printLog(nodeId, "NNComp: chunk %s", chunk.str().c_str());
     timeoutMtx.lock();
     if (timeoutTable.find(chunk) != timeoutTable.end()) {
         printLog(nodeId, "ERROR! duplicated chunk %s", chunk.str().c_str());
@@ -59,18 +56,6 @@ void LambdaComm::NNCompute(Chunk &chunk) {
         invokeLambda(chunk);
     }
     timeoutMtx.unlock();
-}
-
-void LambdaComm::NNSync() {
-    while (resQueue.size() != engine->numLambdasForward) {
-        usleep(20*1000);
-    }
-
-    resLock.lock();
-    for (unsigned u = 0; u < engine->numLambdasForward; ++u) {
-        resQueue.pop();
-    }
-    resLock.unlock();
 }
 
 bool LambdaComm::NNRecv(Chunk &chunk) {
@@ -85,63 +70,26 @@ bool LambdaComm::NNRecv(Chunk &chunk) {
     }
 
     unsigned exeTime = timestamp_ms() - entry->second;
-    if (async) engine->vecTimeLambdaWait[chunk.dir * engine->numLayers + chunk.layer] += exeTime;
+    // if (engine->async) engine->vecTimeLambdaWait[chunk.dir * engine->numLayers + chunk.layer] += exeTime;
     timeoutTable.erase(chunk);
 
-    auto recordFound = recordTable.find(getAbsLayer(chunk, 2));
-    if (recordFound == recordTable.end()) {
-        recordTable[getAbsLayer(chunk, 2)] = exeTime;
-    } else {
-        recordTable[getAbsLayer(chunk, 2)] = recordFound->second * 0.95 + exeTime * (1.0 - 0.95);
+    if (chunk.vertex) {
+        auto recordFound = recordTable.find(engine->getAbsLayer(chunk));
+        if (recordFound == recordTable.end()) {
+            recordTable[engine->getAbsLayer(chunk)] = exeTime;
+        } else {
+            recordTable[engine->getAbsLayer(chunk)] = recordFound->second * 0.95 + exeTime * (1.0 - 0.95);
+        }
     }
     timeoutMtx.unlock();
 
-    // filter out outdate chunks after switching sync/async
-    if ((int)(chunk.epoch) <= outdateEpoch) {
-        return true;
-    }
-
-    // If bounded-staleness enabled, increment the finished chunks for this epoch
-    // If the min epoch has finished, allow chunks to move to the next epoch
-    // TODO (JOHN): Consider using __sync_fetch ops here to make code cleaner and
-    //  still achieve synchronization
-    Chunk nextChunk = incLayer(chunk, 2);
-    if (async && isLastLayer(chunk)) {
-        if (engine->staleness != UINT_MAX) {
-            unsigned ind = chunk.epoch % (engine->staleness + 1);
-            engine->finishedChunkLock.lock();
-            if (++(engine->numFinishedEpoch[ind]) == numChunk) {
-                engine->finishedChunkLock.unlock();
-                // printLog(nodeId, "FINISHED epoch %u. Total finished %u", chunk.epoch, engine->nodesFinishedEpoch[ind]+1);
-                engine->numFinishedEpoch[ind] = 0;
-
-                engine->sendEpochUpdate(chunk.epoch);
-                engine->finishedNodeLock.lock();
-                if (++(engine->nodesFinishedEpoch[ind]) == numNodes + 1) {
-                    ++(engine->minEpoch);
-                    engine->nodesFinishedEpoch[ind] = 0;
-                }
-                engine->finishedNodeLock.unlock();
-            } else {
-                engine->finishedChunkLock.unlock();
-            }
-        }
-
-        aggLock.lock();
-        aggQueue.push(nextChunk);
-        aggLock.unlock();
-    } else {
-        resLock.lock();
-        resQueue.push(nextChunk);
-        resLock.unlock();
-    }
-
+    NNRecvCallback(engine, chunk);
     return true;
 }
 
 void LambdaComm::asyncRelaunchLoop() {
 #define MIN_TIMEOUT 500u     // at least wait for MIN_TIMEOUT ms before relaunching
-#define TIMEOUT_PERIOD 3000u // wait for up to TIMEOUT_PERIOD ms before relaunching
+#define TIMEOUT_PERIOD 6000u // wait for up to TIMEOUT_PERIOD ms before relaunching
 #define SLEEP_PERIOD (MIN_TIMEOUT * 1000) // sleep SLEEP_PERIOD us and then check the condition.
 
     if (!relaunching) return;
@@ -149,14 +97,24 @@ void LambdaComm::asyncRelaunchLoop() {
     while (!halt) {
         unsigned currTS = timestamp_ms();
         for (auto &kv : timeoutTable) {
-            auto found = recordTable.find(getAbsLayer(kv.first, 2));
+            auto found = recordTable.find(engine->getAbsLayer(kv.first));
             if (found == recordTable.end()) {
                 continue; // No lambda finished.
             }
-            if (currTS - kv.second > std::max(MIN_TIMEOUT, timeoutRatio * found->second)) {
-                printLog(nodeId, "curr %u, timed %u, chunk %s", currTS - kv.second, 3 * found->second,
-                    kv.first.str().c_str());
-                relaunchLambda(kv.first);
+            unsigned currDur = currTS - kv.second;
+            if (kv.first.vertex) {
+                unsigned timeout = std::max(MIN_TIMEOUT, timeoutRatio * found->second);
+                if (currDur > timeout) {
+                    printLog(nodeId, "curr %u, timed %u, chunk %s", currDur, timeout,
+                        kv.first.str().c_str());
+                    relaunchLambda(kv.first);
+                }
+            } else {
+                if (currTS - kv.second > TIMEOUT_PERIOD) {
+                    printLog(nodeId, "curr %u, timed %u, chunk %s", currDur, TIMEOUT_PERIOD,
+                        kv.first.str().c_str());
+                    relaunchLambda(kv.first);
+                }
             }
         }
         usleep(SLEEP_PERIOD);
@@ -182,11 +140,7 @@ void LambdaComm::relaunchLambda(const Chunk &chunk) {
 // LAMBDA INVOCATION AND RETURN FUNCTIONS
 void LambdaComm::invokeLambda(const Chunk &chunk) {
     Aws::Lambda::Model::InvokeRequest invReq;
-    if (chunk.vertex) { // vertex NN
-        invReq.SetFunctionName(LAMBDA_VTX_NN);
-    } else {
-        // TODO: set edge NN func name here
-    }
+    invReq.SetFunctionName(LAMBDA_NAME);
     invReq.SetInvocationType(Aws::Lambda::Model::InvocationType::RequestResponse);
     invReq.SetLogType(Aws::Lambda::Model::LogType::Tail);
     std::shared_ptr<Aws::IOStream> payload = Aws::MakeShared<Aws::StringStream>("LambdaInvoke");
@@ -309,6 +263,7 @@ void LambdaComm::loadWServerIps(std::string wsFile) {
             continue;
         char *addr = strdup(line.c_str());
         wservers.push_back(addr);
+        free(addr);
     }
 }
 
@@ -350,34 +305,4 @@ void LambdaComm::startRelaunchThd() {
 void LambdaComm::stopRelaunchThd() {
     relaunchThd->join();
     delete relaunchThd;
-}
-
-
-unsigned getAbsLayer(const Chunk &chunk, unsigned numLayers) {
-    // YIFAN: I set the "numLayers" to 10 here to avoid any conflicts
-    return chunk.dir == PROP_TYPE::FORWARD ? (chunk.layer) : (2 * numLayers - 1 - chunk.layer);
-}
-
-Chunk incLayer(const Chunk &chunk, unsigned numLayers) {
-    Chunk nextChunk = chunk;
-    if (chunk.dir == PROP_TYPE::FORWARD && chunk.layer < numLayers - 1) {
-        // Keep dir as FORWARD and inc layer
-        nextChunk.layer++;
-    } else if (chunk.dir == PROP_TYPE::FORWARD && chunk.layer == numLayers - 1) {
-        // Change dir to BACKWARD and dec layer (the final layer backawrd lambda is merged into the forward lambda)
-        nextChunk.dir = PROP_TYPE::BACKWARD;
-        nextChunk.layer--;
-    } else if (chunk.dir == PROP_TYPE::BACKWARD && chunk.layer > 0) {
-        // Keep dir as BACKWARD and dec layer
-        nextChunk.layer--;
-    } else if (chunk.dir == PROP_TYPE::BACKWARD && chunk.layer == 0) {
-        // Change dir to FORWARD and inc epoch
-        nextChunk.dir = PROP_TYPE::FORWARD;
-        nextChunk.epoch++;
-    }
-    return nextChunk;
-}
-
-bool isLastLayer(const Chunk &chunk) {
-    return chunk.dir == PROP_TYPE::BACKWARD && chunk.layer == 0;
 }

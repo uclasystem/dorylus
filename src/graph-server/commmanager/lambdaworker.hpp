@@ -18,6 +18,7 @@
 #include <vector>
 #include <zmq.hpp>
 #include <unistd.h>
+#include <unordered_map>
 
 #include "../utils/utils.hpp"
 #include "../parallel/lock.hpp"
@@ -42,7 +43,10 @@ public:
     // Continuously listens for incoming lambda connections.
     void work(unsigned wid);
     void sendTensors(zmq::message_t& client_id, Chunk &chunk);
+    void sendEdgeTensor(zmq::message_t& client_id, Chunk& chunk);
+    void sendEdgeInfo(zmq::message_t& client_id, Chunk& chunk);
     void recvTensors(zmq::message_t& client_id, Chunk &chunk);
+    void recvETensors(zmq::message_t& client_id, Chunk &chunk);
     void recvEvalData(zmq::message_t& client_id, Chunk &chunk);
     void markFinish(zmq::message_t& client_id, Chunk &chunk);
 
@@ -52,6 +56,10 @@ public:
 
     void sendTensor(Matrix &tensor, Chunk &chunk, unsigned &more);
     int recvTensor(Chunk &chunk);
+    int recvETensor(Chunk& chunk);
+
+    void sendEdgeTensorChunk(Matrix& eTensor, Chunk& chunk);
+    void sendTensor(Chunk& chunk);
 
     void sendRefChunk(Matrix &srcMat, zmq::message_t& client_id, unsigned partId, bool forward);
 

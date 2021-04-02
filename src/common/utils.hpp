@@ -39,12 +39,13 @@ enum OP {
     REQ_EDG_FORWARD, PUSH_EDG_FORWARD, PULL_EDG_FORWARD,
     REQ_EDG_BACKWARD, PUSH_EDG_BACKWARD, PULL_EDG_BACKWARD,
     PULL_EDG_EVAL, PUSH_EDG_EVAL,
-    PUSH, PULL, FIN, EVAL,
+    PUSH, PULL, PULLE, PUSHE, PULLEINFO, FIN, EVAL,
     RESP, INFO, TERM
 };
 enum TYPE { GRAD, AH, Z, ACT, LAB };
 enum PROP_TYPE { FORWARD, BACKWARD };
 enum AGGREGATOR { WSUM, MEAN, ADD, MIN, MAX };
+enum GNN { GCN, GAT };
 
 enum CONVERGE_STATE { EARLY, CLOSE, DONE, FLUCT, NUM_STATE };
 static std::string CONVERGE_STATE_STR[CONVERGE_STATE::NUM_STATE] = {
@@ -52,6 +53,9 @@ static std::string CONVERGE_STATE_STR[CONVERGE_STATE::NUM_STATE] = {
 };
 
 #define ERR_HEADER_FIELD UINT_MAX
+#define NOT_FOUND_ERR_FIELD (UINT_MAX - 1)
+#define DUPLICATE_REQ_ERR_FIELD (UINT_MAX - 2)
+#define CHUNK_DNE_ERR (UINT_MAX - 3)
 
 #define TRAIN_PORTION 0.66
 #define VAL_PORTION 0.1
@@ -74,8 +78,10 @@ struct Chunk {
         return
             epoch > rhs.epoch || (epoch == rhs.epoch && (
             dir > rhs.dir || (dir == rhs.dir && (
-            layer > rhs.layer || (layer == rhs.layer && (
-            (vertex && !rhs.vertex) || (vertex == rhs.vertex && (
+            (dir == PROP_TYPE::FORWARD && layer > rhs.layer) ||
+            (dir == PROP_TYPE::BACKWARD && layer < rhs.layer) || (layer == rhs.layer && (
+            (dir == PROP_TYPE::FORWARD && !vertex && rhs.vertex) ||
+            (dir == PROP_TYPE::BACKWARD && vertex && !rhs.vertex) || (vertex == rhs.vertex && (
             localId > rhs.localId || (localId == rhs.localId && (
             globalId > rhs.globalId || (globalId == rhs.globalId && (
             lowBound > rhs.lowBound || (lowBound == rhs.lowBound && (
@@ -84,17 +90,17 @@ struct Chunk {
 
     std::string str() const {
         char buf[128];
-        sprintf(buf, "%u:%s:%u:%u/%u", epoch, dir == PROP_TYPE::FORWARD ? "F" : "B",
-          layer, localId, globalId);
+        sprintf(buf, "%u:%s:%u:%u/%u: vtx %u", epoch, dir == PROP_TYPE::FORWARD ? "F" : "B",
+          layer, localId, globalId, vertex);
 
         return std::string(buf);
     }
 
     bool isFirstLayer() {
-        return dir == PROP_TYPE::FORWARD && layer == 0;
+        return dir == PROP_TYPE::FORWARD && layer == 0 && vertex;
     }
     bool isLastLayer() {
-        return dir == PROP_TYPE::BACKWARD && layer == 0;
+        return dir == PROP_TYPE::BACKWARD && layer == 0 && vertex;
     }
 };
 
@@ -149,10 +155,25 @@ serialize(char *buf, unsigned offset, T val) {
 
 template<class T>
 static inline T
+parse(const void* data, unsigned offset) {
+    char* buf = (char*)data;
+    T val;
+    std::memcpy(&val, buf + (offset * sizeof(T)), sizeof(T));
+    return val;
+}
+
+template<class T>
+static inline T
 parse(const char *buf, unsigned offset) {
     T val;
     std::memcpy(&val, buf + (offset * sizeof(T)), sizeof(T));
     return val;
+}
+
+static inline std::string
+parseName(const void* data) {
+    char* buf = (char*)data;
+    return std::string(buf + sizeof(unsigned));
 }
 
 static inline std::string

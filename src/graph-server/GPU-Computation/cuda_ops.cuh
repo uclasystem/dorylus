@@ -5,6 +5,22 @@ struct activateDerivative_functor {
     }
 };
 
+struct leakyRelu_functor {
+    leakyRelu_functor(float coef_) : coef(coef_) {}
+    __host__ __device__ float operator()(const float &x) const {
+        return x > 0 ? x : coef * x;
+    }
+    float coef;
+};
+
+struct leakyReluPrime_functor {
+    leakyReluPrime_functor(float coef_) : coef(coef_) {}
+    __host__ __device__ float operator()(const float &x) const {
+        return x > 0 ? 1 : coef;
+    }
+    float coef;
+};
+
 struct exp_functor {
     exp_functor() {}
     __host__ __device__ float operator()(const float &x) const {

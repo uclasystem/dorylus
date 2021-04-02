@@ -176,6 +176,9 @@ def process_target(ctx, target, args):
     elif target == 'user':
         print(user_name)
 
+    elif target == 'key':
+        print(ssh_key)
+
     # Dump the dshmachines file for the given context.
     elif target == 'dshfile':
         for inst in ctx.instances:

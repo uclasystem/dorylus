@@ -1,4 +1,5 @@
 #include "engine.hpp"
+#include "../utils/utils.hpp"
 
 #include <omp.h>
 
@@ -23,10 +24,6 @@
 
 #ifdef _GPU_ENABLED_
 #include "../commmanager/GPU_comm.hpp"
-extern CuMatrix *NormAdjMatrixIn;
-extern CuMatrix *NormAdjMatrixOut;
-extern CuMatrix *Norms;
-extern ComputingUnit cu;
 #endif
 #ifdef _CPU_ENABLED_
 #include "../commmanager/CPU_comm.hpp"
@@ -54,7 +51,8 @@ void Engine::init(int argc, char *argv[]) {
     numNodes = nodeManager.getNumNodes();
     assert(numNodes <= 256);  // Cluster size limitation.
     outFile += std::to_string(nodeId);
-    commManager.init(nodeManager);
+    // Init data ctx with `dThreads` threads for scatter
+    commManager.init(nodeManager, mode == LAMBDA ? dThreads : 1);
 
     // Set number of layers and number of features in each layer. Also store the
     // prefix sum of config for offset querying use.
@@ -65,7 +63,6 @@ void Engine::init(int argc, char *argv[]) {
         datasetDir + "graph." + std::to_string(nodeId) + ".bin";
     // detect whether preprocessed
     {
-        bool forcePreprocess = false;
         std::ifstream gfile(graphFile.c_str(), std::ios::binary);
         if (!gfile.good() || forcePreprocess) {
             DataLoader dl(datasetDir, nodeId, numNodes, undirected);
@@ -80,13 +77,13 @@ void Engine::init(int argc, char *argv[]) {
         vecTimeApplyVtx.push_back(0.0);
         vecTimeScatter.push_back(0.0);
         vecTimeApplyEdg.push_back(0.0);
+        vecTimeLambdaInvoke.push_back(0.0);
         vecTimeLambdaWait.push_back(0.0);
     }
 
     // Save intermediate tensors during forward phase for backward computation.
-    savedTensors = new std::vector<Matrix>[numLayers];
-    savedNNTensors.resize(numLayers);
-    savedEdgeTensors.resize(numLayers);
+    savedNNTensors.resize(numLayers + 1);
+    savedEdgeTensors.resize(numLayers + 1);
 
     // Track the number of chunks finished at each epoch;
     if (staleness != UINT_MAX) {
@@ -109,9 +106,20 @@ void Engine::init(int argc, char *argv[]) {
     printLog(nodeId, "Loading SparseMatrices for GPU");
     NormAdjMatrixIn = new CuMatrix();
     NormAdjMatrixOut = new CuMatrix();
-    Matrix norms(graph.localVtxCnt, 1, graph.vtxDataVec.data());
-    Norms = new CuMatrix(norms, cu.handle);
-    CuMatrix::MemoryPool.erase(Norms->devPtr);
+    {
+        Matrix onenorms(graph.localVtxCnt, 1, graph.vtxDataVec.data());
+        OneNorms = new CuMatrix(onenorms, cu.handle);
+        CuMatrix::MemoryPool.erase(OneNorms->devPtr); // don't free
+    }
+    {
+        FeatType *zerobuf = new FeatType[graph.localVtxCnt];
+        for (unsigned i = 0; i < graph.localVtxCnt; i++)
+            zerobuf[i] = 0;
+        Matrix zeronorms(graph.localVtxCnt, 1, zerobuf);
+        ZeroNorms = new CuMatrix(zeronorms, cu.handle);
+        CuMatrix::MemoryPool.erase(ZeroNorms->devPtr); // don't free
+        delete[] zerobuf;
+    }
     NormAdjMatrixIn->loadSpCSC(cu.spHandle, graph);
     NormAdjMatrixOut->loadSpCSR(cu.spHandle, graph);
 #endif
@@ -120,20 +128,6 @@ void Engine::init(int argc, char *argv[]) {
     recvCnt = 0;
     recvCntLock.init();
     recvCntCond.init(recvCntLock);
-
-    aggQueueLock.init();
-    scatQueueLock.init();
-
-    // Initialize computation thread barrier.
-    barComp.init(cThreads);
-    // Create computation workers thread pool.
-    computePool = new ThreadPool(cThreads);
-    computePool->createPool();
-    printLog(nodeId, "Created %u computation threads.", cThreads);
-    // Create data communicators thread pool.
-    dataPool = new ThreadPool(dThreads);
-    dataPool->createPool();
-    printLog(nodeId, "Created %u data communicator threads.", dThreads);
 
     if (nodeId == 0) {
         weightComm = new WeightComm(weightserverIPFile, weightserverPort);
@@ -146,28 +140,30 @@ void Engine::init(int argc, char *argv[]) {
 
 #ifdef _LAMBDA_ENABLED_
     if (mode == LAMBDA) {  // Lambda
+        if (gnn_type == GNN::GCN) {
+            lambdaName = "gcn";
+        } else if (gnn_type == GNN::GAT) {
+            lambdaName = "gat";
+        } else {
+            lambdaName = "invalid_lambda_name";
+        }
+
         resComm = new LambdaComm(this);
     }
 #endif
-
 #ifdef _CPU_ENABLED_
     if (mode == CPU) {  // CPU
         resComm = new CPUComm(this);
     }
 #endif
-
 #ifdef _GPU_ENABLED_
     if (mode == GPU) {  // GPU
         resComm = new GPUComm(this);
     }
 #endif
 
-    timeForwardProcess = 0.0;
     timeInit += getTimer();
     printLog(nodeId, "Engine initialization complete.");
-
-    preallocate_tensors(GNN::GCN);
-    start_time = getCurrentTime();
 }
 
 /**
@@ -180,8 +176,6 @@ void Engine::destroy() {
 
     nodeManager.destroy();
     commManager.destroy();
-    computePool->destroyPool();
-    dataPool->destroyPool();
 
     recvCntLock.destroy();
     recvCntCond.destroy();
@@ -190,13 +184,25 @@ void Engine::destroy() {
         weightComm->shutdown();
         delete weightComm;
     }
-
     delete resComm;
 
-    delete[] forwardVerticesInitData;
-    delete[] forwardGhostInitData;
-
-    delete[] localVerticesLabels;
+    // delete[] forwardVerticesInitData;
+    // delete[] forwardGhostInitData;
+    // delete[] localVerticesLabels;
+    for (int i = 0; i < numLayers; i++) {
+        auto &kkv = savedNNTensors[i];
+        for (auto &kv : kkv) {
+            if (kv.first == "A") {
+                continue;
+            }
+            kv.second.free();
+        }
+    }
+    for (auto &kkv : savedEdgeTensors) {
+        for (auto &kv : kkv) {
+            delete[] kv.second;
+        }
+    }
 }
 
 
@@ -205,314 +211,93 @@ void Engine::preallocate_tensors(GNN gnn_type) {
         case GNN::GCN:
             preallocateGCN();
             break;
+        case GNN::GAT:
+            preallocateGAT();
+            break;
         default:
             printLog(nodeId, "Unrecognized benchmark type");
     }
 }
 
-void Engine::preallocateGCN() {
-    unsigned vtxCnt = graph.localVtxCnt;
-
-    // Store input tesnors
-    savedNNTensors[0]["x"] =
-        Matrix(vtxCnt, getFeatDim(0), forwardVerticesInitData);
-    savedNNTensors[0]["fg"] =
-        Matrix(graph.srcGhostCnt, getFeatDim(0), forwardGhostInitData);
-    savedNNTensors[numLayers - 1]["lab"] =
-        Matrix(vtxCnt, getFeatDim(numLayers), localVerticesLabels);
-
-    FeatType **eVFeatsTensor = srcVFeats2eFeats(
-        forwardVerticesInitData, forwardGhostInitData, vtxCnt, getFeatDim(0));
-    savedEdgeTensors[0]["fedge"] = eVFeatsTensor;
-
-    // forward tensor allocation
-    for (layer = 0; layer < numLayers; ++layer) {
-        unsigned featDim = getFeatDim(layer);
-        unsigned nextFeatDim = getFeatDim(layer + 1);
-
-        // GATHER TENSORS
-        FeatType *ahTensor = new FeatType[vtxCnt * featDim];
-        savedNNTensors[layer]["ah"] = Matrix("ah", vtxCnt, featDim, ahTensor);
-
-        // APPLY TENSORS
-        if (layer < numLayers - 1) {
-            FeatType *zTensor = new FeatType[vtxCnt * nextFeatDim];
-            FeatType *hTensor = new FeatType[vtxCnt * nextFeatDim];
-
-            savedNNTensors[layer]["z"] = Matrix(vtxCnt, nextFeatDim, zTensor);
-            savedNNTensors[layer]["h"] = Matrix(vtxCnt, nextFeatDim, hTensor);
-
-            // SCATTER TENSORS
-            FeatType *ghostTensor =
-                new FeatType[graph.srcGhostCnt * nextFeatDim];
-            savedNNTensors[layer + 1]["fg"] =
-                Matrix(graph.srcGhostCnt, nextFeatDim, ghostTensor);
-
-            FeatType **edgeTensor =
-                srcVFeats2eFeats(hTensor, ghostTensor, vtxCnt, nextFeatDim);
-            savedEdgeTensors[layer + 1]["fedge"] = edgeTensor;
-        }
-    }
-
-    // backward tensor allocation
-    for (layer = numLayers - 1; layer > 0; --layer) {
-        unsigned featDim = getFeatDim(layer);
-
-        // APPLY TENSORS
-        FeatType *gradTensor = new FeatType[vtxCnt * featDim];
-        savedNNTensors[layer]["grad"] =
-            Matrix("grad", vtxCnt, featDim, gradTensor);
-
-        // SCATTER TENSORS
-        FeatType *ghostTensor = new FeatType[graph.dstGhostCnt * featDim];
-        savedNNTensors[layer - 1]["bg"] =
-            Matrix(graph.dstGhostCnt, featDim, ghostTensor);
-
-        FeatType **eFeats =
-            dstVFeats2eFeats(gradTensor, ghostTensor, vtxCnt, featDim);
-        savedEdgeTensors[layer - 1]["bedge"] = eFeats;
-
-        // GATHER TENSORS
-        FeatType *aTgTensor = new FeatType[vtxCnt * featDim];
-        savedNNTensors[layer - 1]["aTg"] = Matrix(vtxCnt, featDim, aTgTensor);
-    }
-}
-
 
 void Engine::run() {
-    const bool syncPipelineFlag = true;
-    if (!pipeline) {
-        for (unsigned epoch = 0; epoch < numEpochs; ++epoch) {
-            double epochStart = getTimer();
-            if (syncPipelineFlag) { // sync pipeline
-                runForwardSyncPipeline(epoch);
-                runBackwardSyncPipline();
-            } else { // sync sequential
-                FeatType *predictData = runForward(epoch);
-                runBackward(predictData);
-            }
-            // YIFAN: we set a barrier only for pipeline to make sure weight is
-            // updated. Seq-sync version usually won't go wrong since there are
-            // aggregation between two applyVertex, that time should be enough
-            // for weight update
-            nodeManager.barrier();
-
-            double epochTime = getTimer() - epochStart;
-            printLog(nodeId, "Time for epoch %u: %f ms", epoch, epochTime);
-            if (epoch > 0) {
-                addEpochTime(epochTime);
-            }
-            if (convergeState == CONVERGE_STATE::DONE) {
-                printLog(nodeId, "Early stop at epoch %u", epoch);
-                break;
-            }
-        }
-    } else { // async pipeline. For lambda only
-        // Run synchronous epoch to setup data
-        savedNNTensors[0]["x"] =
-            Matrix(graph.localVtxCnt, getFeatDim(0), forwardVerticesInitData);
-        savedNNTensors[0]["fghost"] =
-            Matrix(graph.srcGhostCnt, getFeatDim(0), forwardGhostInitData);
-        savedNNTensors[numLayers - 1]["lab"] = Matrix(
-            graph.localVtxCnt, getFeatDim(numLayers), localVerticesLabels);
-
-        // Run one synchronous epoch
-        {
-            double epochStart = getTimer();
-            if (syncPipelineFlag) {
-                runForwardSyncPipeline(0);
-                runBackwardSyncPipline();
-            } else {
-                FeatType *tensor = runForward(0);
-                runBackward(tensor);
-            }
-            // YIFAN: going to run pipeline so no need for barrier here.
-            // nodeManager.barrier();
-            double epochTime = getTimer() - epochStart;
-            printLog(nodeId, "Time for epoch %u: %f ms", 0, epochTime);
-            addEpochTime(epochTime);
-        }
-
-        if (nodeId == 0) {
-            printLog(nodeId, "Finished SYNCHRONOUS epoch, starting PIPELINE");
-        }
-        loadChunks();
-        // Start pipeline
-        runAsyncPipeline();
-
-        if (convergeState != CONVERGE_STATE::DONE) {
-            for (unsigned epoch = currEpoch; epoch < numEpochs; ++epoch) {
-                double epochStart = getTimer();
-                if (syncPipelineFlag) { // sync pipeline
-                    runForwardSyncPipeline(epoch);
-                    runBackwardSyncPipline();
-                    nodeManager.barrier();
-                } else { // sync sequential
-                    FeatType *predictData = runForward(epoch);
-                    runBackward(predictData);
-                }
-
-                double epochTime = getTimer() - epochStart;
-                printLog(nodeId, "Time for epoch %u: %f ms", epoch, epochTime);
-                addEpochTime(epochTime);
-                if (convergeState == CONVERGE_STATE::DONE) {
-                    printLog(nodeId, "Early stop at epoch %u", epoch);
-                    break;
-                }
-            }
-        }
-        printLog(nodeId, "Finished, shutting down...");
+    preallocate_tensors(gnn_type);
+    start_time = getCurrentTime();
+    switch (gnn_type) {
+        case GNN::GCN:
+        case GNN::GAT:
+            runPipeline();  // GAT and GCN share the same pipeline
+            break;
+        default:
+            printLog(nodeId, "Unsupported GNN type");
     }
-
     end_time = getCurrentTime();
 }
 
-/**
- *
- * Runs a forward propagation phase: (Aggregate -> Lambda Computing -> Ghost
- * Update) -> ( ... ) -> ... Will start a bunch of worker threads and a bunch of
- * data communicator threads.
- *
- */
-FeatType *Engine::runForward(unsigned epoch) {
-    currEpoch = epoch;
-    // Make sure all nodes start running the forward-prop phase.
-    if (nodeId == 0) {
-        printLog(nodeId, "Epoch %u FORWARD starts...", epoch);
-    }
+void Engine::runPipeline() {
+    using ThreadVector = std::vector<std::thread>;
+    pipelineHalt = false;
+    unsigned commThdCnt = dThreads;
+    // unsigned commThdCnt = std::max(2u, cThreads / 4);
 
-    timeForwardProcess -= getTimer();
-
-    // Create buffer for first-layer aggregation.
-    FeatType *inputTensor = forwardVerticesInitData;
-    forwardGhostVerticesDataIn = forwardGhostInitData;
-    // FeatType **eVFeatsTensor = srcVFeats2eFeats(inputTensor,
-    // forwardGhostInitData, graph.localVtxCnt, getFeatDim(layer));
-    FeatType **eVFeatsTensor = savedEdgeTensors[0]["fedge"];
-    for (layer = 0; layer < numLayers; ++layer) {
-        inputTensor = aggregate(eVFeatsTensor, graph.localInEdgeCnt,
-                                getFeatDim(layer), AGGREGATOR::WSUM);
-        inputTensor =
-            applyVertex(inputTensor, graph.localVtxCnt, getFeatDim(layer),
-                        getFeatDim(layer + 1), layer == numLayers - 1);
-        // inputTensor = fusedGatherApply(eVFeatsTensor, graph.localInEdgeCnt,
-        //                 getFeatDim(layer), getFeatDim(layer + 1), AGGREGATOR::WSUM);
-        if (layer < numLayers - 1) {  // don't need scatter at the last layer.
-            eVFeatsTensor =
-                scatter(inputTensor, graph.localVtxCnt, getFeatDim(layer + 1));
-            eVFeatsTensor =
-                applyEdge(NULL, graph.localInEdgeCnt, 0, eVFeatsTensor,
-                          eVFeatsTensor + graph.localInEdgeCnt,
-                          getFeatDim(layer + 1), getFeatDim(layer + 1));
-        }
-    }
-
-    timeForwardProcess += getTimer();
-    // if (nodeId == 0) {
-    //     printLog(nodeId, "Epoch %u FORWARD finishes at layer %u.", epoch, layer);
-    // }
-    // calcAcc(inputTensor, localVerticesLabels, graph.localVtxCnt,
-    // getFeatDim(numLayers));
-
-    return inputTensor;
-}
-
-/**
- *
- * Runs a backward propagation phase: (Lambda Computing) -> ( ... ) -> ...
- * Will start a bunch of worker threads and a bunch of data communicator
- * threads.
- *
- */
-void Engine::runBackward(FeatType *initGradTensor) {
-    // if (nodeId == 0) {
-    //     printLog(nodeId, "Epoch %u BACKWARD starts...", currEpoch);
-    // }
-
-    timeBackwardProcess -= getTimer();
-
-    // Create buffer for first-layer aggregation.
-    FeatType *gradTensor = initGradTensor;
-
-    // Pure sequential
-    FeatType **eVGradTensor = NULL;
-    for (layer = numLayers - 1; layer > 0; --layer) {
-        eVGradTensor =
-            scatterBackward(gradTensor, graph.localVtxCnt, getFeatDim(layer));
-        eVGradTensor = applyEdgeBackward(NULL, graph.localOutEdgeCnt, 0,
-                                         eVGradTensor + graph.localOutEdgeCnt,
-                                         eVGradTensor, getFeatDim(layer),
-                                         getFeatDim(layer));
-        gradTensor = aggregateBackward(eVGradTensor, graph.localOutEdgeCnt,
-                                       getFeatDim(layer), AGGREGATOR::WSUM);
-        gradTensor =
-            applyVertexBackward(gradTensor, graph.localVtxCnt,
-                                getFeatDim(layer - 1), getFeatDim(layer));
-        // gradTensor = fusedGatherApplyBackward(eVGradTensor, graph.localOutEdgeCnt,
-        //                 getFeatDim(layer - 1), getFeatDim(layer), AGGREGATOR::WSUM);
-    }
-
-    timeBackwardProcess += getTimer();
-    // if (nodeId == 0) {
-    //     printLog(nodeId, "Epoch %u BACKWARD finishes at layer %u.", currEpoch, layer);
-    // }
-    numSyncEpochs++;
-}
-
-/**
- * Run the deep-pipeline version where all stages happen in parallel
- */
-void Engine::runAsyncPipeline() {
-    double stt = getTimer();
-
-    resComm->setAsync(true, currEpoch);
-
-    commHalt = false;
-    maxEpoch = 0; // for async/sync switching
-
-    unsigned commThdCnt = std::max(2u, cThreads / 4);
-    // unsigned commThdCnt = 1;
-    auto ghstRcvr =
-        std::bind(&Engine::ghostReceiver, this, std::placeholders::_1);
-
-    // std::thread grt(ghstRcvr, 0);
-    std::vector<std::thread> ghstRcvrThds;
-    for (unsigned tid = 0; tid < commThdCnt; ++tid) {
-        ghstRcvrThds.push_back(std::thread(ghstRcvr, tid));
-    }
-
-    auto scttrWrkr =
-        std::bind(&Engine::scatterWorker, this, std::placeholders::_1);
-    // std::thread swt(scttrWrkr, 1);
-    std::vector<std::thread> sctterWrkrThds;
-    for (unsigned tid = 0; tid < commThdCnt; ++tid) {
-        sctterWrkrThds.push_back(std::thread(scttrWrkr, tid));
-    }
-
-    auto aggWrkr =
-        std::bind(&Engine::aggregator, this, std::placeholders::_1);
-    std::vector<std::thread> aggWrkrThds;
+    auto gaWrkrFunc =
+        std::bind(&Engine::gatherWorkFunc, this, std::placeholders::_1);
+    ThreadVector gaWrkrThds;
     for (unsigned tid = 0; tid < cThreads; ++tid) {
-        aggWrkrThds.push_back(std::thread(aggWrkr, 2 + tid));
+        gaWrkrThds.push_back(std::thread(gaWrkrFunc, 2 + tid));
     }
-    for (unsigned tid = 0; tid < cThreads; ++tid) {
-        aggWrkrThds[tid].join();
+    auto avWrkrFunc =
+        std::bind(&Engine::applyVertexWorkFunc, this, std::placeholders::_1);
+    ThreadVector avWrkrThds;
+    for (unsigned tid = 0; tid < 1; ++tid) {
+        avWrkrThds.push_back(std::thread(avWrkrFunc, tid));
+    }
+    auto scWrkrFunc =
+        std::bind(&Engine::scatterWorkFunc, this, std::placeholders::_1);
+    // std::thread swt(scWrkrFunc, 1);
+    ThreadVector scWrkrThds;
+    for (unsigned tid = 0; tid < commThdCnt; ++tid) {
+        scWrkrThds.push_back(std::thread(scWrkrFunc, tid));
+    }
+    auto ghstRcvrFunc =
+        std::bind(&Engine::ghostReceiverFunc, this, std::placeholders::_1);
+    ThreadVector ghstRcvrThds;
+    for (unsigned tid = 0; tid < commThdCnt; ++tid) {
+        ghstRcvrThds.push_back(std::thread(ghstRcvrFunc, tid));
+    }
+    auto aeWrkrFunc =
+        std::bind(&Engine::applyEdgeWorkFunc, this, std::placeholders::_1);
+    ThreadVector aeWrkrThds;
+    for (unsigned tid = 0; tid < 1; ++tid) {
+        aeWrkrThds.push_back(std::thread(aeWrkrFunc, tid));
+    }
+    nodeManager.barrier();
+
+    loadChunks();
+    // Start scheduler
+    auto schedFunc =
+        std::bind(&Engine::scheduleAsyncFunc, this, std::placeholders::_1);
+    ThreadVector schedulerThds;
+    for (unsigned tid = 0; tid < 1; ++tid) {
+        schedulerThds.push_back(std::thread(schedFunc, tid));
     }
 
-    double edt = getTimer();
-    asyncAvgEpochTime = (edt - stt) / numAsyncEpochs;
-
+    for (unsigned tid = 0; tid < 1; ++tid) {
+        schedulerThds[tid].join();
+    }
     // Wait for all nodes to finish
     nodeManager.barrier();
-    commHalt = true;
-    // swt.join();
-    // grt.join();
-    for (unsigned tid = 0; tid < commThdCnt; ++tid) {
-        sctterWrkrThds[tid].join();
+    for (unsigned tid = 0; tid < cThreads; ++tid) {
+        gaWrkrThds[tid].join();
     }
-    for (unsigned tid = 0; tid < commThdCnt; ++tid) {
+    for (unsigned tid = 0; tid < 1; ++tid) {
+        avWrkrThds[tid].join();
+        aeWrkrThds[tid].join();
+    }
+    for (unsigned tid = 0; tid < commThdCnt; ++tid)
+        scWrkrThds[tid].join();
+    for (unsigned tid = 0; tid < commThdCnt; ++tid)
         ghstRcvrThds[tid].join();
-    }
 
     {
         // clean up
@@ -526,53 +311,6 @@ void Engine::runAsyncPipeline() {
                                     MAX_MSG_SIZE)) {};
         delete[] msgBuf;
     }
-
-    if (nodeId == 0) {
-        printLog(nodeId, "All nodes finished pipeline");
-    }
-
-    resComm->setAsync(false, currEpoch - 1);
 }
-
-void Engine::runForwardSyncPipeline(unsigned epoch) {
-    currEpoch = epoch;
-    // Make sure all nodes start running the forward-prop phase.
-    if (nodeId == 0) {
-        printLog(nodeId, "Epoch %u FORWARD starts...", epoch);
-    }
-
-    timeForwardProcess -= getTimer();
-
-    for (layer = 0; layer < numLayers; ++layer) {
-        fusedGAS();
-    }
-
-    timeForwardProcess += getTimer();
-    // if (nodeId == 0) {
-    //     printLog(nodeId, "Epoch %u FORWARD finishes at layer %u.", epoch, layer);
-    // }
-}
-
-void Engine::runBackwardSyncPipline() {
-    // if (nodeId == 0) {
-    //     printLog(nodeId, "Epoch %u BACKWARD starts...", currEpoch);
-    // }
-    timeBackwardProcess -= getTimer();
-
-    // Pure sequential, fused the first backward scatter with forward phase GAS
-    FeatType **eVGradTensor = NULL;
-    for (layer = numLayers - 1; layer > 0; --layer) {
-        eVGradTensor = savedEdgeTensors[layer - 1]["bedge"];
-        fusedGatherApplyBackward(eVGradTensor, graph.localOutEdgeCnt,
-            getFeatDim(layer - 1), getFeatDim(layer), AGGREGATOR::WSUM);
-    }
-
-    timeBackwardProcess += getTimer();
-    // if (nodeId == 0) {
-    //     printLog(nodeId, "Epoch %u BACKWARD finishes at layer %u.", currEpoch, layer);
-    // }
-    numSyncEpochs++;
-}
-
 
 Engine engine;

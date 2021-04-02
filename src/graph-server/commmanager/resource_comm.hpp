@@ -14,14 +14,17 @@ class ResourceComm {
 public:
     virtual ~ResourceComm() {};
 
-    virtual void setAsync(bool _async, unsigned currEpoch) = 0;
-
     virtual void NNCompute(Chunk &chunk) = 0;
-    virtual void NNSync() = 0;
+    // Push result chunks back to queues
+    void NNRecvCallback(Engine *engine, Chunk &chunk);
 
     virtual void prefetchWeights() {};
 
     virtual unsigned getRelaunchCnt() { return 0u; };
+
+private:
+    void NNRecvCallbackGCN(Engine *engine, Chunk &chunk);
+    void NNRecvCallbackGAT(Engine *engine, Chunk &chunk);
 };
 
 #endif // __RESOURCE_COMM_HPP__

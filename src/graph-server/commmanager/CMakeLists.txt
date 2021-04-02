@@ -12,7 +12,7 @@ target_link_libraries(weight_comm PRIVATE utils
 target_compile_options(weight_comm PRIVATE "-Wall" "-Werror" "-Wno-unused-but-set-variable" "-MMD")
 
 if (BACKEND STREQUAL lambda)
-    add_library(lambda_comm SHARED "lambda_comm.cpp" "lambdaworker.cpp")
+    add_library(lambda_comm SHARED "lambda_comm.cpp" "resource_comm.cpp" "lambdaworker.cpp")
     set_property(TARGET lambda_comm PROPERTY POSITION_INDEPENDENT_CODE ON)
     target_link_libraries(lambda_comm PRIVATE utils common
                                       PUBLIC  ${AWSSDK_LINK_LIBRARIES} ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES})
@@ -26,7 +26,7 @@ if (BACKEND STREQUAL cpu)
     target_link_libraries(MessageService ${ZMQ_LIB} common utils Threads::Threads)
 
     find_package(OpenMP REQUIRED)
-    add_library(cpu_comm SHARED "CPU_comm.cpp")
+    add_library(cpu_comm SHARED "CPU_comm.cpp" "resource_comm.cpp")
     set_property(TARGET cpu_comm PROPERTY POSITION_INDEPENDENT_CODE ON)
     target_link_libraries(cpu_comm PRIVATE utils common MessageService ${OpenMP_CXX_FLAGS}
                                     PUBLIC  ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES} )
@@ -42,7 +42,7 @@ if(BACKEND STREQUAL gpu)
     enable_language(CUDA)
     FIND_PACKAGE(CUDA REQUIRED)
     include_directories(${CUDA_INCLUDE_DIRS})
-    add_library(gpu_comm SHARED "GPU_comm.cpp")
+    add_library(gpu_comm SHARED "GPU_comm.cpp" "resource_comm.cpp")
     set_property(TARGET gpu_comm PROPERTY POSITION_INDEPENDENT_CODE ON)
     target_link_libraries(gpu_comm PRIVATE utils MessageService ComputingServer
                                   PUBLIC  ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES})

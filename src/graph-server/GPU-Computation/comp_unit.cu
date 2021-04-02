@@ -2,9 +2,17 @@
 #include "cuda_ops.cuh"
 
 #define ACTIVATION CUDNN_ACTIVATION_TANH
-
 const float alpha = 1.0f, beta = 0.0f;
 using namespace std;
+
+// Init global variables
+CuMatrix *NormAdjMatrixIn = NULL;
+CuMatrix *NormAdjMatrixOut = NULL;
+CuMatrix *OneNorms = NULL;
+CuMatrix *ZeroNorms = NULL;
+ComputingUnit cu = ComputingUnit::getInstance();
+// End of global variables
+
 void cudaErrCheck(cudaError_t stat) {
     if (stat != cudaSuccess) {
         fprintf(stderr, "CUDA Error: %s\n", cudaGetErrorString(stat));
@@ -81,6 +89,62 @@ CuMatrix ComputingUnit::aggregate(CuMatrix &sparse, CuMatrix &dense,
     cudaDeviceSynchronize();
     return C;
 }
+
+CuMatrix ComputingUnit::gatherRows(CuMatrix m, std::vector<int> indices) {
+    CuMatrix out =
+        wrapMatrix(Matrix(indices.size(), m.getCols(), (char *)NULL));
+    int row_size = m.getCols() * sizeof(float);
+    int row_cnt = m.getCols();
+
+    for (size_t i = 0; i < indices.size(); ++i) {
+        cudaMemcpyAsync(out.devPtr + i * row_cnt,
+                        m.devPtr + indices[i] * row_cnt, row_size,
+                        cudaMemcpyDeviceToDevice, stream);
+    }
+    return out;
+}
+CuMatrix ComputingUnit::gatherRowsGthr(CuMatrix m, int *indices, int len) {
+    auto m_trans = m.transpose();
+    CuMatrix out = wrapMatrix(Matrix(m.getCols(), len, (char *)NULL));
+    for (int i = 0; i < m.getCols(); ++i) {
+        cusparseSgthr(spHandle, len, m_trans.devPtr + i * m.getRows(),
+                      out.devPtr + i * len, indices, CUSPARSE_INDEX_BASE_ZERO);
+    }
+    m_trans.explicitFree();
+    std::cout << "Transposing\n";
+    CuMatrix outT=out.transpose();
+    return outT;
+}
+CuMatrix ComputingUnit::leakyRelu(CuMatrix &m, float coef) {
+    Matrix out(m.getRows(), m.getCols(), (FeatType *)NULL);
+    CuMatrix cu_out = wrapMatrix(out);
+    thrust::device_ptr<FeatType> dptr_m(m.devPtr);
+    thrust::device_ptr<FeatType> dptr_out(cu_out.devPtr);
+    thrust::transform(dptr_m, dptr_m + m.getNumElemts(), dptr_out,
+                      leakyRelu_functor(coef));
+    return cu_out;
+}
+
+CuMatrix ComputingUnit::leakyReluPrime(CuMatrix &m, float coef) {
+    Matrix out(m.getRows(), m.getCols(), (FeatType *)NULL);
+    CuMatrix cu_out = wrapMatrix(out);
+    thrust::device_ptr<FeatType> dptr_m(m.devPtr);
+    thrust::device_ptr<FeatType> dptr_out(cu_out.devPtr);
+    thrust::transform(dptr_m, dptr_m + m.getNumElemts(), dptr_out,
+                      leakyReluPrime_functor(coef));
+    return cu_out;
+}
+
+CuMatrix ComputingUnit::reduceColumns(CuMatrix m) {
+    CuMatrix out(Matrix(1, m.getCols(), (char *)NULL), handle);
+    CuMatrix ones(Matrix(m.getRows(), 1, (char *)NULL), handle);
+    thrust::device_ptr<float> one_ptr(ones.devPtr);
+    thrust::fill(one_ptr, one_ptr + ones.getNumElemts(), 1);
+    cublasSgemv(handle, CUBLAS_OP_N, m.getCols(), m.getRows(), &alpha, m.devPtr,
+                m.getCols(), ones.devPtr, 1, &beta, out.devPtr, 1);
+    return out;
+}
+
 // This function will scale first nth rows of M based on the length of cuV
 void ComputingUnit::scaleRowsByVector(CuMatrix &cuM, CuMatrix &cuV) {
     stat = cublasSdgmm(handle, CUBLAS_SIDE_RIGHT, cuM.getCols(), cuV.getRows(),
@@ -146,12 +210,9 @@ CuMatrix ComputingUnit::softmaxRows(CuMatrix &mat) {
 
 CuMatrix ComputingUnit::activateBackward(CuMatrix &x, CuMatrix &y,
                                          CuMatrix &dy) {
-    FeatType *x_d = new FeatType[y.getNumElemts()];
     FeatType *dx_d = new FeatType[y.getNumElemts()];
     memset(dx_d, 0, y.getDataSize());
-    memset(x_d, 0, y.getDataSize());
     CuMatrix dx(Matrix(y.getRows(), y.getCols(), dx_d), handle);
-    CuMatrix x_(Matrix(y.getRows(), y.getCols(), x_d), handle);
 
     cudnnActivationDescriptor_t actDesc;
     cudnnCreateActivationDescriptor(&actDesc);
@@ -163,9 +224,8 @@ CuMatrix ComputingUnit::activateBackward(CuMatrix &x, CuMatrix &y,
                                y.getRows(), 1, 1, y.getCols());
     auto error = cudnnActivationBackward(cudnnHandle, actDesc, &alpha, yDesc,
                                          y.devPtr, yDesc, dy.devPtr, yDesc,
-                                         x_.devPtr, &beta, yDesc, dx.devPtr);
+                                         x.devPtr, &beta, yDesc, dx.devPtr);
     assert(CUDNN_STATUS_SUCCESS == error);
-    delete[] x_d;
     delete[] dx_d;
 
     return dx;
