@@ -5,6 +5,9 @@ cd $( dirname $0 )/../
 EC2MAN_CMD='python3 -m ec2man'
 
 $EC2MAN_CMD setup
+$EC2MAN_CMD weight all start
+$EC2MAN_CMD graph all start
+
 USER=$( $EC2MAN_CMD graph user )
 KEY=$( $EC2MAN_CMD graph key )
 
