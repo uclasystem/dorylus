@@ -91,7 +91,7 @@ STALENESS_FLAGS=
 if [[ $STALENESS != 4294967295 ]]; then
 	STALENESS_FLAGS="--p --s=$STALENESS"
 fi
-./run/run-dorylus reddit --l=$NUM_LAMBDA --e=$EPOCHS $STALENESS_FLAGS $MODE --t=$TARGET_ACC
+./run/run-dorylus reddit --l=$NUM_LAMBDA --e=$EPOCHS $STALENESS_FLAGS $MODE --t=$TARGET_ACC --st=$SWITCH_THRESHOLD
 
 
 for ctx in weight graph; do
