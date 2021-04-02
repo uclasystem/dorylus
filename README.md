@@ -15,4 +15,4 @@ Now the main logic of the engine has been completely simplified, and we integrat
 
 ## User Guide
 
-Check our [Wiki page](https://bitbucket.org/jothor/dorylus/wiki/Home) for managing your EC2 clusters, building & running Dorylus.
+Check our [Wiki page](https://github.com/uclasystem/dorylus/wiki) for managing your EC2 clusters, building & running Dorylus.
