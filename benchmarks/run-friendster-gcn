@@ -3,7 +3,7 @@
 ##
 ## Running the reddit GCN benchmark
 ##
-## Cluster configuration: c5n.2xlarge (12), c5.xlarge (4)
+## Cluster configuration: c5n.4xlarge (32), c5.2xlarge (8)
 ##
 
 cd $( dirname $0 )/../
@@ -11,7 +11,7 @@ EC2MAN_CMD='python3 -m ec2man'
 
 PARAMS=''
 MODE=
-NUM_LAMBDA=100
+NUM_LAMBDA=50
 STALENESS=4294967295
 EPOCHS=100
 TARGET_ACC=1
@@ -65,15 +65,15 @@ rm ec2man/machines
 rm ec2man/contexts/*
 
 GRAPH_AMI='ami-00d9394087122c2c6'
-GRAPH_TYPE='c5n.2xlarge'
+GRAPH_TYPE='c5n.4xlarge'
 WEIGHT_AMI='ami-00d9394087122c2c6'
 if [[ $MODE == 'gpu' ]]; then
 	GRAPH_AMI='ami-0a03809b8693a4532'
 	GRAPH_TYPE='p3.2xlarge'
 fi
 
-$EC2MAN_CMD allocate --ami $GRAPH_AMI --type $GRAPH_TYPE --cnt 12 --ctx graph
-$EC2MAN_CMD allocate --ami $WEIGHT_AMI --type c5.xlarge --cnt 4 --ctx weight
+$EC2MAN_CMD allocate --ami $GRAPH_AMI --type $GRAPH_TYPE --cnt 32 --ctx graph
+$EC2MAN_CMD allocate --ami $WEIGHT_AMI --type c5.2xlarge --cnt 8 --ctx weight
 $EC2MAN_CMD add nfs i-098eda4a36fda9788
 
 $EC2MAN_CMD setup
@@ -92,7 +92,7 @@ STALENESS_FLAGS=
 if [[ $STALENESS != 4294967295 ]]; then
 	STALENESS_FLAGS="--p --s=$STALENESS"
 fi
-./run/run-dorylus amazon --l=$NUM_LAMBDA --e=$EPOCHS $STALENESS_FLAGS $MODE --t=$TARGET_ACC --st=$SWITCH_THRESHOLD --g=GAT
+./run/run-dorylus amazon --l=$NUM_LAMBDA --e=$EPOCHS $STALENESS_FLAGS $MODE --t=$TARGET_ACC --st=$SWITCH_THRESHOLD
 
 
 for ctx in weight graph; do

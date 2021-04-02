@@ -3,7 +3,7 @@
 ##
 ## Running the reddit GCN benchmark
 ##
-## Cluster configuration: c5.2xlarge (2), c5.xlarge (2)
+## Cluster configuration: c5.2xlarge (10), c5.xlarge (4)
 ##
 
 cd $( dirname $0 )/../

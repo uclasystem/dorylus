@@ -3,7 +3,7 @@
 ##
 ## Running the reddit GCN benchmark
 ##
-## Cluster configuration: c5.2xlarge (2), c5.xlarge (2)
+## Cluster configuration: c5n.2xlarge (8), c5.xlarge (4)
 ##
 
 cd $( dirname $0 )/../
@@ -73,7 +73,7 @@ if [[ $MODE == 'gpu' ]]; then
 fi
 
 $EC2MAN_CMD allocate --ami $GRAPH_AMI --type $GRAPH_TYPE --cnt 8 --ctx graph
-$EC2MAN_CMD allocate --ami $WEIGHT_AMI --type c5.xlarge --cnt 2 --ctx weight
+$EC2MAN_CMD allocate --ami $WEIGHT_AMI --type c5.xlarge --cnt 4 --ctx weight
 $EC2MAN_CMD add nfs i-098eda4a36fda9788
 
 $EC2MAN_CMD setup
