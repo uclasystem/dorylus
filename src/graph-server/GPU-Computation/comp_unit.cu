@@ -60,10 +60,12 @@ CuMatrix ComputingUnit::aggregate(CuMatrix &sparse, CuMatrix &dense,
         sparse.csrColInd, sparse.csrVal, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
         CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F);
     assert(CUSPARSE_STATUS_SUCCESS == cusparseStat);
+
     cusparseStat = cusparseCreateDnMat(&desB, dense.getCols(), dense.getRows(),
                                        dense.getCols(), dense.devPtr,
                                        CUDA_R_32F, CUSPARSE_ORDER_COL);
     assert(CUSPARSE_STATUS_SUCCESS == cusparseStat);
+
     cusparseStat = cusparseCreateDnMat(&desC, sparse.getRows(), dense.getCols(),
                                        sparse.getRows(), C.devPtr, CUDA_R_32F,
                                        CUSPARSE_ORDER_COL);

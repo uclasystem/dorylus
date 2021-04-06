@@ -39,19 +39,25 @@ void CuMatrix::loadSpCSR(cusparseHandle_t &handle, Graph &graph) {
 
     cudaStat = cudaMalloc((void **)&csrVal, nnz * sizeof(EdgeType));
     assert(cudaStat == cudaSuccess);
+
     cudaStat = cudaMalloc((void **)&csrColInd, nnz * sizeof(unsigned));
     assert(cudaStat == cudaSuccess);
+
     cudaStat = cudaMalloc((void **)&csrRowInd, nnz * sizeof(unsigned));
     assert(cudaStat == cudaSuccess);
+
     cudaStat = cudaMalloc((void **)&csrRowPtr,
                           (graph.localVtxCnt + 1) * sizeof(unsigned));
     assert(cudaStat == cudaSuccess);
+
     cudaStat = cudaMemcpy(csrVal, graph.backwardAdj.values,
                           sizeof(EdgeType) * nnz, cudaMemcpyHostToDevice);
     assert(cudaStat == cudaSuccess);
+
     cudaStat = cudaMemcpy(csrColInd, graph.backwardAdj.columnIdxs,
                           sizeof(unsigned) * nnz, cudaMemcpyHostToDevice);
     assert(cudaStat == cudaSuccess);
+
     unsigned *rowPtrs = new unsigned[graph.localVtxCnt + 1];
     for (unsigned i = 0; i < graph.localVtxCnt + 1; ++i) {
         rowPtrs[i] = (unsigned)(graph.backwardAdj.rowPtrs[i]);
@@ -72,19 +78,25 @@ void CuMatrix::loadSpCSC(cusparseHandle_t &handle, Graph &graph) {
 
     cudaStat = cudaMalloc((void **)&csrVal, nnz * sizeof(EdgeType));
     assert(cudaStat == cudaSuccess);
+
     cudaStat = cudaMalloc((void **)&csrColInd, nnz * sizeof(unsigned));
     assert(cudaStat == cudaSuccess);
+
     cudaStat = cudaMalloc((void **)&csrRowInd, nnz * sizeof(unsigned));
     assert(cudaStat == cudaSuccess);
+
     cudaStat = cudaMalloc((void **)&csrRowPtr,
                           (graph.localVtxCnt + 1) * sizeof(unsigned));
     assert(cudaStat == cudaSuccess);
+
     cudaStat = cudaMemcpy(csrVal, graph.forwardAdj.values,
                           sizeof(EdgeType) * nnz, cudaMemcpyHostToDevice);
     assert(cudaStat == cudaSuccess);
+
     cudaStat = cudaMemcpy(csrColInd, graph.forwardAdj.rowIdxs,
                           sizeof(unsigned) * nnz, cudaMemcpyHostToDevice);
     assert(cudaStat == cudaSuccess);
+
     unsigned *columnPtrs = new unsigned[graph.localVtxCnt + 1];
     for (unsigned i = 0; i < graph.localVtxCnt + 1; ++i) {
         columnPtrs[i] = (unsigned)(graph.forwardAdj.columnPtrs[i]);
