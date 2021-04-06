@@ -103,6 +103,7 @@ void Engine::init(int argc, char *argv[]) {
     readLabelsFile(labelsFile);
 
 #ifdef _GPU_ENABLED_
+    numLambdasForward = ngpus;
     printLog(nodeId, "Loading SparseMatrices for GPU");
     NormAdjMatrixIn = new CuMatrix();
     NormAdjMatrixOut = new CuMatrix();

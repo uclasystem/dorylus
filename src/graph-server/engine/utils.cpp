@@ -345,6 +345,7 @@ Engine::parseArgs(int argc, char *argv[]) {
     ("validationFrequency", boost::program_options::value<unsigned>(), "Number of epochs to run before validation")
 
     ("MODE", boost::program_options::value<unsigned>(), "0: Lambda, 1: GPU, 2: CPU")
+    ("ngpus", boost::program_options::value<unsigned>()->default_value(unsigned(1)), "How many GPUs per node")
     ("pipeline", boost::program_options::value<bool>(), "0: Sequential, 1: Pipelined")
     ("gnn", boost::program_options::value<std::string>(), "GNN type: [GCN | GAT]")
     ("staleness", boost::program_options::value<unsigned>()->default_value(unsigned(UINT_MAX)),
@@ -424,6 +425,9 @@ Engine::parseArgs(int argc, char *argv[]) {
 
     assert(vm.count("MODE"));
     mode = vm["MODE"].as<unsigned>();
+
+    assert(vm.count("ngpus"));
+    ngpus = vm["ngpus"].as<unsigned>();
 
     assert(vm.count("pipeline"));
     pipeline = vm["pipeline"].as<bool>();

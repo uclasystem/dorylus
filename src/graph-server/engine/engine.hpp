@@ -198,6 +198,7 @@ public:
 
     //0: Lambda, 1: GPU, 2: CPU
     unsigned mode = 0;
+    unsigned ngpus;
 
     WeightComm *weightComm;
     ResourceComm *resComm;

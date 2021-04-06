@@ -57,6 +57,7 @@ case $1 in
         let STALE_BOUND=4294967295
         let PREPROCESS=0
         let TO_RATIO=5
+        let NGPUS=1
         for var in "$@"
         do
             if [ $var = "GPU" ] || [ $var = "gpu" ]; then
@@ -99,6 +100,10 @@ case $1 in
 
             if [[ $var = --tr=* ]] || [[ $var = --timeout_ratio=* ]]; then
                 TO_RATIO="${var#*=}"
+            fi
+
+            if [[ $var = --ngpus=* ]] || [[ $var = -number-of-gpus=* ]]; then
+                NGPUS="${var#*=}"
             fi
         done
 
@@ -176,7 +181,8 @@ case $1 in
             --staleness ${STALE_BOUND} \
             --gnn ${GNN_TYPE} \
             --preprocess ${PREPROCESS} \
-            --timeout_ratio ${TO_RATIO}"
+            --timeout_ratio ${TO_RATIO} \
+            --ngpus ${NGPUS}"
         echo ${DSH_COMMAND}
         dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/dorylus && ${DSH_COMMAND}" 2>&1 | tee ${LOGFILE}
 
