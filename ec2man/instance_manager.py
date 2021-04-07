@@ -29,22 +29,6 @@ def launch_ec2_instances(input_args):
 		'SecurityGroupIds': ['sg-0a98f6952f8c78610']
 	}
 
-	## For the artifact ##
-	# A way of identifying instances that were launched for the artifact eval
-	# So we can terminate them after experiments are over
-	args['TagSpecifications'] = [
-			{
-				"ResourceType": 'instance',
-				"Tags": [
-					{
-						"Key": 'Name',
-						"Value": 'artifact-server'
-					}
-				]
-			}
-		]
-
-
 	if opts.type != 't2.micro':
 		args['EbsOptimized'] = True
 
