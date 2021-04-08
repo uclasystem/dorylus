@@ -152,14 +152,14 @@ void DataLoader::processEdge(unsigned &from, unsigned &to) {
  */
 void DataLoader::setEdgeNormalizations() {
     for (Vertex &vertex : rawGraph.getVertices()) {
-        unsigned vtxDeg = vertex.getNumInEdges();
+        unsigned vtxDeg = vertex.getNumInEdges() + 1;
         float vtxNorm = std::pow(vtxDeg, -.5);
         vertex.setNormFactor(vtxNorm * vtxNorm);
         for (unsigned i = 0; i < vertex.getNumInEdges(); ++i) {
             InEdge &e = vertex.getInEdge(i);
             unsigned vid = e.getSourceId();
             if (e.getEdgeLocation() == LOCAL_EDGE_TYPE) {
-                unsigned srcDeg = rawGraph.getVertex(vid).getNumInEdges() - 1;
+                unsigned srcDeg = rawGraph.getVertex(vid).getNumInEdges() + 1;
                 float srcNorm = std::pow(srcDeg, -.5);
                 e.setData(srcNorm * vtxNorm);
             } else {
@@ -172,7 +172,7 @@ void DataLoader::setEdgeNormalizations() {
             OutEdge &e = vertex.getOutEdge(i);
             unsigned vid = e.getDestId();
             if (e.getEdgeLocation() == LOCAL_EDGE_TYPE) {
-                unsigned dstDeg = rawGraph.getVertex(vid).getNumInEdges() - 1;
+                unsigned dstDeg = rawGraph.getVertex(vid).getNumInEdges() + 1;
                 float dstNorm = std::pow(dstDeg, -.5);
                 e.setData(vtxNorm * dstNorm);
             } else {
@@ -272,13 +272,6 @@ void DataLoader::preprocess() {
         if (undirected)
             processEdge(srcdst[1], srcdst[0]);
         rawGraph.incrementNumGlobalEdges();
-    }
-
-    // Add all self edges into the graph for this node
-    for (unsigned vid = 0; vid < rawGraph.getNumLocalVertices(); ++vid) {
-        if (rawGraph.getVertexPartitionId(vid) == nodeId) {
-            processEdge(vid, vid);
-        }
     }
 
     for (unsigned i = 0; i < numNodes; ++i) {
