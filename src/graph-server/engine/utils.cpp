@@ -320,6 +320,9 @@ Engine::parseArgs(int argc, char *argv[]) {
     ("featuresfile", boost::program_options::value<std::string>(), "Path to the file containing the vertex features")
     ("layerfile", boost::program_options::value<std::string>(), "Layer configuration file")
     ("labelsfile", boost::program_options::value<std::string>(), "Target labels file")
+    ("preprocess", boost::program_options::value<bool>()->default_value(false),
+        "0: Re-use cached data (if it exists); 1: Force recreating cached partitions")
+
     ("dshmachinesfile", boost::program_options::value<std::string>(), "DSH machines file")
     ("pripfile", boost::program_options::value<std::string>(), "File containing my private ip")
     ("pubipfile", boost::program_options::value<std::string>(), "File containing my public ip")
@@ -380,6 +383,9 @@ Engine::parseArgs(int argc, char *argv[]) {
 
     assert(vm.count("labelsfile"));
     labelsFile = vm["labelsfile"].as<std::string>();
+
+    assert(vm.count("preprocess"));
+    forcePreprocess = vm["preprocess"].as<bool>();
 
     assert(vm.count("dshmachinesfile"));
     dshMachinesFile = vm["dshmachinesfile"].as<std::string>();
