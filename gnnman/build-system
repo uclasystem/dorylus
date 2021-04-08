@@ -41,12 +41,29 @@ done
 # For graph servers.
 if [ ${BUILD_GRAPH} -eq 1 ]; then
     echo "Processing context 'graph'..."
-    ${EC2MAN_CMD} graph 0 ssh -t "source ~/.profile; cd dorylus && ./gnnman/helpers/graphserver.bld ${BACKEND_OPT} && ./gnnman/helpers/send-folder build"
+    ${EC2MAN_CMD} graph 0 ssh -t "source ~/.profile; cd dorylus && ./gnnman/helpers/graphserver.bld ${BACKEND_OPT} && ./gnnman/helpers/send-folder build" | tee ssh_build_output
+
+    ERROR=$( grep 'make: ***' ssh_build_output )
+    if [[ ! -z $ERROR ]]; then
+        echo $ERROR
+        rm ssh_build_output
+        exit 13
+    fi
+    rm ssh_build_output
 fi
+
 
 
 # For weight servers.
 if [ ${BUILD_WEIGHT} -eq 1 ]; then
     echo "Processing context 'weight'..."
-    ${EC2MAN_CMD} weight 0 ssh -t "cd dorylus && ./gnnman/helpers/weightserver.bld ${BACKEND_OPT} && ./gnnman/helpers/send-folder build"
+    ${EC2MAN_CMD} weight 0 ssh -t "cd dorylus && ./gnnman/helpers/weightserver.bld ${BACKEND_OPT} && ./gnnman/helpers/send-folder build" | tee ssh_build_output
+
+    ERROR=$( grep 'make: ***' ssh_build_output )
+    if [[ ! -z $ERROR ]]; then
+        echo $ERROR
+        rm ssh_build_output
+        exit 13
+    fi
+    rm ssh_build_output
 fi
