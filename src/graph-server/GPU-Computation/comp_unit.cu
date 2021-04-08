@@ -85,9 +85,9 @@ CuMatrix ComputingUnit::aggregate(CuMatrix &sparse, CuMatrix &dense,
                                 CUSPARSE_MM_ALG_DEFAULT, buffer);
     assert(CUSPARSE_STATUS_SUCCESS == cusparseStat);
     C = C.transpose();
-    scaleRowsByVector(dense, norms);
-
-    hadamardAdd(C, dense);
+//    scaleRowsByVector(dense, norms);
+//
+//    hadamardAdd(C, dense);
     cudaDeviceSynchronize();
     return C;
 }
