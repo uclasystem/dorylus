@@ -336,8 +336,9 @@ Engine::parseArgs(int argc, char *argv[]) {
     // Default is directed graph!
     ("undirected", boost::program_options::value<unsigned>()->default_value(unsigned(0), "0"), "Graph type is undirected or not")
 
-    ("dthreads", boost::program_options::value<unsigned>(), "Number of data threads")
-    ("cthreads", boost::program_options::value<unsigned>(), "Number of compute threads")
+    ("aggthreads", boost::program_options::value<unsigned>(), "Number of compute threads")
+    ("commthreads", boost::program_options::value<unsigned>(), "Number of data threads")
+    ("applythreads", boost::program_options::value<unsigned>(), "Number of apply threads")
 
     ("dataport", boost::program_options::value<unsigned>(), "Port for data communication")
     ("ctrlport", boost::program_options::value<unsigned>(), "Port start for control communication")
@@ -366,11 +367,15 @@ Engine::parseArgs(int argc, char *argv[]) {
         exit(-1);
     }
 
-    assert(vm.count("dthreads"));
-    dThreads = vm["dthreads"].as<unsigned>();   // Communicator threads.
 
-    assert(vm.count("cthreads"));
-    cThreads = vm["cthreads"].as<unsigned>();   // Computation threads.
+    assert(vm.count("aggthreads"));
+    aggThreads = vm["aggthreads"].as<unsigned>();   // Computation threads.
+
+    assert(vm.count("commthreads"));
+    commThreads = vm["commthreads"].as<unsigned>();   // Communicator threads.
+
+    assert(vm.count("applythreads"));
+    applyThreads = vm["applythreads"].as<unsigned>();
 
     assert(vm.count("datasetdir"));
     datasetDir = vm["datasetdir"].as<std::string>();

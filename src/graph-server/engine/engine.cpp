@@ -52,7 +52,7 @@ void Engine::init(int argc, char *argv[]) {
     assert(numNodes <= 256);  // Cluster size limitation.
     outFile += std::to_string(nodeId);
     // Init data ctx with `dThreads` threads for scatter
-    commManager.init(nodeManager, mode == LAMBDA ? dThreads : 1);
+    commManager.init(nodeManager, mode == LAMBDA ? commThreads : 1);
 
     // Set number of layers and number of features in each layer. Also store the
     // prefix sum of config for offset querying use.
@@ -296,19 +296,19 @@ void Engine::run() {
 void Engine::runPipeline() {
     using ThreadVector = std::vector<std::thread>;
     pipelineHalt = false;
-    unsigned commThdCnt = dThreads;
+    unsigned commThdCnt = commThreads;
     // unsigned commThdCnt = std::max(2u, cThreads / 4);
 
     auto gaWrkrFunc =
         std::bind(&Engine::gatherWorkFunc, this, std::placeholders::_1);
     ThreadVector gaWrkrThds;
-    for (unsigned tid = 0; tid < cThreads; ++tid) {
+    for (unsigned tid = 0; tid < aggThreads; ++tid) {
         gaWrkrThds.push_back(std::thread(gaWrkrFunc, 2 + tid));
     }
     auto avWrkrFunc =
         std::bind(&Engine::applyVertexWorkFunc, this, std::placeholders::_1);
     ThreadVector avWrkrThds;
-    for (unsigned tid = 0; tid < 1; ++tid) {
+    for (unsigned tid = 0; tid < applyThreads; ++tid) {
         avWrkrThds.push_back(std::thread(avWrkrFunc, tid));
     }
     auto scWrkrFunc =
@@ -327,7 +327,7 @@ void Engine::runPipeline() {
     auto aeWrkrFunc =
         std::bind(&Engine::applyEdgeWorkFunc, this, std::placeholders::_1);
     ThreadVector aeWrkrThds;
-    for (unsigned tid = 0; tid < 1; ++tid) {
+    for (unsigned tid = 0; tid < applyThreads; ++tid) {
         aeWrkrThds.push_back(std::thread(aeWrkrFunc, tid));
     }
     nodeManager.barrier();

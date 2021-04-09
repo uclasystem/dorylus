@@ -149,8 +149,9 @@ public:
     std::vector< std::map<unsigned, unsigned> > chunkIdForwardMaps;
     std::vector< std::map<unsigned, unsigned> > chunkIdBackwardMaps;
 
-    unsigned dThreads;
-    unsigned cThreads;
+    unsigned aggThreads;
+    unsigned commThreads;
+    unsigned applyThreads;
 
     GNN gnn_type;
 

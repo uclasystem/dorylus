@@ -44,7 +44,8 @@ case $1 in
 
         # Minor options.
         UNDIRECTED=0           # Currently are all directed graphs.
-        COMP_THREADS=$(nproc)  # Default values.
+        AGG_THREADS=$(nproc)  # Default values.
+        APPLY_THREADS=1
         COMM_THREADS=$[$(nproc) / 4]
         if [ $COMM_THREADS -lt 2 ]; then
             COMM_THREADS=2 # at least use two comm threads
@@ -63,8 +64,10 @@ case $1 in
             if [ $var = "GPU" ] || [ $var = "gpu" ]; then
                 let MODE=1;
                 NUM_LAMBDAS=1
-                COMP_THREADS=$(nproc)
+                AGG_THREADS=$((NGPUS*2))
                 COMM_THREADS=$(nproc)
+                APPLY_THREADS=$(($NGPUS*2))
+
             elif [ $var = "CPU" ] || [ $var = "cpu" ]; then
                 let MODE=2;
                 NUM_LAMBDAS=1
@@ -168,8 +171,9 @@ case $1 in
             --wserveripfile ${WSERVERIP} \
             --undirected ${UNDIRECTED} \
             --tmpdir=${TMPFILEDIR} \
-            --cthreads ${COMP_THREADS} \
-            --dthreads ${COMM_THREADS} \
+            --aggthreads ${COMP_THREADS} \
+            --commthreads ${COMM_THREADS} \
+            --applythreads ${APPLY_THREADS} \
             --dataport ${DATAPORT} \
             --ctrlport ${CTRLPORT} \
             --nodeport ${NODEPORT} \
