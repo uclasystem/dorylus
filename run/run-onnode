@@ -130,10 +130,13 @@ case $1 in
         dsh -f ${DSHMACHINESFILE} -c "killall -u $( whoami ) graphserver"
 
         # Count the machines.
-        NDS=$( wc -l ${DSHMACHINESFILE} | cut -d" " -f1 )
+        NNODES=$( cat ${WORKERSFILE} | wc -l )
+        #NDS=$( wc -l ${DSHMACHINES} | cut -d" " -f1 )
         for i in $( seq 1 ${NDS} ); do
+          echo "IN THE FOR LOOP i = $i"
           DSHNODES[$i]=$( head -n $i ${DSHMACHINESFILE} | tail -n 1 )
         done
+
 
         # Choosing the dataset.
         if [[ -z $2 ]] || [[ ! -d /filepool/$2 ]]; then
@@ -165,7 +168,7 @@ case $1 in
 
         # Run the command on all dsh machines.
         DSH_COMMAND="./run/run-each \
-            --datasetdir ${DATASET}/parts_${NDS}/ \
+            --datasetdir ${DATASET}/parts_${NNODES}/ \
             --featuresfile ${DATASET}/features.bsnap \
             --labelsfile ${DATASET}/labels.bsnap \
             --workersfile ${WORKERSFILE} \
