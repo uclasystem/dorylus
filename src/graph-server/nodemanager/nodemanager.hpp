@@ -34,13 +34,15 @@ typedef struct nodeMessage {
 /** Structure of a node information block. */
 typedef struct node {
     unsigned id;
+    int localId;
     std::string ip;
     std::string prip;
     bool master;
 
     node() { }
-    node(unsigned i, std::string *ip_, bool mtr) {
+    node(unsigned i, int lId, std::string *ip_, bool mtr) {
         id = i;
+        localId = lId;
         ip = *ip_;
         master = mtr;
     }

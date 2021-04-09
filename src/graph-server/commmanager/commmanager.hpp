@@ -51,6 +51,7 @@ private:
 
     unsigned numNodes = 0;
     unsigned nodeId = 0;
+    unsigned localId = 0;
 
     zmq::context_t dataContext;
     zmq::socket_t *dataPublisher = NULL;

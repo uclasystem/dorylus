@@ -44,8 +44,6 @@ void Engine::init(int argc, char *argv[]) {
     nodeManager.init(workersFile, myPrIpFile,
                      this);  // NodeManger should go first.
 
-    return;
-
     nodeId = nodeManager.getMyNodeId();
     numNodes = nodeManager.getNumNodes();
     assert(numNodes <= 256);  // Cluster size limitation.
@@ -136,52 +134,6 @@ void Engine::init(int argc, char *argv[]) {
     }
     NormAdjMatrixIn->loadSpCSC(cu.spHandle, graph);
     NormAdjMatrixOut->loadSpCSR(cu.spHandle, graph);
-
-    // TODO: Create chunk based CSC/CSR matrices and One/Zero Norms
-//    unsigned vtcsCnt = graph.localVtxCnt;
-//    for (unsigned cid = 0; cid < ngpus; ++cid) {
-//        unsigned chunkSize =
-//            (vtcsCnt + numLambdasForward - 1) / numLambdasForward;
-//        unsigned lowBound = cid * chunkSize;
-//        unsigned upBound = std::min(lowBound + chunkSize, vtcsCnt);
-//
-//        unsigned thisChunkSize = upBound - lowBound;
-//
-//        // Get info to create CSC matrix chunk
-//        unsigned long long chunkEdgesSize =
-//            graph.forwardAdj.columnPtrs[upBound] - graph.forwardAdj.columnPtrs[lowBound];
-//
-//        // Write col Ptrs to chunk and shift to be zero based
-//        unsigned long long* chunkColPtr = new unsigned long long[thisChunkSize];
-//        unsigned long long startColPtr = graph.forwardAdj.columnPtrs[lowBound];
-//        for (unsigned u = 0; u < thisChunkSize; ++u) {
-//            chunkColPtr[u] = graph.forwardAdj.columnPtrs[u + lowbound] - startColPtr;
-//        }
-//
-//        unsigned rowIdxChunk = new unsigned[chunkEdgeSize];
-//        std::map<unsigned, unsigned> vertexChunkIdToNodeLocalId;
-//        unsigned chunkVertexId = 0;
-//        for (unsigned eid = 0; eid < chunkEdgeSize; ++eid) {
-//            unsigned rowId = graph.forwardAdj.rowIdxs[eid];
-//            if (vertexChunkIdToNodeLocalId.find(rowId) == vertexChunkIdToNodeLocalId.end()) {
-//                vertexChunkIdToNodeLocalId[rowId] = chunkVertexId++;
-//            }
-//
-//            rowIdxChunk[eid] = vertexChunkIdToNodeLocalId[rowId];
-//            chunkIdForwardMaps.push_back(vertexChunkIdToNodeLocalId);
-//        }
-//
-//        EdgeType* chunkEdgeValues = new EdgeType[chunkEdgeSize];
-//        memcpy(chunkEdgeValues, graph.forwardAdj.values + startColPtr, chunkEdgeSize);
-//
-//        CSCMatrix chunkCSCMatrix;
-//        chunkCSCMatrix.columnCnt = thisChunkSize;
-//        chunkCSCMatrix.nnz = chunkEdgeSizes;
-//        chunkCSCMatrix.values = chunkEdgeValues;
-//        chunkCSCMatrix.columnPtrs = chunkColPtrs;
-//        chunkCSCMatrix.rowIdxs = rowIdxChunk;
-//        CSCChunks.push_back(chunkCSCMatrix);
-//    }
 #endif
 
     // Initialize synchronization utilities.

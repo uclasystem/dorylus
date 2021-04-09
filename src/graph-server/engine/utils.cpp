@@ -475,7 +475,6 @@ Engine::parseArgs(int argc, char *argv[]) {
 // For now just incrementing the base ports by the localId of the worker
 void Engine::adjustPortsForWorkers() {
     dataserverPort += 1;
-    weightserverPort += 1;
 }
 
 /******************************** File utils ********************************/

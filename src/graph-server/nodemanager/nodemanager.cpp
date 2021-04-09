@@ -38,7 +38,7 @@ NodeManager::init(std::string workersFile, std::string myPrIpFile,
     nodePublisher->setsockopt(ZMQ_SNDHWM, 0);       // Set no limit on number of message queueing.
     nodePublisher->setsockopt(ZMQ_RCVHWM, 0);
     char hostPort[50];
-    sprintf(hostPort, "tcp://%s:%u", me.ip.c_str(), nodePort);
+    sprintf(hostPort, "tcp://%s:%u", me.ip.c_str(), nodePort + me.localId);
     nodePublisher->bind(hostPort);
 
     nodeSubscriber = new zmq::socket_t(nodeContext, ZMQ_SUB);
@@ -46,7 +46,7 @@ NodeManager::init(std::string workersFile, std::string myPrIpFile,
     nodeSubscriber->setsockopt(ZMQ_RCVHWM, 0);
     for (Node& node : allNodes) {
         char hostPort[50];
-        sprintf(hostPort, "tcp://%s:%u", node.ip.c_str(), nodePort);
+        sprintf(hostPort, "tcp://%s:%u", node.ip.c_str(), nodePort + node.localId);
         nodeSubscriber->connect(hostPort);
     }
     nodeSubscriber->setsockopt(ZMQ_SUBSCRIBE, NULL, 0);
@@ -302,10 +302,11 @@ NodeManager::parseNodeConfig(const std::string workersFile, int localId) {
             // It's me!
             if (ip == me.ip && localId == lineLocalId) {
                 me.id = id;
+                me.localId = localId;
                 me.master = (me.id == MASTER_NODEID);
             }
 
-            allNodes.push_back(Node(id, &ip, (id == MASTER_NODEID)));
+            allNodes.push_back(Node(id, lineLocalId, &ip, (id == MASTER_NODEID)));
         }
     }
     standAlone = (getNumNodes() == 1) ? true : false;

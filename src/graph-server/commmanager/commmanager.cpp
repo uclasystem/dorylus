@@ -13,6 +13,7 @@ CommManager::init(NodeManager& nodeManager, unsigned ctxThds) {
     numNodes = nodeManager.getNumNodes();
     nodeId = nodeManager.getMyNodeId();
     Node me = nodeManager.getNode(nodeId);
+    localId = me.localId;
 
     if (nodeManager.standAloneMode() == true) {
         printLog(nodeId, "CommManager initialization complete.");
@@ -27,7 +28,7 @@ CommManager::init(NodeManager& nodeManager, unsigned ctxThds) {
     dataPublisher->setsockopt(ZMQ_SNDHWM, 0);       // Set no limit on number of message queueing.
     dataPublisher->setsockopt(ZMQ_RCVHWM, 0);
     char hostPort[50];
-    sprintf(hostPort, "tcp://%s:%u", me.ip.c_str(), dataPort);
+    sprintf(hostPort, "tcp://%s:%u", me.ip.c_str(), dataPort + localId);
     dataPublisher->bind(hostPort);
 
     dataSubscriber = new zmq::socket_t(dataContext, ZMQ_SUB);
@@ -40,7 +41,7 @@ CommManager::init(NodeManager& nodeManager, unsigned ctxThds) {
     for (unsigned i = 0; i < numNodes; ++i) {
         Node node = nodeManager.getNode(i);
         char hostPort[50];
-        sprintf(hostPort, "tcp://%s:%u", node.ip.c_str(), dataPort);
+        sprintf(hostPort, "tcp://%s:%u", node.ip.c_str(), dataPort + node.localId);
         dataSubscriber->connect(hostPort);
     }
 
