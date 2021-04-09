@@ -59,6 +59,7 @@ case $1 in
         let PREPROCESS=0
         let TO_RATIO=5
         let NGPUS=1
+        let WORKERS_PER_NODE=1
         for var in "$@"
         do
             if [ $var = "GPU" ] || [ $var = "gpu" ]; then
@@ -107,6 +108,10 @@ case $1 in
             if [[ $var = --ngpus=* ]] || [[ $var = -number-of-gpus=* ]]; then
                 NGPUS="${var#*=}"
             fi
+
+            if [[ $var = --nworkers=* ]] || [[ $var = -workers_per_node=* ]]; then
+                WORKERS_PER_NODE="${var#*=}"
+            fi
         done
 
         # After processing args, check to see if GPU enables
@@ -118,6 +123,7 @@ case $1 in
 
         MYPRIPFILE=${HOME}/myprip
         DSHMACHINESFILE=${HOME}/dshmachines
+        WORKERSFILE=${HOME}/workersfile
 
         # Kill running graphservers.
         echo -e "\e[33;1mKilling existing 'graphserver' processes...\e[0m"
@@ -158,11 +164,11 @@ case $1 in
         dsh -f ${DSHMACHINESFILE} -c "rm -rf ${TMPFILEDIR} && mkdir -p ${TMPFILEDIR}"
 
         # Run the command on all dsh machines.
-        DSH_COMMAND="./build/graphserver \
+        DSH_COMMAND="./run/run-each \
             --datasetdir ${DATASET}/parts_${NDS}/ \
             --featuresfile ${DATASET}/features.bsnap \
             --labelsfile ${DATASET}/labels.bsnap \
-            --dshmachinesfile ${DSHMACHINESFILE} \
+            --workersfile ${WORKERSFILE} \
             --layerfile ${LAYERFILE} \
             --pripfile ${MYPRIPFILE} \
             --dataserverport ${GPORT} \
@@ -185,10 +191,11 @@ case $1 in
             --gnn ${GNN_TYPE} \
             --preprocess ${PREPROCESS} \
             --timeout_ratio ${TO_RATIO} \
-            --ngpus ${NGPUS}"
+            --ngpus ${NGPUS} \
+            --nworkers ${WORKERS_PER_NODE}"
+
         echo ${DSH_COMMAND}
         dsh -f ${DSHMACHINESFILE} -c "cd ${HOME}/dorylus && ${DSH_COMMAND}" 2>&1 | tee ${LOGFILE}
-
 
         # Gather the output files.
         OUTFILEDIR=${HOME}/outfiles/${RUN_MARK}.$2

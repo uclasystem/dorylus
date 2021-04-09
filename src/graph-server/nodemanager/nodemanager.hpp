@@ -54,7 +54,7 @@ typedef struct node {
  */
 class NodeManager {
 public:
-    void init(std::string dshMachinesFile, std::string myPrIpFile, Engine* _engine);
+    void init(std::string workersFile, std::string myPrIpFile, Engine* _engine);
     void destroy();
 
     // Synchronous barrier
@@ -92,7 +92,7 @@ private:
     zmq::socket_t *nodeSubscriber = NULL;
     unsigned nodePort;
 
-    void parseNodeConfig(const std::string dshMachinesFile);
+    void parseNodeConfig(const std::string workersFile, int localId);
 };
 
 

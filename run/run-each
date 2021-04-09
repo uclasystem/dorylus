@@ -1,0 +1,29 @@
+#!/bin/bash
+
+echo "STARTING RUN EACH"
+
+WORKERS_PER_NODE=1
+PARAMS=''
+while (( "$#" )); do
+    case $1 in
+        --nworkers|-workers_per_node)
+            WORKERS_PER_NODE="${2}"
+            shift
+            shift
+            ;;
+    *)
+        PARAMS+=' '$1
+        shift
+    esac
+done
+eval set -- $PARAMS
+
+ID_UPPER_LIMIT=$(($WORKERS_PER_NODE-1))
+for wid in $( seq 0 $ID_UPPER_LIMIT ); do
+    GRAPHSERVER_CMD="./build/graphserver $PARAMS --localId $wid"
+    echo $GRAPHSERVER_CMD
+    ${GRAPHSERVER_CMD} &
+done
+
+
+wait

@@ -17,11 +17,11 @@
  *
  */
 void
-NodeManager::init(std::string dshMachinesFile, std::string myPrIpFile,
+NodeManager::init(std::string workersFile, std::string myPrIpFile,
   Engine* _engine) {
     printLog(404, "NodeManager starts initialization...");
     getPrIP(myPrIpFile, me.ip);
-    parseNodeConfig(dshMachinesFile);
+    parseNodeConfig(workersFile, _engine->localId);
     allNodes[me.id].prip = me.ip;       // Set my node struct's pubip, in case CommManager uses it.
     printLog(me.id, "Private IP: %s", me.ip.c_str());
 
@@ -287,8 +287,8 @@ NodeManager::amIMaster() {
  *
  */
 void
-NodeManager::parseNodeConfig(const std::string dshMachinesFile) {
-    std::ifstream inFile(dshMachinesFile);
+NodeManager::parseNodeConfig(const std::string workersFile, int localId) {
+    std::ifstream inFile(workersFile);
     std::string line;
     while (std::getline(inFile, line)) {
         boost::algorithm::trim(line);
@@ -296,10 +296,11 @@ NodeManager::parseNodeConfig(const std::string dshMachinesFile) {
 
             // Get id and private ip of the machine in the line. Machine at line i (starting from 0) will have nodeId = i.
             unsigned id = allNodes.size();
-            std::string ip = line.substr(line.find('@') + 1);
+            std::string ip = line.substr(line.find('@') + 1, line.find(':') - line.find('@') - 1);
+            int lineLocalId = std::atoi(line.substr(line.find(':') + 1).c_str());
 
             // It's me!
-            if (ip == me.ip) {
+            if (ip == me.ip && localId == lineLocalId) {
                 me.id = id;
                 me.master = (me.id == MASTER_NODEID);
             }

@@ -184,7 +184,7 @@ public:
     std::string featuresFile;
     std::string layerConfigFile;
     std::string labelsFile;
-    std::string dshMachinesFile;
+    std::string workersFile;
     std::string myPrIpFile;
     std::string myPubIpFile;
 
@@ -207,6 +207,8 @@ public:
 
     //0: Lambda, 1: GPU, 2: CPU
     unsigned mode = 0;
+
+    // GPU related vars
     unsigned ngpus;
     std::vector<ComputingUnit> compUnits;
 
@@ -214,6 +216,7 @@ public:
     ResourceComm *resComm;
     unsigned nodeId;
     unsigned numNodes;
+    int localId;
 
     bool undirected = false;
 
@@ -277,6 +280,7 @@ public:
 
     // For initialization.
     void parseArgs(int argc, char* argv[]);
+    void adjustPortsForWorkers();
     void readLayerConfigFile(std::string& layerConfigFileName);
     void readFeaturesFile(std::string& featuresFileName);
     void readLabelsFile(std::string& labelsFileName);

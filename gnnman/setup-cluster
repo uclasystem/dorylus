@@ -21,10 +21,14 @@ EC2MAN_CMD="python3 -m ec2man"
 
 $EC2MAN_CMD setup
 
+NWORKERS=${1}
+NWORKERS=${NWORKERS:-1}
+
 # For graph servers.
 echo "Processing context 'graph'..."
 
 ${EC2MAN_CMD} graph dshfile > dshmachines
+${EC2MAN_CMD} graph workersfile ${NWORKERS} > workersfile
 ${EC2MAN_CMD} weight all prip > wserverip
 
 ## Create `kill-all` file
@@ -39,8 +43,8 @@ elif [[ "$OSTYPE" == "darwin"* ]]; then
     sed -i "" s/{{GSERVER0}}/$( python3 -m ec2man graph 0 prip )/ kill-all
 fi
 
-${EC2MAN_CMD} graph all put wserverip run/wserverport dshmachines run/*.config run/gserverport run/dataport run/ctrlport run/nodeport run/numlambdasforward run/numlambdasbackward kill-all ~/.aws
-rm -f dshmachines kill-all wserverip
+${EC2MAN_CMD} graph all put wserverip run/wserverport dshmachines workersfile run/*.config run/gserverport run/dataport run/ctrlport run/nodeport run/numlambdasforward run/numlambdasbackward kill-all ~/.aws
+rm -f dshmachines kill-all wserverip workersfile
 
 NUM_GRAPH_NODES=$(( $( ${EC2MAN_CMD} graph info | wc -l | awk '{print $1}' ) - 1 ))
 for i in $( seq 0 $(( ${NUM_GRAPH_NODES} - 1 )) ); do

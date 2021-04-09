@@ -4,11 +4,6 @@
 #include <omp.h>
 
 #include <algorithm>
-#include <boost/algorithm/string/classification.hpp>  // Include boost::for is_any_of.
-#include <boost/algorithm/string/split.hpp>
-#include <boost/algorithm/string/trim.hpp>
-#include <boost/program_options.hpp>
-#include <boost/program_options/parsers.hpp>
 #include <cerrno>
 #include <cmath>
 #include <cstdlib>
@@ -43,9 +38,13 @@ void Engine::init(int argc, char *argv[]) {
 
     parseArgs(argc, argv);
 
+    adjustPortsForWorkers();
+
     // Initialize the node manager and communication manager.
-    nodeManager.init(dshMachinesFile, myPrIpFile,
+    nodeManager.init(workersFile, myPrIpFile,
                      this);  // NodeManger should go first.
+
+    return;
 
     nodeId = nodeManager.getMyNodeId();
     numNodes = nodeManager.getNumNodes();
@@ -108,8 +107,10 @@ void Engine::init(int argc, char *argv[]) {
     // different GPU
     if (mode == GPU) {  // GPU
         compUnits = std::vector<ComputingUnit>(ngpus);
-        for (unsigned devId = 0; devId < ngpus; ++devId) {
-            compUnits[devId] = ComputingUnit(devId);
+        for (unsigned gpuId = 0; gpuId < ngpus; ++gpuId) {
+            // Giving each process its own GPU for now so each process will
+            // have ngpus=1 and assigned its devId through the CLI
+            compUnits[gpuId] = ComputingUnit(localId);
         }
         resComm = new GPUComm(this);
     }

@@ -21,7 +21,6 @@ help_str = ("Usage: python3 -m ec2man help\n"
             "       python3 -m ec2man add <Context> <ec2 id> [ec2 id]...\n"
             "       python3 -m ec2man setup\n"
             "       python3 -m ec2man <Context> info\n"
-            "       python3 -m ec2man <Context> dshfile\n"
             "       python3 -m ec2man <Context> <NodeID> <Operation> [Args]\n"
             "       python3 -m ec2man <Context> all <Operation> [Args]\n"
             "\nOperations:\n"
@@ -126,7 +125,6 @@ def process_target(ctx, target, args):
     Process the given command arguments on the given context. Returns the resulting context in case
     it is changed.
     """
-
     from ec2man.command import handle_command
 
     # Process a single instance id.
@@ -183,6 +181,12 @@ def process_target(ctx, target, args):
     elif target == 'dshfile':
         for inst in ctx.instances:
             print(inst.user + "@" + inst.pr_ip)
+
+    elif target == 'workersfile':
+        workers_per_node = int(args[0])
+        for inst in ctx.instances:
+            for local_id in range(workers_per_node):
+                print(inst.user + "@" + inst.pr_ip + ":" + str(local_id))
 
     else:
         print("Option unrecognized. Use `python3 -m ec2man help` for the help message.")

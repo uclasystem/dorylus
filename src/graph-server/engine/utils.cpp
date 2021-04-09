@@ -323,7 +323,7 @@ Engine::parseArgs(int argc, char *argv[]) {
     ("preprocess", boost::program_options::value<bool>()->default_value(false),
         "0: Re-use cached data (if it exists); 1: Force recreating cached partitions")
 
-    ("dshmachinesfile", boost::program_options::value<std::string>(), "DSH machines file")
+    ("workersfile", boost::program_options::value<std::string>(), "File with workers ips and ids")
     ("pripfile", boost::program_options::value<std::string>(), "File containing my private ip")
     ("pubipfile", boost::program_options::value<std::string>(), "File containing my public ip")
 
@@ -350,6 +350,7 @@ Engine::parseArgs(int argc, char *argv[]) {
 
     ("MODE", boost::program_options::value<unsigned>(), "0: Lambda, 1: GPU, 2: CPU")
     ("ngpus", boost::program_options::value<unsigned>()->default_value(unsigned(1)), "How many GPUs per node")
+    ("localId", boost::program_options::value<int>()->default_value(int(0)), "Local worker ID (for multi-GPU)")
     ("pipeline", boost::program_options::value<bool>(), "0: Sequential, 1: Pipelined")
     ("gnn", boost::program_options::value<std::string>(), "GNN type: [GCN | GAT]")
     ("staleness", boost::program_options::value<unsigned>()->default_value(unsigned(UINT_MAX)),
@@ -392,8 +393,8 @@ Engine::parseArgs(int argc, char *argv[]) {
     assert(vm.count("preprocess"));
     forcePreprocess = vm["preprocess"].as<bool>();
 
-    assert(vm.count("dshmachinesfile"));
-    dshMachinesFile = vm["dshmachinesfile"].as<std::string>();
+    assert(vm.count("workersfile"));
+    workersFile = vm["workersfile"].as<std::string>();
 
     assert(vm.count("pripfile"));
     myPrIpFile = vm["pripfile"].as<std::string>();
@@ -440,6 +441,9 @@ Engine::parseArgs(int argc, char *argv[]) {
     assert(vm.count("ngpus"));
     ngpus = vm["ngpus"].as<unsigned>();
 
+    assert(vm.count("localId"));
+    localId = vm["localId"].as<int>();
+
     assert(vm.count("pipeline"));
     pipeline = vm["pipeline"].as<bool>();
 
@@ -460,10 +464,18 @@ Engine::parseArgs(int argc, char *argv[]) {
     assert(vm.count("timeout_ratio"));
     timeoutRatio = vm["timeout_ratio"].as<unsigned>();
 
-    printLog(404, "Parsed configuration: dThreads = %u, cThreads = %u, datasetDir = %s, featuresFile = %s, dshMachinesFile = %s, "
+    printLog(404, "Parsed configuration: dThreads = %u, cThreads = %u, datasetDir = %s, featuresFile = %s, workersFile = %s, "
              "myPrIpFile = %s, undirected = %s, data port set -> %u, control port set -> %u, node port set -> %u",
-             aggThreads, commThreads, datasetDir.c_str(), featuresFile.c_str(), dshMachinesFile.c_str(),
+             aggThreads, commThreads, datasetDir.c_str(), featuresFile.c_str(), workersFile.c_str(),
              myPrIpFile.c_str(), undirected ? "true" : "false", data_port, ctrl_port, node_port);
+}
+
+// Definitely need a better way to do this that adds more resilience against port
+// conflicts
+// For now just incrementing the base ports by the localId of the worker
+void Engine::adjustPortsForWorkers() {
+    dataserverPort += 1;
+    weightserverPort += 1;
 }
 
 /******************************** File utils ********************************/
