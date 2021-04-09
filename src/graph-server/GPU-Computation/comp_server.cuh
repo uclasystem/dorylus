@@ -23,7 +23,7 @@ class GPUComm;
 class ComputingServer {
 public:
     ComputingServer();
-    ComputingServer(GPUComm *gpu_comm, GNN gnn_type_);
+    ComputingServer(GPUComm *gpu_comm, GNN gnn_type_, ComputingUnit& cu_);
 
     // compute related
     void vtxNNForward(unsigned layer, bool lastLayer);
@@ -39,7 +39,8 @@ private:
     std::vector<TensorMap> &savedNNTensors;
 
     GPUComm *gpuComm;
-    ComputingUnit cu;
+    ComputingUnit& cu;
+    unsigned deviceId;
 
     std::vector<char *> weightServerAddrs;
     MessageService &msgService;

@@ -10,7 +10,7 @@ CuMatrix *NormAdjMatrixIn = NULL;
 CuMatrix *NormAdjMatrixOut = NULL;
 CuMatrix *OneNorms = NULL;
 CuMatrix *ZeroNorms = NULL;
-ComputingUnit cu = ComputingUnit::getInstance();
+//ComputingUnit cu = ComputingUnit::getInstance();
 // End of global variables
 
 void cudaErrCheck(cudaError_t stat) {
@@ -20,13 +20,19 @@ void cudaErrCheck(cudaError_t stat) {
     }
 }
 
-ComputingUnit *ComputingUnit::instance = nullptr;
-ComputingUnit &ComputingUnit::getInstance() {
-    if (instance == nullptr) instance = new ComputingUnit();
-    return *instance;
-}
+//ComputingUnit &ComputingUnit::getInstance(int devId) {
+//    if (instance == nullptr){
+//        instance = new ComputingUnit(devId);
+//        std::cerr << "NO CU, INITING" << std::endl;
+//    } else {
+//        std::cerr << "FOUND A CU, MUST'VE BEEN INITED" << std::endl;
+//    }
+//    return *instance;
+//}
 
-ComputingUnit::ComputingUnit() {
+ComputingUnit::ComputingUnit(int device) {
+//    stat = cudaSetDevice(device);
+//    assert(state == cudaSuccess);
     stat = cublasCreate(&handle);
     if (stat != CUBLAS_STATUS_SUCCESS) {
         printf("CUBLAS initialization failed\n");

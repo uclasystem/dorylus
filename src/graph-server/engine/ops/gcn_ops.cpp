@@ -95,6 +95,7 @@ void Engine::preallocateGCN() {
 #ifdef _GPU_ENABLED_
 void Engine::aggregateGCN(Chunk &c) {
     PROP_TYPE dir = c.dir;
+    ComputingUnit& cu = compUnits[c.localId];
 
     // No edge feat tensor support for GPU. use featTensor + ghostTensor instead
     Matrix featTensor;

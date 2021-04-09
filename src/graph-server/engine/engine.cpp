@@ -103,6 +103,18 @@ void Engine::init(int argc, char *argv[]) {
     readLabelsFile(labelsFile);
 
 #ifdef _GPU_ENABLED_
+    // HACK FOR NOW: Need to have some reference to 'cu' so I can test
+    // if new setup is working. Later will rework to give a chunk to each
+    // different GPU
+    if (mode == GPU) {  // GPU
+        compUnits = std::vector<ComputingUnit>(ngpus);
+        for (unsigned devId = 0; devId < ngpus; ++devId) {
+            compUnits[devId] = ComputingUnit(devId);
+        }
+        resComm = new GPUComm(this);
+    }
+    ComputingUnit& cu = compUnits[0];
+
     numLambdasForward = ngpus;
     printLog(nodeId, "Loading SparseMatrices for GPU");
     NormAdjMatrixIn = new CuMatrix();
@@ -123,6 +135,8 @@ void Engine::init(int argc, char *argv[]) {
     }
     NormAdjMatrixIn->loadSpCSC(cu.spHandle, graph);
     NormAdjMatrixOut->loadSpCSR(cu.spHandle, graph);
+
+    // TODO: Create chunk based CSC/CSR matrices and One/Zero Norms
 #endif
 
     // Initialize synchronization utilities.
@@ -157,11 +171,9 @@ void Engine::init(int argc, char *argv[]) {
         resComm = new CPUComm(this);
     }
 #endif
-#ifdef _GPU_ENABLED_
-    if (mode == GPU) {  // GPU
-        resComm = new GPUComm(this);
-    }
-#endif
+//#ifdef _GPU_ENABLED_
+//
+//#endif
 
     timeInit += getTimer();
     printLog(nodeId, "Engine initialization complete.");

@@ -4,12 +4,18 @@ GPUComm::GPUComm(Engine *engine_)
     : engine(engine_), nodeId(engine_->nodeId), totalLayers(engine_->numLayers),
     wServersFile(engine_->weightserverIPFile), wPort(engine_->weightserverPort),
     numNodes(engine_->numNodes), savedNNTensors(engine_->savedNNTensors),
-    msgService(wPort, nodeId, totalLayers, engine_->gnn_type) {
-        comp_server = new ComputingServer(this, engine_->gnn_type);
+    msgService(wPort, nodeId, totalLayers, engine_->gnn_type),
+    ngpus(engine_->ngpus)
+    {
+        comp_servers = std::vector<ComputingServer*>(ngpus);
+        for (unsigned devId = 0; devId < ngpus; ++devId) {
+            comp_servers[devId] = new ComputingServer(this, engine->gnn_type, engine->compUnits[devId]);
+        }
     }
 
 void GPUComm::NNCompute(Chunk &chunk) {
     unsigned layer = chunk.layer;
+    ComputingServer* comp_server = comp_servers[chunk.localId];
     if (chunk.vertex) { // AV & AVB
         if (chunk.dir == PROP_TYPE::FORWARD) {
             // printLog(nodeId, "GPU FORWARD vtx NN started");

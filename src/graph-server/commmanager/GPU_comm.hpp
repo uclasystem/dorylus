@@ -37,6 +37,7 @@ private:
     unsigned numNodes;
     unsigned numLocalVertices;
     unsigned currLayer;
+    unsigned ngpus;
 
     Engine *engine;
 
@@ -48,7 +49,7 @@ private:
 
     std::vector<TensorMap> &savedNNTensors;
 
-    ComputingServer *comp_server;
+    std::vector<ComputingServer*> comp_servers;
 };
 
 #endif // GPU_COMM_HPP

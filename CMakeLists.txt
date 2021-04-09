@@ -34,6 +34,14 @@ include_directories(${Boost_INCLUDE_DIR})
 # Include Threads lib.
 find_package(Threads REQUIRED)
 
+if (BACKEND STREQUAL gpu)
+    find_library(CUDNN NAME libcudnn.so HINTS /opt/cuda/targets/x86_64-linux/lib/ /usr/local/cuda/lib64/)
+
+    FIND_PACKAGE(CUDA REQUIRED)
+    include_directories(${CUDA_INCLUDE_DIRS})
+endif()
+
+
 
 # Graph server (Data server).
 if(BUILD_GRAPH)

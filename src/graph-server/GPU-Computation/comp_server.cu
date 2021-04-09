@@ -33,8 +33,8 @@ void loadWeightServers(std::vector<char *> &addresses,
     }
 }
 
-ComputingServer::ComputingServer(GPUComm *gpu_comm, GNN gnn_type_)
-    : cu(ComputingUnit::getInstance()), gpuComm(gpu_comm),
+ComputingServer::ComputingServer(GPUComm *gpu_comm, GNN gnn_type_, ComputingUnit& cu_)
+    : cu(cu_), gpuComm(gpu_comm),
     totalLayers(gpu_comm->totalLayers), nodeId(gpu_comm->nodeId),
     gnn_type(gnn_type_), savedNNTensors(gpu_comm->savedNNTensors),
     msgService(gpu_comm->msgService)

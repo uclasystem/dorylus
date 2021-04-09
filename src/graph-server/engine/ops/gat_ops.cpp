@@ -116,6 +116,7 @@ void Engine::preallocateGAT() {
 
 #ifdef _GPU_ENABLED_
 void Engine::aggregateGAT(Chunk &c) {
+    ComputingUnit& cu = compUnits[c.localId];
     if (c.dir == PROP_TYPE::FORWARD) { // forward
         Matrix &featTensor = savedNNTensors[c.layer - 1]["z"];
         Matrix &ghostTensor = savedNNTensors[c.layer - 1]["fg_z"];

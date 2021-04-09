@@ -20,6 +20,10 @@
 #include "../utils/utils.hpp"
 #include "../../common/matrix.hpp"
 
+#ifdef _GPU_ENABLED_
+#include "../GPU-Computation/comp_unit.cuh"
+#endif
+
 // Max size (bytes) for a message received by the data communicator.
 #define MAX_MSG_SIZE (1 * 1024 * 1024)
 #define NODE_ID_DIGITS 8 // Digits num of node id.
@@ -199,6 +203,7 @@ public:
     //0: Lambda, 1: GPU, 2: CPU
     unsigned mode = 0;
     unsigned ngpus;
+    std::vector<ComputingUnit> compUnits;
 
     WeightComm *weightComm;
     ResourceComm *resComm;

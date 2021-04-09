@@ -30,7 +30,8 @@
 // It maintains a GPU context
 class ComputingUnit {
    public:
-    static ComputingUnit &getInstance();
+    //static ComputingUnit &getInstance(int devId);
+    ComputingUnit(int device = 0);
 
     CuMatrix leakyRelu(CuMatrix &m, float coef);
     CuMatrix leakyReluPrime(CuMatrix &m, float coef);
@@ -62,10 +63,6 @@ class ComputingUnit {
     cublasHandle_t handle;
     cublasStatus_t stat;
     cudaStream_t stream;
-
-   private:
-    ComputingUnit();
-    static ComputingUnit *instance;
 };
 
 // global variables
@@ -73,6 +70,6 @@ extern CuMatrix *NormAdjMatrixIn;
 extern CuMatrix *NormAdjMatrixOut;
 extern CuMatrix *OneNorms;
 extern CuMatrix *ZeroNorms;
-extern ComputingUnit cu;
+//extern ComputingUnit cu;
 
 #endif
