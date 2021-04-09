@@ -16,6 +16,7 @@ cd $( dirname $0 )/..
 
 EC2MAN_CMD="python3 -m ec2man"
 
+./run/kill-all.sh
 
 if [[ ! -z $1 ]] && [[ $1 != "graph" ]] && [[ $1 != "weight" ]] && [[ $1 != "cpu" ]] && [[ $1 != "gpu" ]] && [[ $1 != "d" ]]; then
     echo "Context '$1' not recognized."
