@@ -14,6 +14,7 @@ def launch_ec2_instances(input_args):
 	parser.add_argument('--ctx', type=str, default=None)
 	parser.add_argument('--az', type=str, default=None)
 	parser.add_argument('--sg', type=str, default=None)
+	parser.add_argument('--spot', action='store_true')
 
 	opts = parser.parse_args(input_args)
 
@@ -36,6 +37,15 @@ def launch_ec2_instances(input_args):
 		args['Placement'] = { 'AvailabilityZone': opts.az }
 		if opts.az[:-1] == 'us-east-1':
 			args['SecurityGroupIds'] = ['sg-098524cf5a5d0011f']
+
+	if opts.spot:
+		args['InstanceMarketOptions'] = {
+			'MarketType': 'spot',
+			'SpotOptions': {
+				'SpotInstanceType': 'one-time',
+				'InstanceInterruptionBehavior': 'terminate',
+			}
+		}
 
 	print("Instance options:", args)
 	response = ec2.create_instances(**args)
