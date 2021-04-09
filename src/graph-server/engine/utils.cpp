@@ -462,7 +462,7 @@ Engine::parseArgs(int argc, char *argv[]) {
 
     printLog(404, "Parsed configuration: dThreads = %u, cThreads = %u, datasetDir = %s, featuresFile = %s, dshMachinesFile = %s, "
              "myPrIpFile = %s, undirected = %s, data port set -> %u, control port set -> %u, node port set -> %u",
-             dThreads, cThreads, datasetDir.c_str(), featuresFile.c_str(), dshMachinesFile.c_str(),
+             aggThreads, commThreads, datasetDir.c_str(), featuresFile.c_str(), dshMachinesFile.c_str(),
              myPrIpFile.c_str(), undirected ? "true" : "false", data_port, ctrl_port, node_port);
 }
 

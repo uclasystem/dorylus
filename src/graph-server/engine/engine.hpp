@@ -144,8 +144,8 @@ public:
     CommManager commManager;
 
     Graph graph;
-    std::vector<CSCMatrix> CSCChunks;
-    std::vector<CSRMatrix> CSRChunks;
+//    std::vector<CSCMatrix> CSCChunks;
+//    std::vector<CSRMatrix> CSRChunks;
     std::vector< std::map<unsigned, unsigned> > chunkIdForwardMaps;
     std::vector< std::map<unsigned, unsigned> > chunkIdBackwardMaps;
 
