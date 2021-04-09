@@ -62,6 +62,7 @@ class ComputingUnit {
     cusparseHandle_t spHandle;
     cublasHandle_t handle;
     cublasStatus_t stat;
+    cudaError_t err;
     cudaStream_t stream;
 };
 

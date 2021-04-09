@@ -31,8 +31,8 @@ void cudaErrCheck(cudaError_t stat) {
 //}
 
 ComputingUnit::ComputingUnit(int device) {
-//    stat = cudaSetDevice(device);
-//    assert(state == cudaSuccess);
+    err = cudaSetDevice(device);
+    assert(state == cudaSuccess);
     stat = cublasCreate(&handle);
     if (stat != CUBLAS_STATUS_SUCCESS) {
         printf("CUBLAS initialization failed\n");
