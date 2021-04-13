@@ -9,7 +9,7 @@ GPUComm::GPUComm(Engine *engine_)
     {
         comp_servers = std::vector<ComputingServer*>(ngpus);
         for (unsigned devId = 0; devId < ngpus; ++devId) {
-            comp_servers[devId] = new ComputingServer(this, engine->gnn_type, engine->compUnits[devId]);
+            comp_servers[devId] = new ComputingServer(this, engine->gnn_type, engine->localId, engine->compUnits[devId]);
         }
     }
 

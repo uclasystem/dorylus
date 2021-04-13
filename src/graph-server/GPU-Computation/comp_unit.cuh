@@ -58,6 +58,8 @@ class ComputingUnit {
                       float &loss);
     void maskout(CuMatrix &preds, CuMatrix &labels);
 
+    int deviceId;
+
     cudnnHandle_t cudnnHandle;
     cusparseHandle_t spHandle;
     cublasHandle_t handle;

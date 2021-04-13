@@ -33,11 +33,11 @@ void loadWeightServers(std::vector<char *> &addresses,
     }
 }
 
-ComputingServer::ComputingServer(GPUComm *gpu_comm, GNN gnn_type_, ComputingUnit& cu_)
+ComputingServer::ComputingServer(GPUComm *gpu_comm, GNN gnn_type_, int devId, ComputingUnit& cu_)
     : cu(cu_), gpuComm(gpu_comm),
     totalLayers(gpu_comm->totalLayers), nodeId(gpu_comm->nodeId),
     gnn_type(gnn_type_), savedNNTensors(gpu_comm->savedNNTensors),
-    msgService(gpu_comm->msgService)
+    msgService(gpu_comm->msgService), deviceId(devId)
 {
     loadWeightServers(weightServerAddrs, gpu_comm->wServersFile);
     msgService.setUpWeightSocket(
@@ -129,6 +129,10 @@ void ComputingServer::vtxNNForwardGCN(unsigned layer, bool lastLayer) {
         if (report) {
             // Asynchronously do acc, loss calc on CPUs
             std::thread evalThread([&](Matrix labels) {
+                cudaError_t err = cudaSetDevice(deviceId);
+                if (err != cudaSuccess) {
+                    abort();
+                }
                 Matrix cpuPreds = cuPred.getMatrix();
                 float acc = 0.0, loss = 0.0;
                 unsigned featDim = labels.getCols();
@@ -176,6 +180,13 @@ void ComputingServer::vtxNNForwardGCN(unsigned layer, bool lastLayer) {
 }
 
 void ComputingServer::vtxNNBackwardGCN(unsigned layer) {
+#ifdef _GPU_ENABLED_
+    cudaError_t err = cudaSetDevice(deviceId);
+    if (err != cudaSuccess) {
+        abort();
+    }
+#endif
+
     Matrix grad = savedNNTensors[layer]["aTg"];
     CuMatrix cuGrad = cu.wrapMatrix(grad);
     Matrix z = savedNNTensors[layer]["z"];

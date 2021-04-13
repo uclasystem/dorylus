@@ -30,8 +30,9 @@ void cudaErrCheck(cudaError_t stat) {
 //    return *instance;
 //}
 
-ComputingUnit::ComputingUnit(int device) {
-    err = cudaSetDevice(device);
+ComputingUnit::ComputingUnit(int device)
+    : deviceId(device) {
+    err = cudaSetDevice(deviceId);
     assert(err == cudaSuccess);
     stat = cublasCreate(&handle);
     if (stat != CUBLAS_STATUS_SUCCESS) {
@@ -53,6 +54,8 @@ CuMatrix ComputingUnit::wrapMatrix(Matrix m) { return CuMatrix(m, handle); }
 
 CuMatrix ComputingUnit::aggregate(CuMatrix &sparse, CuMatrix &dense,
                                   CuMatrix &norms) {
+    err = cudaSetDevice(deviceId);
+    assert(err == cudaSuccess);
     CuMatrix C(Matrix(dense.getCols(), sparse.getRows(), (FeatType *)NULL),
                handle);
 
@@ -97,6 +100,8 @@ CuMatrix ComputingUnit::aggregate(CuMatrix &sparse, CuMatrix &dense,
 }
 
 CuMatrix ComputingUnit::gatherRows(CuMatrix m, std::vector<int> indices) {
+    err = cudaSetDevice(deviceId);
+    assert(err == cudaSuccess);
     CuMatrix out =
         wrapMatrix(Matrix(indices.size(), m.getCols(), (char *)NULL));
     int row_size = m.getCols() * sizeof(float);
@@ -109,7 +114,11 @@ CuMatrix ComputingUnit::gatherRows(CuMatrix m, std::vector<int> indices) {
     }
     return out;
 }
+
 CuMatrix ComputingUnit::gatherRowsGthr(CuMatrix m, int *indices, int len) {
+    err = cudaSetDevice(deviceId);
+    assert(err == cudaSuccess);
+
     auto m_trans = m.transpose();
     CuMatrix out = wrapMatrix(Matrix(m.getCols(), len, (char *)NULL));
     for (int i = 0; i < m.getCols(); ++i) {
@@ -121,7 +130,11 @@ CuMatrix ComputingUnit::gatherRowsGthr(CuMatrix m, int *indices, int len) {
     CuMatrix outT=out.transpose();
     return outT;
 }
+
 CuMatrix ComputingUnit::leakyRelu(CuMatrix &m, float coef) {
+    err = cudaSetDevice(deviceId);
+    assert(err == cudaSuccess);
+
     Matrix out(m.getRows(), m.getCols(), (FeatType *)NULL);
     CuMatrix cu_out = wrapMatrix(out);
     thrust::device_ptr<FeatType> dptr_m(m.devPtr);
@@ -132,6 +145,9 @@ CuMatrix ComputingUnit::leakyRelu(CuMatrix &m, float coef) {
 }
 
 CuMatrix ComputingUnit::leakyReluPrime(CuMatrix &m, float coef) {
+    err = cudaSetDevice(deviceId);
+    assert(err == cudaSuccess);
+
     Matrix out(m.getRows(), m.getCols(), (FeatType *)NULL);
     CuMatrix cu_out = wrapMatrix(out);
     thrust::device_ptr<FeatType> dptr_m(m.devPtr);
@@ -142,6 +158,9 @@ CuMatrix ComputingUnit::leakyReluPrime(CuMatrix &m, float coef) {
 }
 
 CuMatrix ComputingUnit::reduceColumns(CuMatrix m) {
+    err = cudaSetDevice(deviceId);
+    assert(err == cudaSuccess);
+
     CuMatrix out(Matrix(1, m.getCols(), (char *)NULL), handle);
     CuMatrix ones(Matrix(m.getRows(), 1, (char *)NULL), handle);
     thrust::device_ptr<float> one_ptr(ones.devPtr);
@@ -153,6 +172,9 @@ CuMatrix ComputingUnit::reduceColumns(CuMatrix m) {
 
 // This function will scale first nth rows of M based on the length of cuV
 void ComputingUnit::scaleRowsByVector(CuMatrix &cuM, CuMatrix &cuV) {
+    err = cudaSetDevice(deviceId);
+    assert(err == cudaSuccess);
+
     stat = cublasSdgmm(handle, CUBLAS_SIDE_RIGHT, cuM.getCols(), cuV.getRows(),
                        cuM.devPtr, cuM.getCols(), cuV.devPtr, 1, cuM.devPtr,
                        cuM.getCols());
@@ -160,6 +182,9 @@ void ComputingUnit::scaleRowsByVector(CuMatrix &cuM, CuMatrix &cuV) {
 }
 
 void ComputingUnit::hadamardAdd(CuMatrix &matLeft, CuMatrix &matRight) {
+    err = cudaSetDevice(deviceId);
+    assert(err == cudaSuccess);
+
     thrust::device_ptr<float> cuLeft_ptr(matLeft.devPtr);
     thrust::device_ptr<float> cuRight_ptr(matRight.devPtr);
     thrust::transform(cuLeft_ptr, cuLeft_ptr + matLeft.getNumElemts(),
@@ -167,6 +192,9 @@ void ComputingUnit::hadamardAdd(CuMatrix &matLeft, CuMatrix &matRight) {
 }
 
 CuMatrix ComputingUnit::hadamardSub(CuMatrix &matLeft, CuMatrix &matRight) {
+    err = cudaSetDevice(deviceId);
+    assert(err == cudaSuccess);
+
     assert(matLeft.getRows() == matRight.getRows());
     assert(matLeft.getCols() == matRight.getCols());
     CuMatrix res(Matrix(matLeft.getRows(), matLeft.getCols(), (FeatType *)NULL),
@@ -181,6 +209,9 @@ CuMatrix ComputingUnit::hadamardSub(CuMatrix &matLeft, CuMatrix &matRight) {
 }
 
 CuMatrix ComputingUnit::hadamardMul(CuMatrix &matLeft, CuMatrix &matRight) {
+    err = cudaSetDevice(deviceId);
+    assert(err == cudaSuccess);
+
     assert(matLeft.getRows() == matRight.getRows());
     assert(matLeft.getCols() == matRight.getCols());
     CuMatrix res(Matrix(matLeft.getRows(), matLeft.getCols(), (FeatType *)NULL),
@@ -197,6 +228,9 @@ CuMatrix ComputingUnit::hadamardMul(CuMatrix &matLeft, CuMatrix &matRight) {
 }
 
 CuMatrix ComputingUnit::softmaxRows(CuMatrix &mat) {
+    err = cudaSetDevice(deviceId);
+    assert(err == cudaSuccess);
+
     CuMatrix res(Matrix(mat.getRows(), mat.getCols(), (FeatType *)NULL),
                  handle);
     cudnnTensorDescriptor_t srcTensorDesc, sftTensorDesc;
@@ -216,6 +250,13 @@ CuMatrix ComputingUnit::softmaxRows(CuMatrix &mat) {
 
 CuMatrix ComputingUnit::activateBackward(CuMatrix &x, CuMatrix &y,
                                          CuMatrix &dy) {
+    err = cudaSetDevice(deviceId);
+    assert(err == cudaSuccess);
+
+    cudaError_t err = cudaSetDevice(deviceId);
+    if (err != cudaSuccess) {
+        abort();
+    }
     FeatType *dx_d = new FeatType[y.getNumElemts()];
     memset(dx_d, 0, y.getDataSize());
     CuMatrix dx(Matrix(y.getRows(), y.getCols(), dx_d), handle);
@@ -238,6 +279,9 @@ CuMatrix ComputingUnit::activateBackward(CuMatrix &x, CuMatrix &y,
 }
 
 CuMatrix ComputingUnit::dot(Matrix &A, Matrix &B) {
+    err = cudaSetDevice(deviceId);
+    assert(err == cudaSuccess);
+
     CuMatrix devA(A, handle);
     CuMatrix devB(B, handle);
     CuMatrix devC = devA.dot(devB);
@@ -246,6 +290,9 @@ CuMatrix ComputingUnit::dot(Matrix &A, Matrix &B) {
 }
 
 void ComputingUnit::activate(CuMatrix &A) {
+    err = cudaSetDevice(deviceId);
+    assert(err == cudaSuccess);
+
     cudnnTensorDescriptor_t srcTensorDesc;
     cudnnCreateTensorDescriptor(&srcTensorDesc);
     cudnnSetTensor4dDescriptor(srcTensorDesc, CUDNN_TENSOR_NCHW,
@@ -262,6 +309,9 @@ void ComputingUnit::activate(CuMatrix &A) {
 //** much slower than CPU only if Input Matrices are not loaded in GPU
 // beforehand
 unsigned ComputingUnit::checkAccuracy(CuMatrix &predictions, CuMatrix &labels) {
+    err = cudaSetDevice(deviceId);
+    assert(err == cudaSuccess);
+
     unsigned rowSize = predictions.getCols();
 
     unsigned valStt = (unsigned)(predictions.getRows() * TRAIN_PORTION);
@@ -293,6 +343,9 @@ unsigned ComputingUnit::checkAccuracy(CuMatrix &predictions, CuMatrix &labels) {
 //** much slower than CPU only if Input Matrices are not loaded in GPU
 // beforehand
 float ComputingUnit::checkLoss(CuMatrix &preds, CuMatrix &labels) {
+    err = cudaSetDevice(deviceId);
+    assert(err == cudaSuccess);
+
     unsigned rowSize = preds.getCols();
 
     // TODO: (YIFAN) cannot set valStt to non-zero value. Memorcy access error. Debug this
@@ -319,6 +372,9 @@ float ComputingUnit::checkLoss(CuMatrix &preds, CuMatrix &labels) {
 
 void ComputingUnit::getTrainStat(CuMatrix &preds, CuMatrix &labels, float &acc,
                                  float &loss) {
+    err = cudaSetDevice(deviceId);
+    assert(err == cudaSuccess);
+
     // loss = checkLoss(preds, labels);
     loss = 0.0;
     acc = checkAccuracy(preds, labels);
@@ -343,6 +399,9 @@ void ComputingUnit::getTrainStat(CuMatrix &preds, CuMatrix &labels, float &acc,
 }
 
 void ComputingUnit::maskout(CuMatrix &preds, CuMatrix &labels) {
+    err = cudaSetDevice(deviceId);
+    assert(err == cudaSuccess);
+
     unsigned end = labels.getRows();
     unsigned stt = (unsigned)(end * TRAIN_PORTION);
 

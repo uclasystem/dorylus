@@ -133,7 +133,6 @@ case $1 in
         NNODES=$( cat ${WORKERSFILE} | wc -l )
         #NDS=$( wc -l ${DSHMACHINES} | cut -d" " -f1 )
         for i in $( seq 1 ${NDS} ); do
-          echo "IN THE FOR LOOP i = $i"
           DSHNODES[$i]=$( head -n $i ${DSHMACHINESFILE} | tail -n 1 )
         done
 

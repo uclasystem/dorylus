@@ -103,19 +103,23 @@ void Engine::init(int argc, char *argv[]) {
     // HACK FOR NOW: Need to have some reference to 'cu' so I can test
     // if new setup is working. Later will rework to give a chunk to each
     // different GPU
+    cudaError_t err = cudaSetDevice(localId);
+    if (err != cudaSuccess) {
+        abort();
+    }
+
     if (mode == GPU) {  // GPU
-        compUnits = std::vector<ComputingUnit>(ngpus);
         for (unsigned gpuId = 0; gpuId < ngpus; ++gpuId) {
             // Giving each process its own GPU for now so each process will
             // have ngpus=1 and assigned its devId through the CLI
-            compUnits[gpuId] = ComputingUnit(localId);
+            compUnits.push_back(ComputingUnit(localId));
         }
+
         resComm = new GPUComm(this);
     }
     ComputingUnit& cu = compUnits[0];
 
     numLambdasForward = ngpus;
-    printLog(nodeId, "Loading SparseMatrices for GPU");
     NormAdjMatrixIn = new CuMatrix();
     NormAdjMatrixOut = new CuMatrix();
     {

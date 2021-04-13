@@ -4,6 +4,12 @@
 #pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 // Scheduler for sync/async pipeline
 void Engine::scheduleAsyncFunc(unsigned tid) {
+#ifdef _GPU_ENABLED_
+    cudaError_t err = cudaSetDevice(localId);
+    if (err != cudaSuccess) {
+        abort();
+    }
+#endif
     double asyncStt = 0, asyncEnd = 0;
     double syncStt  = 0, syncEnd  = 0;
     // unsigned numAsyncEpochs = 0;
@@ -182,6 +188,12 @@ void Engine::scheduleAsyncFunc(unsigned tid) {
 #pragma GCC diagnostic pop
 
 void Engine::gatherWorkFunc(unsigned tid) {
+#ifdef _GPU_ENABLED_
+    cudaError_t err = cudaSetDevice(localId);
+    if (err != cudaSuccess) {
+        abort();
+    }
+#endif
     BackoffSleeper bs;
     while (!pipelineHalt) {
         GAQueue.lock();
@@ -222,6 +234,12 @@ void Engine::gatherWorkFunc(unsigned tid) {
 
 // We could merge GA and AV since GA always calls AV
 void Engine::applyVertexWorkFunc(unsigned tid) {
+#ifdef _GPU_ENABLED_
+    cudaError_t err = cudaSetDevice(localId);
+    if (err != cudaSuccess) {
+        abort();
+    }
+#endif
     BackoffSleeper bs;
     while (!pipelineHalt) {
         AVQueue.lock();
@@ -254,6 +272,12 @@ void Engine::applyVertexWorkFunc(unsigned tid) {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 void Engine::scatterWorkFunc(unsigned tid) {
+#ifdef _GPU_ENABLED_
+    cudaError_t err = cudaSetDevice(localId);
+    if (err != cudaSuccess) {
+        abort();
+    }
+#endif
     BackoffSleeper bs;
     const bool BLOCK = true;
     bool block = BLOCK;
@@ -343,6 +367,12 @@ void Engine::scatterWorkFunc(unsigned tid) {
 #pragma GCC diagnostic pop
 
 void Engine::ghostReceiverFunc(unsigned tid) {
+#ifdef _GPU_ENABLED_
+    cudaError_t err = cudaSetDevice(localId);
+    if (err != cudaSuccess) {
+        abort();
+    }
+#endif
     switch (gnn_type) {
         case GNN::GCN:
             ghostReceiverGCN(tid);
@@ -357,6 +387,12 @@ void Engine::ghostReceiverFunc(unsigned tid) {
 
 // Only for single thread because of the barrier
 void Engine::applyEdgeWorkFunc(unsigned tid) {
+#ifdef _GPU_ENABLED_
+    cudaError_t err = cudaSetDevice(localId);
+    if (err != cudaSuccess) {
+        abort();
+    }
+#endif
     BackoffSleeper bs;
     while (!pipelineHalt) {
         AEQueue.lock();
