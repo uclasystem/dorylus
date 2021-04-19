@@ -27,6 +27,6 @@ ARGS="${@}"
 
 ${EC2MAN_CMD} weight 0 ssh "cd dorylus; ./run/run-onnode weight ${ARGS}" &> weightserver-out.txt &
 
-#${EC2MAN_CMD} graph 0 ssh "cd dorylus; ./run/run-onnode graph ${ARGS}" | tee graphserver-out.txt
+${EC2MAN_CMD} graph 0 ssh "cd dorylus; ./run/run-onnode graph ${ARGS}" | tee graphserver-out.txt
 
 wait

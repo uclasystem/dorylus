@@ -50,6 +50,7 @@ public:
 private:
 
     unsigned numNodes = 0;
+    int numWorkers = 0;
     unsigned nodeId = 0;
     unsigned localId = 0;
 
@@ -57,6 +58,8 @@ private:
     zmq::socket_t *dataPublisher = NULL;
     zmq::socket_t *dataSubscriber = NULL;
     unsigned dataPort;
+
+    zmq::socket_t **ipcSockets;
 
     Lock lockDataPublisher;
     Lock lockDataSubscriber;

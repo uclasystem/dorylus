@@ -110,25 +110,32 @@ void CuMatrix::loadSpCSC(cusparseHandle_t &handle, Graph &graph) {
     setCols(total);
 }
 
-void CuMatrix::loadSpDense(FeatType *vtcsTensor, FeatType *ghostTensor,
+std::vector<double> CuMatrix::loadSpDense(FeatType *vtcsTensor, FeatType *ghostTensor,
                            unsigned numLocalVertices, unsigned numGhostVertices,
                            unsigned numFeat) {
+    std::vector<double> times;
+    times.push_back(getTimer());
     // Still row major
     unsigned totalVertices = (numLocalVertices + numGhostVertices);
     cudaStat = cudaMalloc((void **)&devPtr,
                           numFeat * sizeof(FeatType) * totalVertices);
     assert(cudaStat == cudaSuccess);
+    times.push_back(getTimer());
     cudaStat = cudaMemcpy(devPtr, vtcsTensor,
                           sizeof(FeatType) * numLocalVertices * numFeat,
                           cudaMemcpyHostToDevice);
     assert(cudaStat == cudaSuccess);
+    times.push_back(getTimer());
     cudaStat = cudaMemcpy(devPtr + numLocalVertices * numFeat, ghostTensor,
                           sizeof(FeatType) * numGhostVertices * numFeat,
                           cudaMemcpyHostToDevice);
     assert(cudaStat == cudaSuccess);
+    times.push_back(getTimer());
     setRows(totalVertices);
     setCols(numFeat);
     MemoryPool.insert(devPtr);
+    times.push_back(getTimer());
+    return times;
 }
 
 CuMatrix CuMatrix::extractRow(unsigned row) {

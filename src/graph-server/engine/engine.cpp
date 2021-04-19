@@ -38,6 +38,9 @@ void Engine::init(int argc, char *argv[]) {
 
     parseArgs(argc, argv);
 
+    printLog(nodeId, "AggT: %u, AppT: %u, CommT: %u",
+        aggThreads, applyThreads, commThreads);
+
     adjustPortsForWorkers();
 
     // Initialize the node manager and communication manager.
@@ -49,7 +52,7 @@ void Engine::init(int argc, char *argv[]) {
     assert(numNodes <= 256);  // Cluster size limitation.
     outFile += std::to_string(nodeId);
     // Init data ctx with `dThreads` threads for scatter
-    commManager.init(nodeManager, mode == LAMBDA ? commThreads : 1);
+    commManager.init(nodeManager, mode == LAMBDA ? commThreads : 3);
 
     // Set number of layers and number of features in each layer. Also store the
     // prefix sum of config for offset querying use.
@@ -76,6 +79,16 @@ void Engine::init(int argc, char *argv[]) {
         vecTimeApplyEdg.push_back(0.0);
         vecTimeLambdaInvoke.push_back(0.0);
         vecTimeLambdaWait.push_back(0.0);
+    }
+
+    for (unsigned i = 0; i < 2 * numLayers; i++) {
+        aggTimes.push_back(std::map<std::string, double>());
+    }
+    for (unsigned i = 0; i < 2 * numLayers; i++) {
+        applyTimes.push_back(std::map<std::string, double>());
+    }
+    for (unsigned i = 0; i < 2 * numLayers; i++) {
+        scatterTimes.push_back(std::map<std::string, double>());
     }
 
     // Save intermediate tensors during forward phase for backward computation.

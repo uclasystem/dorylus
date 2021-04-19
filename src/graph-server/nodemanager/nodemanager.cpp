@@ -265,6 +265,11 @@ NodeManager::getNumNodes() {
     return allNodes.size();
 }
 
+int
+NodeManager::getNumWorkers() {
+    return numWorkers;
+}
+
 unsigned
 NodeManager::getMyNodeId() {
     return me.id;
@@ -290,6 +295,7 @@ void
 NodeManager::parseNodeConfig(const std::string workersFile, int localId) {
     std::ifstream inFile(workersFile);
     std::string line;
+    numWorkers = 0;
     while (std::getline(inFile, line)) {
         boost::algorithm::trim(line);
         if (line.length() > 0) {
@@ -298,6 +304,7 @@ NodeManager::parseNodeConfig(const std::string workersFile, int localId) {
             unsigned id = allNodes.size();
             std::string ip = line.substr(line.find('@') + 1, line.find(':') - line.find('@') - 1);
             int lineLocalId = std::atoi(line.substr(line.find(':') + 1).c_str());
+            numWorkers = std::max(numWorkers, lineLocalId+1);
 
             // It's me!
             if (ip == me.ip && localId == lineLocalId) {

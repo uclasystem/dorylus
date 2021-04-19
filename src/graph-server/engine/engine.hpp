@@ -210,7 +210,9 @@ public:
 
     // GPU related vars
     unsigned ngpus;
+#ifdef _GPU_ENABLED_
     std::vector<ComputingUnit> compUnits;
+#endif
 
     WeightComm *weightComm;
     ResourceComm *resComm;
@@ -235,6 +237,10 @@ public:
     std::vector<double> vecTimeApplyEdg;
     std::vector<double> vecTimeScatter;
     std::vector<double> epochTimes;
+
+    std::vector< std::map<std::string, double> > aggTimes;
+    std::vector< std::map<std::string, double> > applyTimes;
+    std::vector< std::map<std::string, double> > scatterTimes;
     double asyncAvgEpochTime;
 
     void calcAcc(FeatType *predicts, FeatType *labels, unsigned vtcsCnt,

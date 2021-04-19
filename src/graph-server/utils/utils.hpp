@@ -37,4 +37,6 @@ std::time_t getCurrentTime();
 
 void getPrIP(std::string& myPrIpFile, std::string& ip);
 
+void addOrCreate(std::string key, double value, std::map<std::string, double>& map);
+
 #endif //__GRAPH_UTILS_HPP__

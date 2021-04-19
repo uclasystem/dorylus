@@ -94,6 +94,7 @@ void Engine::preallocateGCN() {
 
 #ifdef _GPU_ENABLED_
 void Engine::aggregateGCN(Chunk &c) {
+    double aggStart = getTimer();
     PROP_TYPE dir = c.dir;
     ComputingUnit& cu = compUnits[c.localId];
 
@@ -101,6 +102,7 @@ void Engine::aggregateGCN(Chunk &c) {
     Matrix featTensor;
     Matrix ghostTensor;
     Matrix outputTensor;
+    double aggGetTensors = getTimer();
     if (dir == PROP_TYPE::FORWARD) { // forward
         featTensor = c.layer == 0
                    ? savedNNTensors[c.layer]["x"]
@@ -112,20 +114,37 @@ void Engine::aggregateGCN(Chunk &c) {
         ghostTensor = savedNNTensors[c.layer - 1]["bg"];
         outputTensor = savedNNTensors[c.layer - 1]["aTg"];
     }
+    double aggLoadSpDense = getTimer();
     CuMatrix feat;
-    feat.loadSpDense(featTensor.getData(), ghostTensor.getData(),
+    auto timeVec = feat.loadSpDense(featTensor.getData(), ghostTensor.getData(),
                      featTensor.getRows(), ghostTensor.getRows(),
                      featTensor.getCols());
     CuMatrix out;
+    double aggCompute = getTimer();
     if (dir == PROP_TYPE::FORWARD) {
         out = cu.aggregate(*NormAdjMatrixIn, feat, *OneNorms);
     } else {
         out = cu.aggregate(*NormAdjMatrixOut, feat, *OneNorms);
     }
+    double aggSaveData = getTimer();
     out.setData(outputTensor.getData());
     out.updateMatrixFromGPU();
     cudaDeviceSynchronize();
     CuMatrix::freeGPU();
+
+    unsigned layerIndex = c.dir == PROP_TYPE::FORWARD ? c.layer : c.layer + numLayers;
+    vecTimeAggregate[layerIndex] += (getTimer() - aggStart);
+
+    std::map<std::string, double>& timesMap = aggTimes[layerIndex];
+    addOrCreate("1. Init", aggGetTensors - aggStart, timesMap);
+    addOrCreate("2. Get Tensors", aggLoadSpDense - aggGetTensors, timesMap);
+    addOrCreate("3. Load Dense Matrix", aggCompute - aggLoadSpDense, timesMap);
+    addOrCreate("3a. cudaMalloc", timeVec[1] - timeVec[0], timesMap);
+    addOrCreate("3b. cudaMemcpy Feats", timeVec[2] - timeVec[1], timesMap);
+    addOrCreate("3c. cudaMemcpy Ghosts", timeVec[3] - timeVec[2], timesMap);
+    addOrCreate("3d. Finishing up", timeVec[4] - timeVec[3], timesMap);
+    addOrCreate("4. Agg Compute", aggSaveData - aggCompute, timesMap);
+    addOrCreate("5. Save Data to Tensor", getTimer() - aggSaveData, timesMap);
 }
 #else // !defined(_GPU_ENABLED_)
 void Engine::aggregateGCN(Chunk &c) {
@@ -193,6 +212,7 @@ void Engine::aggregateGCN(Chunk &c) {
 #endif // _GPU_ENABLED
 
 void Engine::applyVertexGCN(Chunk &c) {
+    double avStart = getTimer();
     c.vertex = true;
     if (c.dir == PROP_TYPE::FORWARD) { // Forward pass
         resComm->NNCompute(c);
@@ -200,9 +220,12 @@ void Engine::applyVertexGCN(Chunk &c) {
         Chunk nextC = incLayerGCN(c);
         resComm->NNCompute(nextC);
     }
+    unsigned layerIndex = c.dir == PROP_TYPE::FORWARD ? c.layer : c.layer + numLayers;
+    vecTimeApplyVtx[layerIndex] += (getTimer() - avStart);
 }
 
 void Engine::scatterGCN(Chunk &c) {
+    double scatterStart = getTimer();
     unsigned outputLayer = c.layer;
     std::string tensorName;
     if (c.dir == PROP_TYPE::FORWARD) {
@@ -222,6 +245,7 @@ void Engine::scatterGCN(Chunk &c) {
         c.dir == PROP_TYPE::FORWARD ? graph.forwardGhostMap
                                     : graph.backwardGhostMap;
 
+    double scatterCreateBuckets = getTimer();
     // batch sendouts similar to the sequential version
     const unsigned BATCH_SIZE = std::max(
         (MAX_MSG_SIZE - DATA_HEADER_SIZE) /
@@ -235,12 +259,13 @@ void Engine::scatterGCN(Chunk &c) {
         }
     }
 
+    double scatterPushOut = getTimer();
     for (unsigned nid = 0; nid < numNodes; ++nid) {
         if (nid == nodeId)
             continue;
         unsigned ghostVCnt = batchedIds[nid].size();
 #if defined(_GPU_ENABLED_)
-#pragma omp parallel for
+#pragma omp parallel for num_threads(commThreads)
 #endif
         for (unsigned ib = 0; ib < ghostVCnt; ib += BATCH_SIZE) {
             unsigned sendBatchSize = (ghostVCnt - ib) < BATCH_SIZE
@@ -258,6 +283,13 @@ void Engine::scatterGCN(Chunk &c) {
     }
 
     delete[] batchedIds;
+    unsigned layerIndex = c.dir == PROP_TYPE::FORWARD ? c.layer : c.layer + numLayers;
+    vecTimeScatter[layerIndex] += (getTimer() - scatterStart);
+
+    std::map<std::string, double>& timesMap = scatterTimes[layerIndex];
+    addOrCreate("1. Get References", scatterCreateBuckets - scatterStart, timesMap);
+    addOrCreate("2. Create Buckets", scatterPushOut - scatterCreateBuckets, timesMap);
+    addOrCreate("3. Push Out", getTimer() - scatterPushOut, timesMap);
 }
 
 void Engine::ghostReceiverGCN(unsigned tid) {

@@ -67,3 +67,12 @@ getPrIP(std::string& myPrIpFile, std::string& ip) {
 
     ipFile.close();
 }
+
+
+void addOrCreate(std::string key, double value, std::map<std::string, double>& map) {
+    if (map.find(key) == map.end()) {
+        map[key] = value;
+    } else {
+        map[key] += value;
+    }
+}

@@ -8,6 +8,7 @@
 #include <iostream>
 #include <set>
 #include <map>
+#include <vector>
 #include "../../common/matrix.hpp"
 #include "../../common/utils.hpp"
 #include "../graph/graph.hpp"
@@ -28,7 +29,7 @@ class CuMatrix : public Matrix {
     void loadSpCSR(cusparseHandle_t &handle, Graph& graph);
     void loadSpCSC(cusparseHandle_t &handle, Graph& graph);
 
-    void loadSpDense(FeatType *vtcsTensor, FeatType *ghostTensor,
+    std::vector<double> loadSpDense(FeatType *vtcsTensor, FeatType *ghostTensor,
                      unsigned numLocalVertices, unsigned numGhostVertices,
                      unsigned numFeat);
 

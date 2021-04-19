@@ -114,6 +114,11 @@ case $1 in
             fi
         done
 
+        if [[ $MODE -eq 1 ]]; then
+            AGG_THREADS=$[$(nproc)/${WORKERS_PER_NODE}]
+            COMM_THREADS=$[$(nproc)/${WORKERS_PER_NODE}]
+        fi
+
         # After processing args, check to see if GPU enables
         # If so, disable pipelining
         if [[ ($MODE -eq 1 || $MODE -eq 2) && $PIPELINE -eq 1 ]]; then

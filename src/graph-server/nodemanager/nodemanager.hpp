@@ -71,6 +71,7 @@ public:
     bool standAloneMode();
     Node& getNode(unsigned i);
     unsigned getNumNodes();
+    int getNumWorkers();
     unsigned getMyNodeId();
     bool amIMaster();
 
@@ -81,6 +82,7 @@ private:
     Engine* engine;
     unsigned masterId;
     unsigned numNodes;
+    int numWorkers;
     bool standAlone;
 
 

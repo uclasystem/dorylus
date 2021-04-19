@@ -1,7 +1,5 @@
 #!/bin/bash
 
-echo "STARTING RUN EACH"
-
 WORKERS_PER_NODE=1
 PARAMS=''
 while (( "$#" )); do
@@ -18,11 +16,32 @@ while (( "$#" )); do
 done
 eval set -- $PARAMS
 
+## CPU AFFINITY ASSIGNMENT TEST
+NPROC=$(nproc)
+MASK=0x
+let MASK_CHARS="$NPROC/4"
+for i in $( seq 1 $MASK_CHARS ); do
+    MASK+='0'
+done
+let CORE_CHUNK_SIZE="$MASK_CHARS/$WORKERS_PER_NODE"
+## END CPU AFFINITY ASSIGNMENT TEST
+
+
 ID_UPPER_LIMIT=$(($WORKERS_PER_NODE-1))
 for wid in $( seq 0 $ID_UPPER_LIMIT ); do
+    let START_POS="$wid * $CORE_CHUNK_SIZE + 2"
+    let END_POS="$START_POS + $CORE_CHUNK_SIZE"
+    THIS_MASK=${MASK:0:START_POS}
+    for _ in $( seq 1 $CORE_CHUNK_SIZE ); do
+        THIS_MASK+="F"
+    done
+    THIS_MASK+="${MASK:END_POS}"
+    echo $THIS_MASK
+
     GRAPHSERVER_CMD="./build/graphserver $PARAMS --localId $wid"
     echo $GRAPHSERVER_CMD
-    ${GRAPHSERVER_CMD} &
+    taskset $THIS_MASK ${GRAPHSERVER_CMD} &
+#    ${GRAPHSERVER_CMD} &
 done
 
 

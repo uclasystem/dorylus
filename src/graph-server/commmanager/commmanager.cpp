@@ -11,6 +11,7 @@ void
 CommManager::init(NodeManager& nodeManager, unsigned ctxThds) {
     printLog(nodeId, "CommManager starts initialization...");
     numNodes = nodeManager.getNumNodes();
+    numWorkers = nodeManager.getNumWorkers();
     nodeId = nodeManager.getMyNodeId();
     Node me = nodeManager.getNode(nodeId);
     localId = me.localId;
@@ -40,10 +41,26 @@ CommManager::init(NodeManager& nodeManager, unsigned ctxThds) {
     dataSubscriber->setsockopt(ZMQ_SUBSCRIBE, "FFFFFFFF", 8);
     for (unsigned i = 0; i < numNodes; ++i) {
         Node node = nodeManager.getNode(i);
+        //if (node.ip == me.ip) continue; // Use IPC sockets for intra-server comms
         char hostPort[50];
         sprintf(hostPort, "tcp://%s:%u", node.ip.c_str(), dataPort + node.localId);
         dataSubscriber->connect(hostPort);
     }
+
+//    if (numWorkers > 1) {
+//        ipcSockets = new zmq::socket_t*[numWorkers];
+//        for (int wid = 0; wid < numWorkers; ++wid) {
+//            std::string address = "ipc:///home/ubuntu/feeds/" + std::to_string(wid);
+//            if (wid == me.localId) {
+//                ipcSockets[wid] = new zmq::socket_t(dataContext, ZMQ_REP);
+//                ipcSockets[wid]->bind(address.c_str());
+//            }
+//            else {
+//                ipcSockets[wid] = new zmq::socket_t(dataContext, ZMQ_REQ);
+//                ipcSockets[wid]->connect(address.c_str());
+//            }
+//        }
+//    }
     sleep_ms(5000);
 
     lockDataPublisher.init();

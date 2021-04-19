@@ -3,6 +3,7 @@
 #include <thread>
 
 #include "../../common/utils.hpp"
+#include "../utils/utils.hpp"
 #include "comp_server.cuh"
 
 void deleteMatrix(Matrix &mat) {
@@ -102,11 +103,14 @@ void ComputingServer::edgNNBackward(unsigned layer) {
 }
 
 void ComputingServer::vtxNNForwardGCN(unsigned layer, bool lastLayer) {
+    double avStart = getTimer();
     CuMatrix cuFeats = cu.wrapMatrix(savedNNTensors[layer]["ah"]);
     CuMatrix cuWeights = cu.wrapMatrix(msgService.getWeightMatrix(layer));
+    double avComputeZ = getTimer();
     CuMatrix z = cuFeats.dot(cuWeights);
 
     if (!lastLayer) {
+        double avLastLayer = getTimer();
         Matrix savedTensor = savedNNTensors[layer]["z"];
         Matrix outputTensor = savedNNTensors[layer]["h"];
         FeatType *act_z = outputTensor.getData();
@@ -119,8 +123,14 @@ void ComputingServer::vtxNNForwardGCN(unsigned layer, bool lastLayer) {
         z.updateMatrixFromGPU();
         memcpy(act_z, z.getData(), z.getDataSize());
         z.free();
+
+        std::map<std::string, double>& timesMap = gpuComm->engine->applyTimes[layer];
+        addOrCreate("1. Wrap Feats/Weights", avComputeZ - avStart, timesMap);
+        addOrCreate("2. Compute Z", avLastLayer - avComputeZ, timesMap);
+        addOrCreate("3. Last Layer Ops", getTimer() - avLastLayer, timesMap);
     } else {
         bool report = true;
+        double avPredict = getTimer();
 
         CuMatrix cuPred = cu.softmaxRows(z);
         // here it can be optimized by fetching directly from Forward;
@@ -128,7 +138,8 @@ void ComputingServer::vtxNNForwardGCN(unsigned layer, bool lastLayer) {
         CuMatrix cuLabels = cu.wrapMatrix(labels);
         if (report) {
             // Asynchronously do acc, loss calc on CPUs
-            std::thread evalThread([&](Matrix labels) {
+            std::thread evalThread([&](Matrix labels, unsigned layer) {
+                double reportStart = getTimer();
                 cudaError_t err = cudaSetDevice(deviceId);
                 if (err != cudaSuccess) {
                     abort();
@@ -149,8 +160,12 @@ void ComputingServer::vtxNNForwardGCN(unsigned layer, bool lastLayer) {
                 unsigned valsetSize = (unsigned)(cpuPreds.getRows() * VAL_PORTION);
                 printLog(nodeId, "batch Acc: %f, Loss: %f", acc / valsetSize, loss / valsetSize);
                 cpuPreds.free();
+
+                double reportEnd = getTimer();
+                std::map<std::string, double>& reportTimesMap = gpuComm->engine->applyTimes[layer];
+                addOrCreate("Report", reportEnd - reportStart, reportTimesMap);
             },
-            labels);
+            labels, layer);
             // evalThread.join();
             evalThread.detach();
             // float acc, loss;
@@ -160,6 +175,7 @@ void ComputingServer::vtxNNForwardGCN(unsigned layer, bool lastLayer) {
             // // printLog(nodeId, "valset size %u, total size %u", valsetSize, cuPred.getRows());
             // printLog(nodeId, "batch Acc: %f, Loss: %f", acc / valsetSize, loss / valsetSize);
         }
+        double calcUpdates = getTimer();
         cu.maskout(cuPred, cuLabels);
 
         CuMatrix d_output = cu.hadamardSub(cuPred, cuLabels);
@@ -173,20 +189,28 @@ void ComputingServer::vtxNNForwardGCN(unsigned layer, bool lastLayer) {
         CuMatrix cuAh = cu.wrapMatrix(ah);
         CuMatrix cuWeightUpdates = cuAh.dot(d_output, true, false);
         Matrix weightUpdates = cuWeightUpdates.getMatrix();
+        double sendUpdates = getTimer();
         msgService.sendWeightUpdate(weightUpdates, layer);
+
+        std::map<std::string, double>& timesMap = gpuComm->engine->applyTimes[layer];
+        addOrCreate("1. WrapFeats/Weights", avComputeZ - avStart, timesMap);
+        addOrCreate("2. Compute Z", avPredict - avComputeZ, timesMap);
+        addOrCreate("3. Make Predictions", calcUpdates - avPredict, timesMap);
+        addOrCreate("4. Calc Updates", sendUpdates - calcUpdates, timesMap);
+        addOrCreate("5. Send Updates", getTimer() - sendUpdates, timesMap);
     }
 
     CuMatrix::freeGPU();
+
 }
 
 void ComputingServer::vtxNNBackwardGCN(unsigned layer) {
-#ifdef _GPU_ENABLED_
     cudaError_t err = cudaSetDevice(deviceId);
     if (err != cudaSuccess) {
         abort();
     }
-#endif
 
+    double avbStart = getTimer();
     Matrix grad = savedNNTensors[layer]["aTg"];
     CuMatrix cuGrad = cu.wrapMatrix(grad);
     Matrix z = savedNNTensors[layer]["z"];
@@ -196,22 +220,34 @@ void ComputingServer::vtxNNBackwardGCN(unsigned layer) {
     Matrix ah = savedNNTensors[layer]["ah"];
     CuMatrix cuAh = cu.wrapMatrix(ah);
 
+    double avbCompute = getTimer();
     CuMatrix interGrad = cu.activateBackward(cuZ, cuH, cuGrad);
     CuMatrix cuWeightUpdates = cuAh.dot(interGrad, true, false);
 
+    double avbGetUpdates = getTimer();
     Matrix weightUpdates = cuWeightUpdates.getMatrix();
     Matrix weight = msgService.getWeightMatrix(layer);
     CuMatrix cuWeights = cu.wrapMatrix(weight);
+    double avbComputeGrad = getTimer();
     if (layer != 0) {
         CuMatrix resultGrad = interGrad.dot(cuWeights, false, true);
         resultGrad.setData(savedNNTensors[layer]["grad"].getData());
         resultGrad.updateMatrixFromGPU();
     }
 
+    double avbSendUpdates = getTimer();
     msgService.sendWeightUpdate(weightUpdates, layer);
     CuMatrix::freeGPU();
 
     if (layer == 0) msgService.prefetchWeightsMatrix();
+
+    unsigned numLayers = gpuComm->engine->numLayers;
+    std::map<std::string, double>& timesMap = gpuComm->engine->applyTimes[layer + numLayers];
+    addOrCreate("1. Wrap to CUDA", avbCompute - avbStart, timesMap);
+    addOrCreate("2. Compute Updates", avbGetUpdates - avbCompute, timesMap);
+    addOrCreate("3. Get Weights", avbComputeGrad - avbGetUpdates, timesMap);
+    addOrCreate("4. Compute Grad", avbSendUpdates - avbComputeGrad, timesMap);
+    addOrCreate("5. Send Weight Updates", getTimer() - avbSendUpdates, timesMap);
 }
 
 void ComputingServer::vtxNNForwardGAT(unsigned layer, bool lastLayer) {

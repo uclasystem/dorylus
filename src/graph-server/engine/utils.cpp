@@ -241,7 +241,7 @@ void Engine::printEngineMetrics() {
         printLog(nodeId, "<EM>: Using %u lambdas", numLambdasForward);
         printLog(nodeId, "<EM>: Initialization takes %.3lf ms", timeInit);
 
-        if (false) {
+        if (true) {
             float avgDenom = static_cast<float>(numSyncEpochs);
             // if (pipeline) avgDenom = static_cast<float>(numSyncEpochs * numLambdasForward);
             printLog(nodeId, "<EM>: Forward:  Time per stage:");
@@ -273,6 +273,63 @@ void Engine::printEngineMetrics() {
                     timeBackwardProcess / (float)avgDenom);
 
             printLog(nodeId, "<EM>: Final accuracy %.3lf", accuracy);
+        }
+
+        if (true) {
+            float avgDenom = static_cast<float>(numSyncEpochs);
+            printLog(nodeId, "<EM>: Forward Times Breakdown ==========");
+            printLog(nodeId, "<EM>: Aggregation");
+            for (unsigned i = 0; i < numLayers; ++i) {
+                for (auto iter = aggTimes[i].begin(); iter != aggTimes[i].end(); ++iter) {
+                    printLog(nodeId, "<EM>  %2u\t%.3lf ms\t%s", i, iter->second / (float)avgDenom, iter->first.c_str());
+                }
+                if (!aggTimes[i].empty()) std::cerr << "\n";
+            }
+
+            std::cerr << "\n";
+            printLog(nodeId, "<EM>: Apply Vertex");
+            for (unsigned i = 0; i < numLayers; ++i) {
+                for (auto iter = applyTimes[i].begin(); iter != applyTimes[i].end(); ++iter) {
+                    printLog(nodeId, "<EM>  %2u\t%.3lf ms\t%s", i, iter->second / (float)avgDenom, iter->first.c_str());
+                }
+                if (!applyTimes[i].empty()) std::cerr << "\n";
+            }
+
+            std::cerr << "\n";
+            printLog(nodeId, "<EM>: Scatter");
+            for (unsigned i = 0; i < numLayers; ++i) {
+                for (auto iter = scatterTimes[i].begin(); iter != scatterTimes[i].end(); ++iter) {
+                    printLog(nodeId, "<EM>  %2u\t%.3lf ms\t%s", i, iter->second / (float)avgDenom, iter->first.c_str());
+                }
+                if (!scatterTimes[i].empty()) std::cerr << "\n";
+            }
+            std::cerr << "\n\n";
+            printLog(nodeId, "<EM>: Backward Times Breakdown ==========");
+            printLog(nodeId, "<EM>: Aggregation");
+            for (unsigned i = numLayers; i < numLayers*2; ++i) {
+                for (auto iter = aggTimes[i].begin(); iter != aggTimes[i].end(); ++iter) {
+                    printLog(nodeId, "<EM>  %2u\t%.3lf ms\t%s", i, iter->second / (float)avgDenom, iter->first.c_str());
+                }
+                if (!aggTimes[i].empty()) std::cerr << "\n";
+            }
+
+            std::cerr << "\n";
+            printLog(nodeId, "<EM>: Apply Vertex");
+            for (unsigned i = numLayers; i < numLayers*2; ++i) {
+                for (auto iter = applyTimes[i].begin(); iter != applyTimes[i].end(); ++iter) {
+                    printLog(nodeId, "<EM>  %2u\t%.3lf ms\t%s", i, iter->second / (float)avgDenom, iter->first.c_str());
+                }
+                if (!applyTimes[i].empty()) std::cerr << "\n";
+            }
+
+            std::cerr << "\n";
+            printLog(nodeId, "<EM>: Scatter");
+            for (unsigned i = numLayers; i < numLayers*2; ++i) {
+                for (auto iter = scatterTimes[i].begin(); iter != scatterTimes[i].end(); ++iter) {
+                    printLog(nodeId, "<EM>  %2u\t%.3lf ms\t%s", i, iter->second / (float)avgDenom, iter->first.c_str());
+                }
+                if (!scatterTimes[i].empty()) std::cerr << "\n";
+            }
         }
 
         printLog(nodeId, "Relaunched Lambda Cnt: %u", resComm->getRelaunchCnt());
