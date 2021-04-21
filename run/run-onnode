@@ -169,6 +169,7 @@ case $1 in
         # Set temporary directory.
         TMPFILEDIR=${HOME}/tmpfiles
         dsh -f ${DSHMACHINESFILE} -c "rm -rf ${TMPFILEDIR} && mkdir -p ${TMPFILEDIR}"
+        dsh -f ${DSHMACHINESFILE} -c "mkdir -p ${HOME}/feeds"
 
         # Run the command on all dsh machines.
         DSH_COMMAND="./run/run-each \

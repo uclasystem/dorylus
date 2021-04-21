@@ -10,6 +10,15 @@ CuMatrix *NormAdjMatrixIn = NULL;
 CuMatrix *NormAdjMatrixOut = NULL;
 CuMatrix *OneNorms = NULL;
 CuMatrix *ZeroNorms = NULL;
+CuMatrix *cuX = NULL;
+CuMatrix *ahs = NULL;
+CuMatrix *hs = NULL;
+CuMatrix *zs = NULL;
+
+CuMatrix *grads = NULL;
+CuMatrix *aTgs = NULL;
+
+CuMatrix *ws = NULL;
 //ComputingUnit cu = ComputingUnit::getInstance();
 // End of global variables
 
@@ -289,9 +298,12 @@ CuMatrix ComputingUnit::dot(Matrix &A, Matrix &B) {
     return devC;
 }
 
-void ComputingUnit::activate(CuMatrix &A) {
+CuMatrix ComputingUnit::activate(CuMatrix &A) {
     err = cudaSetDevice(deviceId);
     assert(err == cudaSuccess);
+
+    FeatType* C_data = new FeatType[A.getNumElemts()];
+    CuMatrix C(Matrix(A.getRows(), A.getCols(), C_data), handle);
 
     cudnnTensorDescriptor_t srcTensorDesc;
     cudnnCreateTensorDescriptor(&srcTensorDesc);
@@ -303,7 +315,10 @@ void ComputingUnit::activate(CuMatrix &A) {
     cudnnCreateActivationDescriptor(&actDesc);
     cudnnSetActivationDescriptor(actDesc, ACTIVATION, CUDNN_PROPAGATE_NAN, 0.0);
     cudnnActivationForward(cudnnHandle, actDesc, &alpha, srcTensorDesc,
-                           A.devPtr, &beta, srcTensorDesc, A.devPtr);
+                           A.devPtr, &beta, srcTensorDesc, C.devPtr);
+
+    delete[] C_data;
+    return C;
 }
 
 //** much slower than CPU only if Input Matrices are not loaded in GPU

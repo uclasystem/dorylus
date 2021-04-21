@@ -729,7 +729,7 @@ void Engine::verticesPushOut(unsigned receiver, unsigned totCnt,
         memcpy(msgPtr, dataPtr, sizeof(FeatType) * featDim);
         msgPtr += sizeof(FeatType) * featDim;
     }
-    commManager.rawMsgPushOut(msg);
+    commManager.rawMsgPushOut(receiver, msg);
 }
 /********************************* AE utils *********************************/
 // reshape vtcs tensor to edgs tensor. Each element in edgsTensor is a reference

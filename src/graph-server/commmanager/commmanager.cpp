@@ -41,145 +41,37 @@ CommManager::init(NodeManager& nodeManager, unsigned ctxThds) {
     dataSubscriber->setsockopt(ZMQ_SUBSCRIBE, "FFFFFFFF", 8);
     for (unsigned i = 0; i < numNodes; ++i) {
         Node node = nodeManager.getNode(i);
-        //if (node.ip == me.ip) continue; // Use IPC sockets for intra-server comms
+        if (node.ip == me.ip) {
+            localNodeIdMin = std::min(localNodeIdMin, node.id);
+            localNodeIdMax = std::max(localNodeIdMax, node.id);
+        }
         char hostPort[50];
         sprintf(hostPort, "tcp://%s:%u", node.ip.c_str(), dataPort + node.localId);
         dataSubscriber->connect(hostPort);
     }
 
-//    if (numWorkers > 1) {
-//        ipcSockets = new zmq::socket_t*[numWorkers];
-//        for (int wid = 0; wid < numWorkers; ++wid) {
-//            std::string address = "ipc:///home/ubuntu/feeds/" + std::to_string(wid);
-//            if (wid == me.localId) {
-//                ipcSockets[wid] = new zmq::socket_t(dataContext, ZMQ_REP);
-//                ipcSockets[wid]->bind(address.c_str());
-//            }
-//            else {
-//                ipcSockets[wid] = new zmq::socket_t(dataContext, ZMQ_REQ);
-//                ipcSockets[wid]->connect(address.c_str());
-//            }
-//        }
-//    }
+    printLog(nodeId, "Boundaries for my IP %s: (%u,%u)", me.ip.c_str(), localNodeIdMin, localNodeIdMax);
+
+    if (numWorkers > 1) {
+        ipcSockets = new zmq::socket_t*[numWorkers];
+        lockIpcSockets = new Lock[numWorkers];
+        for (int wid = 0; wid < numWorkers; ++wid) {
+            lockIpcSockets[wid].init();
+            std::string address = "ipc:///home/ubuntu/feeds/" + std::to_string(wid);
+            if (wid == me.localId) {
+                ipcSockets[wid] = new zmq::socket_t(dataContext, ZMQ_DEALER);
+                ipcSockets[wid]->bind(address.c_str());
+            }
+            else {
+                ipcSockets[wid] = new zmq::socket_t(dataContext, ZMQ_DEALER);
+                ipcSockets[wid]->connect(address.c_str());
+            }
+        }
+    }
     sleep_ms(5000);
 
     lockDataPublisher.init();
     lockDataSubscriber.init();
-
-//    // Control publishers & subscribers.
-//    controlPublishers = new zmq::socket_t*[numNodes];
-//    controlSubscribers = new zmq::socket_t*[numNodes];
-//    lockControlPublishers = new Lock[numNodes];
-//    lockControlSubscribers = new Lock[numNodes];
-//
-//    for (unsigned i = 0; i < numNodes; ++i) {
-//        if(i == nodeId)     // Skip myself.
-//            continue;
-//
-//        controlPublishers[i] = new zmq::socket_t(controlContext, ZMQ_PUB);
-//        controlPublishers[i]->setsockopt(ZMQ_SNDHWM, 0);
-//        controlPublishers[i]->setsockopt(ZMQ_RCVHWM, 0);
-//        char hostPort[50];
-//        int prt = controlPortStart + i;
-//        sprintf(hostPort, "tcp://%s:%d", me.ip.c_str(), prt);
-//        controlPublishers[i]->bind(hostPort);
-//
-//        controlSubscribers[i] = new zmq::socket_t(controlContext, ZMQ_SUB);
-//        controlSubscribers[i]->setsockopt(ZMQ_SNDHWM, 0);
-//        controlSubscribers[i]->setsockopt(ZMQ_RCVHWM, 0);
-//        Node node = nodeManager.getNode(i);
-//        sprintf(hostPort, "tcp://%s:%d", node.ip.c_str(), controlPortStart + me.id);
-//        controlSubscribers[i]->connect(hostPort);
-//        char tpc = CONTROL_MESSAGE_TOPIC;
-//        controlSubscribers[i]->setsockopt(ZMQ_SUBSCRIBE, &tpc, 1);
-//
-//        lockControlPublishers[i].init();
-//        lockControlSubscribers[i].init();
-//    }
-//
-//    // Subscribe mutually with everyone.
-//    // Send IAMUP, respond IAMUP, send ISEEYOU, and respond ISEEYOU.
-//    bool subscribed[numNodes];
-//    for (unsigned i = 0; i < numNodes; ++i)
-//        subscribed[i] = false;
-//    subscribed[nodeId] = true;
-//    unsigned remaining = numNodes - 1;
-//
-//    double lastSents[numNodes];
-//    for (unsigned i = 0; i < numNodes; ++i)
-//        lastSents[i] = -getTimer() - 500.0;         // Give 0.5 sec pause before doing polls.
-//
-//    unsigned i = 0;
-//    while (1) {     // Loop until all have been subscribed.
-//        if (i == nodeId || subscribed[i]) {     // Skip myself & subsribed nodes.
-//            i = (i + 1) % numNodes;
-//            continue;
-//        }
-//
-//        // Send IAMUP.
-//        if (lastSents[i] + getTimer() > 500.0) {    // Set 0.5 sec interval between polls to the same node.
-//            zmq::message_t outMsg(sizeof(ControlMessage));
-//            ControlMessage cMsg(IAMUP);
-//            *((ControlMessage *) outMsg.data()) = cMsg;
-//            controlPublishers[i]->ksend(outMsg);
-//            lastSents[i] = -getTimer();
-//        }
-//
-//        // Received a message from the same node.
-//        zmq::message_t inMsg;
-//        if (controlSubscribers[i]->krecv(&inMsg, ZMQ_DONTWAIT)) {
-//
-//            // Received IAMUP from that node.
-//            ControlMessage cMsg = *((ControlMessage *) inMsg.data());
-//            if (cMsg.messageType == IAMUP) {
-//
-//                // Send ISEEYOU.
-//                {
-//                    zmq::message_t outAckMsg(sizeof(ControlMessage));
-//                    ControlMessage cAckMsg(ISEEYOUUP);
-//                    *((ControlMessage *) outAckMsg.data()) = cAckMsg;
-//                    controlPublishers[i]->ksend(outAckMsg);
-//                }
-//
-//                // Loop until receiving ISEEYOU from that node.
-//                while (1) {
-//                    zmq::message_t inAckMsg;
-//                    if (controlSubscribers[i]->krecv(&inAckMsg, ZMQ_DONTWAIT)) {
-//                        cMsg = *((ControlMessage *) inAckMsg.data());
-//                        if (cMsg.messageType == ISEEYOUUP) {
-//                            zmq::message_t outAckMsg(sizeof(ControlMessage));
-//                            ControlMessage cAckMsg(ISEEYOUUP);
-//                            *((ControlMessage *) outAckMsg.data()) = cAckMsg;
-//                            controlPublishers[i]->ksend(outAckMsg);
-//
-//                            subscribed[i] = true;
-//                            --remaining;
-//                            break;
-//                        }
-//                    } else
-//                        break;
-//                }
-//
-//            // Received ISEEYOU from that node.
-//            } else if (cMsg.messageType == ISEEYOUUP) {
-//
-//                // Send ISEEYOU back.
-//                zmq::message_t outAckMsg(sizeof(ControlMessage));
-//                ControlMessage cAckMsg(ISEEYOUUP);
-//                *((ControlMessage *) outAckMsg.data()) = cAckMsg;
-//                controlPublishers[i]->ksend(outAckMsg);
-//
-//                subscribed[i] = true;
-//                --remaining;
-//            }
-//        }
-//
-//        // If all nodes have been subscribed, subsription success; else go check the next node.
-//        if (remaining == 0)
-//            break;
-//        else
-//            i = (i + 1) % numNodes;
-//    }
 
     flushData();
     //flushControl();
@@ -231,12 +123,19 @@ CommManager::destroy() {
 }
 
 void
-CommManager::rawMsgPushOut(zmq::message_t &msg) {
+CommManager::rawMsgPushOut(unsigned receiver, zmq::message_t &msg) {
     if (numNodes == 0) return;
 
-    lockDataPublisher.lock();
-    dataPublisher->ksend(msg, ZMQ_DONTWAIT);
-    lockDataPublisher.unlock();
+//    if (receiver >= localNodeIdMin && receiver <= localNodeIdMax) {
+//        unsigned localNodeId = receiver - localNodeIdMin;
+//        lockIpcSockets[localNodeId].lock();
+//        ipcSockets[localNodeId]->ksend(msg, ZMQ_DONTWAIT);
+//        lockIpcSockets[localNodeId].unlock();
+//    } else {
+        lockDataPublisher.lock();
+        dataPublisher->ksend(msg, ZMQ_DONTWAIT);
+        lockDataPublisher.unlock();
+//    }
 }
 
 /**
@@ -260,9 +159,16 @@ CommManager::dataPushOut(unsigned receiver, unsigned sender, unsigned topic, voi
     if (valSize > 0)
         memcpy((void *)msgPtr, value, valSize);
 
-    lockDataPublisher.lock();
-    dataPublisher->ksend(outMsg, ZMQ_DONTWAIT);
-    lockDataPublisher.unlock();
+//    if (receiver >= localNodeIdMin && receiver <= localNodeIdMax) {
+//        unsigned localNodeId = receiver - localNodeIdMin;
+//        lockIpcSockets[localNodeId].lock();
+//        ipcSockets[localNodeId]->ksend(outMsg, ZMQ_DONTWAIT);
+//        lockIpcSockets[localNodeId].unlock();
+//    } else {
+        lockDataPublisher.lock();
+        dataPublisher->ksend(outMsg, ZMQ_DONTWAIT);
+        lockDataPublisher.unlock();
+//    }
 }
 
 
@@ -281,8 +187,23 @@ CommManager::dataPullIn(unsigned *sender, unsigned *topic, void *value, unsigned
     bool ret = dataSubscriber->krecv(&inMsg, ZMQ_DONTWAIT);
     lockDataSubscriber.unlock();
 
-    if (!ret)
-        return false;
+//    bool ipcRet = false;
+//    if (!ret) {
+//        for (int u = 0; u < numWorkers; ++u) {
+//            int currIndex = (pollSocketIndex + u) % numWorkers;
+//            if (currIndex == ((int)localId)) continue;
+//            lockIpcSockets[currIndex].lock();
+//            ipcRet = ipcSockets[currIndex]->krecv(&inMsg, ZMQ_DONTWAIT);
+//            lockIpcSockets[currIndex].unlock();
+//            ret = ipcRet;
+//            if (ret) {
+//                pollSocketIndex = currIndex;
+//                break;
+//            }
+//        }
+//    }
+    if (!ret) return false;
+//    if (ipcRet) printLog(nodeId, "GOT SOMETHING FROM IPC SOCKET");
 
     unsigned valSize = inMsg.size() - sizeof(char) * 8 - sizeof(unsigned) - sizeof(unsigned);
     assert(valSize <= maxValSize);

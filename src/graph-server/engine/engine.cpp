@@ -1,5 +1,6 @@
 #include "engine.hpp"
 #include "../utils/utils.hpp"
+#include "../commmanager/message_service.hpp"
 
 #include <omp.h>
 
@@ -111,16 +112,20 @@ void Engine::init(int argc, char *argv[]) {
     // Read in initial feature values (input features) & labels.
     readFeaturesFile(featuresFile);
     readLabelsFile(labelsFile);
+    printLog(nodeId, "FINISHED LOADING FEATS/LABS");
 
 #ifdef _GPU_ENABLED_
     // HACK FOR NOW: Need to have some reference to 'cu' so I can test
     // if new setup is working. Later will rework to give a chunk to each
     // different GPU
+    printLog(nodeId, "GETTING HERE!?!?!?");
     cudaError_t err = cudaSetDevice(localId);
     if (err != cudaSuccess) {
+        printLog(nodeId, "WE'RE ABORTING BECAUSE LOCAL ID IS %u????", localId);
         abort();
     }
 
+    printLog(nodeId, "GETTING HERE?");
     if (mode == GPU) {  // GPU
         for (unsigned gpuId = 0; gpuId < ngpus; ++gpuId) {
             // Giving each process its own GPU for now so each process will
@@ -128,17 +133,22 @@ void Engine::init(int argc, char *argv[]) {
             compUnits.push_back(ComputingUnit(localId));
         }
 
+        msgService = new MessageService(weightserverPort, nodeId, numLayers, gnn_type);
         resComm = new GPUComm(this);
     }
+    printLog(nodeId, "GETTING HERE??");
     ComputingUnit& cu = compUnits[0];
 
+    printLog(nodeId, "GETTING HERE????");
     numLambdasForward = ngpus;
     NormAdjMatrixIn = new CuMatrix();
     NormAdjMatrixOut = new CuMatrix();
+    printLog(nodeId, "GETTING HERE????????");
     {
         Matrix onenorms(graph.localVtxCnt, 1, graph.vtxDataVec.data());
         OneNorms = new CuMatrix(onenorms, cu.handle);
         CuMatrix::MemoryPool.erase(OneNorms->devPtr); // don't free
+    printLog(nodeId, "GETTING HERE????????????????");
     }
     {
         FeatType *zerobuf = new FeatType[graph.localVtxCnt];
@@ -148,10 +158,20 @@ void Engine::init(int argc, char *argv[]) {
         ZeroNorms = new CuMatrix(zeronorms, cu.handle);
         CuMatrix::MemoryPool.erase(ZeroNorms->devPtr); // don't free
         delete[] zerobuf;
+    printLog(nodeId, "GETTING HERE????????????????????????????????");
     }
+
+    cuX = new CuMatrix[1];
+    ahs = new CuMatrix[numLayers];
+    hs = new CuMatrix[numLayers];
+    zs = new CuMatrix[numLayers];
+    grads = new CuMatrix[numLayers];
+    aTgs = new CuMatrix[numLayers];
+    ws = new CuMatrix[numLayers];
     NormAdjMatrixIn->loadSpCSC(cu.spHandle, graph);
     NormAdjMatrixOut->loadSpCSR(cu.spHandle, graph);
 #endif
+    printLog(nodeId, "GETTING HERE!!");
 
     // Initialize synchronization utilities.
     recvCnt = 0;
@@ -301,6 +321,18 @@ void Engine::runPipeline() {
     nodeManager.barrier();
 
     loadChunks();
+#ifdef _GPU_ENABLED_
+    cudaError_t err = cudaSetDevice(localId);
+    if (err != cudaSuccess) {
+        abort();
+    }
+    Matrix featTensor = savedNNTensors[0]["x"];
+    Matrix ghostTensor = savedNNTensors[0]["fg"];
+    cuX[0].loadSpDense(featTensor.getData(), ghostTensor.getData(),
+        featTensor.getRows(), ghostTensor.getRows(),
+        featTensor.getCols());
+    CuMatrix::MemoryPool.erase(cuX[0].devPtr);
+#endif
     // Start scheduler
     auto schedFunc =
         std::bind(&Engine::scheduleAsyncFunc, this, std::placeholders::_1);

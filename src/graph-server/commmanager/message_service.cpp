@@ -14,6 +14,8 @@ static void deleteMatrix(Matrix &mat) {
     }
 }
 
+
+
 Matrix recvTensor(zmq::socket_t &socket) {
     zmq::message_t tensorHeader(TENSOR_HDR_SIZE);
     zmq::message_t tensorData;

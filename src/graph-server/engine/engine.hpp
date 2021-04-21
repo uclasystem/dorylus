@@ -40,6 +40,8 @@ struct LabelsHeaderType {
     unsigned labelKinds;
 };
 
+class MessageService;
+
 class LockChunkQueue {
 public:
     void lock() { lk.lock(); }
@@ -209,6 +211,7 @@ public:
     unsigned mode = 0;
 
     // GPU related vars
+    MessageService* msgService;
     unsigned ngpus;
 #ifdef _GPU_ENABLED_
     std::vector<ComputingUnit> compUnits;

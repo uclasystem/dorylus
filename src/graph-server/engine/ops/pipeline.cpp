@@ -127,6 +127,9 @@ void Engine::scheduleAsyncFunc(unsigned tid) {
                 addEpochTime(epochTime);
                 printLog(nodeId, "Time for epoch %u: %.2lfms",
                     currEpoch, epochTime);
+#ifdef _GPU_ENABLED_                
+                CuMatrix::freeGPU();
+#endif
                 syncStt = syncEnd;
                 // reset block status
                 block = BLOCK;

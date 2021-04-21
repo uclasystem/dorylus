@@ -104,25 +104,27 @@ void ComputingServer::edgNNBackward(unsigned layer) {
 
 void ComputingServer::vtxNNForwardGCN(unsigned layer, bool lastLayer) {
     double avStart = getTimer();
-    CuMatrix cuFeats = cu.wrapMatrix(savedNNTensors[layer]["ah"]);
-    CuMatrix cuWeights = cu.wrapMatrix(msgService.getWeightMatrix(layer));
+    CuMatrix cuFeats = ahs[layer];
+    Matrix weights = msgService.getWeightMatrix(layer);
+    CuMatrix cuWeights = cu.wrapMatrix(weights);
     double avComputeZ = getTimer();
     CuMatrix z = cuFeats.dot(cuWeights);
 
     if (!lastLayer) {
         double avLastLayer = getTimer();
-        Matrix savedTensor = savedNNTensors[layer]["z"];
         Matrix outputTensor = savedNNTensors[layer]["h"];
         FeatType *act_z = outputTensor.getData();
-        FeatType *z_data = savedTensor.getData();
         // z.setData(z_data);
-        z.updateMatrixFromGPU();
-        memcpy(z_data, z.getData(), z.getDataSize());
-        cu.activate(z);  // z data get activated ...
+//        z.updateMatrixFromGPU();
+//        memcpy(z_data, z.getData(), z.getDataSize());
+        CuMatrix h = cu.activate(z);  // z data get activated ...
         // z.setData(act_z);
-        z.updateMatrixFromGPU();
-        memcpy(act_z, z.getData(), z.getDataSize());
-        z.free();
+        h.setData(act_z);
+        h.updateMatrixFromGPU();
+        //memcpy(act_z, z.getData(), z.getDataSize());
+
+        zs[layer] = z;
+        hs[layer] = h;
 
         std::map<std::string, double>& timesMap = gpuComm->engine->applyTimes[layer];
         addOrCreate("1. Wrap Feats/Weights", avComputeZ - avStart, timesMap);
@@ -182,11 +184,12 @@ void ComputingServer::vtxNNForwardGCN(unsigned layer, bool lastLayer) {
         d_output.scale(1.0 / (gpuComm->engine->graph.globalVtxCnt * TRAIN_PORTION));
 
         CuMatrix interGrad = d_output.dot(cuWeights, false, true);
+        grads[layer] = interGrad;
         interGrad.setData(savedNNTensors[layer]["grad"].getData());
         interGrad.updateMatrixFromGPU();
 
-        Matrix ah = savedNNTensors[layer]["ah"];
-        CuMatrix cuAh = cu.wrapMatrix(ah);
+        //Matrix ah = savedNNTensors[layer]["ah"];
+        CuMatrix cuAh = ahs[layer]; //cu.wrapMatrix(ah);
         CuMatrix cuWeightUpdates = cuAh.dot(d_output, true, false);
         Matrix weightUpdates = cuWeightUpdates.getMatrix();
         double sendUpdates = getTimer();
@@ -200,8 +203,6 @@ void ComputingServer::vtxNNForwardGCN(unsigned layer, bool lastLayer) {
         addOrCreate("5. Send Updates", getTimer() - sendUpdates, timesMap);
     }
 
-    CuMatrix::freeGPU();
-
 }
 
 void ComputingServer::vtxNNBackwardGCN(unsigned layer) {
@@ -211,14 +212,14 @@ void ComputingServer::vtxNNBackwardGCN(unsigned layer) {
     }
 
     double avbStart = getTimer();
-    Matrix grad = savedNNTensors[layer]["aTg"];
-    CuMatrix cuGrad = cu.wrapMatrix(grad);
-    Matrix z = savedNNTensors[layer]["z"];
-    CuMatrix cuZ = cu.wrapMatrix(z);
-    Matrix h = savedNNTensors[layer]["h"];
-    CuMatrix cuH = cu.wrapMatrix(h);
-    Matrix ah = savedNNTensors[layer]["ah"];
-    CuMatrix cuAh = cu.wrapMatrix(ah);
+    //Matrix grad = savedNNTensors[layer]["aTg"];
+    CuMatrix cuGrad = aTgs[layer];
+    //Matrix z = savedNNTensors[layer]["z"];
+    CuMatrix cuZ = zs[layer]; //cu.wrapMatrix(z);
+    //Matrix h = savedNNTensors[layer]["h"];
+    CuMatrix cuH = hs[layer]; //cu.wrapMatrix(h);
+    //Matrix ah = savedNNTensors[layer]["ah"];
+    CuMatrix cuAh = ahs[layer]; //cu.wrapMatrix(ah);
 
     double avbCompute = getTimer();
     CuMatrix interGrad = cu.activateBackward(cuZ, cuH, cuGrad);
@@ -237,7 +238,7 @@ void ComputingServer::vtxNNBackwardGCN(unsigned layer) {
 
     double avbSendUpdates = getTimer();
     msgService.sendWeightUpdate(weightUpdates, layer);
-    CuMatrix::freeGPU();
+    //CuMatrix::freeGPU();
 
     if (layer == 0) msgService.prefetchWeightsMatrix();
 

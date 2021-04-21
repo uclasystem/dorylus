@@ -4,7 +4,7 @@ GPUComm::GPUComm(Engine *engine_)
     : engine(engine_), nodeId(engine_->nodeId), totalLayers(engine_->numLayers),
     wServersFile(engine_->weightserverIPFile), wPort(engine_->weightserverPort),
     numNodes(engine_->numNodes), savedNNTensors(engine_->savedNNTensors),
-    msgService(wPort, nodeId, totalLayers, engine_->gnn_type),
+    msgService(*(engine->msgService)),
     ngpus(engine_->ngpus)
     {
         comp_servers = std::vector<ComputingServer*>(ngpus);

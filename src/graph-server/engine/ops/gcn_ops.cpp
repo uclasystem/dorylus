@@ -116,23 +116,34 @@ void Engine::aggregateGCN(Chunk &c) {
     }
     double aggLoadSpDense = getTimer();
     CuMatrix feat;
-    auto timeVec = feat.loadSpDense(featTensor.getData(), ghostTensor.getData(),
+    std::vector<double> timeVec = {0.0, 0.0, 0.0, 0.0, 0.0};
+    unsigned layerIndex = c.dir == PROP_TYPE::FORWARD ? c.layer : c.layer + numLayers;
+    if (c.layer == 0) {
+        feat = cuX[0];
+    } else {
+        timeVec = hs[c.layer].loadSpDense(featTensor.getData(), ghostTensor.getData(),
                      featTensor.getRows(), ghostTensor.getRows(),
                      featTensor.getCols());
+        feat = hs[c.layer];
+    }
     CuMatrix out;
     double aggCompute = getTimer();
     if (dir == PROP_TYPE::FORWARD) {
+        printLog(nodeId, "GA%u", c.layer);
         out = cu.aggregate(*NormAdjMatrixIn, feat, *OneNorms);
+        ahs[c.layer] = out;
     } else {
+        printLog(nodeId, "▽GA%u", c.layer);
         out = cu.aggregate(*NormAdjMatrixOut, feat, *OneNorms);
+        aTgs[c.layer-1] = out;
     }
     double aggSaveData = getTimer();
-    out.setData(outputTensor.getData());
-    out.updateMatrixFromGPU();
+//    out.setData(outputTensor.getData());
+//    out.updateMatrixFromGPU();
     cudaDeviceSynchronize();
-    CuMatrix::freeGPU();
+//    CuMatrix::freeGPU();
 
-    unsigned layerIndex = c.dir == PROP_TYPE::FORWARD ? c.layer : c.layer + numLayers;
+
     vecTimeAggregate[layerIndex] += (getTimer() - aggStart);
 
     std::map<std::string, double>& timesMap = aggTimes[layerIndex];
@@ -215,9 +226,11 @@ void Engine::applyVertexGCN(Chunk &c) {
     double avStart = getTimer();
     c.vertex = true;
     if (c.dir == PROP_TYPE::FORWARD) { // Forward pass
+        printLog(nodeId, "AV%u", c.layer);
         resComm->NNCompute(c);
     } else { // Backward pass, inc layer first to align up the layer id
         Chunk nextC = incLayerGCN(c);
+        printLog(nodeId, "▽AV%u", c.layer);
         resComm->NNCompute(nextC);
     }
     unsigned layerIndex = c.dir == PROP_TYPE::FORWARD ? c.layer : c.layer + numLayers;
@@ -244,6 +257,12 @@ void Engine::scatterGCN(Chunk &c) {
     std::map<unsigned, std::vector<unsigned>> &ghostMap =
         c.dir == PROP_TYPE::FORWARD ? graph.forwardGhostMap
                                     : graph.backwardGhostMap;
+
+    if (c.dir == PROP_TYPE::FORWARD) {
+        printLog(nodeId, "SC%u", c.layer);
+    } else {
+        printLog(nodeId, "▽SC%u", c.layer);
+    }
 
     double scatterCreateBuckets = getTimer();
     // batch sendouts similar to the sequential version

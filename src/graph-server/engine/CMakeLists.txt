@@ -8,7 +8,7 @@ if(BACKEND STREQUAL gpu)
     find_library(CUDNN NAME libcudnn.so HINTS /opt/cuda/targets/x86_64-linux/lib/ /usr/local/cuda-10.0/lib64/)
     FIND_PACKAGE(CUDA REQUIRED)
     include_directories(${CUDA_INCLUDE_DIRS})
-    target_link_libraries(engine PRIVATE ComputingUnit graph commmanager weight_comm gpu_comm nodemanager threadpool utils
+    target_link_libraries(engine PRIVATE ComputingUnit graph commmanager weight_comm gpu_comm nodemanager threadpool utils MessageService
                             PUBLIC  ${ZMQ_LIB} Threads::Threads ${Boost_LIBRARIES} ${OpenMP_CXX_FLAGS})
 endif()
 if(BACKEND STREQUAL lambda)

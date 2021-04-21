@@ -38,7 +38,7 @@ public:
     void init(NodeManager& nodeManager, unsigned ctxThds = 2);
     void destroy();
 
-    void rawMsgPushOut(zmq::message_t &msg);
+    void rawMsgPushOut(unsigned receiver, zmq::message_t &msg);
     void dataPushOut(unsigned receiver, unsigned sender, unsigned topic, void* value, unsigned valSize);
     bool dataPullIn(unsigned *sender, unsigned *topic, void *value, unsigned maxValSize);
     void controlPushOut(unsigned to, void* value, unsigned valSize);
@@ -59,7 +59,11 @@ private:
     zmq::socket_t *dataSubscriber = NULL;
     unsigned dataPort;
 
+    unsigned localNodeIdMin = 256;
+    unsigned localNodeIdMax = 0;
+    Lock* lockIpcSockets = NULL;
     zmq::socket_t **ipcSockets;
+    int pollSocketIndex = 0;
 
     Lock lockDataPublisher;
     Lock lockDataSubscriber;

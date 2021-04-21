@@ -45,7 +45,7 @@ class ComputingUnit {
     CuMatrix aggregate(CuMatrix &sparse, CuMatrix &dense, CuMatrix &norms);
 
     CuMatrix dot(Matrix &A, Matrix &B);
-    void activate(CuMatrix &A);
+    CuMatrix activate(CuMatrix &A);
     CuMatrix softmaxRows(CuMatrix &mat);
     void hadamardAdd(CuMatrix &matLeft, CuMatrix &matRight);
     CuMatrix hadamardSub(CuMatrix &matLeft, CuMatrix &matRight);
@@ -73,6 +73,15 @@ extern CuMatrix *NormAdjMatrixIn;
 extern CuMatrix *NormAdjMatrixOut;
 extern CuMatrix *OneNorms;
 extern CuMatrix *ZeroNorms;
+extern CuMatrix* cuX;
+extern CuMatrix* ahs;
+extern CuMatrix *hs;
+extern CuMatrix *zs;
+
+extern CuMatrix* grads;
+extern CuMatrix* aTgs;
+
+extern CuMatrix *ws;
 //extern ComputingUnit cu;
 
 #endif

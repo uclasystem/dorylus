@@ -45,7 +45,7 @@ private:
     unsigned dPort;
     unsigned wPort;
     std::string wServersFile;
-    MessageService msgService;
+    MessageService &msgService;
 
     std::vector<TensorMap> &savedNNTensors;
 
