@@ -1,4 +1,4 @@
-# Dorylus
+# Dorylus: Affordable, Scalable, and Accurate GNN Training with Distributed CPU Servers and Serverless Threads
 
 This is Dorylus, a *Scalable*, *Resource-efficient* & *Affordable*
 computation system for
@@ -11,7 +11,7 @@ built upon an architecture combining cheap data servers on
 
 Now the main logic of the engine has been completely simplified, and we integrate it with AWS Lambda threads. Ultimate goal is to achieve "*Affordable AI*" with the benefit of **cheap scalability** brought by serverless computing.
 
-
+Check out our [OSDI'21 paper](http://web.cs.ucla.edu/~harryxu/papers/dorylus-osdi21.pdf) for details of the design. 
 
 ## User Guide
 
